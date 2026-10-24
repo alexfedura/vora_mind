@@ -69,7 +69,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Vora Mind ${{ github.ref_name }}'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           args: '--bundles msi'
