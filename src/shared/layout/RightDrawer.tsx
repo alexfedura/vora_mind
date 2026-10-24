@@ -566,12 +566,22 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
 
   const matchesRefinement = (createdAt: number | undefined, tags: string[] | undefined): boolean => {
     if (refinementFilter.type === "today") return wasCreatedToday(createdAt);
-    if (refinementFilter.type === "tag") return tags?.includes(refinementFilter.tag) ?? false;
+    if (refinementFilter.type === "tag") {
+      return tags?.some((tag) => tag.trim() === refinementFilter.tag) ?? false;
+    }
     return true;
   };
 
   const availableTags = [...new Set(
-    Object.values(cards).flatMap((card) => card.tags ?? []).filter((tag) => tag.trim().length > 0),
+    Object.values(cards)
+      .filter((card) => (
+        !card.librarySourceCardId
+        && currentFilter !== "item-groups"
+        && (currentFilter === "trash" ? Boolean(card.deleted_at) : !card.deleted_at)
+      ))
+      .flatMap((card) => card.tags ?? [])
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0),
   )].sort((a, b) => a.localeCompare(b, "fa", { sensitivity: "base" }));
 
   const filteredCards: VoraCard[] = Object.values(cards)
@@ -1033,7 +1043,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                     {refinementFilter.type === "today"
                       ? <CalendarDays size={14} />
                       : refinementFilter.type === "tag" ? <Tag size={14} /> : <Archive size={14} />}
-                    <span>
+                    <span className="max-w-28 truncate">
                       {refinementFilter.type === "tag"
                         ? refinementFilter.tag
                         : refinementFilter.type === "today" ? "Today" : "All"}
