@@ -834,7 +834,10 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
             const r = d as DrawingRect;
             return (r.borderColor && r.fillColor !== undefined && r.fillOpacity !== undefined) ? r : migrateDrawingRect(r);
           }
-          return migrateDrawingAny(d);
+          const migrated = migrateDrawingAny(d);
+          return migrated.type === "geometry" && migrated.tool === "path"
+            ? { ...migrated, selectedSegments: undefined }
+            : migrated;
         }));
     } catch { setDrawings([]); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
