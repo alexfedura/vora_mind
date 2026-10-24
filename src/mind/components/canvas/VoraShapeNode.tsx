@@ -42,6 +42,23 @@ interface PathPointDragStart {
   height: number;
 }
 
+interface PathSegmentSelectionDetail {
+  nodeId: string;
+  segmentId: string;
+  mode: "replace" | "toggle";
+}
+
+function dispatchPathSegmentSelection(
+  nodeId: string,
+  segmentId: string,
+  mode: PathSegmentSelectionDetail["mode"],
+): void {
+  window.dispatchEvent(new CustomEvent<PathSegmentSelectionDetail>(
+    "vora:update-path-segment-selection",
+    { detail: { nodeId, segmentId, mode } },
+  ));
+}
+
 function loadShapeToolbarPosition(key = SHAPE_TOOLBAR_POSITION_KEY): ShapeToolbarPosition {
   try {
     const saved = getSetting(key);
@@ -142,6 +159,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
   const [multiToolbarPosition, setMultiToolbarPosition] = useState(() => loadShapeToolbarPosition(MULTI_SHAPE_TOOLBAR_POSITION_KEY));
   const [hoveredPathPointIndex, setHoveredPathPointIndex] = useState<number | null>(null);
   const [selectedPathSegmentId, setSelectedPathSegmentId] = useState<string | null>(null);
+  const [selectedPathSegmentIds, setSelectedPathSegmentIds] = useState<Set<string>>(() => new Set());
   const pathSegments = data.shape === "path" ? getPathSegments(id, data) : [];
   const selectedPathSegment = pathSegments.find((segment) => segment.id === selectedPathSegmentId)
     ?? pathSegments[0];
@@ -239,15 +257,46 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
   }, [openControlMenu]);
 
   useEffect(() => {
+    const updatePathSegmentSelection = (event: Event): void => {
+      if (!(event instanceof CustomEvent) || !isRecord(event.detail)) return;
+      const { nodeId, segmentId, mode } = event.detail;
+      if (
+        typeof nodeId !== "string" ||
+        typeof segmentId !== "string" ||
+        (mode !== "replace" && mode !== "toggle")
+      ) return;
+
+      if (mode === "replace") {
+        if (nodeId !== id) {
+          setSelectedPathSegmentIds(new Set());
+          return;
+        }
+        if (!pathSegments.some((segment) => segment.id === segmentId)) return;
+        setSelectedPathSegmentIds(new Set([segmentId]));
+      } else {
+        if (nodeId !== id || !pathSegments.some((segment) => segment.id === segmentId)) return;
+        setSelectedPathSegmentIds((current) => {
+          const next = new Set(current);
+          if (next.has(segmentId)) next.delete(segmentId);
+          else next.add(segmentId);
+          return next;
+        });
+      }
+      if (nodeId === id) setSelectedPathSegmentId(segmentId);
+    };
     const selectPathSegment = (event: Event): void => {
       if (!(event instanceof CustomEvent) || !isRecord(event.detail)) return;
       if (event.detail.nodeId !== id || typeof event.detail.segmentId !== "string") return;
       if (!pathSegments.some((segment) => segment.id === event.detail.segmentId)) return;
-      setSelectedPathSegmentId(event.detail.segmentId);
+      dispatchPathSegmentSelection(id, event.detail.segmentId, "replace");
       setSettingsOpen(true);
     };
+    window.addEventListener("vora:update-path-segment-selection", updatePathSegmentSelection);
     window.addEventListener("vora:select-path-segment", selectPathSegment);
-    return () => window.removeEventListener("vora:select-path-segment", selectPathSegment);
+    return () => {
+      window.removeEventListener("vora:update-path-segment-selection", updatePathSegmentSelection);
+      window.removeEventListener("vora:select-path-segment", selectPathSegment);
+    };
   }, [id, pathSegments]);
 
   const update = (patch: Partial<VoraShapeData>): void => {
@@ -801,9 +850,9 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
                   <button
                     key={segment.id}
                     type="button"
-                    aria-pressed={selectedPathSegment?.id === segment.id}
-                    onClick={() => setSelectedPathSegmentId(segment.id)}
-                    className={`rounded border px-2 py-1 text-[10px] ${selectedPathSegment?.id === segment.id ? "border-violet-400 bg-violet-500/20 text-white" : "border-[#383f4e] text-[#aeb4c0]"}`}
+                    aria-pressed={selectedPathSegmentIds.has(segment.id)}
+                    onClick={(event) => dispatchPathSegmentSelection(id, segment.id, event.ctrlKey || event.metaKey ? "toggle" : "replace")}
+                    className={`rounded border px-2 py-1 text-[10px] ${selectedPathSegmentIds.has(segment.id) ? "border-violet-400 bg-violet-500/20 text-white" : "border-[#383f4e] text-[#aeb4c0]"}`}
                   >
                     <span className="mr-1 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: segment.color }} />
                     {segment.name || `Section ${index + 1}`}
@@ -940,12 +989,12 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
                   role="button"
                   tabIndex={0}
                   aria-label={`Select path section ${segment.name}`}
-                  aria-pressed={selectedPathSegment?.id === segment.id}
-                  onClick={() => setSelectedPathSegmentId(segment.id)}
+                  aria-pressed={selectedPathSegmentIds.has(segment.id)}
+                  onClick={(event) => dispatchPathSegmentSelection(id, segment.id, event.ctrlKey || event.metaKey ? "toggle" : "replace")}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      setSelectedPathSegmentId(segment.id);
+                      dispatchPathSegmentSelection(id, segment.id, "replace");
                     }
                   }}
                 />
@@ -954,7 +1003,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
                   fill="none"
                   stroke={segment.color}
                   strokeOpacity={lineOpacity}
-                  strokeWidth={lineWidth + (selectedPathSegment?.id === segment.id ? 1 : 0)}
+                  strokeWidth={lineWidth + (selectedPathSegmentIds.has(segment.id) ? 1 : 0)}
                   strokeDasharray={dashArray}
                   strokeLinecap="round"
                   pointerEvents="none"

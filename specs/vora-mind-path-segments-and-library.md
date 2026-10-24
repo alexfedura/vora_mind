@@ -18,6 +18,9 @@ identity or styling.
 - Clicking a segment selects that segment while keeping the Path node selected.
   Segment name, details, and color can be edited without changing neighboring
   segments. Anchor points remain draggable.
+- Clicking a segment without a modifier replaces the segment selection across
+  all Paths. Ctrl-click or Cmd-click toggles only that segment, preserving
+  other selected segments and deselecting it when clicked again.
 - Cutting a segment detaches it as its own Path node and preserves the
   remaining connected sections and all segment metadata. Undo restores the
   original Path.
