@@ -113,6 +113,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
   const latestNodes = useRef(nodes);
   const latestEdges = useRef(edges);
   const latestCards = useRef(cards);
+  const librarySourceCardIds = useRef(new Map<string, string>());
   const currentBoardId = useRef(boardId);
   const boardReadyWaiters = useRef(new Map<string, Array<{
     resolve: () => void;
@@ -527,6 +528,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
         redoStack.current = [];
         if (!boardId) {
           latestCards.current = {};
+          librarySourceCardIds.current.clear();
           setSnapshots([]);
           setCurrentSnapshotIndex(-1);
           currentSnapshotId.current = null;
@@ -543,7 +545,11 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
         ]);
         if (cancelled) return;
         const cardsMap: Record<string, VoraCard> = {};
+        librarySourceCardIds.current.clear();
         for (const card of savedCards) {
+          if (card.library_source_card_id) {
+            librarySourceCardIds.current.set(card.id, card.library_source_card_id);
+          }
           cardsMap[card.id] = {
             id: card.id,
             title: card.title,
@@ -698,7 +704,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
         boardId: targetBoardId,
         created_at: Date.now(),
         deleted_at: card.deleted_at ?? undefined,
-        librarySourceCardId: latestCards.current[card.id]?.librarySourceCardId,
+        librarySourceCardId: librarySourceCardIds.current.get(card.id),
       };
     }
 
