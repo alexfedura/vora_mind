@@ -246,7 +246,7 @@ export function DrawingToolbarHost(p: HostProps): React.ReactElement {
         templates,
         onSaveTemplate: async (name, makeDefault, settings) => {
           if (!one) return;
-          const template: DrawingStyleTemplate = { id: makeDefault ? "default" : crypto.randomUUID(), name: makeDefault ? "Default" : name.trim(), drawingType: one.type, settings: settings ?? templateSettings(one), createdAt: Math.floor(Date.now() / 1000) };
+          const template: DrawingStyleTemplate = { id: makeDefault ? "default" : crypto.randomUUID(), name: makeDefault ? "Default" : name.trim(), drawingType: one.type, settings: settings ?? templateSettings(toolbarDrawing ?? one), createdAt: Math.floor(Date.now() / 1000) };
           try {
             await saveDrawingTemplate(template);
             setTemplates(await listDrawingTemplates());
