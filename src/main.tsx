@@ -9,6 +9,7 @@ import { getDefaultRoute } from "./lib/settings";
 import { migrateLegacySnapshots } from "./lib/snapshot/storage";
 import { initializeSettingsStore } from "./shared/store/useSettingsStore";
 import { useAppStore } from "./shared/store/useAppStore";
+import { UpdaterProvider } from "./shared/components/UpdaterProvider";
 import "./App.css";
 import "./features/markdown-editor/styles/editor.css";
 import "./features/markdown-editor/styles/markdown-preview.css";
@@ -78,9 +79,11 @@ async function bootstrap(): Promise<void> {
 
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <UpdaterProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </UpdaterProvider>
     </React.StrictMode>,
   );
 }

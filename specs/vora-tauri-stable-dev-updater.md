@@ -12,7 +12,8 @@ Allow a Vora development build to run beside the installed stable build, publish
 - Register Tauri v2 updater and process plugins with the required window permissions.
 - Enable signed MSI updater artifacts and point the updater manifest at the public GitHub Releases latest feed.
 - Build Windows releases from version tags using `tauri-apps/tauri-action`; the workflow verifies the tag matches the app version and publishes the signed updater manifest and MSI to a GitHub Release.
-- Expose a manual update check in the stable app. Download the signed update before installing it; the Windows installer restarts the app.
+- Expose a manual update check in the stable app and automatically check every 60 seconds. Download the signed update in the background and ask the user whether to install once it is ready; the Windows installer restarts the app.
+- If installation fails, show a native error dialog before releasing the update resource. Do not request administrator elevation by default.
 - Configure Windows updater installations for quiet mode.
 - Keep the existing local release commands as legacy helpers; version tags start the automated release workflow.
 - Never commit or store the updater private key in the repository; configure it only as GitHub Actions secrets.
@@ -29,7 +30,7 @@ Allow a Vora development build to run beside the installed stable build, publish
 - Run `pnpm dev` to launch the development build beside the installed stable build. Its config overlay uses a `.dev` bundle identifier.
 - Run `pnpm release:verify` to check that `package.json`, `tauri.conf.json`, and `Cargo.toml` have one synchronized semantic version.
 - Create a version tag to start the Windows release workflow. It builds signed MSI updater artifacts and publishes `latest.json`, the installer, and its signature to the GitHub Release.
-- The stable app exposes a manual update check. It logs whether an update is available, downloads and quietly installs a signed update, and lets the Windows installer restart the app.
+- The stable app checks for updates on launch and every 60 seconds, and also exposes a manual check. It downloads signed updates in the background and asks whether to restart once the download is ready. Installation errors are logged and shown in a native dialog.
 - The repository must be public so updater clients can download `latest.json` and the matching installer assets from GitHub Releases without credentials.
 
 ## Verification

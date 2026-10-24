@@ -1,103 +1,30 @@
-import { useEffect, useRef, useState } from "react";
-import { check, type Update } from "@tauri-apps/plugin-updater";
 import { AlertCircle, Check, RefreshCw } from "lucide-react";
-
-type UpdateStatus = "idle" | "checking" | "up-to-date" | "downloading" | "installing" | "error";
+import { useUpdater } from "./UpdaterProvider";
 
 interface UpdateCheckButtonProps {
   className: string;
 }
 
 export function UpdateCheckButton({ className }: UpdateCheckButtonProps): React.ReactElement {
-  const [status, setStatus] = useState<UpdateStatus>("idle");
-  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const resetTimer = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
-  }, []);
-
-  const checkForUpdates = async (): Promise<void> => {
-    if (status === "checking" || status === "downloading" || status === "installing") return;
-    if (resetTimer.current !== null) {
-      window.clearTimeout(resetTimer.current);
-      resetTimer.current = null;
-    }
-    if (import.meta.env.DEV) {
-      setStatus("error");
-      setMessage("Update checks are available in installed desktop builds.");
-      return;
-    }
-
-    setStatus("checking");
-    setDownloadProgress(null);
-    setMessage(null);
-    let update: Update | null = null;
-
-    try {
-      update = await check();
-      if (!update) {
-        console.info("Vora Mind updater: no update available.");
-        setStatus("up-to-date");
-        resetTimer.current = window.setTimeout(() => {
-          setStatus("idle");
-          resetTimer.current = null;
-        }, 1400);
-        return;
-      }
-
-      console.info(`Vora Mind updater: version ${update.version} is available.`);
-      setStatus("downloading");
-      setMessage(`Downloading version ${update.version}`);
-      let downloadedBytes = 0;
-      let contentLength: number | undefined;
-      await update.download((event) => {
-        if (event.event === "Started") {
-          contentLength = event.data.contentLength;
-          setDownloadProgress(contentLength ? 0 : null);
-        } else if (event.event === "Progress") {
-          downloadedBytes += event.data.chunkLength;
-          if (contentLength && contentLength > 0) {
-            setDownloadProgress(Math.min(100, (downloadedBytes / contentLength) * 100));
-          }
-        } else if (event.event === "Finished") {
-          setDownloadProgress(100);
-        }
-      });
-
-      setStatus("installing");
-      setMessage(`Installing version ${update.version}`);
-      await update.install({ restartAfterInstall: true });
-    } catch (error: unknown) {
-      console.error("Could not check or install Vora Mind updates:", error);
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : String(error));
-      if (update) {
-        try {
-          await update.close();
-        } catch (closeError: unknown) {
-          console.error("Could not release the Vora Mind update resource:", closeError);
-        }
-      }
-    }
-  };
-
+  const { status, downloadProgress, notice, checkForUpdates, installAvailableUpdate } = useUpdater();
   const isBusy = status === "checking" || status === "downloading" || status === "installing";
-  const title = message
-    ?? (status === "up-to-date" ? "You are using the latest version" : "Check for updates");
+  const title = notice
+    ?? (status === "ready" ? "Update ready to install" : "Check for updates");
 
   return (
     <button
       type="button"
-      onClick={() => void checkForUpdates()}
+      onClick={() => {
+        if (status === "ready") void installAvailableUpdate();
+        else void checkForUpdates();
+      }}
       disabled={isBusy}
       title={title}
       aria-label={title}
       aria-live="polite"
       className={className}
     >
-      {status === "up-to-date" ? (
+      {status === "ready" ? (
         <Check size={14} className="text-emerald-400" />
       ) : status === "downloading" || status === "installing" ? (
         <svg
