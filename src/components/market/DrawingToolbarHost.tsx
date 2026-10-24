@@ -193,20 +193,29 @@ export function DrawingToolbarHost(p: HostProps): React.ReactElement {
           p.setDrawings((prev) => pruneNullDrawings(prev).map((drawing) => {
             if (drawing.id !== id) return drawing;
             const updated = update(drawing);
-            if (drawing.type !== "geometry" || drawing.tool !== "path" || !drawing.selectedSegments?.length || updated.type !== "geometry" || updated.tool !== "path") return updated;
-            const currentStyle = getGeometrySegmentStyle(drawing, drawing.selectedSegments[0] ?? 0);
+            if (drawing.type !== "geometry" || drawing.tool !== "path" || updated.type !== "geometry" || updated.tool !== "path") return updated;
+            const partialSelection = (drawing.selectedSegments?.length ?? 0) > 0;
+            const currentStyle = partialSelection
+              ? getGeometrySegmentStyle(drawing, drawing.selectedSegments?.[0] ?? 0)
+              : {
+                color: drawing.color,
+                colorOpacity: drawing.colorOpacity ?? 1,
+                lineWidth: drawing.lineWidth,
+                style: drawing.style ?? "solid",
+              };
             const stylePatch: DrawingGeometryStylePatch = {};
             if (updated.color !== currentStyle.color) stylePatch.color = updated.color;
             if (updated.colorOpacity !== currentStyle.colorOpacity) stylePatch.colorOpacity = updated.colorOpacity;
             if (updated.lineWidth !== currentStyle.lineWidth) stylePatch.lineWidth = updated.lineWidth;
             if (updated.style !== currentStyle.style) stylePatch.style = updated.style;
-            return applyGeometryPathStyle({
+            const drawingToStyle = partialSelection ? {
               ...updated,
               color: drawing.color,
               colorOpacity: drawing.colorOpacity,
               lineWidth: drawing.lineWidth,
               style: drawing.style,
-            }, stylePatch);
+            } : updated;
+            return applyGeometryPathStyle(drawingToStyle, stylePatch);
           }));
         },
         onToggleLock: () => {
