@@ -5,6 +5,7 @@ import {
   Search,
   ChevronDown,
   Tag,
+  CalendarDays,
   Filter,
   ArrowUpDown,
   FileText,
@@ -281,8 +282,21 @@ const GroupDragContentPreview: React.FC<{ snapshot: LibraryItemGroupSnapshot }> 
 };
 
 type ViewFilter = "all" | "cards" | "item-groups" | "trash";
+type LibraryRefinementFilter =
+  | { type: "all" }
+  | { type: "today" }
+  | { type: "tag"; tag: string };
 type SortBy = "alphabetical" | "created" | "viewed";
 type SortOrder = "oldest" | "newest";
+
+const wasCreatedToday = (createdAt: number | undefined): boolean => {
+  if (createdAt === undefined || !Number.isFinite(createdAt)) return false;
+  const createdDate = new Date(createdAt);
+  const today = new Date();
+  return createdDate.getFullYear() === today.getFullYear()
+    && createdDate.getMonth() === today.getMonth()
+    && createdDate.getDate() === today.getDate();
+};
 
 type LibraryDragPreview =
   | { kind: "card"; card: VoraCard }
@@ -335,7 +349,9 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
   const isMajorRtl = textDirection === "rtl";
 
   const [currentFilter, setCurrentFilter] = useState<ViewFilter>("all");
+  const [refinementFilter, setRefinementFilter] = useState<LibraryRefinementFilter>({ type: "all" });
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+  const [isRefinementMenuOpen, setIsRefinementMenuOpen] = useState(false);
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [sortBy, setSortBy] = useState<SortBy>("alphabetical");
   const [sortOrder, setSortOrder] = useState<SortOrder>("oldest");
@@ -548,15 +564,25 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     restoreFromBin(id);
   };
 
+  const matchesRefinement = (createdAt: number | undefined, tags: string[] | undefined): boolean => {
+    if (refinementFilter.type === "today") return wasCreatedToday(createdAt);
+    if (refinementFilter.type === "tag") return tags?.includes(refinementFilter.tag) ?? false;
+    return true;
+  };
+
+  const availableTags = [...new Set(
+    Object.values(cards).flatMap((card) => card.tags ?? []).filter((tag) => tag.trim().length > 0),
+  )].sort((a, b) => a.localeCompare(b, "fa", { sensitivity: "base" }));
+
   const filteredCards: VoraCard[] = Object.values(cards)
     .filter((c) => {
       if (c.librarySourceCardId) return false;
       const matchesSearch = (c.title + " " + c.content).toLowerCase().includes(searchQuery.toLowerCase());
       if (currentFilter === "all" || currentFilter === "cards") {
-        return matchesSearch && !c.deleted_at;
+        return matchesSearch && !c.deleted_at && matchesRefinement(c.created_at, c.tags);
       }
       if (currentFilter === "trash") {
-        return matchesSearch && Boolean(c.deleted_at);
+        return matchesSearch && Boolean(c.deleted_at) && matchesRefinement(c.created_at, c.tags);
       }
       return false;
     })
@@ -581,9 +607,11 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     .filter((group) => {
       const matchesSearch = `${group.name} ${group.version}`.toLowerCase().includes(searchQuery.toLowerCase());
       if (currentFilter === "all" || currentFilter === "item-groups") {
-        return matchesSearch && group.deleted_at === null;
+        return matchesSearch && group.deleted_at === null && matchesRefinement(group.created_at, undefined);
       }
-      if (currentFilter === "trash") return matchesSearch && group.deleted_at !== null;
+      if (currentFilter === "trash") {
+        return matchesSearch && group.deleted_at !== null && matchesRefinement(group.created_at, undefined);
+      }
       return false;
     })
     .sort((a, b) => b.created_at - a.created_at);
@@ -929,6 +957,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                   <button
                     onClick={() => {
                       setIsFilterMenuOpen(!isFilterMenuOpen);
+                      setIsRefinementMenuOpen(false);
                       setIsSortMenuOpen(false);
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition bg-[#1d2028] hover:bg-[#252934] text-gray-200 border border-[#262b37]"
@@ -989,11 +1018,99 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                   )}
                 </div>
 
-                <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1d2028] hover:bg-[#252934] rounded-lg text-sm font-medium text-gray-200 border border-[#262b37] transition">
-                  <Tag size={14} />
-                  <span>Tags</span>
-                  <ChevronDown size={14} />
-                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    aria-haspopup="menu"
+                    aria-expanded={isRefinementMenuOpen}
+                    onClick={() => {
+                      setIsRefinementMenuOpen(!isRefinementMenuOpen);
+                      setIsFilterMenuOpen(false);
+                      setIsSortMenuOpen(false);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1d2028] hover:bg-[#252934] rounded-lg text-sm font-medium text-gray-200 border border-[#262b37] transition"
+                  >
+                    {refinementFilter.type === "today"
+                      ? <CalendarDays size={14} />
+                      : refinementFilter.type === "tag" ? <Tag size={14} /> : <Archive size={14} />}
+                    <span>
+                      {refinementFilter.type === "tag"
+                        ? refinementFilter.tag
+                        : refinementFilter.type === "today" ? "Today" : "All"}
+                    </span>
+                    <ChevronDown size={14} />
+                  </button>
+
+                  {isRefinementMenuOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setIsRefinementMenuOpen(false)}
+                      />
+                      <div
+                        role="menu"
+                        className="absolute top-9 left-0 z-50 flex max-h-72 w-48 flex-col overflow-y-auto rounded-xl border border-[#2b303c] bg-[#181a22] py-1.5 text-sm shadow-2xl"
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setRefinementFilter({ type: "all" });
+                            setIsRefinementMenuOpen(false);
+                          }}
+                          className={`flex items-center gap-2.5 px-3.5 py-2 text-left font-medium transition ${
+                            refinementFilter.type === "all"
+                              ? "bg-[#252a37] text-white"
+                              : "text-gray-300 hover:bg-[#222734] hover:text-white"
+                          }`}
+                        >
+                          <Archive size={14} />
+                          <span>All</span>
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setRefinementFilter({ type: "today" });
+                            setIsRefinementMenuOpen(false);
+                          }}
+                          className={`flex items-center gap-2.5 px-3.5 py-2 text-left font-medium transition ${
+                            refinementFilter.type === "today"
+                              ? "bg-[#252a37] text-white"
+                              : "text-gray-300 hover:bg-[#222734] hover:text-white"
+                          }`}
+                        >
+                          <CalendarDays size={14} />
+                          <span>Today</span>
+                        </button>
+                        <div className="mx-3.5 mt-1.5 border-t border-[#2b303c] pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                          Tags
+                        </div>
+                        {availableTags.length > 0 ? availableTags.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setRefinementFilter({ type: "tag", tag });
+                              setIsRefinementMenuOpen(false);
+                            }}
+                            className={`flex items-center gap-2.5 px-3.5 py-2 text-left font-medium transition ${
+                              refinementFilter.type === "tag" && refinementFilter.tag === tag
+                                ? "bg-[#252a37] text-white"
+                                : "text-gray-300 hover:bg-[#222734] hover:text-white"
+                            }`}
+                          >
+                            <Tag size={14} />
+                            <span className="truncate">{tag}</span>
+                          </button>
+                        )) : (
+                          <p className="px-3.5 py-2 text-xs text-gray-500">No tags available</p>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-1.5">
