@@ -71,6 +71,15 @@ function syncCargoLock(oldVersion, newVersion) {
   writeFileSync(files.lock, setCargoLockVersion(cargoLock, oldVersion, newVersion));
 }
 
+function isTracked(file) {
+  try {
+    return runGit(["ls-files", "--error-unmatch", "--", file], { silent: true }).length > 0;
+  } catch (error) {
+    if (error && typeof error === "object" && "status" in error && error.status === 1) return false;
+    throw error;
+  }
+}
+
 if (command === "sync") {
   const versions = readVersions();
   if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(versions.package)) {
@@ -138,7 +147,7 @@ writeFileSync(files.cargo, cargoToml.replace(cargoPattern, `$1${nextVersion}$2`)
 syncCargoLock(versions.cargo, nextVersion);
 
 const releaseFiles = ["package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml"];
-if (existsSync(files.lock)) releaseFiles.push("src-tauri/Cargo.lock");
+if (existsSync(files.lock) && isTracked("src-tauri/Cargo.lock")) releaseFiles.push("src-tauri/Cargo.lock");
 runGit(["add", ...releaseFiles]);
 runGit([
   "commit",
