@@ -266,25 +266,10 @@ export class LineOverlay implements ISeriesPrimitive<Time> {
           if (first) {
             const segmentCount = path.points.length - 1;
             const selectedSegments = q.tool === "path" ? q.selectedSegments ?? [] : [];
-            if (selectedSegments.length > 0) {
-              ctx.save();
-              ctx.strokeStyle = "#2962ff";
-              ctx.globalAlpha = baseAlpha * 0.28;
-              ctx.lineCap = "round";
-              for (const segmentIndex of selectedSegments) {
-                const start = path.points[segmentIndex];
-                const end = path.points[segmentIndex + 1];
-                if (!start || !end) continue;
-                const segmentStyle = getGeometrySegmentStyle(q, segmentIndex);
-                ctx.lineWidth = Math.max(1, segmentStyle.lineWidth + 5) * k;
-                ctx.beginPath();
-                ctx.moveTo(start.x * hr, start.y * vr);
-                ctx.lineTo(end.x * hr, end.y * vr);
-                ctx.stroke();
-              }
-              ctx.restore();
-            }
-            if (q.tool === "path" && Object.keys(q.segmentStyles ?? {}).length > 0) {
+            if (
+              q.tool === "path" &&
+              (selectedSegments.length > 0 || Object.keys(q.segmentStyles ?? {}).length > 0)
+            ) {
               ctx.lineCap = "round";
               for (let segmentIndex = 0; segmentIndex < segmentCount; segmentIndex += 1) {
                 const start = path.points[segmentIndex];
@@ -292,7 +277,7 @@ export class LineOverlay implements ISeriesPrimitive<Time> {
                 if (!start || !end) continue;
                 const segmentStyle = getGeometrySegmentStyle(q, segmentIndex);
                 ctx.globalAlpha = baseAlpha * segmentStyle.colorOpacity;
-                ctx.strokeStyle = segmentStyle.color;
+                ctx.strokeStyle = selectedSegments.includes(segmentIndex) ? "#2962ff" : segmentStyle.color;
                 ctx.lineWidth = Math.max(1, segmentStyle.lineWidth) * k;
                 ctx.setLineDash(segmentStyle.style === "dashed" ? [6 * k, 4 * k] : segmentStyle.style === "dotted" ? [2 * k, 3 * k] : []);
                 ctx.beginPath();
