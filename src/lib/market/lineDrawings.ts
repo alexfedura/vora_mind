@@ -222,6 +222,8 @@ export interface DrawingGeometry extends DrawingPresentation {
   type: "geometry";
   tool: GeometryToolId;
   points: DrawingAnchor[];
+  segmentStyles?: Record<number, DrawingGeometrySegmentStyle>;
+  selectedSegments?: number[];
   startArrow?: boolean;
   endArrow?: boolean;
   sourceBars?: DrawingCandleSample[];
@@ -231,6 +233,60 @@ export interface DrawingGeometry extends DrawingPresentation {
   hovered?: boolean;
   locked?: boolean;
   style?: LineStyle;
+}
+
+export interface DrawingGeometrySegmentStyle {
+  color?: string;
+  colorOpacity?: number;
+  lineWidth?: number;
+  style?: LineStyle;
+}
+
+export type DrawingGeometryStylePatch = Partial<DrawingGeometrySegmentStyle>;
+
+export function getGeometrySegmentStyle(
+  drawing: DrawingGeometry,
+  segmentIndex: number,
+): Required<DrawingGeometrySegmentStyle> {
+  const override = drawing.segmentStyles?.[segmentIndex];
+  return {
+    color: override?.color ?? drawing.color,
+    colorOpacity: override?.colorOpacity ?? drawing.colorOpacity ?? 1,
+    lineWidth: override?.lineWidth ?? drawing.lineWidth,
+    style: override?.style ?? drawing.style ?? "solid",
+  };
+}
+
+export function applyGeometryPathStyle(
+  drawing: DrawingGeometry,
+  patch: DrawingGeometryStylePatch,
+): DrawingGeometry {
+  const selectedSegments = drawing.selectedSegments?.filter(
+    (index) => Number.isInteger(index) && index >= 0 && index < drawing.points.length - 1,
+  );
+  if (!selectedSegments?.length) {
+    const segmentStyles = Object.fromEntries(
+      Object.entries(drawing.segmentStyles ?? {}).flatMap(([index, style]) => {
+        const remaining = { ...style };
+        for (const key of Object.keys(patch) as (keyof DrawingGeometryStylePatch)[]) {
+          delete remaining[key];
+        }
+        return Object.keys(remaining).length > 0 ? [[index, remaining]] : [];
+      }),
+    );
+    return {
+      ...drawing,
+      ...patch,
+      segmentStyles: Object.keys(segmentStyles).length > 0 ? segmentStyles : undefined,
+      selectedSegments: undefined,
+    };
+  }
+
+  const segmentStyles = { ...drawing.segmentStyles };
+  for (const index of selectedSegments) {
+    segmentStyles[index] = { ...segmentStyles[index], ...patch };
+  }
+  return { ...drawing, segmentStyles };
 }
 
 /** v7.4.4 — shared drawings union (rectangle + line tools). */
