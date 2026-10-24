@@ -1,0 +1,467 @@
+/**
+ * Editor chrome CSS.
+ * Consumed by MarkdownEditor.tsx's wrapper div and by CodeMirror's DOM.
+ * Scoped under .vm-editor-wrapper to avoid leaking into the host app.
+ */
+.vm-editor-wrapper {
+  --vm-bg: #ffffff;
+  --vm-bg-panel: #f7f7f8;
+  --vm-fg: #1f2328;
+  --vm-fg-muted: #57606a;
+  --vm-fg-faint: #8c959f;
+  --vm-border: #d0d7de;
+  --vm-accent: #7c3aed;
+  --vm-accent-soft: rgba(124, 58, 237, 0.1);
+  --vm-selection: rgba(124, 58, 237, 0.22);
+  --vm-selection-match: rgba(124, 58, 237, 0.14);
+  --vm-cursor: #7c3aed;
+  --vm-active-line: rgba(0, 0, 0, 0.03);
+  --vm-link: #0969da;
+  --vm-code-bg: rgba(0, 0, 0, 0.05);
+  --vm-highlight-bg: #fff3a3;
+  --vm-highlight-fg: #1f2328;
+  --vm-hl-keyword: #cf222e;
+  --vm-hl-string: #0a3069;
+  --vm-hl-number: #0550ae;
+  --vm-hl-comment: #6e7781;
+  --vm-hl-type: #953800;
+  --vm-hl-function: #8250df;
+  --vm-hl-property: #0550ae;
+  --vm-hl-tag: #116329;
+  --vm-hl-invalid: #cf222e;
+
+  --vm-bgPanel: var(--vm-bg-panel);
+  --vm-fgMuted: var(--vm-fg-muted);
+  --vm-fgFaint: var(--vm-fg-faint);
+  --vm-accentSoft: var(--vm-accent-soft);
+  --vm-selectionMatch: var(--vm-selection-match);
+  --vm-activeLine: var(--vm-active-line);
+  --vm-codeBg: var(--vm-code-bg);
+  --vm-hlKeyword: var(--vm-hl-keyword);
+  --vm-hlString: var(--vm-hl-string);
+  --vm-hlNumber: var(--vm-hl-number);
+  --vm-hlComment: var(--vm-hl-comment);
+  --vm-hlType: var(--vm-hl-type);
+  --vm-hlFunction: var(--vm-hl-function);
+  --vm-hlProperty: var(--vm-hl-property);
+  --vm-hlTag: var(--vm-hl-tag);
+  --vm-hlInvalid: var(--vm-hl-invalid);
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--vm-bg);
+  color: var(--vm-fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+[data-theme="dark"] .vm-editor-wrapper,
+.vm-editor-wrapper[data-theme="dark"] {
+  --vm-bg: #1e1e1e;
+  --vm-bg-panel: #252525;
+  --vm-fg: #dcddde;
+  --vm-fg-muted: #888888;
+  --vm-fg-faint: #666666;
+  --vm-border: #3d3d3d;
+  --vm-accent: #a78bfa;
+  --vm-accent-soft: rgba(167, 139, 250, 0.14);
+  --vm-selection: rgba(167, 139, 250, 0.28);
+  --vm-selection-match: rgba(167, 139, 250, 0.18);
+  --vm-cursor: #a78bfa;
+  --vm-active-line: rgba(255, 255, 255, 0.04);
+  --vm-link: #818cf8;
+  --vm-code-bg: rgba(255, 255, 255, 0.06);
+  --vm-highlight-bg: #fff3a3;
+  --vm-highlight-fg: #1f2328;
+  --vm-hl-keyword: #c792ea;
+  --vm-hl-string: #c3e88d;
+  --vm-hl-number: #f78c6c;
+  --vm-hl-comment: #6a7a82;
+  --vm-hl-type: #ffcb6b;
+  --vm-hl-function: #82aaff;
+  --vm-hl-property: #82aaff;
+  --vm-hl-tag: #f07178;
+  --vm-hl-invalid: #ff5370;
+}
+
+@media (prefers-color-scheme: dark) {
+  .vm-editor-wrapper:not([data-theme="light"]) {
+    --vm-bg: #1e1e1e;
+    --vm-bg-panel: #252525;
+    --vm-fg: #dcddde;
+    --vm-fg-muted: #888888;
+    --vm-fg-faint: #666666;
+    --vm-border: #3d3d3d;
+    --vm-accent: #a78bfa;
+    --vm-accent-soft: rgba(167, 139, 250, 0.14);
+    --vm-selection: rgba(167, 139, 250, 0.28);
+    --vm-selection-match: rgba(167, 139, 250, 0.18);
+    --vm-cursor: #a78bfa;
+    --vm-active-line: rgba(255, 255, 255, 0.04);
+    --vm-link: #818cf8;
+    --vm-code-bg: rgba(255, 255, 255, 0.06);
+    --vm-highlight-bg: #fff3a3;
+    --vm-highlight-fg: #1f2328;
+    --vm-hl-keyword: #c792ea;
+    --vm-hl-string: #c3e88d;
+    --vm-hl-number: #f78c6c;
+    --vm-hl-comment: #6a7a82;
+    --vm-hl-type: #ffcb6b;
+    --vm-hl-function: #82aaff;
+    --vm-hl-property: #82aaff;
+    --vm-hl-tag: #f07178;
+    --vm-hl-invalid: #ff5370;
+  }
+}
+
+.vm-editor-wrapper .cm-editor {
+  height: 100%;
+  background: var(--vm-bg);
+}
+
+.vm-editor-wrapper .cm-scroller {
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vm-border) transparent;
+}
+
+.vm-editor-wrapper .cm-scroller::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.vm-editor-wrapper .cm-scroller::-webkit-scrollbar-thumb {
+  background: var(--vm-border);
+  border-radius: 5px;
+}
+
+.vm-editor-wrapper .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.vm-editor-wrapper .cm-placeholder {
+  color: var(--vm-fg-faint);
+  font-style: italic;
+  pointer-events: none;
+}
+
+.vm-md-hidden {
+  display: none;
+}
+
+.vm-editor-wrapper .cm-line.vm-md-list-line {
+  text-align: start;
+}
+
+.vm-md-list-bullet {
+  color: var(--vm-fg-muted);
+}
+
+.vm-md-bold {
+  font-weight: 700;
+}
+
+.vm-md-italic {
+  font-style: italic;
+}
+
+.vm-md-strike {
+  color: var(--vm-fg-muted);
+  text-decoration: line-through;
+}
+
+.vm-md-code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--vm-code-bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.vm-md-link {
+  color: var(--vm-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.vm-text-link-anchor {
+  color: #c4b5fd;
+  text-decoration: underline;
+  text-decoration-color: #8b5cf6;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.vm-md-h1 {
+  font-size: 1.8em;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.vm-md-h2 {
+  font-size: 1.5em;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.vm-md-h3 {
+  font-size: 1.25em;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.vm-md-h4 {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.vm-md-h5 {
+  font-size: 1.05em;
+  font-weight: 600;
+}
+
+.vm-md-h6 {
+  color: var(--vm-fg-muted);
+  font-size: 1em;
+  font-weight: 600;
+}
+
+.vm-md-highlight {
+  padding: 0 2px;
+  border-radius: 2px;
+  background: var(--vm-highlight-bg);
+  color: var(--vm-highlight-fg);
+}
+
+.vm-task-checkbox-wrap {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-end: 4px;
+  vertical-align: middle;
+}
+
+.vm-task-checkbox {
+  position: relative;
+  top: -1px;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--vm-accent);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.vm-task-checkbox:hover {
+  filter: brightness(1.1);
+}
+
+.vm-math-inline {
+  display: inline-block;
+  padding: 0 2px;
+  vertical-align: baseline;
+}
+
+.vm-math-inline.vm-math-display {
+  display: block;
+  margin: 8px 0;
+  text-align: center;
+}
+
+.vm-math-placeholder {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--vm-code-bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  opacity: 0.6;
+}
+
+.vm-math-error {
+  padding-inline-start: 6px;
+  border-inline-start: 3px solid var(--vm-hl-invalid);
+  color: var(--vm-hl-invalid);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.vm-editor-wrapper .katex {
+  font-size: 1.05em;
+}
+
+.vm-editor-wrapper .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 0.5em 0;
+}
+
+.vm-editor-wrapper.vm-card-markdown-editor {
+  --vm-bg: transparent;
+  --vm-bg-panel: #25272c;
+  --vm-fg: #d1d5db;
+  --vm-fg-muted: #9ca3af;
+  --vm-fg-faint: #6b7280;
+  --vm-border: #383e4d;
+  --vm-accent: #a78bfa;
+  --vm-accent-soft: rgba(167, 139, 250, 0.14);
+  --vm-selection: rgba(167, 139, 250, 0.28);
+  --vm-selection-match: rgba(167, 139, 250, 0.18);
+  --vm-cursor: #a78bfa;
+  --vm-active-line: transparent;
+  --vm-link: #818cf8;
+  --vm-code-bg: rgba(255, 255, 255, 0.06);
+  --vm-highlight-bg: #fff3a3;
+  --vm-highlight-fg: #1f2328;
+
+  height: auto;
+  min-height: 3rem;
+  background: transparent;
+  color: var(--vm-fg);
+  font-size: 14px;
+  line-height: 1.625;
+}
+
+.vm-card-markdown-editor .cm-editor {
+  height: auto;
+  min-height: 3rem;
+  background: transparent;
+  font-size: inherit;
+}
+
+.vm-card-markdown-editor .cm-scroller {
+  overflow: visible;
+}
+
+.vm-card-markdown-editor .cm-gutters {
+  display: none;
+}
+
+.vm-card-markdown-editor .cm-content {
+  max-width: none;
+  min-height: 3rem;
+  margin: 0;
+  padding: 0;
+}
+
+.vm-card-markdown-editor .cm-line {
+  padding: 0;
+}
+
+.vm-card-markdown-editor .cm-activeLine {
+  background: transparent;
+}
+
+.vm-markdown.vm-card-markdown-preview {
+  --vm-bg: transparent;
+  --vm-bg-panel: #25272c;
+  --vm-fg: #d1d5db;
+  --vm-fg-muted: #9ca3af;
+  --vm-fg-faint: #6b7280;
+  --vm-border: #383e4d;
+  --vm-accent: #a78bfa;
+  --vm-link: #818cf8;
+  --vm-code-bg: rgba(255, 255, 255, 0.06);
+  --vm-highlight-bg: #fff3a3;
+  --vm-highlight-fg: #1f2328;
+
+  max-width: none;
+  color: #d1d5db;
+  font-size: 14px;
+  line-height: 1.625;
+}
+
+.vm-markdown.vm-card-markdown-preview h1,
+.vm-markdown.vm-card-markdown-preview h2,
+.vm-markdown.vm-card-markdown-preview h3,
+.vm-markdown.vm-card-markdown-preview h4,
+.vm-markdown.vm-card-markdown-preview h5,
+.vm-markdown.vm-card-markdown-preview h6 {
+  margin: 0;
+  color: inherit;
+}
+
+.vm-markdown.vm-card-markdown-preview p {
+  margin: 0;
+}
+
+.vm-markdown.vm-card-markdown-preview ul,
+.vm-markdown.vm-card-markdown-preview ol {
+  margin-block: 0.25em;
+}
+
+.vm-mermaid-container {
+  display: block;
+  overflow-x: auto;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--vm-border);
+  border-radius: 6px;
+  background: var(--vm-bg-panel);
+}
+
+.vm-mermaid-container svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.vm-mermaid-placeholder {
+  padding: 12px;
+  border: 1px dashed var(--vm-border);
+  border-radius: 6px;
+  background: var(--vm-bg-panel);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  opacity: 0.6;
+}
+
+.vm-mermaid-placeholder pre,
+.vm-mermaid-error pre {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.vm-mermaid-error {
+  padding: 8px 12px;
+  border-inline-start: 3px solid var(--vm-hl-invalid);
+  border-radius: 4px;
+  background: var(--vm-bg-panel);
+  font-size: 0.9em;
+}
+
+.vm-mermaid-error-title {
+  margin-bottom: 6px;
+  color: var(--vm-hl-invalid);
+  font-weight: 600;
+}
+
+.vm-mermaid-error pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.vm-mermaid-error-msg {
+  margin-top: 6px;
+  color: var(--vm-fg-muted);
+  font-size: 0.85em;
+}
+
+.vm-callout-block {
+  margin: 12px 0;
+}
+
+.vm-callout-block .vm-callout {
+  margin: 0;
+}
+
+.vm-callout-error {
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: var(--vm-bg-panel);
+  color: var(--vm-hl-invalid);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+}

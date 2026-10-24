@@ -1,0 +1,20 @@
+[workspace]
+root = "./workspace"
+db_path = "./data/vora_worker.db"
+
+[worker]
+id = "worker-local-01"
+max_concurrent_tasks = 1
+task_timeout_seconds = 1800
+candidate_ttl_minutes = 60
+
+[git]
+default_branch = "main"
+auto_sync = false
+
+[agent]
+max_retries = 3
+allow_auto_release = false
+
+[tests]
+command = "cargo test --all-targets"

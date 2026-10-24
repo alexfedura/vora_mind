@@ -1,0 +1,249 @@
+/**
+ * Rendered markdown styles for read-only preview and rendered callout content.
+ * Keep this separate from the editor's live-preview decorations.
+ */
+.vm-markdown {
+  max-width: 720px;
+  color: var(--vm-fg, #1f2328);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+
+.vm-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.vm-markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.vm-markdown h1,
+.vm-markdown h2,
+.vm-markdown h3,
+.vm-markdown h4,
+.vm-markdown h5,
+.vm-markdown h6 {
+  margin: 1.6em 0 0.6em;
+  color: var(--vm-fg, #1f2328);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.vm-markdown h1 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--vm-border, #d0d7de);
+  font-size: 1.8em;
+}
+
+.vm-markdown h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--vm-border, #d0d7de);
+  font-size: 1.5em;
+}
+
+.vm-markdown h3 {
+  font-size: 1.25em;
+}
+
+.vm-markdown h4 {
+  font-size: 1.1em;
+}
+
+.vm-markdown h5 {
+  font-size: 1.05em;
+}
+
+.vm-markdown h6 {
+  color: var(--vm-fg-muted, #57606a);
+  font-size: 1em;
+}
+
+.vm-markdown p {
+  margin: 0.8em 0;
+}
+
+.vm-markdown ul,
+.vm-markdown ol {
+  margin: 0.8em 0;
+  padding-inline-start: 1.6em;
+}
+
+.vm-markdown li {
+  margin: 0.2em 0;
+}
+
+.vm-markdown li > p {
+  margin: 0.3em 0;
+}
+
+.vm-markdown li::marker {
+  color: var(--vm-fg-muted, #57606a);
+}
+
+.vm-markdown blockquote {
+  margin: 1em 0;
+  padding: 0.2em 1em;
+  border-inline-start: 3px solid var(--vm-border, #d0d7de);
+  color: var(--vm-fg-muted, #57606a);
+}
+
+.vm-markdown blockquote > *:first-child {
+  margin-top: 0;
+}
+
+.vm-markdown blockquote > *:last-child {
+  margin-bottom: 0;
+}
+
+.vm-markdown code {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--vm-code-bg, rgba(0, 0, 0, 0.05));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.vm-markdown pre {
+  overflow-x: auto;
+  margin: 1em 0;
+  padding: 12px 16px;
+  border: 1px solid var(--vm-border, #d0d7de);
+  border-radius: 6px;
+  background: var(--vm-bg-panel, #f7f7f8);
+  line-height: 1.5;
+}
+
+.vm-markdown pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.875em;
+}
+
+.vm-markdown a.vm-link,
+.vm-markdown a {
+  border-bottom: 1px solid transparent;
+  color: var(--vm-link, #0969da);
+  text-decoration: none;
+  transition: border-bottom-color 0.1s ease;
+}
+
+.vm-markdown a.vm-link:hover,
+.vm-markdown a:hover {
+  border-bottom-color: currentColor;
+}
+
+.vm-markdown table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 1em 0;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.vm-markdown th,
+.vm-markdown td {
+  padding: 6px 12px;
+  border: 1px solid var(--vm-border, #d0d7de);
+  text-align: start;
+}
+
+.vm-markdown th {
+  background: var(--vm-bg-panel, #f7f7f8);
+  font-weight: 600;
+}
+
+.vm-markdown tr:nth-child(2n) td {
+  background: var(--vm-bg-panel, #f7f7f8);
+}
+
+.vm-markdown hr {
+  margin: 2em 0;
+  border: 0;
+  border-top: 1px solid var(--vm-border, #d0d7de);
+}
+
+.vm-markdown img {
+  max-width: 100%;
+  height: auto;
+  margin: 0.5em 0;
+  border-radius: 4px;
+}
+
+.vm-markdown mark.vm-highlight {
+  padding: 0 2px;
+  border-radius: 2px;
+  background: var(--vm-highlight-bg, #fff3a3);
+  color: var(--vm-highlight-fg, #1f2328);
+}
+
+.vm-markdown .vm-task-item {
+  margin-inline-start: -1.4em;
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+.vm-markdown .vm-task-checkbox {
+  width: 15px;
+  height: 15px;
+  margin-inline-end: 6px;
+  accent-color: var(--vm-accent, #7c3aed);
+  pointer-events: none;
+  vertical-align: middle;
+}
+
+.vm-markdown .vm-task-text {
+  vertical-align: middle;
+}
+
+.vm-markdown li:has(> .vm-task-item) {
+  list-style: none;
+}
+
+.vm-markdown .vm-footnote-ref {
+  font-size: 0.8em;
+  line-height: 0;
+  vertical-align: super;
+}
+
+.vm-markdown .vm-footnote-link {
+  color: var(--vm-link, #0969da);
+  text-decoration: none;
+}
+
+.vm-markdown .vm-footnote-link:hover {
+  text-decoration: underline;
+}
+
+.vm-markdown .vm-footnote-sep {
+  margin: 2em 0 1em;
+  border: 0;
+  border-top: 1px solid var(--vm-border, #d0d7de);
+}
+
+.vm-markdown .vm-footnotes {
+  color: var(--vm-fg-muted, #57606a);
+  font-size: 0.875em;
+}
+
+.vm-markdown .vm-footnotes-list {
+  padding-inline-start: 1.4em;
+}
+
+.vm-markdown .vm-footnote-item {
+  margin: 0.4em 0;
+}
+
+.vm-markdown .vm-footnote-item:target {
+  border-radius: 3px;
+  background: var(--vm-accent-soft, rgba(124, 58, 237, 0.1));
+}
+
+.vm-markdown .vm-footnote-backref {
+  margin-inline-start: 4px;
+  color: var(--vm-link, #0969da);
+  text-decoration: none;
+}

@@ -1,0 +1,75 @@
+name: 'Release Build'
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'pnpm'
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify release tag version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/release.js verify "$env:RELEASE_TAG"
+      - name: Verify updater signing secrets
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw "The TAURI_SIGNING_PRIVATE_KEY Actions secret is missing or empty."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
+            throw "The TAURI_SIGNING_PRIVATE_KEY_PASSWORD Actions secret is missing or empty."
+          }
+      - name: Install WiX Toolset
+        run: choco install wixtoolset --no-progress --yes
+      - name: Set WiX Path
+        shell: pwsh
+        run: |
+          $wixBin = Get-ChildItem 'C:\Program Files (x86)' -Directory -Filter 'WiX Toolset v*' |
+            ForEach-Object { Join-Path $_.FullName 'bin' } |
+            Where-Object {
+              (Test-Path (Join-Path $_ 'candle.exe')) -and
+              (Test-Path (Join-Path $_ 'light.exe'))
+            } |
+            Sort-Object -Descending |
+            Select-Object -First 1
+          if (-not $wixBin) {
+            throw 'Could not locate WiX Toolset binaries (candle.exe and light.exe).'
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "WIX=$wixBin"
+      - name: Build and Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Vora Mind ${{ github.ref_name }}'
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: true
+          args: '--profile ci --bundles msi'

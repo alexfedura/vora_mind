@@ -1,0 +1,107 @@
+# =========================================================
+# Git Repository History & Artifacts
+# =========================================================
+.git
+.git/
+.gitignore
+.gitattributes
+
+# =========================================================
+# Rust & Cargo Local Build Artifacts
+# =========================================================
+target
+target/
+**/target/
+src-tauri/target
+src-tauri/target/
+**/*.rs.bk
+*.pdb
+
+# =========================================================
+# Node & Frontend Modules / Dist
+# =========================================================
+node_modules
+node_modules/
+**/node_modules/
+dist
+dist/
+dist-ssr/
+build/
+.turbo/
+*.local
+
+# =========================================================
+# SQLite Databases, WAL & Journal Files
+# =========================================================
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite-journal
+*.sqlite3-journal
+*.sqlite-wal
+*.sqlite-shm
+vora_worker_queue.db*
+*.db-*
+
+# =========================================================
+# Sandboxes, Logs, Cache & Temporary Files
+# =========================================================
+logs/
+**/logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tmp
+*.bak
+*.swp
+data/
+sandboxes/
+tasks/
+.vora_sandboxes/
+.vora_cache/
+
+# =========================================================
+# OS, Shell & Editor Metadata
+# =========================================================
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# =========================================================
+# Environment & Secret Credentials
+# =========================================================
+*.key
+*.key.pub
+*.pem
+*.pfx
+*.cert
+*.crt
+.env
+.env.*
+
+# =========================================================
+# Docker & Deployment Files (Avoid recursion in context)
+# =========================================================
+Dockerfile*
+docker-compose*.yml
+deploy/
+scripts/
+docs/
+specs/

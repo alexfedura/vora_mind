@@ -1,0 +1,1 @@
+{"rustc":3720210673988096810,"features":"[]","declared_features":"[]","target":6216520282702351879,"profile":8378823585564974145,"path":10460608821769362194,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\utf8_iter-b8c409bf39c05c45\\dep-lib-utf8_iter","checksum":false}}],"rustflags":["-C","link-arg=/DEBUG:NONE"],"config":9396254390672932401,"compile_kind":0}

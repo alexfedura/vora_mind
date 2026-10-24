@@ -1,0 +1,123 @@
+[package]
+name = "vora_mind"
+version = "0.86.104"
+description = "A Tauri App"
+edition = "2021"
+default-run = "vora_mind"
+
+[lib]
+name = "vora_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+default = ["custom-protocol", "gui"]
+custom-protocol = ["tauri/custom-protocol"]
+gui = ["tauri", "tauri-plugin-dialog", "tauri-plugin-opener", "tauri-plugin-process", "tauri-plugin-updater"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [], optional = true }
+tauri-plugin-dialog = { version = "2", optional = true }
+tauri-plugin-opener = { version = "2", optional = true }
+tauri-plugin-process = { version = "2", optional = true }
+tauri-plugin-updater = { version = "2", optional = true }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "socks"] }
+tokio = { version = "1", features = ["sync", "rt", "time", "macros", "rt-multi-thread"] }
+dukascopy_rust = "0.2"
+rusqlite = { version = "0.32", features = ["bundled", "backup"] }
+tree-sitter = "0.22.6"
+tree-sitter-rust = "0.21.2"
+tree-sitter-typescript = "0.21.2"
+git2 = { version = "0.19", features = ["vendored-libgit2"] }
+uuid = { version = "1.10", features = ["v7", "serde"] }
+blake3 = "1.5"
+clap = { version = "4", features = ["derive", "env"] }
+memmap2 = "0.9"
+chrono = "0.4"
+
+
+[[bin]]
+name = "vora_source"
+path = "src/bin/vora_source.rs"
+
+[[bench]]
+name = "load_test"
+harness = false
+
+[[bench]]
+name = "scale_stress_test"
+harness = false
+
+[[bench]]
+name = "high_scale_bench"
+harness = false
+
+[[test]]
+name = "contract_verification_test"
+path = "tests/contract_verification_test.rs"
+
+[[test]]
+name = "semantic_identity_invariant_test"
+path = "tests/semantic_identity_invariant_test.rs"
+
+[[test]]
+name = "semantic_extended_matrix_test"
+path = "tests/semantic_extended_matrix_test.rs"
+
+[[test]]
+name = "semantic_lineage_test"
+path = "tests/semantic_lineage_test.rs"
+
+[[test]]
+name = "worker_lifecycle_e2e_test"
+path = "tests/worker_lifecycle_e2e_test.rs"
+
+[[test]]
+name = "cluster_mesh_e2e_test"
+path = "tests/cluster_mesh_e2e_test.rs"
+
+[[test]]
+name = "load_balancer_e2e_test"
+path = "tests/load_balancer_e2e_test.rs"
+
+[[test]]
+name = "ast_cluster_broadcast_test"
+path = "tests/ast_cluster_broadcast_test.rs"
+
+[[test]]
+name = "autonomous_self_healing_test"
+path = "tests/autonomous_self_healing_test.rs"
+
+[[test]]
+name = "diagnostic_telemetry_test"
+path = "tests/diagnostic_telemetry_test.rs"
+
+[[test]]
+name = "cluster_lock_guard_test"
+path = "tests/cluster_lock_guard_test.rs"
+
+[[test]]
+name = "cluster_log_aggregation_test"
+path = "tests/cluster_log_aggregation_test.rs"
+
+[profile.release]
+opt-level = 3
+lto = false
+codegen-units = 16
+debug = false
+strip = true
+panic = "abort"
+
+[profile.ci]
+inherits = "release"
+opt-level = 1
+codegen-units = 16
+lto = false
+incremental = true
+strip = "debuginfo"

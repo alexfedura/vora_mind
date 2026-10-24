@@ -1,0 +1,11 @@
+D:\workspace\vora_mind\.cargo-check-target\debug\deps\tokio_socks-23760e5e53cb9e8f.d: C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\lib.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\error.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\io\mod.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\io\tokio.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\tcp\mod.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\tcp\socks4.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\tcp\socks5.rs
+
+D:\workspace\vora_mind\.cargo-check-target\debug\deps\libtokio_socks-23760e5e53cb9e8f.rmeta: C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\lib.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\error.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\io\mod.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\io\tokio.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\tcp\mod.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\tcp\socks4.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\tcp\socks5.rs
+
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\lib.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\error.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\io\mod.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\io\tokio.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\tcp\mod.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\tcp\socks4.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-socks-0.5.3\src\tcp\socks5.rs:

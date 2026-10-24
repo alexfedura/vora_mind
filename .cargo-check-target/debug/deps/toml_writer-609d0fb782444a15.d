@@ -1,0 +1,10 @@
+D:\workspace\vora_mind\.cargo-check-target\debug\deps\toml_writer-609d0fb782444a15.d: C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\lib.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\integer.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\key.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\string.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\value.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\write.rs
+
+D:\workspace\vora_mind\.cargo-check-target\debug\deps\libtoml_writer-609d0fb782444a15.rmeta: C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\lib.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\integer.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\key.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\string.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\value.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\write.rs
+
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\lib.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\integer.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\key.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\string.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\value.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\toml_writer-1.1.2+spec-1.1.0\src\write.rs:

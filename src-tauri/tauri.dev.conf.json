@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "com.alexfedura.voramind.dev",
+  "productName": "Vora Mind (Dev)",
+  "app": {
+    "windows": [
+      {
+        "title": "Vora Mind (Dev)"
+      }
+    ]
+  }
+}

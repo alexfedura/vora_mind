@@ -1,0 +1,217 @@
+/**
+ * Obsidian-compatible callout styles for rendered markdown and editor widgets.
+ */
+.vm-callout {
+  overflow: hidden;
+  margin: 1em 0;
+  padding: 0;
+  border-inline-start: 4px solid var(--vm-callout-accent, #7c3aed);
+  border-radius: 4px;
+  background: var(--vm-callout-bg, rgba(124, 58, 237, 0.08));
+}
+
+.vm-callout-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  color: var(--vm-callout-accent, #7c3aed);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.vm-callout-icon {
+  display: inline-flex;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.vm-callout-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.vm-callout-title-text {
+  flex: 1;
+  font-size: 0.95em;
+}
+
+.vm-callout-body {
+  padding: 0 16px 12px;
+  color: var(--vm-fg, #1f2328);
+}
+
+.vm-callout-body > *:first-child {
+  margin-top: 0;
+}
+
+.vm-callout-body > *:last-child {
+  margin-bottom: 0;
+}
+
+.vm-callout-body p {
+  margin: 0.5em 0;
+}
+
+.vm-callout-body code {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--vm-code-bg, rgba(0, 0, 0, 0.05));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.vm-callout-note {
+  --vm-callout-accent: #3b82f6;
+  --vm-callout-bg: rgba(59, 130, 246, 0.08);
+}
+
+.vm-callout-tip {
+  --vm-callout-accent: #10b981;
+  --vm-callout-bg: rgba(16, 185, 129, 0.08);
+}
+
+.vm-callout-warning {
+  --vm-callout-accent: #f59e0b;
+  --vm-callout-bg: rgba(245, 158, 11, 0.08);
+}
+
+.vm-callout-danger {
+  --vm-callout-accent: #ef4444;
+  --vm-callout-bg: rgba(239, 68, 68, 0.08);
+}
+
+.vm-callout-info {
+  --vm-callout-accent: #06b6d4;
+  --vm-callout-bg: rgba(6, 182, 212, 0.08);
+}
+
+.vm-callout-success {
+  --vm-callout-accent: #22c55e;
+  --vm-callout-bg: rgba(34, 197, 94, 0.08);
+}
+
+.vm-callout-question {
+  --vm-callout-accent: #a855f7;
+  --vm-callout-bg: rgba(168, 85, 247, 0.08);
+}
+
+.vm-callout-quote {
+  --vm-callout-accent: #64748b;
+  --vm-callout-bg: rgba(100, 116, 139, 0.08);
+}
+
+.vm-callout-example {
+  --vm-callout-accent: #8b5cf6;
+  --vm-callout-bg: rgba(139, 92, 246, 0.08);
+}
+
+[data-theme="dark"] .vm-callout,
+.vm-editor-wrapper[data-theme="dark"] .vm-callout {
+  --vm-callout-bg: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .vm-callout-note,
+.vm-editor-wrapper[data-theme="dark"] .vm-callout-note {
+  --vm-callout-accent: #60a5fa;
+  --vm-callout-bg: rgba(96, 165, 250, 0.14);
+}
+
+[data-theme="dark"] .vm-callout-tip,
+.vm-editor-wrapper[data-theme="dark"] .vm-callout-tip {
+  --vm-callout-accent: #34d399;
+  --vm-callout-bg: rgba(52, 211, 153, 0.14);
+}
+
+[data-theme="dark"] .vm-callout-warning,
+.vm-editor-wrapper[data-theme="dark"] .vm-callout-warning {
+  --vm-callout-accent: #fbbf24;
+  --vm-callout-bg: rgba(251, 191, 36, 0.14);
+}
+
+[data-theme="dark"] .vm-callout-danger,
+.vm-editor-wrapper[data-theme="dark"] .vm-callout-danger {
+  --vm-callout-accent: #f87171;
+  --vm-callout-bg: rgba(248, 113, 113, 0.14);
+}
+
+[data-theme="dark"] .vm-callout-info,
+.vm-editor-wrapper[data-theme="dark"] .vm-callout-info {
+  --vm-callout-accent: #22d3ee;
+  --vm-callout-bg: rgba(34, 211, 238, 0.14);
+}
+
+[data-theme="dark"] .vm-callout-success,
+.vm-editor-wrapper[data-theme="dark"] .vm-callout-success {
+  --vm-callout-accent: #4ade80;
+  --vm-callout-bg: rgba(74, 222, 128, 0.14);
+}
+
+[data-theme="dark"] .vm-callout-question,
+.vm-editor-wrapper[data-theme="dark"] .vm-callout-question {
+  --vm-callout-accent: #c084fc;
+  --vm-callout-bg: rgba(192, 132, 252, 0.14);
+}
+
+[data-theme="dark"] .vm-callout-quote,
+.vm-editor-wrapper[data-theme="dark"] .vm-callout-quote {
+  --vm-callout-accent: #94a3b8;
+  --vm-callout-bg: rgba(148, 163, 184, 0.14);
+}
+
+[data-theme="dark"] .vm-callout-example,
+.vm-editor-wrapper[data-theme="dark"] .vm-callout-example {
+  --vm-callout-accent: #a78bfa;
+  --vm-callout-bg: rgba(167, 139, 250, 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+  .vm-editor-wrapper:not([data-theme="light"]) .vm-callout-note {
+    --vm-callout-accent: #60a5fa;
+    --vm-callout-bg: rgba(96, 165, 250, 0.14);
+  }
+
+  .vm-editor-wrapper:not([data-theme="light"]) .vm-callout-tip {
+    --vm-callout-accent: #34d399;
+    --vm-callout-bg: rgba(52, 211, 153, 0.14);
+  }
+
+  .vm-editor-wrapper:not([data-theme="light"]) .vm-callout-warning {
+    --vm-callout-accent: #fbbf24;
+    --vm-callout-bg: rgba(251, 191, 36, 0.14);
+  }
+
+  .vm-editor-wrapper:not([data-theme="light"]) .vm-callout-danger {
+    --vm-callout-accent: #f87171;
+    --vm-callout-bg: rgba(248, 113, 113, 0.14);
+  }
+
+  .vm-editor-wrapper:not([data-theme="light"]) .vm-callout-info {
+    --vm-callout-accent: #22d3ee;
+    --vm-callout-bg: rgba(34, 211, 238, 0.14);
+  }
+
+  .vm-editor-wrapper:not([data-theme="light"]) .vm-callout-success {
+    --vm-callout-accent: #4ade80;
+    --vm-callout-bg: rgba(74, 222, 128, 0.14);
+  }
+
+  .vm-editor-wrapper:not([data-theme="light"]) .vm-callout-question {
+    --vm-callout-accent: #c084fc;
+    --vm-callout-bg: rgba(192, 132, 252, 0.14);
+  }
+
+  .vm-editor-wrapper:not([data-theme="light"]) .vm-callout-quote {
+    --vm-callout-accent: #94a3b8;
+    --vm-callout-bg: rgba(148, 163, 184, 0.14);
+  }
+
+  .vm-editor-wrapper:not([data-theme="light"]) .vm-callout-example {
+    --vm-callout-accent: #a78bfa;
+    --vm-callout-bg: rgba(167, 139, 250, 0.14);
+  }
+}

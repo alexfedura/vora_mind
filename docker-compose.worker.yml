@@ -1,0 +1,22 @@
+services:
+  vora-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: vora-worker-node
+    restart: unless-stopped
+    ports:
+      - "4040:4040"
+    environment:
+      - WORKER_MODE=local
+      - WORKER_NODE_ID=node-docker-primary
+      - WORKER_MAX_CONCURRENCY=1
+      - RUST_LOG=info
+      - RUST_BACKTRACE=1
+    volumes:
+      - vora-worker-data:/data
+      - ./:/workspace
+
+volumes:
+  vora-worker-data:
+    driver: local

@@ -1,0 +1,14 @@
+D:\workspace\vora_mind\.cargo-check-target\debug\deps\tree_sitter-bafa47fb62e8b79c.d: C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\lib.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\ffi.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\util.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\./README.md C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\./bindings.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\../src/array.h C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\../src/parser.h D:\workspace\vora_mind\.cargo-check-target\debug\build\tree-sitter-fa73395a548820e9\out/stdlib-symbols.txt
+
+D:\workspace\vora_mind\.cargo-check-target\debug\deps\libtree_sitter-bafa47fb62e8b79c.rmeta: C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\lib.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\ffi.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\util.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\./README.md C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\./bindings.rs C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\../src/array.h C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\../src/parser.h D:\workspace\vora_mind\.cargo-check-target\debug\build\tree-sitter-fa73395a548820e9\out/stdlib-symbols.txt
+
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\lib.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\ffi.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\util.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\./README.md:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\./bindings.rs:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\../src/array.h:
+C:\Users\HELIX\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-0.22.6\binding_rust\../src/parser.h:
+D:\workspace\vora_mind\.cargo-check-target\debug\build\tree-sitter-fa73395a548820e9\out/stdlib-symbols.txt:
+
+# env-dep:OUT_DIR=D:\\workspace\\vora_mind\\.cargo-check-target\\debug\\build\\tree-sitter-fa73395a548820e9\\out

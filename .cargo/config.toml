@@ -1,0 +1,17 @@
+[build]
+target-dir = "C:\\vora_build"
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/DEBUG:NONE"]
+
+[profile.dev]
+debug = false
+strip = "debuginfo"
+incremental = true
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+debug = false
+strip = "debuginfo"

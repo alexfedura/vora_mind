@@ -1,0 +1,61 @@
+# ==============================================================================
+# Phase 1: Fast Headless Builder Stage
+# ==============================================================================
+FROM rust:alpine AS builder
+
+WORKDIR /app
+
+# نصب ابزارهای پایه کامپایل C بدون کتابخانه‌های سنگین گرافیکی
+RUN apk add --no-cache \
+    musl-dev \
+    gcc \
+    g++ \
+    make \
+    cmake \
+    pkgconfig \
+    openssl-dev \
+    git \
+    clang-dev
+
+# کپی سورس‌کد
+COPY src-tauri ./src-tauri
+COPY package.json ./
+
+# کامپایل مستقل باینری ورکر بدون فعال‌سازی بخش گرافیکی
+WORKDIR /app/src-tauri
+RUN cargo build --release --bin vora_worker --no-default-features
+
+# ==============================================================================
+# Phase 2: Ultra-lightweight Production Runtime Stage
+# ==============================================================================
+FROM alpine:3.20
+
+WORKDIR /app
+
+# نصب پیش‌نیازهای پایه ران‌تایم و گیت
+RUN apk add --no-cache \
+    ca-certificates \
+    curl \
+    git \
+    build-base \
+    cargo \
+    rust
+
+# کپی باینری کامپایل‌شده
+COPY --from=builder /app/src-tauri/target/release/vora_worker /usr/local/bin/vora_worker
+
+# تنظیم متغیرهای محیطی استاندارد
+ENV WORKER_MODE=local
+ENV WORKER_NODE_ID=node-docker-primary
+ENV WORKER_PORT=4040
+ENV WORKER_MAX_CONCURRENCY=1
+ENV RUST_LOG=info
+ENV RUST_BACKTRACE=1
+
+# دایرکتوری پایدار برای دیتابیس صف، لاگ‌ها و ساندباکس‌ها
+VOLUME ["/data"]
+WORKDIR /data
+
+EXPOSE 4040
+
+ENTRYPOINT ["vora_worker", "serve", "4040"]

@@ -1,0 +1,19 @@
+[Unit]
+Description=Vora Distributed Autonomous Worker Node
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/data/vora
+ExecStart=/usr/local/bin/vora_worker serve 4040
+Restart=always
+RestartSec=5
+Environment=WORKER_MODE=remote
+Environment=WORKER_PORT=4040
+Environment=RUST_BACKTRACE=1
+# در صورت نیاز توکن امنیتی در این بخش مقداردهی می‌شود:
+# Environment=WORKER_AUTH_TOKEN=your_secure_auth_token
+
+[Install]
+WantedBy=multi-user.target
