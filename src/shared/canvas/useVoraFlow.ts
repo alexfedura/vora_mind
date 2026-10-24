@@ -123,6 +123,11 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
   latestNodes.current = nodes;
   latestEdges.current = edges;
   latestCards.current = cards;
+  for (const [cardId, card] of Object.entries(cards)) {
+    if (card.librarySourceCardId) {
+      librarySourceCardIds.current.set(cardId, card.librarySourceCardId);
+    }
+  }
   currentBoardId.current = boardId;
   autosaveEnabledRef.current = autosaveEnabled;
 
@@ -704,7 +709,8 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
         boardId: targetBoardId,
         created_at: Date.now(),
         deleted_at: card.deleted_at ?? undefined,
-        librarySourceCardId: librarySourceCardIds.current.get(card.id),
+        librarySourceCardId:
+          librarySourceCardIds.current.get(card.id) ?? latestCards.current[card.id]?.librarySourceCardId,
       };
     }
 
