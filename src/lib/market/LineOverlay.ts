@@ -1,6 +1,6 @@
 // LineOverlay v7.4.4 - vline/hline/hray/trendline renderer.
 import type { IChartApi, ISeriesApi, ISeriesPrimitive, IPrimitivePaneView, IPrimitivePaneRenderer, SeriesType, Time, UTCTimestamp } from "lightweight-charts";
-import type { DrawingAny, DrawingFibGann, DrawingHorizontalLine, DrawingHorizontalRay, DrawingTrendLine, DrawingVerticalLine } from "./lineDrawings";
+import { getGeometrySegmentStyle, type DrawingAny, type DrawingFibGann, type DrawingHorizontalLine, type DrawingHorizontalRay, type DrawingTrendLine, type DrawingVerticalLine } from "./lineDrawings";
 import type { DrawingCandleSample } from "./drawingTypes";
 import {
   DRAWING_HANDLE_COLOR,
@@ -258,16 +258,59 @@ export class LineOverlay implements ISeriesPrimitive<Time> {
           }, q.tool === "path" ? { startArrow: q.startArrow, endArrow: q.endArrow } : undefined);
           if (!path || path.points.length === 0) continue;
           ctx.save();
-          ctx.globalAlpha *= opacity * (q.tool === "highlighter" ? 0.28 : 1);
+          const baseAlpha = ctx.globalAlpha * (q.tool === "highlighter" ? 0.28 : 1);
+          ctx.globalAlpha = baseAlpha * opacity;
           ctx.strokeStyle = q.color;
           ctx.lineWidth = Math.max(q.tool === "highlighter" ? 10 : 1, q.lineWidth) * k;
           const first = path.points[0];
           if (first) {
-            ctx.beginPath();
-            ctx.moveTo(first.x * hr, first.y * vr);
-            for (const point of path.points.slice(1)) ctx.lineTo(point.x * hr, point.y * vr);
-            if (path.closed) ctx.closePath();
-            ctx.stroke();
+            const segmentCount = path.points.length - 1;
+            const selectedSegments = q.tool === "path" ? q.selectedSegments ?? [] : [];
+            if (selectedSegments.length > 0) {
+              ctx.save();
+              ctx.strokeStyle = "#2962ff";
+              ctx.globalAlpha = baseAlpha * 0.28;
+              ctx.lineCap = "round";
+              for (const segmentIndex of selectedSegments) {
+                const start = path.points[segmentIndex];
+                const end = path.points[segmentIndex + 1];
+                if (!start || !end) continue;
+                const segmentStyle = getGeometrySegmentStyle(q, segmentIndex);
+                ctx.lineWidth = Math.max(1, segmentStyle.lineWidth + 5) * k;
+                ctx.beginPath();
+                ctx.moveTo(start.x * hr, start.y * vr);
+                ctx.lineTo(end.x * hr, end.y * vr);
+                ctx.stroke();
+              }
+              ctx.restore();
+            }
+            if (q.tool === "path" && Object.keys(q.segmentStyles ?? {}).length > 0) {
+              ctx.lineCap = "round";
+              for (let segmentIndex = 0; segmentIndex < segmentCount; segmentIndex += 1) {
+                const start = path.points[segmentIndex];
+                const end = path.points[segmentIndex + 1];
+                if (!start || !end) continue;
+                const segmentStyle = getGeometrySegmentStyle(q, segmentIndex);
+                ctx.globalAlpha = baseAlpha * segmentStyle.colorOpacity;
+                ctx.strokeStyle = segmentStyle.color;
+                ctx.lineWidth = Math.max(1, segmentStyle.lineWidth) * k;
+                ctx.setLineDash(segmentStyle.style === "dashed" ? [6 * k, 4 * k] : segmentStyle.style === "dotted" ? [2 * k, 3 * k] : []);
+                ctx.beginPath();
+                ctx.moveTo(start.x * hr, start.y * vr);
+                ctx.lineTo(end.x * hr, end.y * vr);
+                ctx.stroke();
+              }
+            } else {
+              ctx.beginPath();
+              ctx.moveTo(first.x * hr, first.y * vr);
+              for (const point of path.points.slice(1)) ctx.lineTo(point.x * hr, point.y * vr);
+              if (path.closed) ctx.closePath();
+              ctx.stroke();
+            }
+            ctx.globalAlpha = baseAlpha * opacity;
+            ctx.strokeStyle = q.color;
+            ctx.lineWidth = Math.max(q.tool === "highlighter" ? 10 : 1, q.lineWidth) * k;
+            ctx.setLineDash([]);
             paintGeometryArrowheads(ctx, path, hr, vr, k, q.tool === "arrow-marker" ? 10 : 7);
           }
           ctx.restore();
