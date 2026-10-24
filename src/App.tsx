@@ -1214,7 +1214,7 @@ function AppContent() {
       }
 
       flow.saveHistorySnapshot();
-      const copiedCardId = addCard(sourceCard.title, sourceCard.content);
+      const copiedCardId = addCard(sourceCard.title, sourceCard.content, sourceCard.id);
       const copiedVersion = sourceCard.version || "v0.1.0";
       updateCardVersion(copiedCardId, copiedVersion);
 

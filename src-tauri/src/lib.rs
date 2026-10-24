@@ -19,6 +19,7 @@ pub struct CardDto {
     pub content: String,
     pub version: String,
     pub deleted_at: Option<i64>,
+    pub library_source_card_id: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -442,7 +443,8 @@ fn get_all_cards(state: State<AppState>, board_id: String) -> Result<Vec<CardDto
                    COALESCE(json_extract(v.content, '$.title'), 'Untitled') as title,
                    COALESCE(json_extract(v.content, '$.content'), '') as content,
                    COALESCE(json_extract(v.content, '$.version'), v.version_major || '.' || v.version_minor || '.' || v.version_patch, '0.1.0') as version,
-                   o.deleted_at
+                   o.deleted_at,
+                   json_extract(o.metadata, '$.librarySourceCardId')
             FROM objects o
             LEFT JOIN object_versions v ON v.id = (
                 SELECT id FROM object_versions
@@ -465,6 +467,7 @@ fn get_all_cards(state: State<AppState>, board_id: String) -> Result<Vec<CardDto
                 content: r.get(2)?,
                 version: r.get(3)?,
                 deleted_at: r.get(4)?,
+                library_source_card_id: r.get(5)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -517,6 +520,7 @@ fn save_card_direct(
     content: String,
     version: String,
     text_change_sets: Vec<mind::canvas_db::TextChangeSet>,
+    library_source_card_id: Option<String>,
 ) -> Result<(), String> {
     let mut conn = state.db.lock().map_err(|e| e.to_string())?;
     let now = std::time::SystemTime::now()
@@ -545,11 +549,19 @@ fn save_card_direct(
         return Err("Board does not exist".to_string());
     }
 
+    let metadata = library_source_card_id.map(|source_card_id| {
+        serde_json::json!({ "librarySourceCardId": source_card_id }).to_string()
+    });
     tx.execute(
-        "INSERT INTO objects (id, type, board_id, created_at, updated_at, deleted_at) VALUES (?1, 'card', ?2, ?3, ?3, NULL)
-         ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at
+        "INSERT INTO objects (id, type, board_id, created_at, updated_at, deleted_at, metadata) VALUES (?1, 'card', ?2, ?3, ?3, NULL, ?4)
+         ON CONFLICT(id) DO UPDATE SET
+             updated_at = excluded.updated_at,
+             metadata = CASE
+                 WHEN excluded.metadata IS NULL THEN objects.metadata
+                 ELSE json_patch(COALESCE(objects.metadata, '{}'), excluded.metadata)
+             END
          WHERE objects.board_id = excluded.board_id",
-        rusqlite::params![&id, &board_id, now],
+        rusqlite::params![&id, &board_id, now, metadata],
     ).map_err(|e| e.to_string())?;
     let belongs_to_board: bool = tx
         .query_row(

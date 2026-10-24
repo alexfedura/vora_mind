@@ -42,7 +42,7 @@ interface AppState {
   setTextDirection: (direction: "rtl" | "ltr") => void;
   toggleTextDirection: () => void;
   setCards: (cards: Record<string, VoraCard>) => void;
-  addCard: (title?: string, content?: string) => string;
+  addCard: (title?: string, content?: string, librarySourceCardId?: string) => string;
   updateCardContent: (id: string, title: string, content: string) => void;
   updateCardVersion: (id: string, version: string) => void;
   moveToBin: (id: string) => void;
@@ -104,7 +104,7 @@ export const useAppStore = create<AppState>()(
       setLibraryBoardEditing: (editing, returnCards = null) =>
         set({ isLibraryBoardEditing: editing, libraryBoardReturnCards: editing ? returnCards : null }),
 
-      addCard: (title = "New card", content = "") => {
+      addCard: (title = "New card", content = "", librarySourceCardId) => {
         const boardId = get().activeBoardId;
         const id = `card-${boardId}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
         const newCard: VoraCard = {
@@ -112,6 +112,7 @@ export const useAppStore = create<AppState>()(
           title,
           content,
           boardId,
+          librarySourceCardId,
           version: "v0.1.0",
           created_at: Date.now(),
         };
@@ -120,7 +121,15 @@ export const useAppStore = create<AppState>()(
         }));
         if (!get().isLibraryBoardEditing) {
           void dbService
-            .saveCardDirect(boardId, id, title, content, newCard.version ?? "v0.1.0")
+            .saveCardDirect(
+              boardId,
+              id,
+              title,
+              content,
+              newCard.version ?? "v0.1.0",
+              [],
+              librarySourceCardId,
+            )
             .catch((error: unknown) => console.error("Failed to save new card:", error));
         }
         return id;

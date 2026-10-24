@@ -194,18 +194,19 @@ export function DrawingToolbarHost(p: HostProps): React.ReactElement {
             if (drawing.id !== id) return drawing;
             const updated = update(drawing);
             if (drawing.type !== "geometry" || drawing.tool !== "path" || !drawing.selectedSegments?.length || updated.type !== "geometry" || updated.tool !== "path") return updated;
+            const currentStyle = getGeometrySegmentStyle(drawing, drawing.selectedSegments[0] ?? 0);
+            const stylePatch: DrawingGeometryStylePatch = {};
+            if (updated.color !== currentStyle.color) stylePatch.color = updated.color;
+            if (updated.colorOpacity !== currentStyle.colorOpacity) stylePatch.colorOpacity = updated.colorOpacity;
+            if (updated.lineWidth !== currentStyle.lineWidth) stylePatch.lineWidth = updated.lineWidth;
+            if (updated.style !== currentStyle.style) stylePatch.style = updated.style;
             return applyGeometryPathStyle({
               ...updated,
               color: drawing.color,
               colorOpacity: drawing.colorOpacity,
               lineWidth: drawing.lineWidth,
               style: drawing.style,
-            }, {
-              color: updated.color,
-              colorOpacity: updated.colorOpacity,
-              lineWidth: updated.lineWidth,
-              style: updated.style,
-            });
+            }, stylePatch);
           }));
         },
         onToggleLock: () => {

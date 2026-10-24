@@ -25,6 +25,7 @@ export interface VoraCard {
   title: string;
   content: string;
   boardId?: string;
+  librarySourceCardId?: string;
   version?: string;
   tags?: string[];
   created_at?: number;

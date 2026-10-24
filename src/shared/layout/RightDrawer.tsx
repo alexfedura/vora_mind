@@ -550,6 +550,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
 
   const filteredCards: VoraCard[] = Object.values(cards)
     .filter((c) => {
+      if (c.librarySourceCardId) return false;
       const matchesSearch = (c.title + " " + c.content).toLowerCase().includes(searchQuery.toLowerCase());
       if (currentFilter === "all" || currentFilter === "cards") {
         return matchesSearch && !c.deleted_at;

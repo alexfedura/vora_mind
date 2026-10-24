@@ -81,6 +81,7 @@ function getCanvasSignature(
       content: card.content,
       version: card.version,
       deleted_at: card.deleted_at,
+      librarySourceCardId: card.librarySourceCardId,
     })),
   });
 }
@@ -551,6 +552,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
             boardId,
             created_at: Date.now(),
             deleted_at: card.deleted_at ?? undefined,
+            librarySourceCardId: card.library_source_card_id ?? undefined,
           };
         }
         latestCards.current = cardsMap;
@@ -696,6 +698,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
         boardId: targetBoardId,
         created_at: Date.now(),
         deleted_at: card.deleted_at ?? undefined,
+        librarySourceCardId: latestCards.current[card.id]?.librarySourceCardId,
       };
     }
 

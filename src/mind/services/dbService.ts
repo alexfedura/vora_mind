@@ -20,6 +20,7 @@ export interface CardDto {
   content: string;
   version: string;
   deleted_at: number | null;
+  library_source_card_id: string | null;
 }
 
 export type BoardDto = BoardItem;
@@ -292,8 +293,17 @@ export const dbService = {
     content: string,
     version: string,
     textChangeSets: TextChangeSet[] = [],
+    librarySourceCardId?: string,
   ): Promise<void> {
-    await invoke("save_card_direct", { boardId, id, title, content, version, textChangeSets });
+    await invoke("save_card_direct", {
+      boardId,
+      id,
+      title,
+      content,
+      version,
+      textChangeSets,
+      librarySourceCardId: librarySourceCardId ?? null,
+    });
   },
 
   async getTextLinksForCard(boardId: string, cardId: string): Promise<TextLink[]> {
