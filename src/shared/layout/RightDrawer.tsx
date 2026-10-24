@@ -636,8 +636,8 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
           }}
           className={`max-h-[70vh] overflow-auto rounded-2xl border-2 p-3 shadow-2xl opacity-95 backdrop-blur ${
             draggingLibraryItem.kind === "group"
-              ? "w-[min(420px,calc(100vw-1.5rem))] border-amber-500 bg-[#1e1c18] shadow-amber-500/30"
-              : "w-[min(340px,calc(100vw-1.5rem))] border-purple-500 bg-[#1e222b] shadow-purple-500/30"
+              ? "w-[min(420px,calc(100vw-1.5rem))] border-amber-500 bg-[#1e1c18]"
+              : "w-[min(340px,calc(100vw-1.5rem))] border-purple-500 bg-[#1e222b]"
           }`}
         >
           {draggingLibraryItem.kind === "card" ? (
