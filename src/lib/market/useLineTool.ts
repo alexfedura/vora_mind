@@ -207,7 +207,7 @@ export function registerLineTool(c: LineToolCtx): () => void {
     if (yEdge) return "ns-resize";
     return "move";
   };
-  const hit = (px: number, py: number): { d: DrawingAny; handle: string | null } | null => {
+  const hit = (px: number, py: number): { d: DrawingAny; handle: string | null; segmentIndex?: number } | null => {
     const list = pruneNullDrawings(c.drawingsRef.current);
     for (let i = list.length - 1; i >= 0; i--) {
       const d = list[i];
@@ -300,7 +300,9 @@ export function registerLineTool(c: LineToolCtx): () => void {
         for (let index = 1; index < path.points.length; index += 1) {
           const start = path.points[index - 1];
           const end = path.points[index];
-          if (start && end && pointSegmentDistance({ x: px, y: py }, start, end) <= hitTolerance) return { d, handle: null };
+          if (start && end && pointSegmentDistance({ x: px, y: py }, start, end) <= hitTolerance) {
+            return { d, handle: null, ...(d.tool === "path" ? { segmentIndex: index - 1 } : {}) };
+          }
         }
       } else if (d.type === "icon") {
         const x = drawingX(tt(d.ts));
@@ -513,14 +515,46 @@ export function registerLineTool(c: LineToolCtx): () => void {
     }
     const hh = hit(px, py);
     if (hh) {
+      if (e.ctrlKey && hh.d.type === "geometry" && hh.d.tool === "path" && hh.segmentIndex !== undefined && hh.handle === null) {
+        const segmentIndex = hh.segmentIndex;
+        c.setDrawings((current) => pruneNullDrawings(current).map((drawing) => {
+          if (drawing.id !== hh.d.id) return { ...drawing, selected: false };
+          if (drawing.type !== "geometry" || drawing.tool !== "path") return drawing;
+          const currentSelection = drawing.selectedSegments?.filter(
+            (index) => Number.isInteger(index) && index >= 0 && index < drawing.points.length - 1,
+          ) ?? [];
+          const nextSelection = currentSelection.length === 0
+            ? [segmentIndex]
+            : currentSelection.includes(segmentIndex)
+              ? currentSelection.filter((index) => index !== segmentIndex)
+              : [...currentSelection, segmentIndex];
+          return {
+            ...drawing,
+            selected: true,
+            selectedSegments: nextSelection.length > 0 ? nextSelection.sort((left, right) => left - right) : undefined,
+          };
+        }));
+        e.preventDefault(); e.stopPropagation();
+        return;
+      }
       // v0.82.0 — locked: select only, no drag.
       if ((hh.d as unknown as { locked?: boolean }).locked === true) {
-        c.setDrawings((q) => pruneNullDrawings(q).map((z) => ({ ...z, selected: z.id === hh.d.id })));
+        c.setDrawings((q) => pruneNullDrawings(q).map((z) => {
+          if (z.id !== hh.d.id) return { ...z, selected: false };
+          return z.type === "geometry" && z.tool === "path"
+            ? { ...z, selected: true, selectedSegments: undefined }
+            : { ...z, selected: true };
+        }));
         e.preventDefault(); e.stopPropagation();
         return;
       }
       c.pushHistorySnapshot?.(pruneNullDrawings(c.drawingsRef.current));
-      c.setDrawings((q) => pruneNullDrawings(q).map((z) => ({ ...z, selected: z.id === hh.d.id })));
+      c.setDrawings((q) => pruneNullDrawings(q).map((z) => {
+        if (z.id !== hh.d.id) return { ...z, selected: false };
+        return z.type === "geometry" && z.tool === "path"
+          ? { ...z, selected: true, selectedSegments: undefined }
+          : { ...z, selected: true };
+      }));
       const raw = rawAt(px, py) ?? { t: 0, p: 0 };
       drag = hh.handle
         ? { id: hh.d.id, handle: hh.handle, grabT: raw.t, grabP: raw.p, orig: { ...hh.d } as DrawingAny }
