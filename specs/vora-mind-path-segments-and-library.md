@@ -19,15 +19,13 @@ identity or styling.
   Segment name, details, and color can be edited without changing neighboring
   segments. Anchor points remain draggable.
 - Clicking a segment without a modifier replaces the segment selection across
-  all Paths. Ctrl-click isolates the clicked segment as a separate Path and
-  selects only it. Remaining connected sections stay unselected and retain
-  their segment metadata. Isolating an interior segment produces two
-  unselected connected remnants because the remaining geometry is disconnected.
-- Cmd-click toggles only that segment in the segment-selection UI, preserving
-  other selected segments and deselecting it when clicked again.
+  all Paths. Ctrl-click or Cmd-click toggles only that segment in the
+  selection, preserving other selected sections and deselecting it when clicked
+  again. Modifier-clicking never cuts, clones, or splits a Path.
 - Cutting a segment detaches it as its own Path node and preserves the
-  remaining connected sections and all segment metadata. Undo restores the
-  original Path.
+  remaining connected sections and all segment metadata. Cutting is available
+  only through the explicit **Cut section** action. Undo restores the original
+  Path.
 - Rejoining selected Path nodes is allowed when their endpoints meet. Joining
   preserves the individual segments, names, descriptions, colors, and Library
   identity; incompatible selections are not modified.
@@ -41,7 +39,7 @@ identity or styling.
 
 ## Non-goals
 
-- Curves, automatic routing, or changing existing Path drawing gestures.
+- Curves, automatic routing, or changing Path creation gestures.
 - Editing one Library item's contents to mutate all its existing instances.
 - Treating every anchor point as an independent Library asset.
 
@@ -65,3 +63,6 @@ identity or styling.
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - Test legacy Path defaults, per-segment styling, cut/join metadata retention,
   Library insertion identity, and active-Board usage lookup.
+- Verify Ctrl-click and Cmd-click only toggle section selection; the number of
+  Path nodes and the original connected geometry remain unchanged. Verify the
+  explicit **Cut section** action still splits a Path and that undo restores it.
