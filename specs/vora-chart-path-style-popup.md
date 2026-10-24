@@ -29,8 +29,8 @@ Persist per-segment style overrides on `DrawingGeometry`; keep the selected segm
 
 ## 5. Verification & Acceptance Criteria
 
-* [ ] **TypeScript Check**: `pnpm tsc --noEmit` exits with status `0`.
-* [ ] **Build**: `pnpm build` exits with status `0`.
-* [ ] **Rust Backend Check**: `cargo check --manifest-path src-tauri/Cargo.toml` completes with `0` errors.
+* [x] **TypeScript Check**: `pnpm tsc --noEmit` exits with status `0`.
+* [x] **Build**: `pnpm build` exits with status `0`.
+* [x] **Rust Backend Check**: `cargo check --manifest-path src-tauri/Cargo.toml` completes with `0` errors.
 * [ ] **Runtime Validation**: Path settings show the compact Style-only popup anchored to the toolbar; color, opacity, width, line style, and endpoint changes apply on **Ok** and are discarded on **Cancel**. The popup closes on outside click or Escape.
 * [ ] **Segment Selection**: Normal click selects the whole Path; Ctrl+click selects one or more segments, renders the selected segments distinctly, and each floating-toolbar style change affects only those segments. Ctrl+click toggles segments; clearing the final segment selection returns to whole-Path selection. Arrow controls affect only the Path endpoints.
