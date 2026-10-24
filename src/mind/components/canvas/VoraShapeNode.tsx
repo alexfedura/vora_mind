@@ -65,14 +65,7 @@ function handlePathSegmentClick(
   ctrlKey: boolean,
   metaKey: boolean,
 ): void {
-  if (ctrlKey) {
-    dispatchPathSegmentSelection(nodeId, segmentId, "replace");
-    window.dispatchEvent(new CustomEvent("vora:cut-path-segment", {
-      detail: { nodeId, segmentId },
-    }));
-    return;
-  }
-  dispatchPathSegmentSelection(nodeId, segmentId, metaKey ? "toggle" : "replace");
+  dispatchPathSegmentSelection(nodeId, segmentId, ctrlKey || metaKey ? "toggle" : "replace");
 }
 
 function loadShapeToolbarPosition(key = SHAPE_TOOLBAR_POSITION_KEY): ShapeToolbarPosition {
