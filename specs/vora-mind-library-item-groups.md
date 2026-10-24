@@ -22,7 +22,7 @@ Allow users to save a selection of canvas items as a reusable, version-labeled i
 - Committing edits requires a manually entered three-part numeric version. The new version becomes current on both the group and its owned Board, while every prior snapshot remains available for exact preview and editing as the base of another version.
 - Card titles appear above their content in Library cards. A direct HTTP(S) image/video URL or Markdown image URL in the content is rendered as an in-place preview. Active cards and groups can be moved to Trash without opening their detail view.
 - Inserting a group creates new node and card IDs, preserves internal connections, and leaves the library group and original items unchanged.
-- Dragging a Library card onto its Board creates a new card and canvas node with independent IDs and a copy of the source title, content, and version; it never reuses or mutates the source card.
+- Dragging a Library card onto its Board creates a new card and canvas node with independent IDs and a copy of the source title, content, and version; it never reuses or mutates the source card. The copied Board card retains its source identity and is not listed as a separate Library item.
 - Groups can be moved to and restored from Trash.
 - Groups, their hidden owned Boards, and immutable version snapshots are persisted in SQLite; group snapshots remain independent of subsequent canvas edits and ordinary Board deletion. Full and selective backups preserve version history.
 
@@ -30,6 +30,7 @@ Allow users to save a selection of canvas items as a reusable, version-labeled i
 
 - Add a global item-group table with stable ID, name, version, serialized snapshot, and timestamps, including a soft-delete timestamp.
 - Keep snapshot serialization typed in Rust and TypeScript. Preserve node data, type, dimensions, position, style, and internal edges.
+- Persist the source Library card identity in the copied card's existing object metadata so it stays excluded from the Library across reloads.
 - Add typed Tauri commands and frontend service methods for listing, creating, trashing, and restoring groups.
 - Validate nonempty names and a three-part numeric version label. Surface persistence and validation errors in the UI.
 - Never persist a group only in frontend storage.
