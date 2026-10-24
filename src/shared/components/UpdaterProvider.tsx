@@ -1,4 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 
@@ -19,7 +28,7 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function UpdaterProvider({ children }: { children: React.ReactNode }): React.ReactElement {
+export function UpdaterProvider({ children }: { children: ReactNode }): ReactElement {
   const [status, setStatus] = useState<UpdateStatus>("idle");
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -35,9 +44,9 @@ export function UpdaterProvider({ children }: { children: React.ReactNode }): Re
     return errorMessage;
   }, []);
 
-  const installAvailableUpdate = useCallback(async (): Promise<void> => {
+  const installAvailableUpdate = useCallback(async (allowActiveCheck = false): Promise<void> => {
     const update = updateRef.current;
-    if (!update || busyRef.current) return;
+    if (!update || (busyRef.current && !allowActiveCheck)) return;
 
     busyRef.current = true;
     setStatus("installing");
@@ -115,7 +124,7 @@ export function UpdaterProvider({ children }: { children: React.ReactNode }): Re
         { title: "Vora Mind update ready", kind: "info" },
       );
       if (shouldInstall) {
-        await installAvailableUpdate();
+        await installAvailableUpdate(true);
       }
     } catch (error: unknown) {
       reportError(error, "Could not check or download Vora Mind updates");
@@ -125,11 +134,13 @@ export function UpdaterProvider({ children }: { children: React.ReactNode }): Re
         } catch (closeError: unknown) {
           console.error("Could not release the Vora Mind update resource:", closeError);
         }
+      } else if (updateRef.current === update) {
+        setStatus("ready");
       }
     } finally {
       busyRef.current = false;
     }
-  }, [installAvailableUpdate, notice, reportError]);
+  }, [installAvailableUpdate, reportError]);
 
   useEffect(() => {
     void checkForUpdates();
