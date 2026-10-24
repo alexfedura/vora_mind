@@ -19,11 +19,12 @@ function fail(message) {
 }
 
 function runGit(args, options = {}) {
-  return execFileSync("git", args, {
+  const output = execFileSync("git", args, {
     cwd: root,
     encoding: "utf8",
     stdio: options.silent ? ["ignore", "pipe", "inherit"] : "inherit",
-  }).trim();
+  });
+  return (output ?? "").trim();
 }
 
 function readVersions() {
@@ -72,12 +73,7 @@ function syncCargoLock(oldVersion, newVersion) {
 }
 
 function isTracked(file) {
-  try {
-    return runGit(["ls-files", "--error-unmatch", "--", file], { silent: true }).length > 0;
-  } catch (error) {
-    if (error && typeof error === "object" && "status" in error && error.status === 1) return false;
-    throw error;
-  }
+  return runGit(["ls-files", "--", file], { silent: true }).length > 0;
 }
 
 if (command === "sync") {
