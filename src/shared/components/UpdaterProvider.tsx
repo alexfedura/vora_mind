@@ -11,7 +11,7 @@ import {
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 
-type UpdateStatus = "idle" | "checking" | "downloading" | "ready" | "installing" | "error";
+type UpdateStatus = "idle" | "checking" | "downloading" | "ready" | "prompting" | "installing" | "error";
 
 interface UpdaterContextValue {
   status: UpdateStatus;
@@ -44,35 +44,54 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
     return errorMessage;
   }, []);
 
-  const installAvailableUpdate = useCallback(async (allowActiveCheck = false): Promise<void> => {
+  const installAvailableUpdate = useCallback(async (): Promise<void> => {
     const update = updateRef.current;
-    if (!update || (busyRef.current && !allowActiveCheck)) return;
+    if (!update || busyRef.current) return;
 
     busyRef.current = true;
-    setStatus("installing");
-    setNotice(null);
+    setStatus("prompting");
     try {
-      await update.install({ restartAfterInstall: true });
-      updateRef.current = null;
-      setStatus("idle");
-      setDownloadProgress(null);
-    } catch (error: unknown) {
-      const errorMessage = reportError(error, "Could not install the Vora Mind update");
+      let shouldInstall: boolean;
       try {
-        await message(
-          `${errorMessage}\n\nThe current version is still installed. You can try the update again later.`,
-          { title: "Vora Mind update failed", kind: "error" },
+        shouldInstall = await ask(
+          `Version ${update.version} is downloaded and ready to install. Restart now?`,
+          { title: "Vora Mind update ready", kind: "info" },
         );
-      } catch (dialogError: unknown) {
-        console.error("Could not display the Vora Mind update error dialog:", dialogError);
+      } catch (error: unknown) {
+        reportError(error, "Could not confirm installation of the Vora Mind update");
+        setStatus("ready");
+        return;
+      }
+      if (!shouldInstall) {
+        setStatus("ready");
+        return;
       }
 
+      setStatus("installing");
+      setNotice(null);
       try {
-        await update.close();
-      } catch (closeError: unknown) {
-        console.error("Could not release the Vora Mind update resource:", closeError);
+        await update.install({ restartAfterInstall: true });
+        updateRef.current = null;
+        setStatus("idle");
+        setDownloadProgress(null);
+      } catch (error: unknown) {
+        const errorMessage = reportError(error, "Could not install the Vora Mind update");
+        try {
+          await message(
+            `${errorMessage}\n\nThe current version is still installed. You can try the update again later.`,
+            { title: "Vora Mind update failed", kind: "error" },
+          );
+        } catch (dialogError: unknown) {
+          console.error("Could not display the Vora Mind update error dialog:", dialogError);
+        }
+
+        try {
+          await update.close();
+        } catch (closeError: unknown) {
+          console.error("Could not release the Vora Mind update resource:", closeError);
+        }
+        updateRef.current = null;
       }
-      updateRef.current = null;
     } finally {
       busyRef.current = false;
     }
@@ -119,13 +138,8 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
 
       updateRef.current = update;
       setStatus("ready");
-      const shouldInstall = await ask(
-        `Version ${update.version} is downloaded and ready to install. Restart now?`,
-        { title: "Vora Mind update ready", kind: "info" },
-      );
-      if (shouldInstall) {
-        await installAvailableUpdate(true);
-      }
+      busyRef.current = false;
+      await installAvailableUpdate();
     } catch (error: unknown) {
       reportError(error, "Could not check or download Vora Mind updates");
       if (update && updateRef.current !== update) {
@@ -143,6 +157,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
   }, [installAvailableUpdate, reportError]);
 
   useEffect(() => {
+    if (import.meta.env.DEV) return;
     void checkForUpdates();
     const interval = window.setInterval(() => {
       void checkForUpdates();
