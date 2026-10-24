@@ -71,5 +71,5 @@ jobs:
           releaseName: 'Vora Mind ${{ github.ref_name }}'
           releaseDraft: true
           prerelease: false
-          uploadUpdaterJson: true
-          args: '--profile ci --bundles msi'
+          includeUpdaterJson: true
+          args: '--bundles msi'
