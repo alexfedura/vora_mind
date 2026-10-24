@@ -2700,6 +2700,7 @@ function AppContent() {
             nodeDragThreshold={0}
             nodesDraggable={!isTextToolActive && activeShapeTool === null && !isAddCardToolActive}
             elementsSelectable={!isTextToolActive && activeShapeTool === null && !isAddCardToolActive}
+            multiSelectionKeyCode={["Control", "Meta"]}
             panActivationKeyCode="Space"
             selectionOnDrag={false}
             selectionMode={SelectionMode.Partial}
