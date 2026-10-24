@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DrawingToolbar } from "@/components/market/DrawingToolbar";
 import { isValidHex } from "@/lib/market/colorUtils";
-import type { DrawingAny } from "@/lib/market/lineDrawings";
+import { applyGeometryPathStyle, getGeometrySegmentStyle, type DrawingAny, type DrawingGeometryStylePatch } from "@/lib/market/lineDrawings";
 import { HLINE_WIDTH_KEY, HRAY_WIDTH_KEY, LINE_COLOR_KEY, RECT_WIDTH_KEY, TREND_WIDTH_KEY, VLINE_WIDTH_KEY } from "@/lib/market/lineDrawings";
 import { pruneNullDrawings } from "@/lib/market/useLineTool";
 import { deleteDrawingTemplate, listDrawingTemplates, saveDrawingTemplate } from "@/lib/market/marketApi";
@@ -68,8 +68,19 @@ function cloneDrawing(drawing: DrawingAny): DrawingAny {
     }
     case "regression-trend": return { ...drawing, id, ts1: drawing.ts1 + 60, ts2: drawing.ts2 + 60, hidden: false, selected: true };
     case "fib-gann": return { ...drawing, id, ts1: drawing.ts1 + 60, ts2: drawing.ts2 + 60, ts3: drawing.ts3 === undefined ? undefined : drawing.ts3 + 60, hidden: false, selected: true };
-    case "geometry": return { ...drawing, id, points: drawing.points.map((point) => ({ ts: point.ts + 60, price: point.price + Math.max(0.0001, Math.abs(point.price) * 0.001) })), hidden: false, selected: true };
+    case "geometry": return { ...drawing, id, points: drawing.points.map((point) => ({ ts: point.ts + 60, price: point.price + Math.max(0.0001, Math.abs(point.price) * 0.001) })), selectedSegments: undefined, hidden: false, selected: true };
   }
+}
+
+function withDrawingStyle(drawing: DrawingAny, patch: DrawingGeometryStylePatch): DrawingAny {
+  if (drawing.type === "geometry" && drawing.tool === "path") return applyGeometryPathStyle(drawing, patch);
+  return { ...drawing, ...patch };
+}
+
+function effectiveToolbarDrawing(drawing: DrawingAny | null): DrawingAny | null {
+  if (drawing?.type !== "geometry" || drawing.tool !== "path" || !drawing.selectedSegments?.length) return drawing;
+  const style = getGeometrySegmentStyle(drawing, drawing.selectedSegments[0] ?? 0);
+  return { ...drawing, ...style };
 }
 
 export function DrawingToolbarHost(p: HostProps): React.ReactElement {
@@ -80,6 +91,8 @@ export function DrawingToolbarHost(p: HostProps): React.ReactElement {
   }, [p.setToast]);
   const sel = pruneNullDrawings(p.drawings).filter((x) => x.selected);
   const one: DrawingAny | null = sel[0] ?? null;
+  const toolbarDrawing = effectiveToolbarDrawing(one);
+  const toolbarSelection = sel.map((drawing) => drawing.id === one?.id ? toolbarDrawing ?? drawing : drawing);
   const selectedIds = new Set(sel.map((drawing) => drawing.id));
   const pushU = (): void => { p.pushHist(pruneNullDrawings(p.drawingsRef.current)); };
   const insertClone = (source: DrawingAny): void => {
@@ -106,8 +119,8 @@ export function DrawingToolbarHost(p: HostProps): React.ReactElement {
   });
   return (
     <DrawingToolbar
-      drawing={one}
-      selection={sel}
+      drawing={toolbarDrawing}
+      selection={toolbarSelection}
       selectionCount={sel.length}
       allSelectedLocked={sel.length > 0 && sel.every((drawing) => drawing.locked === true)}
       actions={{
@@ -119,14 +132,14 @@ export function DrawingToolbarHost(p: HostProps): React.ReactElement {
             if (!selectedIds.has(z.id)) return z;
             const colorOpacity = sel.length === 1 ? opacity : z.colorOpacity;
             if (z.type === "rectangle") return { ...z, borderColor: c, colorOpacity, selected: true };
-            return { ...z, color: c, colorOpacity, selected: true };
+            return { ...withDrawingStyle(z, { color: c, ...(colorOpacity === undefined ? {} : { colorOpacity }) }), selected: true };
           }));
           p.persistPrefs({ color: c });
         },
         onColorOpacity: (opacity) => {
           if (!one) return;
           pushU();
-          p.setDrawings((prev) => pruneNullDrawings(prev).map((z) => selectedIds.has(z.id) ? { ...z, colorOpacity: Math.max(0, Math.min(1, opacity)), selected: true } : z));
+          p.setDrawings((prev) => pruneNullDrawings(prev).map((z) => selectedIds.has(z.id) ? { ...withDrawingStyle(z, { colorOpacity: Math.max(0, Math.min(1, opacity)) }), selected: true } : z));
         },
         onBgColor: (c) => {
           if (!one || !isValidHex(c)) return;
@@ -135,7 +148,7 @@ export function DrawingToolbarHost(p: HostProps): React.ReactElement {
           p.setDrawings((prev) => pruneNullDrawings(prev).map((z) => {
             if (z.id !== id) return z;
             if (z.type === "rectangle") return { ...z, fillColor: c, fillOpacity: z.fillOpacity ?? 0.2, selected: true };
-            return { ...z, color: c, selected: true };
+            return { ...withDrawingStyle(z, { color: c }), selected: true };
           }));
         },
         onBgOpacity: (opacity) => {
@@ -160,7 +173,7 @@ export function DrawingToolbarHost(p: HostProps): React.ReactElement {
           const cc = Math.max(1, Math.min(10, Math.round(w)));
           pushU();
           setSetting(k, String(cc));
-          p.setDrawings((prev) => pruneNullDrawings(prev).map((z) => selectedIds.has(z.id) ? { ...z, lineWidth: cc, selected: true } : z));
+          p.setDrawings((prev) => pruneNullDrawings(prev).map((z) => selectedIds.has(z.id) ? { ...withDrawingStyle(z, { lineWidth: cc }), selected: true } : z));
           if (k === RECT_WIDTH_KEY) p.persistPrefs({ rectW: cc });
           else if (k === HLINE_WIDTH_KEY) p.persistPrefs({ hW: cc });
           else if (k === VLINE_WIDTH_KEY) p.persistPrefs({ vW: cc });
@@ -171,13 +184,29 @@ export function DrawingToolbarHost(p: HostProps): React.ReactElement {
           if (!one) return;
           pushU();
           setSetting("vora.drawings.line_style", s);
-          p.setDrawings((prev) => pruneNullDrawings(prev).map((z) => selectedIds.has(z.id) ? { ...z, style: s, selected: true } : z));
+          p.setDrawings((prev) => pruneNullDrawings(prev).map((z) => selectedIds.has(z.id) ? { ...withDrawingStyle(z, { style: s }), selected: true } : z));
         },
         onUpdate: (update) => {
           if (!one) return;
           pushU();
           const id = one.id;
-          p.setDrawings((prev) => pruneNullDrawings(prev).map((drawing) => drawing.id === id ? update(drawing) : drawing));
+          p.setDrawings((prev) => pruneNullDrawings(prev).map((drawing) => {
+            if (drawing.id !== id) return drawing;
+            const updated = update(drawing);
+            if (drawing.type !== "geometry" || drawing.tool !== "path" || !drawing.selectedSegments?.length || updated.type !== "geometry" || updated.tool !== "path") return updated;
+            return applyGeometryPathStyle({
+              ...updated,
+              color: drawing.color,
+              colorOpacity: drawing.colorOpacity,
+              lineWidth: drawing.lineWidth,
+              style: drawing.style,
+            }, {
+              color: updated.color,
+              colorOpacity: updated.colorOpacity,
+              lineWidth: updated.lineWidth,
+              style: updated.style,
+            });
+          }));
         },
         onToggleLock: () => {
           if (!one) return;
@@ -231,9 +260,12 @@ export function DrawingToolbarHost(p: HostProps): React.ReactElement {
           const settings = template.settings;
           p.setDrawings((prev) => pruneNullDrawings(prev).map((drawing) => {
             if (drawing.id !== one?.id) return drawing;
-            const common = { ...drawing, colorOpacity: settings.colorOpacity, lineWidth: settings.lineWidth, style: settings.style, text: settings.text, textColor: settings.textColor, textOpacity: settings.textOpacity, textSize: settings.textSize, textBold: settings.textBold, textItalic: settings.textItalic, textAlignHorizontal: settings.textAlignHorizontal, textAlignVertical: settings.textAlignVertical, selected: true };
+            const common = { ...drawing, text: settings.text, textColor: settings.textColor, textOpacity: settings.textOpacity, textSize: settings.textSize, textBold: settings.textBold, textItalic: settings.textItalic, textAlignHorizontal: settings.textAlignHorizontal, textAlignVertical: settings.textAlignVertical, selected: true };
             if (common.type === "rectangle") return { ...common, borderColor: settings.color, fillColor: settings.fillColor, fillOpacity: settings.fillOpacity };
-            return { ...common, color: settings.color };
+            if (common.type === "geometry" && common.tool === "path") {
+              return applyGeometryPathStyle(common, { color: settings.color, colorOpacity: settings.colorOpacity, lineWidth: settings.lineWidth, style: settings.style });
+            }
+            return { ...common, color: settings.color, colorOpacity: settings.colorOpacity, lineWidth: settings.lineWidth, style: settings.style };
           }));
         },
         onDeleteTemplate: (id) => {
