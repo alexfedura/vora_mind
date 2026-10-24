@@ -45,6 +45,8 @@ function createPathChunk(
   suffix: string,
   startArrow: boolean,
   endArrow: boolean,
+  selected: boolean,
+  preserveSourceId = false,
 ): VoraPathNode {
   const minX = Math.min(...worldPoints.map((point) => point.x));
   const minY = Math.min(...worldPoints.map((point) => point.y));
@@ -64,11 +66,11 @@ function createPathChunk(
   }));
   return {
     ...source,
-    id: `${source.id}-${suffix}-${crypto.randomUUID()}`,
+    id: preserveSourceId ? source.id : `${source.id}-${suffix}-${crypto.randomUUID()}`,
     position,
     width,
     height,
-    selected: true,
+    selected,
     data: {
       ...source.data,
       label: segments.length === 1 ? segments[0]?.name ?? source.data.label : source.data.label,
@@ -98,6 +100,7 @@ export function cutPathSegment(
 
   ranges.forEach(({ start, end }, index) => {
     if (start > end) return;
+    const isSelectedSegment = start === segmentIndex && end === segmentIndex;
     chunks.push(createPathChunk(
       node,
       worldPoints.slice(start, end + 2),
@@ -105,6 +108,8 @@ export function cutPathSegment(
       `cut-${index}`,
       start === 0 && node.data.startArrow,
       end === segmentCount - 1 && node.data.endArrow,
+      isSelectedSegment,
+      isSelectedSegment,
     ));
   });
   return chunks;
@@ -180,7 +185,7 @@ export function joinPathNodes(nodes: VoraPathNode[]): VoraPathNode | null {
     endArrow = firstNode.data.endArrow;
   }
 
-  return createPathChunk(firstNode, points, segments, "joined", startArrow, endArrow);
+  return createPathChunk(firstNode, points, segments, "joined", startArrow, endArrow, true);
 }
 
 export function makeSingleSegmentNode(
@@ -199,5 +204,6 @@ export function makeSingleSegmentNode(
     "library",
     false,
     false,
+    true,
   );
 }

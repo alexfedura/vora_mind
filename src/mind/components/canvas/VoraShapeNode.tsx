@@ -59,6 +59,22 @@ function dispatchPathSegmentSelection(
   ));
 }
 
+function handlePathSegmentClick(
+  nodeId: string,
+  segmentId: string,
+  ctrlKey: boolean,
+  metaKey: boolean,
+): void {
+  if (ctrlKey) {
+    dispatchPathSegmentSelection(nodeId, segmentId, "replace");
+    window.dispatchEvent(new CustomEvent("vora:cut-path-segment", {
+      detail: { nodeId, segmentId },
+    }));
+    return;
+  }
+  dispatchPathSegmentSelection(nodeId, segmentId, metaKey ? "toggle" : "replace");
+}
+
 function loadShapeToolbarPosition(key = SHAPE_TOOLBAR_POSITION_KEY): ShapeToolbarPosition {
   try {
     const saved = getSetting(key);
@@ -851,7 +867,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
                     key={segment.id}
                     type="button"
                     aria-pressed={selectedPathSegmentIds.has(segment.id)}
-                    onClick={(event) => dispatchPathSegmentSelection(id, segment.id, event.ctrlKey || event.metaKey ? "toggle" : "replace")}
+                    onClick={(event) => handlePathSegmentClick(id, segment.id, event.ctrlKey, event.metaKey)}
                     className={`rounded border px-2 py-1 text-[10px] ${selectedPathSegmentIds.has(segment.id) ? "border-violet-400 bg-violet-500/20 text-white" : "border-[#383f4e] text-[#aeb4c0]"}`}
                   >
                     <span className="mr-1 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: segment.color }} />
@@ -990,7 +1006,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
                   tabIndex={0}
                   aria-label={`Select path section ${segment.name}`}
                   aria-pressed={selectedPathSegmentIds.has(segment.id)}
-                  onClick={(event) => dispatchPathSegmentSelection(id, segment.id, event.ctrlKey || event.metaKey ? "toggle" : "replace")}
+                  onClick={(event) => handlePathSegmentClick(id, segment.id, event.ctrlKey, event.metaKey)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();

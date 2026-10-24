@@ -1095,14 +1095,9 @@ function AppContent() {
         .findIndex((segment) => segment.id === segmentId);
       const chunks = cutPathSegment(source, segmentIndex);
       if (!chunks) return;
-      const replacements = chunks.map((chunk, index) => ({
-        ...chunk,
-        id: index === 0 ? source.id : chunk.id,
-        selected: true,
-      }));
       flow.saveHistorySnapshot();
       flow.setNodes((nodes): Node[] => nodes.flatMap((node): Node[] => node.id === source.id
-        ? replacements
+        ? chunks
         : [{ ...node, selected: false }]));
     };
 
