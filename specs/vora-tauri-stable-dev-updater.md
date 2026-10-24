@@ -12,6 +12,7 @@ Allow a Vora development build to run beside the installed stable build, publish
 - Register Tauri v2 updater and process plugins with the required window permissions.
 - Enable signed MSI updater artifacts and point the updater manifest at the public GitHub Releases latest feed.
 - Build Windows releases from version tags using `tauri-apps/tauri-action`; the workflow verifies the tag matches the app version and publishes the signed updater manifest and MSI to a GitHub Release.
+- Build release artifacts with Cargo's `ci` profile and restore Rust build artifacts through the GitHub Actions Rust cache; reuse preinstalled WiX when available and install it only when missing.
 - Expose a manual update check in the stable app and automatically check every 60 seconds. Download the signed update in the background and ask the user whether to install once it is ready; the Windows installer restarts the app.
 - If installation fails, show a native error dialog before releasing the update resource. Do not request administrator elevation by default.
 - Configure Windows updater installations for quiet mode.
