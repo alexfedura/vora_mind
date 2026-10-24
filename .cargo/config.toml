@@ -1,5 +1,5 @@
 [build]
-target-dir = "C:\\vora_build"
+target-dir = "target"
 
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "link-arg=/DEBUG:NONE"]

@@ -1,2 +1,2 @@
 [build]
-target-dir = "C:\\vora_build"
+target-dir = "../target"
