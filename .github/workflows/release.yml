@@ -44,7 +44,21 @@ jobs:
             throw "The TAURI_SIGNING_PRIVATE_KEY_PASSWORD Actions secret is missing or empty."
           }
       - name: Install WiX Toolset
-        run: choco install wixtoolset --no-progress --yes
+        shell: pwsh
+        run: |
+          $wixBin = Get-ChildItem 'C:\Program Files (x86)' -Directory -Filter 'WiX Toolset v*' -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName 'bin' } |
+            Where-Object {
+              (Test-Path (Join-Path $_ 'candle.exe')) -and
+              (Test-Path (Join-Path $_ 'light.exe'))
+            } |
+            Select-Object -First 1
+          if (-not $wixBin) {
+            choco install wixtoolset --no-progress --yes
+            if ($LASTEXITCODE -ne 0) {
+              throw "WiX Toolset installation failed with exit code $LASTEXITCODE."
+            }
+          }
       - name: Set WiX Path
         shell: pwsh
         run: |
@@ -72,4 +86,4 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
-          args: '--bundles msi'
+          args: '--profile ci --bundles msi'
