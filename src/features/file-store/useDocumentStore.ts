@@ -224,6 +224,7 @@ export const useDocumentStore = create<DocumentState>()(
             content: latest.content,
             version: latest.currentVersion,
             deleted_at: null,
+            library_source_card_id: null,
           };
           syncCard(boardId, card);
           window.dispatchEvent(new CustomEvent("vora:text-links-updated", {
