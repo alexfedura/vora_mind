@@ -2362,22 +2362,6 @@ function AppContent() {
           <Sparkles size={23} />
         </button>
       </div>}
-      {!isJournalOpen && <div className="absolute top-[121.5px] z-40 flex w-[57px] justify-center" style={{ left: floatingControlsLeft }}>
-        <button
-          type="button"
-          onClick={() => {
-            setIsTaskFlowOpen(false);
-            setIsJournalOpen(true);
-            setActiveOpenPanel("none");
-          }}
-          className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_FLOATING_CONTROL_BORDER_CLASS} ${CANVAS_FLOATING_CONTROL_BACKGROUND_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
-          title="Open Journal"
-          aria-label="Open Journal"
-        >
-          <BookOpen size={16} />
-        </button>
-      </div>}
-
       {activeOpenPanel !== "none" && !libraryBoardSession && (
         <div className="absolute top-0 left-0 bottom-0 z-30 flex shadow-2xl animate-in fade-in slide-in-from-left duration-150">
           {activeOpenPanel === "sidebar" ? (

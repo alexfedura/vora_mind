@@ -12,7 +12,6 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 - Selecting **Journal** opens a dedicated workspace page without canvas controls.
 - A Home button in the Journal header returns directly to the main canvas; hide
   the duplicate Home shortcut from the upper-left toolbar while Journal is open.
-- A fixed shortcut in the upper-left canvas toolbar opens the Journal from Home.
 - A Journal shortcut beside the Library and Chart controls in the Home toolbar
   opens Journal for quick switching between those destinations.
 - The default view opens today's entry. The selected date and weekday are shown in the top navigation bar, replacing the separate Workspace/Journal title block; there is no editable title field.
