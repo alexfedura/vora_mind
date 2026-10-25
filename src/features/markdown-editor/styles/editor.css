@@ -366,6 +366,7 @@
   --vm-fg-muted: #9ca3af;
   --vm-fg-faint: #4b5563;
   --vm-border: #343741;
+  --vm-active-line: transparent;
 
   box-sizing: border-box;
   height: auto;
@@ -394,6 +395,9 @@
 
 .vm-journal-markdown-editor .cm-content {
   min-height: calc(55vh - 2rem);
+  width: 100%;
+  max-width: none;
+  margin: 0;
   padding: 0;
 }
 

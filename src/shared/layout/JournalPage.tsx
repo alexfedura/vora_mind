@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Clock3, House } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, House } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { MarkdownTextEditor } from "@/features/markdown-editor/MarkdownTextEditor";
 
@@ -107,15 +107,19 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
   return (
     <section className="absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-[#101114] text-gray-200">
       <header className="border-b border-[#292c34] bg-[#14161b] px-6 py-5 sm:px-10">
-        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-purple-500/25 bg-purple-500/10 text-purple-300">
-              <BookOpen size={19} />
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-purple-300">Workspace</p>
-              <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-white">Journal</h1>
-            </div>
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-white">
+              {isMonthView
+                ? monthFormatter.format(selectedDay)
+                : dateHeadingFormatter.format(selectedDay)}
+            </h1>
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-purple-300">
+              <Clock3 size={14} />
+              {isMonthView
+                ? "Monthly archive"
+                : fullDateFormatter.format(selectedDay).split(",")[0]}
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -191,8 +195,8 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-7 sm:px-10">
-        <div className="mx-auto w-full max-w-5xl">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-10">
+        <div className="mx-auto w-full max-w-6xl">
           {loadError && (
             <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
               <span>Could not load journal entries: {loadError}</span>
@@ -267,23 +271,9 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
               )}
             </>
           ) : (
-            <div className="mx-auto max-w-3xl">
-              <div className="border-b border-[#292c34] pb-5">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div>
-                    <h2 className="text-3xl font-semibold tracking-tight text-white">
-                      {dateHeadingFormatter.format(selectedDay)}
-                    </h2>
-                    <p className="mt-2 flex items-center gap-1.5 text-sm text-purple-300">
-                      <Clock3 size={14} />
-                      {fullDateFormatter.format(selectedDay).split(",")[0]}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
+            <div className="w-full">
               {saveError && currentSaveStatus === "error" && (
-                <div role="alert" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
+                <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
                   <span>Could not save this entry: {saveError}</span>
                   <button
                     type="button"
@@ -303,7 +293,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
                 placeholder="Write about your day... (Markdown supported)"
                 direction="auto"
                 ariaLabel={`Journal entry for ${selectedDate}`}
-                className="vm-journal-markdown-editor mt-5 min-h-[55vh] w-full rounded-xl border border-transparent bg-transparent px-1 py-3 text-gray-200 transition focus-within:border-[#343741] focus-within:bg-[#14161b]/60 focus-within:px-4"
+                className="vm-journal-markdown-editor min-h-[55vh] w-full bg-transparent text-gray-200"
               />
             </div>
           )}
