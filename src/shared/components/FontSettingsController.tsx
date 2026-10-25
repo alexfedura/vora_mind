@@ -1,8 +1,7 @@
-import { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useSettingsStore } from "@/shared/store/useSettingsStore";
 import {
   CUSTOM_FONTS_SETTING_KEY,
-  FONT_SETTING_TARGETS,
   fontFamilySettingKey,
   fontSizeSettingKey,
   getCustomFontFamily,
@@ -19,9 +18,10 @@ function getFontSize(value: string | undefined, defaultSize: number): number {
 
 function selectedFamily(
   target: FontSettingTarget,
+  settings: Record<string, string>,
   fontsById: Map<string, string>,
 ): string | null {
-  const selectedId = useSettingsStore.getState().values[fontFamilySettingKey(target)];
+  const selectedId = settings[fontFamilySettingKey(target)];
   const family = selectedId ? fontsById.get(selectedId) : undefined;
   return family ? `"${family}"` : null;
 }
@@ -39,26 +39,26 @@ export const FontSettingsController: React.FC = () => {
     const faces: FontFace[] = [];
     let cancelled = false;
 
-    const appFamily = selectedFamily("app", fontsById) ?? DEFAULT_UI_FONT;
+    const appFamily = selectedFamily("app", settings, fontsById) ?? DEFAULT_UI_FONT;
     root.style.setProperty("--vora-ui-font-family", appFamily);
     root.style.setProperty(
       "--vora-ui-font-size",
       `${getFontSize(settings[fontSizeSettingKey("app")], 16)}px`,
     );
 
-    const cardsFamily = selectedFamily("cards", fontsById) ?? "var(--vora-ui-font-family)";
+    const cardsFamily = selectedFamily("cards", settings, fontsById) ?? "var(--vora-ui-font-family)";
     const cardsSize = getFontSize(settings[fontSizeSettingKey("cards")], 16);
     root.style.setProperty("--vora-card-font-family", cardsFamily);
     root.style.setProperty("--vora-card-font-size", `${cardsSize}px`);
 
-    const textFamily = selectedFamily("text", fontsById) ?? "var(--vora-ui-font-family)";
+    const textFamily = selectedFamily("text", settings, fontsById) ?? "var(--vora-ui-font-family)";
     root.style.setProperty("--vora-text-font-family", textFamily);
     root.style.setProperty(
       "--vora-text-font-scale",
       String(getFontSize(settings[fontSizeSettingKey("text")], 16) / 16),
     );
 
-    const journalFamily = selectedFamily("journal", fontsById) ?? "var(--vora-ui-font-family)";
+    const journalFamily = selectedFamily("journal", settings, fontsById) ?? "var(--vora-ui-font-family)";
     root.style.setProperty("--vora-journal-font-family", journalFamily);
     root.style.setProperty(
       "--vora-journal-font-size",
@@ -100,5 +100,3 @@ export const FontSettingsController: React.FC = () => {
 
   return null;
 };
-
-void FONT_SETTING_TARGETS;
