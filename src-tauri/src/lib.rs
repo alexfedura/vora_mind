@@ -28,7 +28,7 @@ struct UpdaterFailureMarker {
 }
 
 #[tauri::command]
-async fn install_update_with_helper(
+async fn install_update(
     app: tauri::AppHandle,
     requested_version: String,
 ) -> Result<Option<String>, String> {
@@ -61,18 +61,9 @@ async fn install_update_with_helper(
         .await
         .map_err(|error| error.to_string())?;
 
-    #[cfg(windows)]
-    {
-        launch_update_helper(&app, &installer_bytes, &update_version)?;
-        app.exit(0);
-    }
-
-    #[cfg(not(windows))]
-    {
-        update
-            .install(installer_bytes)
-            .map_err(|error| error.to_string())?;
-    }
+    update
+        .install(installer_bytes)
+        .map_err(|error| error.to_string())?;
 
     Ok(Some(update_version))
 }
@@ -101,90 +92,6 @@ fn get_last_update_failure(
             "Could not read updater failure marker at {}: {error}",
             marker_path.display()
         )),
-    }
-}
-
-#[cfg(windows)]
-fn launch_update_helper(
-    app: &tauri::AppHandle,
-    installer_bytes: &[u8],
-    update_version: &str,
-) -> Result<(), String> {
-    use std::os::windows::process::CommandExt;
-    use std::process::Stdio;
-    use tauri::path::BaseDirectory;
-    use windows_sys::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS};
-
-    let app_data_dir = app
-        .path()
-        .app_local_data_dir()
-        .map_err(|error| error.to_string())?
-        .join("updater");
-    std::fs::create_dir_all(&app_data_dir).map_err(|error| error.to_string())?;
-
-    let update_id = uuid::Uuid::now_v7();
-    let helper_source = app
-        .path()
-        .resolve("vora_updater_helper.exe", BaseDirectory::Resource)
-        .map_err(|error| error.to_string())?;
-    let helper_path = app_data_dir.join(format!("vora_updater_helper-{update_id}.exe"));
-    std::fs::copy(&helper_source, &helper_path).map_err(|error| {
-        format!(
-            "Could not copy updater helper from {}: {error}",
-            helper_source.display()
-        )
-    })?;
-
-    let installer_extension = if installer_bytes.starts_with(b"MZ") {
-        "exe"
-    } else {
-        "msi"
-    };
-    let installer_path =
-        app_data_dir.join(format!("VoraMind-update-{update_id}.{installer_extension}"));
-    std::fs::write(&installer_path, installer_bytes).map_err(|error| error.to_string())?;
-
-    let app_executable = std::env::current_exe().map_err(|error| error.to_string())?;
-    let process_id = std::process::id();
-    let ready_path = app_data_dir.join(format!("updater-helper-{update_id}.ready"));
-    let log_path = app_data_dir.join("updater-helper.log");
-    let failure_marker_path = app_data_dir.join("last-failed-update.json");
-
-    let mut helper = Command::new(&helper_path)
-        .arg(&installer_path)
-        .arg(process_id.to_string())
-        .arg(&app_executable)
-        .arg(&ready_path)
-        .arg(&log_path)
-        .arg(update_version)
-        .arg(&failure_marker_path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-        .spawn()
-        .map_err(|error| format!("Could not start detached updater helper: {error}"))?;
-
-    let handshake_deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
-    loop {
-        if ready_path.is_file() {
-            let _ = std::fs::remove_file(&ready_path);
-            return Ok(());
-        }
-        if let Some(status) = helper
-            .try_wait()
-            .map_err(|error| format!("Could not check updater helper startup: {error}"))?
-        {
-            return Err(format!(
-                "Updater helper exited before attaching to the app process ({status})."
-            ));
-        }
-        if std::time::Instant::now() >= handshake_deadline {
-            return Err(
-                "Updater helper did not confirm its process wait within 15 seconds.".to_string(),
-            );
-        }
-        std::thread::sleep(std::time::Duration::from_millis(50));
     }
 }
 
@@ -1341,7 +1248,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            install_update_with_helper,
+            install_update,
             get_last_update_failure,
             get_all_boards,
             create_board,
