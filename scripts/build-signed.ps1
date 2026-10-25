@@ -1,6 +1,6 @@
 param (
     [string]$KeyPath = (Join-Path (Join-Path $HOME ".tauri") "vora.key"),
-    [string]$BundleDirectory = (Join-Path $ProjectRoot "src-tauri\target\release\bundle")
+    [string]$BundleDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) "target\release\bundle")
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,9 +38,9 @@ try {
     $locationPushed = $true
 
     Write-Host "Building Vora with the updater key at: $($ResolvedKeyPath.Path)"
-    & pnpm tauri build
+    & pnpm tauri:build
     if ($LASTEXITCODE -ne 0) {
-        throw "pnpm tauri build failed with exit code $LASTEXITCODE."
+        throw "pnpm tauri:build failed with exit code $LASTEXITCODE."
     }
 
     if (-not (Test-Path -LiteralPath $BundleDirectory -PathType Container)) {

@@ -17,7 +17,7 @@ Allow a Vora development build to run beside the installed stable build, publish
 - Log update installation failures and surface errors to the frontend. Do not request administrator elevation by default.
 - Configure Windows updater installations for quiet mode.
 - Bundle a separate Windows updater helper executable as a Tauri resource. The app copies it and the verified installer into app-local data before starting it with `DETACHED_PROCESS` and `CREATE_NEW_PROCESS_GROUP`.
-- The helper opens a synchronization handle for the main app and signals readiness before the app exits, preventing it from racing the app shutdown. It waits for the app process, runs MSI (`/quiet /norestart`) or NSIS (`/S`) installers to completion, and relaunches the current executable after success.
+- The helper opens synchronization and termination handles for the main app and signals readiness before the app exits, preventing it from racing the app shutdown. It waits up to 30 seconds for the app to exit, then terminates it and confirms process exit before installing. It waits for MSI (`/quiet /norestart`) or NSIS (`/S`) installers to finish, logs their exit status, and attempts to relaunch the current executable after either an installation success or failure.
 - Keep the existing local release commands as legacy helpers; version tags start the automated release workflow.
 - Never commit or store the updater private key in the repository; configure it only as GitHub Actions secrets.
 
