@@ -275,7 +275,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
               )}
             </>
           ) : (
-            <div className="mx-auto w-full md:w-3/5">
+            <div className="mx-auto w-full md:w-[70%]">
               {saveError && currentSaveStatus === "error" && (
                 <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
                   <span>Could not save this entry: {saveError}</span>
