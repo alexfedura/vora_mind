@@ -70,7 +70,7 @@ export const FontSettingsPanel: React.FC = () => {
       <div>
         <h3 id="font-settings-heading" className="text-xs font-semibold text-gray-100">Fonts & text size</h3>
         <p className="mt-1 text-[11px] leading-relaxed text-gray-400">
-          Choose separate fonts and sizes for each area. Imported fonts stay on this device.
+          Set each area&apos;s font and size independently. Import TTF, OTF, WOFF, or WOFF2 files to use your own fonts.
         </p>
       </div>
 
@@ -103,7 +103,7 @@ export const FontSettingsPanel: React.FC = () => {
                     id={`font-size-${id}`}
                     type="number"
                     min="1"
-                    step="1"
+                    step="0.5"
                     value={fontSize}
                     onChange={(event) => {
                       const nextSize = Number(event.target.value);

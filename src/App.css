@@ -244,7 +244,7 @@
   با تغییر این مقدار، تمام اجزای برنامه همزمان مقیاس می‌گیرند
 */
 html {
-  font-size: 20px;
+  font-size: var(--vora-ui-font-size, 20px);
 }
 
 body, #root {
@@ -255,7 +255,7 @@ body, #root {
   overflow: hidden;
   background-color: var(--vora-chart-bg);
   color: var(--vora-chart-text);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: var(--vora-ui-font-family, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif);
   user-select: none;
 }
 

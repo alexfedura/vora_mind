@@ -14,6 +14,8 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
+import { useSettingsStore } from "@/shared/store/useSettingsStore";
+import { fontSizeSettingKey } from "@/shared/settings/fontSettings";
 import { useCanvasZoomScales } from "./CanvasZoomContext";
 
 export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
@@ -21,6 +23,13 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
   const { zoom } = useViewport();
   const canvasZoom = useCanvasZoomScales();
   const defaultRtl = textDirection === "rtl";
+  const configuredFontSize = useSettingsStore(
+    (state) => state.values[fontSizeSettingKey("text")],
+  );
+  const parsedConfiguredFontSize = Number(configuredFontSize);
+  const textFontScale = Number.isFinite(parsedConfiguredFontSize) && parsedConfiguredFontSize > 0
+    ? parsedConfiguredFontSize / 16
+    : 1;
 
   const [text, setText] = useState((data?.text as string) || "");
   const [fontSize, setFontSize] = useState<number>((data?.fontSize as number) || 16);
@@ -75,7 +84,7 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
       textareaRef.current.style.height = "0px";
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
-  }, [text, fontSize, isBold]);
+  }, [text, fontSize, isBold, textFontScale]);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -239,7 +248,8 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
         ref={mirrorRef}
         aria-hidden="true"
         style={{
-          fontSize: `${fontSize}px`,
+          fontSize: `${fontSize * textFontScale}px`,
+          fontFamily: "var(--vora-text-font-family, var(--vora-ui-font-family))",
           fontWeight: isBold ? "bold" : "normal",
           fontStyle: isItalic ? "italic" : "normal",
         }}
@@ -263,7 +273,8 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
           placeholder="Type something..."
           rows={1}
           style={{
-            fontSize: `${fontSize}px`,
+            fontSize: `${fontSize * textFontScale}px`,
+            fontFamily: "var(--vora-text-font-family, var(--vora-ui-font-family))",
             fontWeight: isBold ? "bold" : "normal",
             fontStyle: isItalic ? "italic" : "normal",
             textDecoration: isUnderline ? "underline" : "none",

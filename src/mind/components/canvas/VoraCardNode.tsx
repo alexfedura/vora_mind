@@ -388,6 +388,10 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
         }}
         placeholder={titleDirection.isRtl ? "عنوان کارت..." : "Card title..."}
         rows={1}
+        style={{
+          fontFamily: "var(--vora-card-font-family, var(--vora-ui-font-family))",
+          fontSize: "calc(var(--vora-card-font-size, 14px) * 1.6)",
+        }}
         className={`nodrag w-full bg-transparent text-lg font-bold text-gray-100 placeholder-gray-500 resize-none overflow-hidden focus:outline-none leading-snug break-words ${
           titleDirection.isRtl ? "text-right" : "text-left"
         }`}

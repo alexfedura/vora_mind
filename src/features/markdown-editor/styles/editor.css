@@ -319,7 +319,8 @@
   min-height: 3rem;
   background: transparent;
   color: var(--vm-fg);
-  font-size: 14px;
+  font-family: var(--vora-card-font-family, var(--vora-ui-font-family));
+  font-size: var(--vora-card-font-size, 14px);
   line-height: 1.625;
 }
 
@@ -368,7 +369,8 @@
 
   max-width: none;
   color: #d1d5db;
-  font-size: 14px;
+  font-family: var(--vora-card-font-family, var(--vora-ui-font-family));
+  font-size: var(--vora-card-font-size, 14px);
   line-height: 1.625;
 }
 

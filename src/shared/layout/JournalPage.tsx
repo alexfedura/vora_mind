@@ -265,13 +265,6 @@ export const JournalPage: React.FC = () => {
                       {fullDateFormatter.format(selectedDay).split(",")[0]}
                     </p>
                   </div>
-                  <span aria-live="polite" className="text-xs text-gray-500">
-                    {currentSaveStatus === "saving"
-                      ? "Saving..."
-                      : currentSaveStatus === "saved"
-                        ? "All changes saved"
-                        : "Changes save automatically"}
-                  </span>
                 </div>
               </div>
 
@@ -296,6 +289,10 @@ export const JournalPage: React.FC = () => {
                 onBlur={handleBlur}
                 placeholder="Write about your day..."
                 dir="auto"
+                style={{
+                  fontFamily: "var(--vora-journal-font-family, var(--vora-ui-font-family))",
+                  fontSize: "var(--vora-journal-font-size, 15px)",
+                }}
                 className="mt-5 min-h-[55vh] w-full resize-y rounded-xl border border-transparent bg-transparent px-1 py-3 text-[15px] leading-8 text-gray-200 outline-none transition placeholder:text-gray-600 focus:border-[#343741] focus:bg-[#14161b]/60 focus:px-4"
               />
             </div>

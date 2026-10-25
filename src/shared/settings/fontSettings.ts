@@ -3,10 +3,10 @@ import type { CustomFontSetting } from "@/types";
 export const CUSTOM_FONTS_SETTING_KEY = "vora.fonts.custom";
 
 export const FONT_SETTING_TARGETS = [
-  { id: "app", label: "Application UI", defaultSize: 16 },
-  { id: "cards", label: "Canvas cards", defaultSize: 16 },
+  { id: "app", label: "Application UI", defaultSize: 20 },
+  { id: "cards", label: "Canvas cards", defaultSize: 14 },
   { id: "text", label: "Canvas text", defaultSize: 16 },
-  { id: "journal", label: "Journal", defaultSize: 16 },
+  { id: "journal", label: "Journal writing", defaultSize: 15 },
 ] as const;
 
 export type FontSettingTarget = (typeof FONT_SETTING_TARGETS)[number]["id"];

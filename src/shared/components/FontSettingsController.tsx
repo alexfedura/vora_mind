@@ -41,13 +41,10 @@ export const FontSettingsController: React.FC = () => {
 
     const appFamily = selectedFamily("app", settings, fontsById) ?? DEFAULT_UI_FONT;
     root.style.setProperty("--vora-ui-font-family", appFamily);
-    root.style.setProperty(
-      "--vora-ui-font-size",
-      `${getFontSize(settings[fontSizeSettingKey("app")], 16)}px`,
-    );
+    root.style.setProperty("--vora-ui-font-size", `${getFontSize(settings[fontSizeSettingKey("app")], 20)}px`);
 
     const cardsFamily = selectedFamily("cards", settings, fontsById) ?? "var(--vora-ui-font-family)";
-    const cardsSize = getFontSize(settings[fontSizeSettingKey("cards")], 16);
+    const cardsSize = getFontSize(settings[fontSizeSettingKey("cards")], 14);
     root.style.setProperty("--vora-card-font-family", cardsFamily);
     root.style.setProperty("--vora-card-font-size", `${cardsSize}px`);
 
@@ -60,10 +57,7 @@ export const FontSettingsController: React.FC = () => {
 
     const journalFamily = selectedFamily("journal", settings, fontsById) ?? "var(--vora-ui-font-family)";
     root.style.setProperty("--vora-journal-font-family", journalFamily);
-    root.style.setProperty(
-      "--vora-journal-font-size",
-      `${getFontSize(settings[fontSizeSettingKey("journal")], 16)}px`,
-    );
+    root.style.setProperty("--vora-journal-font-size", `${getFontSize(settings[fontSizeSettingKey("journal")], 15)}px`);
 
     const loadFonts = async (): Promise<void> => {
       for (const font of customFonts) {
