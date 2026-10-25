@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { getSetting, setSetting } from "@/shared/store/useSettingsStore";
-import { DataBackup } from "@/components/DataBackup";
 import { DatabaseSettings } from "@/components/DatabaseSettings";
 import { FontSettingsPanel } from "@/shared/components/FontSettingsPanel";
 import {
@@ -209,7 +208,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               Data Portability & Backups
             </h3>
             <DatabaseSettings />
-            <DataBackup />
           </section>
 
           {/* بخش وضعیت ورکر خودکار ۲۴/۷ و کلاستر */}

@@ -124,12 +124,6 @@ export interface VoraSnapshot {
   checksum: string;
 }
 
-export interface BrowserStorageBackup {
-  localStorage: Record<string, string>;
-  settings: Record<string, string>;
-  snapshots: VoraSnapshot[];
-}
-
 export interface SnapshotMetadata {
   id: string;
   name: string;
