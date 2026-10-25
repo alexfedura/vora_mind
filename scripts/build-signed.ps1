@@ -48,14 +48,14 @@ try {
     }
 
     $signedInstallers = Get-ChildItem -LiteralPath $BundleDirectory -Recurse -File |
-        Where-Object { $_.Name -like "*.msi.sig" -or $_.Name -like "*.exe.sig" } |
+        Where-Object { $_.Name -like "*.exe.zip.sig" } |
         Where-Object {
             $installerPath = $_.FullName.Substring(0, $_.FullName.Length - 4)
             Test-Path -LiteralPath $installerPath -PathType Leaf
         }
 
-    if (-not ($signedInstallers | Where-Object { $_.Name -like "*.exe.sig" })) {
-        throw "Build completed, but no signed NSIS installer (.exe.sig) was found in $BundleDirectory."
+    if (-not $signedInstallers) {
+        throw "Build completed, but no signed NSIS updater archive (.exe.zip.sig) was found in $BundleDirectory."
     }
 
     foreach ($signature in $signedInstallers) {
