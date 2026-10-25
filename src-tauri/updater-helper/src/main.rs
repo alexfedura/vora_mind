@@ -25,9 +25,12 @@ fn main() {
 #[cfg(windows)]
 fn run() -> Result<(), String> {
     use std::path::PathBuf;
-    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0, WAIT_TIMEOUT};
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, GetLastError, WAIT_OBJECT_0, WAIT_TIMEOUT,
+    };
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, TerminateProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+        OpenProcess, TerminateProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+        PROCESS_TERMINATE,
     };
 
     const APP_EXIT_TIMEOUT_MS: u32 = 30_000;
@@ -44,6 +47,12 @@ fn run() -> Result<(), String> {
     let app_executable = PathBuf::from(args.next().ok_or("Missing app executable path")?);
     let ready_path = PathBuf::from(args.next().ok_or("Missing readiness marker path")?);
     let log_path = PathBuf::from(args.next().ok_or("Missing helper log path")?);
+    let update_version = args
+        .next()
+        .ok_or("Missing update version")?
+        .to_string_lossy()
+        .into_owned();
+    let failure_marker_path = PathBuf::from(args.next().ok_or("Missing failure marker path")?);
 
     let process_handle =
         unsafe { OpenProcess(PROCESS_SYNCHRONIZE | PROCESS_TERMINATE, 0, process_id) };
@@ -101,23 +110,32 @@ fn run() -> Result<(), String> {
 
     unsafe { CloseHandle(process_handle) };
 
-    let relaunch_result = std::process::Command::new(&app_executable)
-        .spawn()
-        .map_err(|error| format!("Could not relaunch the app: {error}"));
-    match (update_result, relaunch_result) {
-        (Ok(()), Ok(_)) => {}
-        (Err(update_error), Ok(_)) => {
+    if let Err(update_error) = update_result {
+        let marker_error = write_failure_marker(&failure_marker_path, &update_version);
+        log_or_stderr(
+            &log_path,
+            &format!(
+                "Update to {update_version} failed; the app was not relaunched: {update_error}"
+            ),
+        );
+        return match marker_error {
+            Ok(()) => Err(update_error),
+            Err(marker_error) => Err(format!("{update_error}; {marker_error}")),
+        };
+    }
+
+    if failure_marker_path.exists() {
+        if let Err(error) = std::fs::remove_file(&failure_marker_path) {
             log_or_stderr(
                 &log_path,
-                &format!("Update failed; the app was relaunched: {update_error}"),
+                &format!("Could not clear the previous update failure marker: {error}"),
             );
-            return Err(update_error);
-        }
-        (Ok(()), Err(relaunch_error)) => return Err(relaunch_error),
-        (Err(update_error), Err(relaunch_error)) => {
-            return Err(format!("{update_error}; {relaunch_error}"));
         }
     }
+
+    std::process::Command::new(&app_executable)
+        .spawn()
+        .map_err(|error| format!("Update succeeded, but the app could not be relaunched: {error}"))?;
 
     let _ = std::fs::remove_file(&installer_path);
     Ok(())
@@ -128,16 +146,76 @@ fn run_installer(
     installer_path: &std::path::Path,
     log_path: &std::path::Path,
 ) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, WAIT_OBJECT_0};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, WaitForSingleObject, INFINITE,
+    };
+    use windows_sys::Win32::UI::Shell::{
+        ShellExecuteExW, SHELLEXECUTEINFOW, SEE_MASK_NOCLOSEPROCESS,
+    };
+
     let is_msi = installer_path
         .extension()
         .is_some_and(|extension| extension.eq_ignore_ascii_case("msi"));
     let installer_status = if is_msi {
-        std::process::Command::new("msiexec.exe")
-            .arg("/i")
-            .arg(installer_path)
-            .args(["/quiet", "/norestart"])
-            .status()
-            .map_err(|error| format!("Could not start msiexec.exe: {error}"))?
+        let msi_log_path = log_path
+            .parent()
+            .ok_or("Could not determine updater data directory for MSI log")?
+            .join("msi_install.log");
+        let verb: Vec<u16> = std::ffi::OsStr::new("runas")
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let executable: Vec<u16> = std::ffi::OsStr::new("msiexec.exe")
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let parameters = format!(
+            "/i \"{}\" /quiet /norestart /L*V \"{}\"",
+            installer_path.display(),
+            msi_log_path.display()
+        );
+        let parameters: Vec<u16> = std::ffi::OsStr::new(&parameters)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let mut execute_info: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
+        execute_info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+        execute_info.fMask = SEE_MASK_NOCLOSEPROCESS;
+        execute_info.lpVerb = verb.as_ptr();
+        execute_info.lpFile = executable.as_ptr();
+        execute_info.lpParameters = parameters.as_ptr();
+        execute_info.nShow = 0;
+
+        if unsafe { ShellExecuteExW(&mut execute_info) } == 0 {
+            let error_code = unsafe { GetLastError() };
+            let error = std::io::Error::from_raw_os_error(error_code as i32);
+            return Err(if error_code == 1223 {
+                format!("Administrator approval for MSI installation was cancelled: {error}")
+            } else {
+                format!("Could not start elevated msiexec.exe: {error}")
+            });
+        }
+
+        if execute_info.hProcess.is_null() {
+            return Err("Elevated msiexec.exe started without a process handle.".to_string());
+        }
+        let wait_result = unsafe { WaitForSingleObject(execute_info.hProcess, INFINITE) };
+        let mut exit_code = 0_u32;
+        let exit_code_result = if wait_result == WAIT_OBJECT_0 {
+            unsafe { GetExitCodeProcess(execute_info.hProcess, &mut exit_code) }
+        } else {
+            0
+        };
+        unsafe { CloseHandle(execute_info.hProcess) };
+        if wait_result != WAIT_OBJECT_0 || exit_code_result == 0 {
+            return Err(format!(
+                "Could not wait for elevated msiexec.exe or read its exit code (wait result {wait_result})."
+            ));
+        }
+        let status = std::process::ExitStatus::from_raw(exit_code);
+        status
     } else {
         std::process::Command::new(installer_path)
             .arg("/S")
@@ -160,6 +238,28 @@ fn run_installer(
     }
 
     Ok(())
+}
+
+#[cfg(windows)]
+fn write_failure_marker(path: &std::path::Path, version: &str) -> Result<(), String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let failed_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("Could not determine update failure time: {error}"))?
+        .as_millis();
+    let marker = serde_json::json!({
+        "version": version,
+        "failedAt": failed_at,
+    });
+    let bytes = serde_json::to_vec(&marker)
+        .map_err(|error| format!("Could not serialize update failure marker: {error}"))?;
+    std::fs::write(path, bytes).map_err(|error| {
+        format!(
+            "Could not write update failure marker to {}: {error}",
+            path.display()
+        )
+    })
 }
 
 #[cfg(windows)]
