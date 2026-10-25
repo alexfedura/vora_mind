@@ -12,7 +12,6 @@ import type {
   TextLinkField,
 } from "@/mind/types";
 import type { JournalEntry, TaskFlowItem } from "@/types";
-import type { BrowserStorageBackup } from "@/lib/snapshot/types";
 
 export interface CardDto {
   id: string;
@@ -276,18 +275,6 @@ export const dbService = {
 
   async deleteBoard(boardId: string): Promise<void> {
     await invoke("delete_board", { boardId });
-  },
-
-  async exportBoardToFile(filePath: string, browserStorage: BrowserStorageBackup): Promise<void> {
-    await invoke("export_board_to_file", { filePath, browserStorage });
-  },
-
-  async readBoardBackupStorage(filePath: string): Promise<BrowserStorageBackup | null> {
-    return await invoke<BrowserStorageBackup | null>("read_board_backup_storage", { filePath });
-  },
-
-  async importBoardFromFile(filePath: string): Promise<void> {
-    await invoke("import_board_from_file", { filePath });
   },
 
   async getAllCards(boardId: string): Promise<CardDto[]> {

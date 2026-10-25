@@ -1,20 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { VoraSnapshot } from "@/lib/snapshot/types";
-import type {
-  BackupCatalog,
-  BackupFileInfo,
-  ImportedItemOrigin,
-  PackageImportSummary,
-  PackageSelection,
-} from "@/types";
-export type {
-  BackupCatalog,
-  BackupFileInfo,
-  BackupSelectableRecord,
-  ImportedItemOrigin,
-  PackageImportSummary,
-  PackageSelection,
-} from "@/types";
 
 export type VoraItemType = "board" | "chart" | "library";
 
@@ -123,27 +108,4 @@ export const voraDb = {
     });
   },
 
-  async getBackupCatalog(): Promise<BackupCatalog> {
-    return await invoke<BackupCatalog>("get_backup_catalog");
-  },
-
-  async exportSelectivePackage(
-    filePath: string,
-    packageName: string,
-    selection: PackageSelection,
-  ): Promise<void> {
-    await invoke("export_selective_package", { filePath, packageName, selection });
-  },
-
-  async inspectBackupFile(filePath: string): Promise<BackupFileInfo> {
-    return await invoke<BackupFileInfo>("inspect_backup_file", { filePath });
-  },
-
-  async importSelectivePackage(filePath: string): Promise<PackageImportSummary> {
-    return await invoke<PackageImportSummary>("import_selective_package", { filePath });
-  },
-
-  async getImportedItemOrigins(): Promise<ImportedItemOrigin[]> {
-    return await invoke<ImportedItemOrigin[]>("get_imported_item_origins");
-  },
 };

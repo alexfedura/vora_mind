@@ -1,4 +1,3 @@
-pub mod backup;
 pub mod canvas_db;
 pub mod journal;
 pub mod library_groups;
