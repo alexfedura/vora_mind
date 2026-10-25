@@ -27,8 +27,7 @@ fn run() -> Result<(), String> {
     use std::path::PathBuf;
     use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0, WAIT_TIMEOUT};
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, TerminateProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
-        PROCESS_TERMINATE,
+        OpenProcess, TerminateProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
     };
 
     const APP_EXIT_TIMEOUT_MS: u32 = 30_000;
@@ -125,7 +124,10 @@ fn run() -> Result<(), String> {
 }
 
 #[cfg(windows)]
-fn run_installer(installer_path: &std::path::Path, log_path: &std::path::Path) -> Result<(), String> {
+fn run_installer(
+    installer_path: &std::path::Path,
+    log_path: &std::path::Path,
+) -> Result<(), String> {
     let is_msi = installer_path
         .extension()
         .is_some_and(|extension| extension.eq_ignore_ascii_case("msi"));
