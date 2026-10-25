@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 import { setSetting } from "@/shared/store/useSettingsStore";
 import { VoraCard } from "@/mind/types";
 import { createTextChangeSet, dbService } from "@/mind/services/dbService";
-import type { TaskFlowItem } from "@/types";
+import type { JournalEntry, TaskFlowItem } from "@/types";
 import {
   CanonicalSymbolRecord,
   LineageHistoryEntry,
@@ -27,6 +27,9 @@ export interface ExecutedTaskRecord {
   patchedFilesCount: number;
   healingAttempts?: number;
 }
+
+const journalSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const journalSaveQueues = new Map<string, Promise<void>>();
 
 interface AppState {
   // --- Mind & Canvas Existing State ---
@@ -69,6 +72,13 @@ interface AppState {
   setTaskFlowItemCompleted: (id: string, completed: boolean) => Promise<void>;
   reorderTaskFlowItems: (ids: string[]) => Promise<void>;
   deleteTaskFlowItem: (id: string) => Promise<void>;
+
+  journalEntries: Record<string, JournalEntry>;
+  journalSaveStatus: Record<string, "saving" | "saved" | "error">;
+  journalSaveError: string | null;
+  loadJournalEntries: (startDate: string, endDate: string) => Promise<void>;
+  updateJournalEntryContent: (date: string, content: string) => void;
+  flushJournalEntry: (date: string) => Promise<void>;
 
   fetchCanonicalEntities: () => Promise<void>;
   selectCanonicalEntity: (entity: CanonicalSymbolRecord | null) => Promise<void>;
@@ -260,6 +270,80 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           taskFlowItems: state.taskFlowItems.filter((item) => item.id !== id),
         }));
+      },
+
+      journalEntries: {},
+      journalSaveStatus: {},
+      journalSaveError: null,
+      loadJournalEntries: async (startDate, endDate) => {
+        const entries = await dbService.getJournalEntries(startDate, endDate);
+        set((state) => ({
+          journalEntries: {
+            ...state.journalEntries,
+            ...Object.fromEntries(entries.map((entry) => [entry.date, entry])),
+          },
+        }));
+      },
+      updateJournalEntryContent: (date, content) => {
+        const now = Date.now();
+        set((state) => ({
+          journalEntries: {
+            ...state.journalEntries,
+            [date]: {
+              date,
+              content,
+              createdAt: state.journalEntries[date]?.createdAt ?? now,
+              updatedAt: now,
+            },
+          },
+          journalSaveStatus: { ...state.journalSaveStatus, [date]: "saving" },
+          journalSaveError: null,
+        }));
+        const previousTimer = journalSaveTimers.get(date);
+        if (previousTimer) clearTimeout(previousTimer);
+        journalSaveTimers.set(date, setTimeout(() => {
+          journalSaveTimers.delete(date);
+          void get().flushJournalEntry(date).catch(() => undefined);
+        }, 500));
+      },
+      flushJournalEntry: async (date) => {
+        const timer = journalSaveTimers.get(date);
+        if (timer) {
+          clearTimeout(timer);
+          journalSaveTimers.delete(date);
+        }
+        const entry = get().journalEntries[date];
+        if (!entry) return;
+
+        const previousSave = journalSaveQueues.get(date) ?? Promise.resolve();
+        const save = previousSave.catch(() => undefined).then(async () => {
+          set({ journalSaveStatus: { ...get().journalSaveStatus, [date]: "saving" } });
+          try {
+            const saved = await dbService.saveJournalEntry(date, entry.content);
+            set((state) => {
+              const latestEntry = state.journalEntries[date];
+              return {
+                journalEntries: latestEntry?.content === entry.content
+                  ? { ...state.journalEntries, [date]: saved }
+                  : state.journalEntries,
+                journalSaveStatus: {
+                  ...state.journalSaveStatus,
+                  [date]: latestEntry?.content === entry.content ? "saved" : "saving",
+                },
+                journalSaveError: null,
+              };
+            });
+          } catch (error) {
+            console.error("Failed to save journal entry:", error);
+            set({
+              journalSaveStatus: { ...get().journalSaveStatus, [date]: "error" },
+              journalSaveError: error instanceof Error ? error.message : String(error),
+            });
+            throw error;
+          }
+        });
+        journalSaveQueues.set(date, save.catch(() => undefined));
+        await save;
       },
 
       setIsIndexingWorkspace: (isIndexingWorkspace) => set({ isIndexingWorkspace }),
