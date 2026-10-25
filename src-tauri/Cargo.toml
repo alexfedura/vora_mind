@@ -50,6 +50,10 @@ chrono = "0.4"
 name = "vora_source"
 path = "src/bin/vora_source.rs"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Threading"] }
+
+
 [[bench]]
 name = "load_test"
 harness = false

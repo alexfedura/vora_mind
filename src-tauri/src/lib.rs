@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct UpdaterDownloadProgress {
     downloaded_bytes: u64,
