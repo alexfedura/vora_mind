@@ -25,9 +25,7 @@ fn main() {
 #[cfg(windows)]
 fn run() -> Result<(), String> {
     use std::path::PathBuf;
-    use windows_sys::Win32::Foundation::{
-        CloseHandle, GetLastError, WAIT_OBJECT_0, WAIT_TIMEOUT,
-    };
+    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0, WAIT_TIMEOUT};
     use windows_sys::Win32::System::Threading::{
         OpenProcess, TerminateProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
         PROCESS_TERMINATE,
@@ -148,7 +146,9 @@ fn run_installer(
 ) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use std::os::windows::process::ExitStatusExt;
-    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, WAIT_OBJECT_0};
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, GetLastError, ERROR_CANCELLED, WAIT_OBJECT_0,
+    };
     use windows_sys::Win32::System::Threading::{
         GetExitCodeProcess, WaitForSingleObject, INFINITE,
     };
@@ -172,15 +172,15 @@ fn run_installer(
             .encode_wide()
             .chain(std::iter::once(0))
             .collect();
-        let parameters = format!(
-            "/i \"{}\" /quiet /norestart /L*V \"{}\"",
-            installer_path.display(),
-            msi_log_path.display()
+        let mut parameters: Vec<u16> = std::ffi::OsStr::new("/i \"").encode_wide().collect();
+        parameters.extend(installer_path.as_os_str().encode_wide());
+        parameters.extend(
+            std::ffi::OsStr::new("\" /quiet /norestart /L*V \"")
+                .encode_wide(),
         );
-        let parameters: Vec<u16> = std::ffi::OsStr::new(&parameters)
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
+        parameters.extend(msi_log_path.as_os_str().encode_wide());
+        parameters.extend(std::ffi::OsStr::new("\"").encode_wide());
+        parameters.push(0);
         let mut execute_info: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
         execute_info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
         execute_info.fMask = SEE_MASK_NOCLOSEPROCESS;
@@ -192,7 +192,7 @@ fn run_installer(
         if unsafe { ShellExecuteExW(&mut execute_info) } == 0 {
             let error_code = unsafe { GetLastError() };
             let error = std::io::Error::from_raw_os_error(error_code as i32);
-            return Err(if error_code == 1223 {
+            return Err(if error_code == ERROR_CANCELLED {
                 format!("Administrator approval for MSI installation was cancelled: {error}")
             } else {
                 format!("Could not start elevated msiexec.exe: {error}")

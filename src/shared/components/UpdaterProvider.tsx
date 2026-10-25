@@ -110,6 +110,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
     if (!update || busyRef.current) return;
 
     busyRef.current = true;
+    let attemptedInstallation = false;
     try {
       const failureRecord = readUpdateFailureRecord();
       if (isRecentFailure(failureRecord, update.version)) {
@@ -122,19 +123,31 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
       setStatus("installing");
       setNotice(null);
       console.info(`Vora Mind updater: silently installing version ${update.version}.`);
+      attemptedInstallation = true;
       await update.install({ restartAfterInstall: true });
-      localStorage.removeItem(UPDATE_FAILURE_STORAGE_KEY);
+      try {
+        localStorage.removeItem(UPDATE_FAILURE_STORAGE_KEY);
+      } catch (storageError: unknown) {
+        console.error("Could not clear the Vora Mind updater failure record:", storageError);
+      }
       updateRef.current = null;
       setStatus("idle");
       setDownloadProgress(null);
     } catch (error: unknown) {
-      try {
-        writeUpdateFailureRecord(update.version);
-      } catch (storageError: unknown) {
-        console.error("Could not save the Vora Mind updater failure record:", storageError);
+      if (attemptedInstallation) {
+        try {
+          writeUpdateFailureRecord(update.version);
+        } catch (storageError: unknown) {
+          console.error("Could not save the Vora Mind updater failure record:", storageError);
+        }
       }
-      reportError(error, "Could not check or install the Vora Mind update");
-      setNotice(UPDATE_FAILURE_NOTICE);
+      reportError(
+        error,
+        attemptedInstallation
+          ? "Could not install the Vora Mind update"
+          : "Could not read the Vora Mind updater failure record",
+      );
+      if (attemptedInstallation) setNotice(UPDATE_FAILURE_NOTICE);
       try {
         await update.close();
       } catch (closeError: unknown) {
@@ -303,6 +316,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
           }
         } catch (error: unknown) {
           reportError(error, "Could not load the Vora Mind updater failure record");
+          setNotice(UPDATE_FAILURE_NOTICE);
           return;
         }
       }
