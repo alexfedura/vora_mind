@@ -108,7 +108,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
     <section className="absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-[#101114] text-gray-200">
       <header className="border-b border-[#292c34] bg-[#14161b] px-6 py-5 sm:px-10">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4">
-          <div>
+          <div className="pl-12 sm:pl-14">
             <h1 className="text-2xl font-semibold tracking-tight text-white">
               {isMonthView
                 ? monthFormatter.format(selectedDay)
@@ -177,7 +177,11 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
             )}
             <button
               type="button"
-              onClick={() => setSelectedDate(dateKey(new Date()))}
+              onClick={() => {
+                setSelectedDate(dateKey(new Date()));
+                setIsMonthView(false);
+              }}
+              aria-label="Open today's journal entry"
               className="rounded-xl border border-[#343741] bg-[#1a1c22] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:border-purple-500/40 hover:text-white"
             >
               Today
@@ -271,7 +275,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
               )}
             </>
           ) : (
-            <div className="w-full">
+            <div className="mx-auto w-full md:w-[85%]">
               {saveError && currentSaveStatus === "error" && (
                 <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
                   <span>Could not save this entry: {saveError}</span>
