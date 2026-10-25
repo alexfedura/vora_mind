@@ -147,6 +147,7 @@ fn run_installer(
     log_path: &std::path::Path,
 ) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::process::ExitStatusExt;
     use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, WAIT_OBJECT_0};
     use windows_sys::Win32::System::Threading::{
         GetExitCodeProcess, WaitForSingleObject, INFINITE,
