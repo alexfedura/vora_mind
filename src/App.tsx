@@ -2123,7 +2123,7 @@ function AppContent() {
     }));
   };
 
-  const handleNodeDragStop = (_event: MouseEvent | TouchEvent, node: Node): void => {
+  const handleNodeDragStop = (_event: MouseEvent | TouchEvent, _node: Node): void => {
     dragPositionsRef.current.clear();
     groupDragRef.current = null;
   };
