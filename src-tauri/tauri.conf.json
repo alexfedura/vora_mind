@@ -41,7 +41,7 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "target/release/vora_updater_helper.exe": "vora_updater_helper.exe"
+      "../target/release/vora_updater_helper.exe": "vora_updater_helper.exe"
     }
   },
   "plugins": {
