@@ -22,6 +22,8 @@ identity or styling.
   all Paths. Ctrl-click or Cmd-click toggles only that segment in the
   selection, preserving other selected sections and deselecting it when clicked
   again. Modifier-clicking never cuts, clones, or splits a Path.
+- Ctrl-dragging or Cmd-dragging a selected Path moves it without creating a
+  clone. Explicit copy/paste remains available.
 - Cutting a segment detaches it as its own Path node and preserves the
   remaining connected sections and all segment metadata. Cutting is available
   only through the explicit **Cut section** action. Undo restores the original
@@ -66,3 +68,4 @@ identity or styling.
 - Verify Ctrl-click and Cmd-click only toggle section selection; the number of
   Path nodes and the original connected geometry remain unchanged. Verify the
   explicit **Cut section** action still splits a Path and that undo restores it.
+- Verify Ctrl-drag and Cmd-drag move a Path without creating another node.

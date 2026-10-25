@@ -278,19 +278,6 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
     return { nodes: copiedNodes, edges: copiedEdges };
   }, [addCard, updateCardVersion]);
 
-  const duplicateNodesAtOffset = useCallback((
-    sourceNodes: Node[],
-    offset: { x: number; y: number }
-  ): Node[] => {
-    if (sourceNodes.length === 0) return [];
-    const copies = createNodeCopies(sourceNodes, offset);
-    setNodes((current) => [...current, ...copies.nodes]);
-    if (copies.edges.length > 0) {
-      setEdges((current) => [...current, ...copies.edges]);
-    }
-    return copies.nodes;
-  }, [createNodeCopies, setEdges, setNodes]);
-
   const pasteCopiedNodes = useCallback(() => {
     const clipboard = flowClipboard.current;
     const { nodes: copiedNodes } = clipboard;
@@ -813,6 +800,5 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
     redo,
     copyNodesToClipboard,
     cutNodes,
-    duplicateNodesAtOffset,
   };
 }

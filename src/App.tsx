@@ -80,12 +80,6 @@ interface CanvasShapePoint {
   screen: { x: number; y: number };
 }
 
-interface CtrlDragCopyState {
-  originalPositions: Map<string, { x: number; y: number }>;
-  copySourceById: Map<string, string>;
-  startPosition: { x: number; y: number };
-}
-
 interface CanvasMarquee {
   start: { x: number; y: number };
   additive: boolean;
@@ -394,7 +388,6 @@ function AppContent() {
   const [shapeDefaults, setShapeDefaults] = useState<VoraShapeDefaults>(loadShapeDefaults);
   const rectangleStartRef = React.useRef<CanvasShapePoint | null>(null);
   const pathPointsRef = React.useRef<CanvasShapePoint[]>([]);
-  const ctrlDragCopyRef = React.useRef<CtrlDragCopyState | null>(null);
   const dragPositionsRef = React.useRef(new Map<string, {
     raw: Node["position"];
     normalized: Node["position"];
@@ -2089,8 +2082,7 @@ function AppContent() {
     }
   };
 
-  const handleNodeDragStart = (event: MouseEvent | TouchEvent, node: Node): void => {
-    ctrlDragCopyRef.current = null;
+  const handleNodeDragStart = (_event: MouseEvent | TouchEvent, node: Node): void => {
     groupDragRef.current = null;
     dragPositionsRef.current.clear();
     flow.nodes.forEach((item) => {
@@ -2101,67 +2093,24 @@ function AppContent() {
       const position = { ...node.position };
       dragPositionsRef.current.set(node.id, { raw: position, normalized: position });
     }
-    const shouldCopy = event instanceof MouseEvent && (event.ctrlKey || event.metaKey);
     const groupId = getCanvasGroupId(node);
-    if (!shouldCopy) {
-      flow.saveHistorySnapshot();
-      if (groupId && !node.selected) {
-        setActiveCanvasGroupId(groupId);
-        groupDragRef.current = {
-          groupId,
-          nodeId: node.id,
-          startPosition: { ...node.position },
-          positions: new Map(
-            flow.nodes
-              .filter((item) => getCanvasGroupId(item) === groupId)
-              .map((item) => [item.id, { ...item.position }])
-          ),
-        };
-      }
-      return;
-    }
-
-    const selectedNodes = flow.nodes.filter((item) => item.selected);
-    const sourceNodes = groupId && !node.selected
-      ? flow.nodes.filter((item) => getCanvasGroupId(item) === groupId)
-      : selectedNodes.some((item) => item.id === node.id) ? selectedNodes : [node];
     flow.saveHistorySnapshot();
-    const copies = flow.duplicateNodesAtOffset(sourceNodes, { x: 0, y: 0 });
-    if (copies.length === 0) return;
-    copies.forEach((copy) => {
-      const position = { ...copy.position };
-      dragPositionsRef.current.set(copy.id, { raw: position, normalized: position });
-    });
+    if (!groupId || node.selected) return;
 
-    const originalPositions = new Map<string, { x: number; y: number }>();
-    const copySourceById = new Map<string, string>();
-    sourceNodes.forEach((source, index) => {
-      const copy = copies[index];
-      if (!copy) return;
-      originalPositions.set(source.id, { ...source.position });
-      copySourceById.set(copy.id, source.id);
-    });
-    ctrlDragCopyRef.current = {
-      originalPositions,
-      copySourceById,
+    setActiveCanvasGroupId(groupId);
+    groupDragRef.current = {
+      groupId,
+      nodeId: node.id,
       startPosition: { ...node.position },
+      positions: new Map(
+        flow.nodes
+          .filter((item) => getCanvasGroupId(item) === groupId)
+          .map((item) => [item.id, { ...item.position }])
+      ),
     };
   };
 
   const handleNodeDrag = (_event: MouseEvent | TouchEvent, node: Node): void => {
-    const dragCopy = ctrlDragCopyRef.current;
-    if (dragCopy) {
-      const deltaX = (node.position.x - dragCopy.startPosition.x) / zoomScale;
-      const deltaY = (node.position.y - dragCopy.startPosition.y) / zoomScale;
-      flow.setNodes((nodes) => nodes.map((item) => {
-        const sourceId = dragCopy.copySourceById.get(item.id);
-        const originalPosition = sourceId ? dragCopy.originalPositions.get(sourceId) : undefined;
-        return originalPosition
-          ? { ...item, position: { x: originalPosition.x + deltaX, y: originalPosition.y + deltaY } }
-          : item;
-      }));
-      return;
-    }
     const groupDrag = groupDragRef.current;
     if (!groupDrag || groupDrag.nodeId !== node.id) return;
     const deltaX = (node.position.x - groupDrag.startPosition.x) / zoomScale;
@@ -2176,30 +2125,7 @@ function AppContent() {
 
   const handleNodeDragStop = (_event: MouseEvent | TouchEvent, node: Node): void => {
     dragPositionsRef.current.clear();
-    const dragCopy = ctrlDragCopyRef.current;
-    if (!dragCopy) {
-      groupDragRef.current = null;
-      return;
-    }
-    ctrlDragCopyRef.current = null;
     groupDragRef.current = null;
-    const deltaX = (node.position.x - dragCopy.startPosition.x) / zoomScale;
-    const deltaY = (node.position.y - dragCopy.startPosition.y) / zoomScale;
-    flow.setNodes((nodes) => nodes.map((item) => {
-      const originalPosition = dragCopy.originalPositions.get(item.id);
-      if (originalPosition) {
-        return { ...item, position: originalPosition, selected: false };
-      }
-      const sourceId = dragCopy.copySourceById.get(item.id);
-      const copyPosition = sourceId ? dragCopy.originalPositions.get(sourceId) : undefined;
-      return copyPosition
-        ? {
-          ...item,
-          position: { x: copyPosition.x + deltaX, y: copyPosition.y + deltaY },
-          selected: true,
-        }
-        : item;
-    }));
   };
 
   useEffect(() => {
