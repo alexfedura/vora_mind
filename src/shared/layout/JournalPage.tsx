@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Clock3 } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Clock3, House } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { MarkdownTextEditor } from "@/features/markdown-editor/MarkdownTextEditor";
 
@@ -47,7 +47,11 @@ function getMonthBounds(date: Date): [string, string] {
   return [dateKey(firstDay), dateKey(lastDay)];
 }
 
-export const JournalPage: React.FC = () => {
+interface JournalPageProps {
+  onGoHome: () => void;
+}
+
+export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
   const entries = useAppStore((state) => state.journalEntries);
   const saveStatus = useAppStore((state) => state.journalSaveStatus);
   const saveError = useAppStore((state) => state.journalSaveError);
@@ -173,6 +177,15 @@ export const JournalPage: React.FC = () => {
               className="rounded-xl border border-[#343741] bg-[#1a1c22] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:border-purple-500/40 hover:text-white"
             >
               Today
+            </button>
+            <button
+              type="button"
+              onClick={onGoHome}
+              aria-label="Go to Home"
+              title="Home"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#343741] bg-[#1a1c22] text-gray-300 transition hover:border-purple-500/40 hover:bg-purple-500/10 hover:text-white"
+            >
+              <House size={17} aria-hidden="true" />
             </button>
           </div>
         </div>

@@ -2425,7 +2425,13 @@ function AppContent() {
           isTextToolActive ? "cursor-text" : activeShapeTool || isAddCardToolActive ? "cursor-crosshair" : ""
         }`}
       >
-        {isTaskFlowOpen ? <TaskFlowPage /> : isJournalOpen ? <JournalPage /> : (
+        {isTaskFlowOpen ? <TaskFlowPage /> : isJournalOpen ? (
+          <JournalPage onGoHome={() => {
+            setIsJournalOpen(false);
+            setIsTaskFlowOpen(false);
+            setActiveOpenPanel("none");
+          }} />
+        ) : (
           <>
         {libraryBoardSession && (
           <div className="absolute left-1/2 top-3 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-amber-500/40 bg-[#171a22]/95 px-4 py-2.5 shadow-xl backdrop-blur">
