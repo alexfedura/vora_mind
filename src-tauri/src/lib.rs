@@ -56,7 +56,9 @@ async fn install_update_with_helper(app: tauri::AppHandle) -> Result<Option<Stri
 
     #[cfg(not(windows))]
     {
-        update.install(installer_bytes).map_err(|error| error.to_string())?;
+        update
+            .install(installer_bytes)
+            .map_err(|error| error.to_string())?;
     }
 
     Ok(Some(update_version))
@@ -94,7 +96,8 @@ fn launch_update_helper(app: &tauri::AppHandle, installer_bytes: &[u8]) -> Resul
     } else {
         "msi"
     };
-    let installer_path = app_data_dir.join(format!("VoraMind-update-{update_id}.{installer_extension}"));
+    let installer_path =
+        app_data_dir.join(format!("VoraMind-update-{update_id}.{installer_extension}"));
     std::fs::write(&installer_path, installer_bytes).map_err(|error| error.to_string())?;
 
     let app_executable = std::env::current_exe().map_err(|error| error.to_string())?;
@@ -130,7 +133,9 @@ fn launch_update_helper(app: &tauri::AppHandle, installer_bytes: &[u8]) -> Resul
             ));
         }
         if std::time::Instant::now() >= handshake_deadline {
-            return Err("Updater helper did not confirm its process wait within 15 seconds.".to_string());
+            return Err(
+                "Updater helper did not confirm its process wait within 15 seconds.".to_string(),
+            );
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
@@ -316,14 +321,15 @@ fn create_board_version(
         return Err("Choose a Major, Minor, or Patch version increment.".to_string());
     }
     let mut conn = state.db.lock().map_err(|e| e.to_string())?;
-    mind::canvas_db::create_board_version(&mut conn, &board_id, &increment, snapshot)
-        .map_err(|error| match error {
+    mind::canvas_db::create_board_version(&mut conn, &board_id, &increment, snapshot).map_err(
+        |error| match error {
             rusqlite::Error::InvalidQuery => {
                 "That version label already exists on this Board. Choose another increment."
                     .to_string()
             }
             other => other.to_string(),
-        })
+        },
+    )
 }
 
 #[tauri::command]
@@ -398,13 +404,9 @@ fn move_library_item_group_to_trash(
 }
 
 #[tauri::command]
-fn restore_library_item_group(
-    state: State<AppState>,
-    group_id: String,
-) -> Result<(), String> {
+fn restore_library_item_group(state: State<AppState>, group_id: String) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    mind::library_groups::restore_item_group(&conn, &group_id)
-        .map_err(|error| error.to_string())
+    mind::library_groups::restore_item_group(&conn, &group_id).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -534,7 +536,10 @@ fn import_selective_package(
     let database_path = active_database_path(&app)?;
     let database_path_buf = database_path.clone();
     let previous_settings = mind::portable_db::read_settings_for_database(&database_path)?;
-    let current_settings = previous_settings.iter().map(|(key, value)| (key.clone(), value.clone())).collect();
+    let current_settings = previous_settings
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
     let mut settings_write_attempted = false;
     let result = {
         let state = app.state::<AppState>();
@@ -547,7 +552,10 @@ fn import_selective_package(
                 settings_write_attempted = true;
                 mind::portable_db::replace_settings_for_database(
                     &database_path_buf,
-                    settings.iter().map(|(key, value)| (key.clone(), value.clone())).collect(),
+                    settings
+                        .iter()
+                        .map(|(key, value)| (key.clone(), value.clone()))
+                        .collect(),
                 )
             },
         )
@@ -561,7 +569,9 @@ fn import_selective_package(
                     &database_path,
                     previous_settings,
                 ) {
-                    return Err(format!("{error}; settings rollback also failed: {rollback_error}"));
+                    return Err(format!(
+                        "{error}; settings rollback also failed: {rollback_error}"
+                    ));
                 }
             }
             Err(error)
@@ -646,8 +656,7 @@ fn create_text_link(
         .as_millis() as i64;
     let id = format!("text-link-{}", uuid::Uuid::now_v7());
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
-    mind::canvas_db::create_text_link(&mut conn, input, now, &id)
-        .map_err(|error| error.to_string())
+    mind::canvas_db::create_text_link(&mut conn, input, now, &id).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -674,14 +683,8 @@ fn save_card_direct(
         .as_millis() as i64;
 
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    mind::canvas_db::apply_text_link_changes(
-        &tx,
-        &board_id,
-        &id,
-        &text_change_sets,
-        now,
-    )
-    .map_err(|error| error.to_string())?;
+    mind::canvas_db::apply_text_link_changes(&tx, &board_id, &id, &text_change_sets, now)
+        .map_err(|error| error.to_string())?;
 
     let board_exists: bool = tx
         .query_row(
