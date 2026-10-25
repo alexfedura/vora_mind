@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Clock3 } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
+import { MarkdownTextEditor } from "@/features/markdown-editor/MarkdownTextEditor";
 
 function dateKey(date: Date): string {
   const year = date.getFullYear();
@@ -281,19 +282,14 @@ export const JournalPage: React.FC = () => {
                 </div>
               )}
 
-              <label className="sr-only" htmlFor="journal-entry-content">Journal entry for {selectedDate}</label>
-              <textarea
-                id="journal-entry-content"
+              <MarkdownTextEditor
+                key={selectedDate}
                 value={entryForSelectedDate?.content ?? ""}
-                onChange={(event) => updateContent(selectedDate, event.target.value)}
-                onBlur={handleBlur}
-                placeholder="Write about your day..."
-                dir="auto"
-                style={{
-                  fontFamily: "var(--vora-journal-font-family, var(--vora-ui-font-family))",
-                  fontSize: "var(--vora-journal-font-size, 15px)",
-                }}
-                className="mt-5 min-h-[55vh] w-full resize-y rounded-xl border border-transparent bg-transparent px-1 py-3 text-[15px] leading-8 text-gray-200 outline-none transition placeholder:text-gray-600 focus:border-[#343741] focus:bg-[#14161b]/60 focus:px-4"
+                onChange={(content) => updateContent(selectedDate, content)}
+                placeholder="Write about your day... (Markdown supported)"
+                direction="auto"
+                ariaLabel={`Journal entry for ${selectedDate}`}
+                className="vm-journal-markdown-editor mt-5 min-h-[55vh] w-full rounded-xl border border-transparent bg-transparent px-1 py-3 text-gray-200 transition focus-within:border-[#343741] focus-within:bg-[#14161b]/60 focus-within:px-4"
               />
             </div>
           )}
