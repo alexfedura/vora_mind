@@ -8,6 +8,8 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 
 type UpdateStatus = "idle" | "checking" | "downloading" | "ready" | "installing" | "error";
@@ -22,6 +24,12 @@ interface UpdaterContextValue {
 
 const UpdaterContext = createContext<UpdaterContextValue | null>(null);
 const AUTO_CHECK_INTERVAL_MS = 60_000;
+const isWindows = navigator.userAgent.toLowerCase().includes("windows");
+
+interface UpdaterDownloadProgress {
+  downloadedBytes: number;
+  contentLength: number | null;
+}
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -78,6 +86,25 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
     setStatus("checking");
     setDownloadProgress(null);
     setNotice(null);
+    if (isWindows) {
+      try {
+        setStatus("downloading");
+        const installedVersion = await invoke<string | null>("install_update_with_helper");
+        if (installedVersion) {
+          console.info(`Vora Mind updater: handing version ${installedVersion} to the detached installer helper.`);
+          setStatus("installing");
+        } else {
+          console.info("Vora Mind updater: no update available.");
+          setStatus("idle");
+        }
+      } catch (error: unknown) {
+        reportError(error, "Could not check or install Vora Mind updates");
+      } finally {
+        busyRef.current = false;
+      }
+      return;
+    }
+
     let update: Update | null = null;
 
     try {
@@ -125,6 +152,30 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
       busyRef.current = false;
     }
   }, [installAvailableUpdate, reportError]);
+
+  useEffect(() => {
+    if (!isWindows) return;
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    void listen<UpdaterDownloadProgress>("vora-updater-progress", (event) => {
+      if (!active) return;
+      const { downloadedBytes, contentLength } = event.payload;
+      setDownloadProgress(
+        contentLength && contentLength > 0
+          ? Math.min(100, (downloadedBytes / contentLength) * 100)
+          : null,
+      );
+    }).then((stopListening) => {
+      if (active) unlisten = stopListening;
+      else stopListening();
+    }).catch((error: unknown) => {
+      console.error("Could not listen for updater download progress:", error);
+    });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (import.meta.env.DEV) return;

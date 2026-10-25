@@ -1450,6 +1450,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            install_update_with_helper,
             get_all_boards,
             create_board,
             get_task_flow_items,

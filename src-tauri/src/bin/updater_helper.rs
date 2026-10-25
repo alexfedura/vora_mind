@@ -17,7 +17,6 @@ fn main() {
 
 #[cfg(windows)]
 fn run() -> Result<(), String> {
-    use std::os::windows::ffi::OsStrExt;
     use std::path::PathBuf;
     use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
     use windows_sys::Win32::System::Threading::{
