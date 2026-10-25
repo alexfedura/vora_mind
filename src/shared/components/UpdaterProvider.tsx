@@ -8,10 +8,9 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { ask, message } from "@tauri-apps/plugin-dialog";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 
-type UpdateStatus = "idle" | "checking" | "downloading" | "ready" | "prompting" | "installing" | "error";
+type UpdateStatus = "idle" | "checking" | "downloading" | "ready" | "installing" | "error";
 
 interface UpdaterContextValue {
   status: UpdateStatus;
@@ -35,13 +34,11 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
   const updateRef = useRef<Update | null>(null);
   const busyRef = useRef(false);
 
-  const reportError = useCallback((error: unknown, prefix: string): string => {
+  const reportError = useCallback((error: unknown, prefix: string): void => {
     const detail = getErrorMessage(error);
     const errorMessage = `${prefix}: ${detail}`;
     console.error(errorMessage, error);
     setStatus("error");
-    setNotice(errorMessage);
-    return errorMessage;
   }, []);
 
   const installAvailableUpdate = useCallback(async (): Promise<void> => {
@@ -49,49 +46,22 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
     if (!update || busyRef.current) return;
 
     busyRef.current = true;
-    setStatus("prompting");
+    setStatus("installing");
+    setNotice(null);
     try {
-      let shouldInstall: boolean;
+      console.info(`Vora Mind updater: silently installing version ${update.version}.`);
+      await update.install({ restartAfterInstall: true });
+      updateRef.current = null;
+      setStatus("idle");
+      setDownloadProgress(null);
+    } catch (error: unknown) {
+      reportError(error, "Could not install the Vora Mind update");
       try {
-        shouldInstall = await ask(
-          `Version ${update.version} is downloaded and ready to install. Restart now?`,
-          { title: "Vora Mind update ready", kind: "info" },
-        );
-      } catch (error: unknown) {
-        reportError(error, "Could not confirm installation of the Vora Mind update");
-        setStatus("ready");
-        return;
+        await update.close();
+      } catch (closeError: unknown) {
+        console.error("Could not release the Vora Mind update resource:", closeError);
       }
-      if (!shouldInstall) {
-        setStatus("ready");
-        return;
-      }
-
-      setStatus("installing");
-      setNotice(null);
-      try {
-        await update.install({ restartAfterInstall: true });
-        updateRef.current = null;
-        setStatus("idle");
-        setDownloadProgress(null);
-      } catch (error: unknown) {
-        const errorMessage = reportError(error, "Could not install the Vora Mind update");
-        try {
-          await message(
-            `${errorMessage}\n\nThe current version is still installed. You can try the update again later.`,
-            { title: "Vora Mind update failed", kind: "error" },
-          );
-        } catch (dialogError: unknown) {
-          console.error("Could not display the Vora Mind update error dialog:", dialogError);
-        }
-
-        try {
-          await update.close();
-        } catch (closeError: unknown) {
-          console.error("Could not release the Vora Mind update resource:", closeError);
-        }
-        updateRef.current = null;
-      }
+      updateRef.current = null;
     } finally {
       busyRef.current = false;
     }
