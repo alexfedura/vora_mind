@@ -65,6 +65,7 @@ import { PathToolIcon } from "./components/market/PathToolIcon";
 import { RectangleToolIcon } from "./components/market/RectangleToolIcon";
 import { LeftSidebar } from "./shared/layout/LeftSidebar";
 import { TaskFlowPage } from "./shared/layout/TaskFlowPage";
+import { JournalPage } from "./shared/layout/JournalPage";
 import { BoardsPanel } from "./shared/layout/BoardsPanel";
 import { RightDrawer } from "./shared/layout/RightDrawer";
 import { ReplayController } from "./shared/canvas/ReplayController";
@@ -356,6 +357,8 @@ function AppContent() {
 
   const [activeOpenPanel, setActiveOpenPanel] = useState<OpenPanel>("none");
   const [isTaskFlowOpen, setIsTaskFlowOpen] = useState(false);
+  const [isJournalOpen, setIsJournalOpen] = useState(false);
+  const isWorkspacePageOpen = isTaskFlowOpen || isJournalOpen;
   const [lastActivePanel, setLastActivePanel] = useState<"boards" | "sidebar">("boards");
   const [boards, setBoards] = useState<BoardItem[]>([]);
   const [boardsLoaded, setBoardsLoaded] = useState(false);
@@ -2265,7 +2268,7 @@ function AppContent() {
   return (
     <div className="vora-mind-theme flex h-screen w-screen bg-background text-gray-200 overflow-hidden select-none font-sans relative">
     {/* تولبار ابزارها */}
-    {!isTaskFlowOpen && canvasBoardId && <div
+    {!isWorkspacePageOpen && canvasBoardId && <div
       className="absolute top-[117.5px] z-40 flex flex-col gap-1 p-1 bg-[#181818]/90 border border-[#2a2a2a] rounded-xl shadow-lg backdrop-blur transition-all duration-200"
       style={{ left: floatingControlsLeft }}
     >
@@ -2347,7 +2350,7 @@ function AppContent() {
             {activeOpenPanel === "sidebar" ? <PanelLeft size={16} /> : <LayoutGrid size={16} />}
           </button>
       </div>
-      {!isTaskFlowOpen && <div className="absolute top-[67.5px] z-40 flex w-[57px] justify-center" style={{ left: floatingControlsLeft }}>
+      {!isWorkspacePageOpen && <div className="absolute top-[67.5px] z-40 flex w-[57px] justify-center" style={{ left: floatingControlsLeft }}>
         <button
           type="button"
           onClick={toggleForgeAgent}
@@ -2367,15 +2370,24 @@ function AppContent() {
               hasActiveBoard={Boolean(activeBoardId)}
               isLibraryOpen={isRightDrawerOpen}
               isTaskFlowOpen={isTaskFlowOpen}
+              isJournalOpen={isJournalOpen}
               onAddNewCard={handleCreateCardInLibraryOnly}
               onToggleLibrary={toggleRightDrawer}
               onOpenTaskFlow={() => {
+                setIsJournalOpen(false);
                 setIsTaskFlowOpen(true);
+                setLastActivePanel("sidebar");
+                setActiveOpenPanel("sidebar");
+              }}
+              onOpenJournal={() => {
+                setIsTaskFlowOpen(false);
+                setIsJournalOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
               }}
               onOpenBoards={() => {
                 setIsTaskFlowOpen(false);
+                setIsJournalOpen(false);
                 setLastActivePanel("boards");
                 setActiveOpenPanel("boards");
               }}
@@ -2403,17 +2415,17 @@ function AppContent() {
       {/* بوم اصلی */}
       <main
         ref={flow.reactFlowWrapper}
-        onContextMenu={isTaskFlowOpen ? undefined : handleCanvasContextMenu}
-        onPointerDownCapture={isTaskFlowOpen ? undefined : handleCanvasPointerDown}
-        onPointerMoveCapture={isTaskFlowOpen ? undefined : handleCanvasPointerMove}
-        onPointerUpCapture={isTaskFlowOpen ? undefined : handleCanvasPointerUp}
-        onDoubleClickCapture={isTaskFlowOpen ? undefined : handleCanvasDoubleClick}
-        onKeyDown={isTaskFlowOpen ? undefined : handleCanvasKeyDown}
+        onContextMenu={isWorkspacePageOpen ? undefined : handleCanvasContextMenu}
+        onPointerDownCapture={isWorkspacePageOpen ? undefined : handleCanvasPointerDown}
+        onPointerMoveCapture={isWorkspacePageOpen ? undefined : handleCanvasPointerMove}
+        onPointerUpCapture={isWorkspacePageOpen ? undefined : handleCanvasPointerUp}
+        onDoubleClickCapture={isWorkspacePageOpen ? undefined : handleCanvasDoubleClick}
+        onKeyDown={isWorkspacePageOpen ? undefined : handleCanvasKeyDown}
         className={`w-full h-full relative bg-background flex-1 ${isSpacePanActive ? "space-pan-active" : ""} ${
           isTextToolActive ? "cursor-text" : activeShapeTool || isAddCardToolActive ? "cursor-crosshair" : ""
         }`}
       >
-        {isTaskFlowOpen ? <TaskFlowPage /> : (
+        {isTaskFlowOpen ? <TaskFlowPage /> : isJournalOpen ? <JournalPage /> : (
           <>
         {libraryBoardSession && (
           <div className="absolute left-1/2 top-3 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-amber-500/40 bg-[#171a22]/95 px-4 py-2.5 shadow-xl backdrop-blur">
@@ -2761,7 +2773,7 @@ function AppContent() {
         )}
       </main>
 
-      {!isTaskFlowOpen && <div className="absolute top-3.5 right-3.5 z-40 flex flex-row-reverse gap-2">
+      {!isWorkspacePageOpen && <div className="absolute top-3.5 right-3.5 z-40 flex flex-row-reverse gap-2">
         <button
           type="button"
           onClick={toggleRightDrawer}
@@ -2783,7 +2795,7 @@ function AppContent() {
       </div>}
 
       {/* سایدبار کتابخانه یادداشت‌ها (Mind) */}
-      {!isTaskFlowOpen && <RightDrawer
+      {!isWorkspacePageOpen && <RightDrawer
         selectedCardId={selectedCardId}
         setSelectedCardId={setSelectedCardId}
         onAddNewCard={handleCreateCardInLibraryOnly}
@@ -2799,7 +2811,7 @@ function AppContent() {
       />}
 
       {/* سایدبار تحلیل هوشمند کد (Forge AI Agent) */}
-      {!isTaskFlowOpen && <ForgeAgentDrawer
+      {!isWorkspacePageOpen && <ForgeAgentDrawer
         onInjectGraphToCanvas={({ nodes, edges }) => {
           if (!canvasBoardId) return;
           flow.saveHistorySnapshot();

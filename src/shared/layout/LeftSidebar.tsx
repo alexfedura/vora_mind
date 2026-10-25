@@ -21,9 +21,11 @@ interface LeftSidebarProps {
   hasActiveBoard: boolean;
   isLibraryOpen: boolean;
   isTaskFlowOpen: boolean;
+  isJournalOpen: boolean;
   onAddNewCard: () => void;
   onOpenBoards: () => void;
   onOpenTaskFlow: () => void;
+  onOpenJournal: () => void;
   onToggleLibrary: () => void;
 }
 
@@ -32,9 +34,11 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   hasActiveBoard,
   isLibraryOpen,
   isTaskFlowOpen,
+  isJournalOpen,
   onAddNewCard,
   onOpenBoards,
   onOpenTaskFlow,
+  onOpenJournal,
   onToggleLibrary,
 }) => {
   return (
@@ -92,7 +96,16 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             <ListTodo size={16} />
             <span>Task Flow</span>
           </button>
-          <button className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#1b1e27] hover:text-gray-200 transition">
+          <button
+            type="button"
+            onClick={onOpenJournal}
+            aria-current={isJournalOpen ? "page" : undefined}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition ${
+              isJournalOpen
+                ? "bg-[#1d212d] text-purple-400 font-semibold"
+                : "hover:bg-[#1b1e27] hover:text-gray-200"
+            }`}
+          >
             <BookOpen size={16} />
             <span>Journal</span>
           </button>
