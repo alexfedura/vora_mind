@@ -1,0 +1,7 @@
+[package]
+name = "vora_updater_helper"
+version = "0.2.12"
+edition = "2021"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading"] }

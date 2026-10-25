@@ -11,7 +11,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tauri:build": "pnpm build:updater-helper && tauri build",
-    "build:updater-helper": "cargo build --manifest-path src-tauri/Cargo.toml --release --bin vora_updater_helper",
+    "build:updater-helper": "cargo build --manifest-path src-tauri/updater-helper/Cargo.toml --release",
     "release:patch": "node scripts/release.js patch",
     "release:minor": "node scripts/release.js minor",
     "release:major": "node scripts/release.js major",

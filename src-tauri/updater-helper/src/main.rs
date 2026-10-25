@@ -51,7 +51,9 @@ fn run() -> Result<(), String> {
     let wait_result = unsafe { WaitForSingleObject(process_handle, INFINITE) };
     unsafe { CloseHandle(process_handle) };
     if wait_result != WAIT_OBJECT_0 {
-        return Err(format!("Waiting for the app process failed with code {wait_result}."));
+        return Err(format!(
+            "Waiting for the app process failed with code {wait_result}."
+        ));
     }
 
     append_log(&log_path, "The app exited; starting the update installer.")?;
