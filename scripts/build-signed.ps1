@@ -54,9 +54,6 @@ try {
             Test-Path -LiteralPath $installerPath -PathType Leaf
         }
 
-    if (-not ($signedInstallers | Where-Object { $_.Name -like "*.msi.sig" })) {
-        throw "Build completed, but no signed MSI installer (.msi.sig) was found in $BundleDirectory."
-    }
     if (-not ($signedInstallers | Where-Object { $_.Name -like "*.exe.sig" })) {
         throw "Build completed, but no signed NSIS installer (.exe.sig) was found in $BundleDirectory."
     }

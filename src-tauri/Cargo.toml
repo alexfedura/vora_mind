@@ -6,7 +6,6 @@ edition = "2021"
 default-run = "vora_mind"
 
 [workspace]
-members = ["updater-helper"]
 resolver = "2"
 
 [lib]

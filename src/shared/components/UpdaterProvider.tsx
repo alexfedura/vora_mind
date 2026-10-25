@@ -171,6 +171,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
     setDownloadProgress(null);
     if (isWindows) {
       let update: Update | null = null;
+      let requestedVersion: string | null = null;
       try {
         update = await check();
         if (!update) {
@@ -180,7 +181,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
           return;
         }
 
-        const requestedVersion = update.version;
+        requestedVersion = update.version;
         const failureRecord = readUpdateFailureRecord();
         if (isRecentFailure(failureRecord, requestedVersion)) {
           setStatus("error");
@@ -194,17 +195,24 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
         await update.close();
         update = null;
         setStatus("downloading");
-        const installedVersion = await invoke<string | null>("install_update_with_helper", {
+        const installedVersion = await invoke<string | null>("install_update", {
           requestedVersion,
         });
         if (installedVersion) {
-          console.info(`Vora Mind updater: handing version ${installedVersion} to the detached installer helper.`);
+          console.info(`Vora Mind updater: installing version ${installedVersion}.`);
           setStatus("installing");
         } else {
           console.info("Vora Mind updater: no update available.");
           setStatus("idle");
         }
       } catch (error: unknown) {
+        if (requestedVersion) {
+          try {
+            writeUpdateFailureRecord(requestedVersion);
+          } catch (storageError: unknown) {
+            console.error("Could not save the Vora Mind updater failure record:", storageError);
+          }
+        }
         if (update) {
           try {
             await update.close();
