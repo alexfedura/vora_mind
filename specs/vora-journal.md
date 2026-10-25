@@ -11,6 +11,8 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 
 - Selecting **Journal** opens a dedicated workspace page without canvas controls.
 - A Home button in the Journal header returns directly to the main canvas.
+- A fixed shortcut in the upper-left canvas toolbar opens the Journal from Home.
+  While the Journal is open, the same shortcut switches back to Home.
 - The default view opens today's entry. The selected date and weekday are shown in the top navigation bar, replacing the separate Workspace/Journal title block; there is no editable title field.
 - Users can move to adjacent days, choose a date, or open a month view.
 - The month view displays one card per day, with saved text previews, in a four-column date grid; selecting a card opens that day's entry.
