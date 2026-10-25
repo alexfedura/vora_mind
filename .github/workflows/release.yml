@@ -98,4 +98,4 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
-          args: '--profile ci --bundles msi'
+          args: '--bundles msi -- --profile ci'
