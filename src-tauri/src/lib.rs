@@ -152,6 +152,27 @@ fn delete_task_flow_item(state: State<AppState>, id: String) -> Result<(), Strin
 }
 
 #[tauri::command]
+fn get_journal_entries(
+    state: State<AppState>,
+    start_date: String,
+    end_date: String,
+) -> Result<Vec<mind::journal::JournalEntry>, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::journal::list_entries(&conn, &start_date, &end_date).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_journal_entry(
+    state: State<AppState>,
+    date: String,
+    content: String,
+) -> Result<mind::journal::JournalEntry, String> {
+    let now = task_flow_now()?;
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::journal::save_entry(&conn, &date, &content, now).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn get_board_versions(
     state: State<AppState>,
     board_id: String,
@@ -1312,6 +1333,8 @@ pub fn run() {
             set_task_flow_item_completed,
             reorder_task_flow_items,
             delete_task_flow_item,
+            get_journal_entries,
+            save_journal_entry,
             get_board_versions,
             create_board_version,
             checkout_board_version,

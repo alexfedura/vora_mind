@@ -11,7 +11,7 @@ import type {
   TextLinkInput,
   TextLinkField,
 } from "@/mind/types";
-import type { TaskFlowItem } from "@/types";
+import type { JournalEntry, TaskFlowItem } from "@/types";
 import type { BrowserStorageBackup } from "@/lib/snapshot/types";
 
 export interface CardDto {
@@ -154,6 +154,14 @@ export function createLibraryItemGroupSnapshot(
 }
 
 export const dbService = {
+  async getJournalEntries(startDate: string, endDate: string): Promise<JournalEntry[]> {
+    return await invoke<JournalEntry[]>("get_journal_entries", { startDate, endDate });
+  },
+
+  async saveJournalEntry(date: string, content: string): Promise<JournalEntry> {
+    return await invoke<JournalEntry>("save_journal_entry", { date, content });
+  },
+
   async getTaskFlowItems(): Promise<TaskFlowItem[]> {
     return await invoke<TaskFlowItem[]>("get_task_flow_items");
   },

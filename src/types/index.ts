@@ -55,3 +55,10 @@ export interface TaskFlowItem {
   createdAt: number;
   updatedAt: number;
 }
+
+export interface JournalEntry {
+  date: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+}
