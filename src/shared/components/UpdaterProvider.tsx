@@ -31,8 +31,64 @@ interface UpdaterDownloadProgress {
   contentLength: number | null;
 }
 
+interface UpdateFailureRecord {
+  lastFailedVersion: string;
+  failedAt: number;
+}
+
+interface BackendUpdateFailureMarker {
+  version: string;
+  failedAt: number;
+}
+
+const UPDATE_FAILURE_STORAGE_KEY = "vora.updater.lastFailedVersion";
+const UPDATE_FAILURE_COOLDOWN_MS = 60 * 60 * 1_000;
+const UPDATE_FAILURE_NOTICE = "Update failed. Please check the logs or try again later.";
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function readUpdateFailureRecord(): UpdateFailureRecord | null {
+  const rawRecord = localStorage.getItem(UPDATE_FAILURE_STORAGE_KEY);
+  if (!rawRecord) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawRecord);
+  } catch (error: unknown) {
+    console.error("Could not parse the stored updater failure record:", error);
+    throw new Error("The stored updater failure record is invalid.");
+  }
+
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    !("lastFailedVersion" in parsed) ||
+    typeof parsed.lastFailedVersion !== "string" ||
+    !("failedAt" in parsed) ||
+    typeof parsed.failedAt !== "number"
+  ) {
+    throw new Error("The stored updater failure record has an invalid shape.");
+  }
+
+  return {
+    lastFailedVersion: parsed.lastFailedVersion,
+    failedAt: parsed.failedAt,
+  };
+}
+
+function writeUpdateFailureRecord(version: string, failedAt = Date.now()): void {
+  localStorage.setItem(
+    UPDATE_FAILURE_STORAGE_KEY,
+    JSON.stringify({ lastFailedVersion: version, failedAt }),
+  );
+}
+
+function isRecentFailure(record: UpdateFailureRecord | null, version: string): boolean {
+  if (!record || record.lastFailedVersion !== version) return false;
+  const elapsed = Date.now() - record.failedAt;
+  return elapsed >= 0 && elapsed < UPDATE_FAILURE_COOLDOWN_MS;
 }
 
 export function UpdaterProvider({ children }: { children: ReactNode }): ReactElement {
@@ -54,16 +110,31 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
     if (!update || busyRef.current) return;
 
     busyRef.current = true;
-    setStatus("installing");
-    setNotice(null);
     try {
+      const failureRecord = readUpdateFailureRecord();
+      if (isRecentFailure(failureRecord, update.version)) {
+        setStatus("error");
+        setNotice(UPDATE_FAILURE_NOTICE);
+        await update.close();
+        updateRef.current = null;
+        return;
+      }
+      setStatus("installing");
+      setNotice(null);
       console.info(`Vora Mind updater: silently installing version ${update.version}.`);
       await update.install({ restartAfterInstall: true });
+      localStorage.removeItem(UPDATE_FAILURE_STORAGE_KEY);
       updateRef.current = null;
       setStatus("idle");
       setDownloadProgress(null);
     } catch (error: unknown) {
-      reportError(error, "Could not install the Vora Mind update");
+      try {
+        writeUpdateFailureRecord(update.version);
+      } catch (storageError: unknown) {
+        console.error("Could not save the Vora Mind updater failure record:", storageError);
+      }
+      reportError(error, "Could not check or install the Vora Mind update");
+      setNotice(UPDATE_FAILURE_NOTICE);
       try {
         await update.close();
       } catch (closeError: unknown) {
@@ -85,11 +156,34 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
     busyRef.current = true;
     setStatus("checking");
     setDownloadProgress(null);
-    setNotice(null);
     if (isWindows) {
+      let update: Update | null = null;
       try {
+        update = await check();
+        if (!update) {
+          console.info("Vora Mind updater: no update available.");
+          setStatus("idle");
+          setNotice(null);
+          return;
+        }
+
+        const requestedVersion = update.version;
+        const failureRecord = readUpdateFailureRecord();
+        if (isRecentFailure(failureRecord, requestedVersion)) {
+          setStatus("error");
+          setNotice(UPDATE_FAILURE_NOTICE);
+          await update.close();
+          update = null;
+          return;
+        }
+
+        setNotice(null);
+        await update.close();
+        update = null;
         setStatus("downloading");
-        const installedVersion = await invoke<string | null>("install_update_with_helper");
+        const installedVersion = await invoke<string | null>("install_update_with_helper", {
+          requestedVersion,
+        });
         if (installedVersion) {
           console.info(`Vora Mind updater: handing version ${installedVersion} to the detached installer helper.`);
           setStatus("installing");
@@ -98,6 +192,13 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
           setStatus("idle");
         }
       } catch (error: unknown) {
+        if (update) {
+          try {
+            await update.close();
+          } catch (closeError: unknown) {
+            console.error("Could not release the Vora Mind update resource:", closeError);
+          }
+        }
         reportError(error, "Could not check or install Vora Mind updates");
       } finally {
         busyRef.current = false;
@@ -108,6 +209,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
     let update: Update | null = null;
 
     try {
+      setNotice(null);
       update = await check();
       if (!update) {
         console.info("Vora Mind updater: no update available.");
@@ -179,12 +281,43 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
 
   useEffect(() => {
     if (import.meta.env.DEV) return;
-    void checkForUpdates();
-    const interval = window.setInterval(() => {
+    let active = true;
+    let interval: number | undefined;
+    const initialize = async (): Promise<void> => {
+      if (isWindows) {
+        try {
+          const marker = await invoke<BackendUpdateFailureMarker | null>("get_last_update_failure");
+          if (
+            marker !== null &&
+            (typeof marker.version !== "string" ||
+              typeof marker.failedAt !== "number" ||
+              !Number.isFinite(marker.failedAt))
+          ) {
+            throw new Error("The updater returned an invalid failure marker.");
+          }
+          if (active && marker) {
+            const storedRecord = readUpdateFailureRecord();
+            if (!storedRecord || marker.failedAt > storedRecord.failedAt) {
+              writeUpdateFailureRecord(marker.version, marker.failedAt);
+            }
+          }
+        } catch (error: unknown) {
+          reportError(error, "Could not load the Vora Mind updater failure record");
+          return;
+        }
+      }
+      if (!active) return;
       void checkForUpdates();
-    }, AUTO_CHECK_INTERVAL_MS);
-    return () => window.clearInterval(interval);
-  }, [checkForUpdates]);
+      interval = window.setInterval(() => {
+        void checkForUpdates();
+      }, AUTO_CHECK_INTERVAL_MS);
+    };
+    void initialize();
+    return () => {
+      active = false;
+      if (interval !== undefined) window.clearInterval(interval);
+    };
+  }, [checkForUpdates, reportError]);
 
   return (
     <UpdaterContext.Provider
