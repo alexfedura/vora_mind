@@ -11,6 +11,7 @@ export interface MarkdownTextEditorProps {
   placeholder?: string;
   direction?: "auto" | "ltr" | "rtl";
   ariaLabel: string;
+  onBlur?: () => void;
 }
 
 export function MarkdownTextEditor({
@@ -20,11 +21,14 @@ export function MarkdownTextEditor({
   placeholder = "Start writing...",
   direction = "auto",
   ariaLabel,
+  onBlur,
 }: MarkdownTextEditorProps): ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
+  const onBlurRef = useRef(onBlur);
   onChangeRef.current = onChange;
+  onBlurRef.current = onBlur;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -41,6 +45,12 @@ export function MarkdownTextEditor({
           }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+          }),
+          EditorView.domEventHandlers({
+            blur: () => {
+              onBlurRef.current?.();
+              return false;
+            },
           }),
         ],
       }),

@@ -286,6 +286,7 @@ export const JournalPage: React.FC = () => {
                 key={selectedDate}
                 value={entryForSelectedDate?.content ?? ""}
                 onChange={(content) => updateContent(selectedDate, content)}
+                onBlur={handleBlur}
                 placeholder="Write about your day... (Markdown supported)"
                 direction="auto"
                 ariaLabel={`Journal entry for ${selectedDate}`}

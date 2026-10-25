@@ -275,6 +275,10 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
 
   return (
     <div
+      style={{
+        fontFamily: "var(--vora-card-font-family, var(--vora-ui-font-family))",
+        fontSize: "var(--vora-card-font-size, 14px)",
+      }}
       className={`group relative w-88 rounded-2xl bg-[#1e2025] border px-6 pt-4 pb-6 flex flex-col gap-4 will-change-transform ${
         selected
           ? "border-[#383e4d]"
@@ -389,8 +393,7 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
         placeholder={titleDirection.isRtl ? "عنوان کارت..." : "Card title..."}
         rows={1}
         style={{
-          fontFamily: "var(--vora-card-font-family, var(--vora-ui-font-family))",
-          fontSize: "calc(var(--vora-card-font-size, 14px) * 1.6)",
+          fontSize: "1.6em",
         }}
         className={`nodrag w-full bg-transparent text-lg font-bold text-gray-100 placeholder-gray-500 resize-none overflow-hidden focus:outline-none leading-snug break-words ${
           titleDirection.isRtl ? "text-right" : "text-left"

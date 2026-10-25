@@ -13,7 +13,7 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 - The default view opens today's entry. Its heading is the date, with the weekday shown as supporting text; there is no editable title field.
 - Users can move to adjacent days, choose a date, or open a month view.
 - The month view displays one card per day, with saved text previews, in a four-column date grid; selecting a card opens that day's entry.
-- The description is plain text, multiline, and has no application-level length limit.
+- The description is Markdown, multiline, and has no application-level length limit. The editor provides live formatting for headings, lists, emphasis, links, and code while preserving the Markdown source in the database.
 - Edits are saved automatically and remain available after restarting the app.
 
 ## Data and Boundaries
@@ -29,4 +29,5 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 - Today's entry opens without an editable title; its date is the only heading.
 - Month/day navigation and previews reflect saved entries.
 - Empty and long descriptions can be saved and reloaded.
+- Typing Markdown list markers (for example, `- `) and pressing Enter continues lists; headings and other supported Markdown render in the live editor.
 - TypeScript and Rust checks pass; focused Rust tests verify journal upsert, retrieval, and date scoping.
