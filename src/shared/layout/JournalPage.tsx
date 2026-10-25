@@ -199,7 +199,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-10">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-[30px] pb-5 sm:px-10">
         <div className="mx-auto w-full max-w-6xl">
           {loadError && (
             <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">

@@ -34,6 +34,7 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 - Today's entry opens without an editable title; its date is the only heading.
 - Daily view has no divider below the date or decorative editor frame; the editor uses the available content width without a highlighted active-line background.
 - On medium and wider screens, the daily editor occupies 70% of its content container, leaving balanced 15% side margins; on smaller screens it uses the full available width.
+- The daily editor starts 30px below the header divider, 50% more top spacing than the previous 20px.
 - Month/day navigation and previews reflect saved entries.
 - Empty and long descriptions can be saved and reloaded.
 - Typing Markdown list markers (for example, `- `) and pressing Enter continues lists; headings and other supported Markdown render in the live editor.
