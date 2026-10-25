@@ -354,6 +354,11 @@ body, #root {
   pointer-events: stroke !important;
 }
 
+.vora-shape-artwork path[role="button"]:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .drawing-toolbar.vora-shape-toolbar,
 .react-flow__node-voraShape.vora-shape-border-hit .react-flow__resize-control {
   pointer-events: auto;
