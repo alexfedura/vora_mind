@@ -41,6 +41,6 @@ Allow a Vora development build to run beside the installed stable build, publish
 - Frontend TypeScript/build passes.
 - Rust checks with updater and process plugins enabled.
 - Tauri config validates with the updater artifact settings.
-- The signed local build helper verifies the NSIS updater archive signature (`*.exe.zip.sig`) beside the archive.
+- The signed local build helper verifies the NSIS installer signature (`*.exe.sig`) beside the installer.
 - The release workflow runs on version tags, verifies the tag version, and publishes updater assets to a non-draft GitHub Release.
 - `plugins.updater.endpoints` points to `https://github.com/alexfedura/vora_mind/releases/latest/download/latest.json`.
