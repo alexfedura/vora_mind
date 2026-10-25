@@ -45,7 +45,7 @@ interface PathPointDragStart {
 interface PathSegmentSelectionDetail {
   nodeId: string;
   segmentId: string;
-  mode: "replace" | "toggle";
+  mode: "replace" | "add" | "toggle";
 }
 
 function dispatchPathSegmentSelection(
@@ -62,10 +62,12 @@ function dispatchPathSegmentSelection(
 function handlePathSegmentClick(
   nodeId: string,
   segmentId: string,
+  shiftKey: boolean,
   ctrlKey: boolean,
   metaKey: boolean,
 ): void {
-  dispatchPathSegmentSelection(nodeId, segmentId, ctrlKey || metaKey ? "toggle" : "replace");
+  const mode = shiftKey ? "add" : ctrlKey || metaKey ? "toggle" : "replace";
+  dispatchPathSegmentSelection(nodeId, segmentId, mode);
 }
 
 function loadShapeToolbarPosition(key = SHAPE_TOOLBAR_POSITION_KEY): ShapeToolbarPosition {
@@ -272,7 +274,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
       if (
         typeof nodeId !== "string" ||
         typeof segmentId !== "string" ||
-        (mode !== "replace" && mode !== "toggle")
+        (mode !== "replace" && mode !== "add" && mode !== "toggle")
       ) return;
 
       if (mode === "replace") {
@@ -282,6 +284,9 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
         }
         if (!pathSegments.some((segment) => segment.id === segmentId)) return;
         setSelectedPathSegmentIds(new Set([segmentId]));
+      } else if (mode === "add") {
+        if (nodeId !== id || !pathSegments.some((segment) => segment.id === segmentId)) return;
+        setSelectedPathSegmentIds((current) => new Set(current).add(segmentId));
       } else {
         if (nodeId !== id || !pathSegments.some((segment) => segment.id === segmentId)) return;
         setSelectedPathSegmentIds((current) => {
@@ -860,7 +865,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
                     key={segment.id}
                     type="button"
                     aria-pressed={selectedPathSegmentIds.has(segment.id)}
-                    onClick={(event) => handlePathSegmentClick(id, segment.id, event.ctrlKey, event.metaKey)}
+                    onClick={(event) => handlePathSegmentClick(id, segment.id, event.shiftKey, event.ctrlKey, event.metaKey)}
                     className={`rounded border px-2 py-1 text-[10px] ${selectedPathSegmentIds.has(segment.id) ? "border-violet-400 bg-violet-500/20 text-white" : "border-[#383f4e] text-[#aeb4c0]"}`}
                   >
                     <span className="mr-1 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: segment.color }} />
@@ -999,7 +1004,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
                   tabIndex={0}
                   aria-label={`Select path section ${segment.name}`}
                   aria-pressed={selectedPathSegmentIds.has(segment.id)}
-                  onClick={(event) => handlePathSegmentClick(id, segment.id, event.ctrlKey, event.metaKey)}
+                  onClick={(event) => handlePathSegmentClick(id, segment.id, event.shiftKey, event.ctrlKey, event.metaKey)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
