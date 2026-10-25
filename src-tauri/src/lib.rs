@@ -20,12 +20,25 @@ struct UpdaterDownloadProgress {
     content_length: Option<u64>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdaterFailureMarker {
+    version: String,
+    failed_at: u64,
+}
+
 #[tauri::command]
-async fn install_update_with_helper(app: tauri::AppHandle) -> Result<Option<String>, String> {
+async fn install_update_with_helper(
+    app: tauri::AppHandle,
+    requested_version: String,
+) -> Result<Option<String>, String> {
     let updater = app.updater().map_err(|error| error.to_string())?;
     let Some(update) = updater.check().await.map_err(|error| error.to_string())? else {
         return Ok(None);
     };
+    if update.version != requested_version {
+        return Ok(None);
+    }
     let update_version = update.version.clone();
     let progress_app = app.clone();
     let mut downloaded_bytes = 0_u64;
@@ -50,7 +63,7 @@ async fn install_update_with_helper(app: tauri::AppHandle) -> Result<Option<Stri
 
     #[cfg(windows)]
     {
-        launch_update_helper(&app, &installer_bytes)?;
+        launch_update_helper(&app, &installer_bytes, &update_version)?;
         app.exit(0);
     }
 
@@ -64,8 +77,39 @@ async fn install_update_with_helper(app: tauri::AppHandle) -> Result<Option<Stri
     Ok(Some(update_version))
 }
 
+#[tauri::command]
+fn get_last_update_failure(
+    app: tauri::AppHandle,
+) -> Result<Option<UpdaterFailureMarker>, String> {
+    let marker_path = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("updater")
+        .join("last-failed-update.json");
+    match fs::read(&marker_path) {
+        Ok(contents) => serde_json::from_slice(&contents)
+            .map(Some)
+            .map_err(|error| {
+                format!(
+                    "Could not parse updater failure marker at {}: {error}",
+                    marker_path.display()
+                )
+            }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!(
+            "Could not read updater failure marker at {}: {error}",
+            marker_path.display()
+        )),
+    }
+}
+
 #[cfg(windows)]
-fn launch_update_helper(app: &tauri::AppHandle, installer_bytes: &[u8]) -> Result<(), String> {
+fn launch_update_helper(
+    app: &tauri::AppHandle,
+    installer_bytes: &[u8],
+    update_version: &str,
+) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     use std::process::Stdio;
     use tauri::path::BaseDirectory;
@@ -104,6 +148,7 @@ fn launch_update_helper(app: &tauri::AppHandle, installer_bytes: &[u8]) -> Resul
     let process_id = std::process::id();
     let ready_path = app_data_dir.join(format!("updater-helper-{update_id}.ready"));
     let log_path = app_data_dir.join("updater-helper.log");
+    let failure_marker_path = app_data_dir.join("last-failed-update.json");
 
     let mut helper = Command::new(&helper_path)
         .arg(&installer_path)
@@ -111,6 +156,8 @@ fn launch_update_helper(app: &tauri::AppHandle, installer_bytes: &[u8]) -> Resul
         .arg(&app_executable)
         .arg(&ready_path)
         .arg(&log_path)
+        .arg(update_version)
+        .arg(&failure_marker_path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -1295,6 +1342,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             install_update_with_helper,
+            get_last_update_failure,
             get_all_boards,
             create_board,
             get_task_flow_items,
