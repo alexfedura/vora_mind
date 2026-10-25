@@ -3,7 +3,7 @@
 #  • Live "X/Y" cargo progress with color
 #  • File-based child launcher (no quote-stripping bugs)
 #  • Pause/Resume, PID tracking, disk-full recovery
-#  • Target dir on C:, no nuke, no .pdb, targeted cleanup only
+#  • Target dir in the repo workspace, no nuke, no .pdb, targeted cleanup only
 # ═════════════════════════════════════════════════════════════════════
 
 [CmdletBinding()]
@@ -26,7 +26,7 @@ $ErrorActionPreference    = "Continue"
 
 # ─── Constants ───
 $ProjectRoot = "D:\workspace\vora_mind"
-$TargetDir   = "C:\vora_build"
+$TargetDir   = "$ProjectRoot\target"
 $LogFile     = "$ProjectRoot\.vora.log"
 $BuildLog    = "$ProjectRoot\.vora-build.log"
 $PidFile     = "$ProjectRoot\.vora-dev.pid"

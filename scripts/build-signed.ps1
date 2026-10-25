@@ -1,6 +1,6 @@
 param (
     [string]$KeyPath = (Join-Path (Join-Path $HOME ".tauri") "vora.key"),
-    [string]$BundleDirectory = "C:\vora_build\release\bundle"
+    [string]$BundleDirectory = (Join-Path $ProjectRoot "src-tauri\target\release\bundle")
 )
 
 $ErrorActionPreference = "Stop"
