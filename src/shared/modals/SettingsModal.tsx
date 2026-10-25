@@ -18,6 +18,7 @@ import { useAppStore } from "@/shared/store/useAppStore";
 import { getSetting, setSetting } from "@/shared/store/useSettingsStore";
 import { DataBackup } from "@/components/DataBackup";
 import { DatabaseSettings } from "@/components/DatabaseSettings";
+import { FontSettingsPanel } from "@/shared/components/FontSettingsPanel";
 import {
   workerClient,
   WorkerHealthResponse,
@@ -201,6 +202,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
         {/* محتوای تنظیمات */}
         <div className="p-5 flex flex-col gap-4 overflow-y-auto">
+          <FontSettingsPanel />
+
           <section className="flex flex-col gap-3" aria-labelledby="data-portability-heading">
             <h3 id="data-portability-heading" className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
               Data Portability & Backups
