@@ -1,7 +1,7 @@
 pub mod backup;
 pub mod canvas_db;
-pub mod library_groups;
 pub mod journal;
+pub mod library_groups;
 pub mod portable_db;
 pub mod resolver;
 pub mod task_flow;

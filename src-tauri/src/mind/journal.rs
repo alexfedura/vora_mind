@@ -41,12 +41,7 @@ pub fn list_entries(
     rows.collect()
 }
 
-pub fn save_entry(
-    conn: &Connection,
-    date: &str,
-    content: &str,
-    now: i64,
-) -> Result<JournalEntry> {
+pub fn save_entry(conn: &Connection, date: &str, content: &str, now: i64) -> Result<JournalEntry> {
     if parse_date(date).is_none() {
         return Err(rusqlite::Error::InvalidQuery);
     }

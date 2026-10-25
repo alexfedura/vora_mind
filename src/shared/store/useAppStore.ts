@@ -277,12 +277,22 @@ export const useAppStore = create<AppState>()(
       journalSaveError: null,
       loadJournalEntries: async (startDate, endDate) => {
         const entries = await dbService.getJournalEntries(startDate, endDate);
-        set((state) => ({
-          journalEntries: {
-            ...state.journalEntries,
-            ...Object.fromEntries(entries.map((entry) => [entry.date, entry])),
-          },
-        }));
+        set((state) => {
+          const journalEntries = { ...state.journalEntries };
+          for (const entry of entries) {
+            const saveStatus = state.journalSaveStatus[entry.date];
+            const existingEntry = state.journalEntries[entry.date];
+            if (
+              saveStatus === "saving" ||
+              saveStatus === "error" ||
+              (existingEntry && existingEntry.updatedAt > entry.updatedAt)
+            ) {
+              continue;
+            }
+            journalEntries[entry.date] = entry;
+          }
+          return { journalEntries };
+        });
       },
       updateJournalEntryContent: (date, content) => {
         const now = Date.now();

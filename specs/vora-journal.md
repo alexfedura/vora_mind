@@ -1,6 +1,6 @@
 # VORA Journal
 
-> **Status**: Planned
+> **Status**: Implemented
 > **Target Scope**: `layout | store | tauri | db | types`
 
 ## Intent
