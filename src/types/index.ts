@@ -62,3 +62,9 @@ export interface JournalEntry {
   createdAt: number;
   updatedAt: number;
 }
+
+export interface CustomFontSetting {
+  id: string;
+  name: string;
+  dataUrl: string;
+}
