@@ -55,6 +55,8 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
             throw "The TAURI_SIGNING_PRIVATE_KEY_PASSWORD Actions secret is missing or empty."
           }
+      - name: Build updater helper
+        run: cargo build --manifest-path src-tauri/Cargo.toml --release --bin vora_updater_helper
       - name: Install WiX Toolset
         shell: pwsh
         run: |

@@ -41,10 +41,17 @@ clap = { version = "4", features = ["derive", "env"] }
 memmap2 = "0.9"
 chrono = "0.4"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading"] }
+
 
 [[bin]]
 name = "vora_source"
 path = "src/bin/vora_source.rs"
+
+[[bin]]
+name = "vora_updater_helper"
+path = "src/bin/updater_helper.rs"
 
 [[bench]]
 name = "load_test"
