@@ -143,25 +143,31 @@ class HiddenWidget extends WidgetType {
   }
 }
 
-class ListBulletWidget extends WidgetType {
-  toDOM(): HTMLElement {
-    const bullet = document.createElement('span');
-    bullet.className = 'vm-md-list-bullet';
-    bullet.textContent = '•';
-    bullet.setAttribute('aria-hidden', 'true');
-    return bullet;
+class ListMarkerWidget extends WidgetType {
+  constructor(private readonly marker: string) {
+    super();
   }
 
-  eq(): boolean {
-    return true;
+  toDOM(): HTMLElement {
+    const element = document.createElement('span');
+    element.className = /^\d+[.)]$/.test(this.marker)
+      ? 'vm-md-list-number'
+      : 'vm-md-list-bullet';
+    element.textContent = this.marker === '-' || this.marker === '*' || this.marker === '+'
+      ? '•'
+      : this.marker;
+    element.setAttribute('aria-hidden', 'true');
+    return element;
+  }
+
+  eq(other: WidgetType): boolean {
+    return other instanceof ListMarkerWidget && other.marker === this.marker;
   }
 
   ignoreEvent(): boolean {
     return true;
   }
 }
-
-const listBulletWidget = new ListBulletWidget();
 
 function handleHeading(ctx: BuildContext, node: SyntaxNode): void {
   const { state } = ctx.view;
@@ -233,12 +239,12 @@ function handleListItem(ctx: BuildContext, node: SyntaxNode): void {
   const { state } = ctx.view;
   const line = state.doc.lineAt(node.from);
   const text = state.doc.sliceString(line.from, line.to);
-  const match = /^([ \t]*)([-*+])(?=[ \t]+)/.exec(text);
+  const match = /^([ \t]*)([-*+]|[0-9]+[.)])(?=[ \t]+)/.exec(text);
   if (!match) return;
 
   ctx.pending.push({ from: line.from, to: line.from, decoration: listLine });
   const markerFrom = line.from + match[1].length;
-  const markerTo = markerFrom + 1;
+  const markerTo = markerFrom + match[2].length;
   const selectionTouchesMarker = state.selection.ranges.some((range) =>
     range.empty
       ? range.from === markerFrom || range.from === markerTo
@@ -246,7 +252,7 @@ function handleListItem(ctx: BuildContext, node: SyntaxNode): void {
   );
   const taskMatch = /^([ \t]*[-*+][ \t]+)(\[[ xX]\])[ \t]+/.exec(text);
   if (!taskMatch && !selectionTouchesMarker) {
-    addReplace(ctx, markerFrom, markerTo, listBulletWidget);
+    addReplace(ctx, markerFrom, markerTo, new ListMarkerWidget(match[2]));
   }
 
   if (!taskMatch || isNearSelection(state, line.from, line.to)) return;
@@ -391,7 +397,8 @@ function visibleLineRange(
 }
 
 function containsMarkdownSyntax(state: EditorState, from: number, to: number): boolean {
-  return /[#*_~`[\]()>$=!+-]/.test(state.doc.sliceString(from, to));
+  const text = state.doc.sliceString(from, to);
+  return /[#*_~`[\]()>$=!+-]/.test(text) || /^\s*\d+[.)]\s/m.test(text);
 }
 
 function buildDecorations(view: EditorView): DecorationSet {

@@ -158,6 +158,11 @@
   color: var(--vm-fg-muted);
 }
 
+.vm-md-list-number {
+  color: var(--vm-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .vm-md-bold {
   font-weight: 700;
 }
