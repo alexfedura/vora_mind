@@ -10,6 +10,7 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 ## User Experience
 
 - Selecting **Journal** opens a dedicated workspace page without canvas controls.
+- A Home button in the Journal header returns directly to the main canvas.
 - The default view opens today's entry. Its heading is the date, with the weekday shown as supporting text; there is no editable title field.
 - Users can move to adjacent days, choose a date, or open a month view.
 - The month view displays one card per day, with saved text previews, in a four-column date grid; selecting a card opens that day's entry.
@@ -26,6 +27,7 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 ## Acceptance Criteria
 
 - Journal is selectable from the left menu and active styling uses VORA purple/indigo.
+- The Journal header Home button returns to the main canvas in one click.
 - Today's entry opens without an editable title; its date is the only heading.
 - Month/day navigation and previews reflect saved entries.
 - Empty and long descriptions can be saved and reloaded.
