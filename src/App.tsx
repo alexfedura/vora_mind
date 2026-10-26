@@ -2395,6 +2395,7 @@ function AppContent() {
               onToggleLibrary={toggleRightDrawer}
               onOpenTaskFlow={() => {
                 setIsAiTasksOpen(false);
+                setIsVoraTraceOpen(false);
                 setIsJournalOpen(false);
                 setIsQuestionsBoardOpen(false);
                 setIsTaskFlowOpen(true);
@@ -2491,6 +2492,7 @@ function AppContent() {
             setIsJournalOpen(false);
             setIsTaskFlowOpen(false);
             setIsAiTasksOpen(false);
+            setIsVoraTraceOpen(false);
             setIsQuestionsBoardOpen(false);
             setActiveOpenPanel("none");
           }} />
@@ -2500,6 +2502,7 @@ function AppContent() {
             setIsJournalOpen(false);
             setIsTaskFlowOpen(false);
             setIsAiTasksOpen(false);
+            setIsVoraTraceOpen(false);
             setActiveOpenPanel("none");
           }} />
         ) : (
@@ -2866,6 +2869,7 @@ function AppContent() {
           onClick={() => {
             setIsTaskFlowOpen(false);
             setIsAiTasksOpen(false);
+            setIsVoraTraceOpen(false);
             setIsJournalOpen(true);
             setActiveOpenPanel("none");
           }}
