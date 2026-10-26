@@ -1879,6 +1879,16 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
       r.setDrawings(drawingsRef.current.filter(Boolean).filter((d): d is DrawingRect => d.type === "rectangle"));
       r.setPreview(null);
       r.setSnap(null);
+      const graded = new GradedRectangleOverlay(
+        chart,
+        series as unknown as import("lightweight-charts").ISeriesApi<import("lightweight-charts").SeriesType>,
+      );
+      series.attachPrimitive(graded as unknown as Parameters<import("@/lib/market/CandlestickChart").ZigzagSeriesRef["attachPrimitive"]>[0]);
+      gradedRectOverlayRef.current = graded;
+      graded.setData(
+        drawingsRef.current.filter((drawing): drawing is GradedRectangle => drawing.type === "graded-rectangle"),
+        candlesRef.current,
+      );
       // v7.4.4 — line overlay alongside the rect overlay.
       const lo = new LineOverlay(chart, series as unknown as import("lightweight-charts").ISeriesApi<import("lightweight-charts").SeriesType>);
       series.attachPrimitive(lo as unknown as Parameters<import("@/lib/market/CandlestickChart").ZigzagSeriesRef["attachPrimitive"]>[0]);
