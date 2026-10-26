@@ -21,6 +21,7 @@ export default defineConfig(async () => ({
   clearScreen: false,
   cacheDir: path.resolve(compileDirectory, "vite-cache"),
   build: {
+    base: "./",
     outDir: path.resolve(compileDirectory, "frontend"),
     emptyOutDir: true,
   },
