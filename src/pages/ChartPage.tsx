@@ -19,12 +19,17 @@ import { CandlestickChart, type ZigzagSeriesRef } from "@/lib/market/Candlestick
 import { useMarqueeSelection, type SelectionBox } from "@/lib/market/useMarqueeSelection";
 import { BoxOverlay } from "@/lib/market/BoxOverlay";
 import { MeasureOverlay } from "@/lib/market/MeasureOverlay";
+import { GradedRectangleOverlay } from "@/lib/market/GradedRectangleOverlay";
+import { GradedRectangleControls } from "@/components/market/GradedRectangleControls";
+import { useGradedRectStore } from "@/lib/market/gradedRectStore";
+import { useGradedRectTool, type GradedRectContextMenu } from "@/lib/market/useGradedRectTool";
 import {
   RectangleOverlay,
   type DrawingRect,
   type TrendPreview,
 } from "@/lib/market/RectangleOverlay";
 import type { DrawingAny, LineToolId } from "@/lib/market/lineDrawings";
+import type { GradedRectangle } from "@/lib/market/lineDrawings";
 import { HLINE_WIDTH_KEY, HRAY_WIDTH_KEY, LINE_COLOR_KEY, RECT_WIDTH_KEY, TREND_WIDTH_KEY, VLINE_WIDTH_KEY, isAnnotationToolId, migrateDrawingAny, readLineColor, readLineWidth } from "@/lib/market/lineDrawings";
 import { isDrawingVisible, type DrawingIconSelection } from "@/lib/market/drawingTypes";
 import type { ChartDrawingAlert } from "@/lib/market/drawingTypes";
