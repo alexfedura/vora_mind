@@ -4039,6 +4039,9 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
                   <span className="chart-older-loading__spinner" aria-hidden="true" />
                 </div>
               )}
+              {activeTool === "graded-rectangle" && (
+                <GradedRectangleControls config={gradedRectConfig} onChange={setGradedRectConfig} />
+              )}
 
               {/* Chart */}
               <CandlestickChart
@@ -4144,6 +4147,53 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
               />
 
               {/* v7.3.0 Part B1 — right-click context menu (position:fixed, viewport coords). */}
+              {gradedRectContextMenu && (
+                <>
+                  <div
+                    className="vora-floating-ui fixed inset-0 z-40"
+                    onMouseDown={() => setGradedRectContextMenu(null)}
+                    onContextMenu={(event) => { event.preventDefault(); setGradedRectContextMenu(null); }}
+                  />
+                  <div
+                    role="menu"
+                    aria-label="Graded Rectangle options"
+                    className="vora-floating-ui fixed z-50 min-w-[210px] rounded border border-[#63358d] bg-[#18151d] py-1 text-[13px] shadow-xl"
+                    style={{
+                      left: Math.max(8, Math.min(gradedRectContextMenu.x, window.innerWidth - 226)),
+                      top: Math.max(8, Math.min(gradedRectContextMenu.y, window.innerHeight - 92)),
+                    }}
+                    onMouseDown={(event) => event.stopPropagation()}
+                  >
+                    {(["top", "bottom"] as const).map((baseline) => (
+                      <button
+                        key={baseline}
+                        type="button"
+                        role="menuitem"
+                        className="block w-full px-3 py-2 text-left text-[#e9d5ff] hover:bg-[#33223f]"
+                        onClick={() => {
+                          const target = drawingsRef.current.find(
+                            (drawing): drawing is GradedRectangle =>
+                              drawing.type === "graded-rectangle" && drawing.id === gradedRectContextMenu.drawingId,
+                          );
+                          if (!target || target.baselineSide === baseline) {
+                            setGradedRectContextMenu(null);
+                            return;
+                          }
+                          pushDrawingsHistory(drawingsRef.current);
+                          setDrawings((current) => current.map((drawing) =>
+                            drawing.type === "graded-rectangle" && drawing.id === target.id
+                              ? { ...drawing, baselineSide: baseline, selected: true }
+                              : { ...drawing, selected: false },
+                          ));
+                          setGradedRectContextMenu(null);
+                        }}
+                      >
+                        {baseline === "top" ? "Set Top as Baseline" : "Set Bottom as Baseline"}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
               {ctxMenu && (
                 <>
                   <div
