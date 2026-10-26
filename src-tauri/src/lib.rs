@@ -208,6 +208,22 @@ fn create_task_flow_item(
 }
 
 #[tauri::command]
+fn update_task_flow_item(
+    state: State<AppState>,
+    id: String,
+    title: String,
+    description: String,
+) -> Result<mind::task_flow::TaskFlowItem, String> {
+    let title = title.trim();
+    if title.is_empty() || title.chars().count() > 200 {
+        return Err("Task title must contain between 1 and 200 characters".to_string());
+    }
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::task_flow::update_task(&conn, &id, title, &description, task_flow_now()?)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn set_task_flow_item_completed(
     state: State<AppState>,
     id: String,
@@ -1292,6 +1308,7 @@ pub fn run() {
             create_board,
             get_task_flow_items,
             create_task_flow_item,
+            update_task_flow_item,
             set_task_flow_item_completed,
             reorder_task_flow_items,
             delete_task_flow_item,

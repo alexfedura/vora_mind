@@ -79,6 +79,7 @@ interface AppState {
   taskFlowItems: TaskFlowItem[];
   loadTaskFlowItems: () => Promise<void>;
   createTaskFlowItem: (title: string) => Promise<void>;
+  updateTaskFlowItem: (id: string, title: string, description: string) => Promise<void>;
   setTaskFlowItemCompleted: (id: string, completed: boolean) => Promise<void>;
   reorderTaskFlowItems: (ids: string[]) => Promise<void>;
   deleteTaskFlowItem: (id: string) => Promise<void>;
@@ -272,6 +273,12 @@ export const useAppStore = create<AppState>()(
           taskFlowItems: [...state.taskFlowItems, task].sort((left, right) =>
             left.position - right.position
           ),
+        }));
+      },
+      updateTaskFlowItem: async (id, title, description) => {
+        const task = await dbService.updateTaskFlowItem(id, title, description);
+        set((state) => ({
+          taskFlowItems: state.taskFlowItems.map((item) => item.id === id ? task : item),
         }));
       },
       setTaskFlowItemCompleted: async (id, completed) => {

@@ -7,19 +7,21 @@ use std::collections::HashSet;
 pub struct TaskFlowItem {
     pub id: String,
     pub title: String,
+    pub description: String,
     pub completed: bool,
     pub position: i64,
     pub created_at: i64,
     pub updated_at: i64,
 }
 
-const TASK_COLUMNS: &str = "id, title, completed, position, created_at, updated_at";
+const TASK_COLUMNS: &str = "id, title, description, completed, position, created_at, updated_at";
 
 pub fn init_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS task_flow_items (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 200),
+            description TEXT NOT NULL DEFAULT '',
             completed INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1)),
             position INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
@@ -27,7 +29,19 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS idx_task_flow_items_position
             ON task_flow_items(position, created_at, id);",
-    )
+    )?;
+    let has_description = {
+        let mut statement = conn.prepare("PRAGMA table_info(task_flow_items)")?;
+        let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+        columns.collect::<Result<Vec<_>>>()?.iter().any(|name| name == "description")
+    };
+    if !has_description {
+        conn.execute(
+            "ALTER TABLE task_flow_items ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+    }
+    Ok(())
 }
 
 pub fn list_tasks(conn: &Connection) -> Result<Vec<TaskFlowItem>> {
@@ -61,6 +75,29 @@ pub fn create_task(
     let task = query_task(&transaction, id)?;
     transaction.commit()?;
     Ok(task)
+}
+
+pub fn update_task(
+    conn: &Connection,
+    id: &str,
+    title: &str,
+    description: &str,
+    now: i64,
+) -> Result<TaskFlowItem> {
+    let title = title.trim();
+    if title.is_empty() || title.chars().count() > 200 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let changed = conn.execute(
+        "UPDATE task_flow_items
+         SET title = ?1, description = ?2, updated_at = ?3
+         WHERE id = ?4",
+        params![title, description, now, id],
+    )?;
+    if changed == 0 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    query_task(conn, id)
 }
 
 pub fn set_completed(
@@ -134,16 +171,20 @@ fn map_task(row: &rusqlite::Row<'_>) -> Result<TaskFlowItem> {
     Ok(TaskFlowItem {
         id: row.get(0)?,
         title: row.get(1)?,
-        completed: row.get(2)?,
-        position: row.get(3)?,
-        created_at: row.get(4)?,
-        updated_at: row.get(5)?,
+        description: row.get(2)?,
+        completed: row.get(3)?,
+        position: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{create_task, delete_task, init_schema, list_tasks, reorder_tasks, set_completed};
+    use super::{
+        create_task, delete_task, init_schema, list_tasks, reorder_tasks, set_completed,
+        update_task,
+    };
     use rusqlite::Connection;
 
     #[test]
@@ -153,11 +194,19 @@ mod tests {
 
         create_task(&mut connection, "task-a", "First task", 1).expect("create first task");
         create_task(&mut connection, "task-b", "Second task", 2).expect("create second task");
-        set_completed(&connection, "task-a", true, 3).expect("complete first task");
+        update_task(
+            &connection,
+            "task-a",
+            "Updated task",
+            "Full task details",
+            3,
+        )
+        .expect("update task details");
+        set_completed(&connection, "task-a", true, 4).expect("complete first task");
         let reordered = reorder_tasks(
             &mut connection,
             &["task-b".to_string(), "task-a".to_string()],
-            4,
+            5,
         )
         .expect("reorder tasks");
 
@@ -166,6 +215,8 @@ mod tests {
             vec!["task-b", "task-a"]
         );
         assert!(reordered[1].completed);
+        assert_eq!(reordered[1].title, "Updated task");
+        assert_eq!(reordered[1].description, "Full task details");
 
         delete_task(&connection, "task-b").expect("delete second task");
         let remaining = list_tasks(&connection).expect("list remaining tasks");
@@ -186,5 +237,29 @@ mod tests {
             2,
         )
         .is_err());
+    }
+
+    #[test]
+    fn schema_migration_adds_description_to_existing_tasks() {
+        let connection = Connection::open_in_memory().expect("open in-memory database");
+        connection
+            .execute_batch(
+                "CREATE TABLE task_flow_items (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    completed INTEGER NOT NULL DEFAULT 0,
+                    position INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                INSERT INTO task_flow_items (id, title, position, created_at, updated_at)
+                VALUES ('legacy-task', 'Legacy task', 0, 1, 1);",
+            )
+            .expect("create legacy Task Flow schema");
+
+        init_schema(&connection).expect("migrate Task Flow schema");
+        let tasks = list_tasks(&connection).expect("list migrated tasks");
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].description, "");
     }
 }

@@ -1,6 +1,7 @@
 export interface TaskFlowItem {
   id: string;
   title: string;
+  description: string;
   completed: boolean;
   position: number;
   createdAt: number;

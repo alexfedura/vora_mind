@@ -185,6 +185,10 @@ export const dbService = {
     return await invoke<TaskFlowItem>("create_task_flow_item", { title });
   },
 
+  async updateTaskFlowItem(id: string, title: string, description: string): Promise<TaskFlowItem> {
+    return await invoke<TaskFlowItem>("update_task_flow_item", { id, title, description });
+  },
+
   async setTaskFlowItemCompleted(id: string, completed: boolean): Promise<TaskFlowItem> {
     return await invoke<TaskFlowItem>("set_task_flow_item_completed", { id, completed });
   },
