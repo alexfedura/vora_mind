@@ -14,6 +14,14 @@ export interface JournalEntry {
   updatedAt: number;
 }
 
+export interface QuestionItem {
+  id: string;
+  title: string;
+  description: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface CustomFontSetting {
   id: string;
   name: string;

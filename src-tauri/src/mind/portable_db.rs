@@ -884,6 +884,7 @@ pub fn initialize_workspace_schema(conn: &Connection) -> Result<(), Box<dyn std:
     super::canvas_db::init_db(conn)?;
     super::task_flow::init_schema(conn)?;
     super::journal::init_schema(conn)?;
+    super::questions::init_schema(conn)?;
     crate::market::db::init_schema(conn)?;
     crate::source::db::init_schema(conn)?;
     crate::forge::index::CodeIndex::initialize_schema(conn)?;

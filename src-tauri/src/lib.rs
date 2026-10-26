@@ -256,6 +256,44 @@ fn save_journal_entry(
 }
 
 #[tauri::command]
+fn get_questions(state: State<AppState>) -> Result<Vec<mind::questions::QuestionItem>, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::questions::list_questions(&conn).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn create_question(
+    state: State<AppState>,
+    title: String,
+    description: String,
+) -> Result<mind::questions::QuestionItem, String> {
+    let id = format!("question_{}", uuid::Uuid::now_v7());
+    let now = task_flow_now()?;
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::questions::create_question(&conn, &id, &title, &description, now)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_question(
+    state: State<AppState>,
+    id: String,
+    title: String,
+    description: String,
+) -> Result<mind::questions::QuestionItem, String> {
+    let now = task_flow_now()?;
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::questions::save_question(&conn, &id, &title, &description, now)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn delete_question(state: State<AppState>, id: String) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::questions::delete_question(&conn, &id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn get_board_versions(
     state: State<AppState>,
     board_id: String,
@@ -1259,6 +1297,10 @@ pub fn run() {
             delete_task_flow_item,
             get_journal_entries,
             save_journal_entry,
+            get_questions,
+            create_question,
+            save_question,
+            delete_question,
             get_board_versions,
             create_board_version,
             checkout_board_version,

@@ -11,7 +11,7 @@ import type {
   TextLinkInput,
   TextLinkField,
 } from "@/mind/types";
-import type { JournalEntry, TaskFlowItem } from "@/types";
+import type { JournalEntry, QuestionItem, TaskFlowItem } from "@/types";
 
 export interface CardDto {
   id: string;
@@ -159,6 +159,22 @@ export const dbService = {
 
   async saveJournalEntry(date: string, content: string): Promise<JournalEntry> {
     return await invoke<JournalEntry>("save_journal_entry", { date, content });
+  },
+
+  async getQuestions(): Promise<QuestionItem[]> {
+    return await invoke<QuestionItem[]>("get_questions");
+  },
+
+  async createQuestion(title: string, description: string): Promise<QuestionItem> {
+    return await invoke<QuestionItem>("create_question", { title, description });
+  },
+
+  async saveQuestion(id: string, title: string, description: string): Promise<QuestionItem> {
+    return await invoke<QuestionItem>("save_question", { id, title, description });
+  },
+
+  async deleteQuestion(id: string): Promise<void> {
+    await invoke("delete_question", { id });
   },
 
   async getTaskFlowItems(): Promise<TaskFlowItem[]> {
