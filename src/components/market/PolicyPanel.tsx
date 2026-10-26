@@ -120,9 +120,9 @@ export function PolicyPanel({
   /** v7.2.0 Part A — master switch for the auto RBR/DBD detection pipeline. */
   autoDetect: boolean;
   onAutoDetectChange: (v: boolean) => void;
-  /** v7.4.2 — default-route segmented control (moved from top toolbar). */
-  defaultRouteSetting: "home" | "chart";
-  onDefaultRouteChange: (r: "home" | "chart") => void;
+  /** v7.4.2 — default route is fixed to Home; the segmented control is intentionally removed. */
+  defaultRouteSetting?: "home" | "chart";
+  onDefaultRouteChange?: (r: "home" | "chart") => void;
   /** v0.82.0 — DRAWINGS removed from Policy Panel (now in floating DrawingToolbar).
       Kept optional for backward-compat with callers still passing prefs. */
   drawings?: {
