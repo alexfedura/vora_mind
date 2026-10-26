@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Check, CheckCircle2, GripVertical, ListTodo, Plus, Trash2 } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
 import type { TaskFlowItem } from "@/types";
@@ -11,6 +11,7 @@ export const TaskFlowPage: React.FC = () => {
   const tasks = useAppStore((state) => state.taskFlowItems);
   const loadTasks = useAppStore((state) => state.loadTaskFlowItems);
   const createTask = useAppStore((state) => state.createTaskFlowItem);
+  const updateTask = useAppStore((state) => state.updateTaskFlowItem);
   const setTaskCompleted = useAppStore((state) => state.setTaskFlowItemCompleted);
   const reorderTasks = useAppStore((state) => state.reorderTaskFlowItems);
   const deleteTask = useAppStore((state) => state.deleteTaskFlowItem);
@@ -20,6 +21,31 @@ export const TaskFlowPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [inlineEdit, setInlineEdit] = useState<{ id: string; value: string } | null>(null);
+  const [detailsEdit, setDetailsEdit] = useState<{
+    id: string;
+    title: string;
+    description: string;
+  } | null>(null);
+  const [isSavingInline, setIsSavingInline] = useState(false);
+  const inlineInputRef = useRef<HTMLInputElement>(null);
+  const skipInlineBlurRef = useRef(false);
+
+  useEffect(() => {
+    if (inlineEdit) {
+      inlineInputRef.current?.focus();
+      inlineInputRef.current?.select();
+    }
+  }, [inlineEdit?.id]);
+
+  useEffect(() => {
+    if (!detailsEdit) return;
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setDetailsEdit(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [detailsEdit]);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,17 +65,58 @@ export const TaskFlowPage: React.FC = () => {
     return () => { cancelled = true; };
   }, [loadTasks]);
 
-  const runAction = async (action: () => Promise<void>): Promise<void> => {
+  const runAction = async (action: () => Promise<void>): Promise<boolean> => {
     setError(null);
     setIsBusy(true);
     try {
       await action();
+      return true;
     } catch (cause) {
       console.error("Task Flow action failed:", cause);
       setError(getErrorMessage(cause));
+      return false;
     } finally {
       setIsBusy(false);
     }
+  };
+
+  const finishInlineEdit = async (task: TaskFlowItem, value: string): Promise<void> => {
+    const nextTitle = value.trim();
+    if (!nextTitle) {
+      setError("Task title must contain between 1 and 200 characters");
+      inlineInputRef.current?.focus();
+      return;
+    }
+    if (nextTitle.length > 200) {
+      setError("Task title must contain between 1 and 200 characters");
+      inlineInputRef.current?.focus();
+      return;
+    }
+    setInlineEdit(null);
+    if (nextTitle !== task.title) {
+      await runAction(() => updateTask(task.id, nextTitle, task.description));
+    }
+  };
+
+  const openDetailsEdit = (task: TaskFlowItem): void => {
+    const title = inlineEdit?.id === task.id ? inlineEdit.value : task.title;
+    skipInlineBlurRef.current = inlineEdit?.id === task.id;
+    setInlineEdit(null);
+    setDetailsEdit({ id: task.id, title, description: task.description });
+  };
+
+  const saveDetailsEdit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    if (!detailsEdit) return;
+    const nextTitle = detailsEdit.title.trim();
+    if (!nextTitle || nextTitle.length > 200) {
+      setError("Task title must contain between 1 and 200 characters");
+      return;
+    }
+    const saved = await runAction(() =>
+      updateTask(detailsEdit.id, nextTitle, detailsEdit.description)
+    );
+    if (saved) setDetailsEdit(null);
   };
 
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -152,8 +219,8 @@ export const TaskFlowPage: React.FC = () => {
             </div>
           ) : (
             <div className="relative mt-4">
-              <div className="pointer-events-none absolute bottom-7 left-[21px] top-7 w-px bg-[#30333b]" />
-              <ol className="space-y-2">
+              <div className="pointer-events-none absolute bottom-7 right-[21px] top-7 w-px bg-[#30333b]" />
+              <ol className="space-y-2" dir="rtl">
                 {tasks.map((task, index) => (
                   <li
                     key={task.id}
@@ -178,7 +245,8 @@ export const TaskFlowPage: React.FC = () => {
                       setDraggedTaskId(null);
                       setDropTargetId(null);
                     }}
-                    className={`relative flex min-h-[68px] items-center gap-3 rounded-xl border px-3 py-2 transition ${
+                    dir="rtl"
+                    className={`relative flex min-h-[68px] flex-row items-center gap-3 rounded-xl border px-3 py-2 transition ${
                       dropTargetId === task.id
                         ? "border-[#e8ad55]/70 bg-[#25221d]"
                         : "border-[#292c34] bg-[#17191f] hover:border-[#3c404a]"
@@ -190,7 +258,7 @@ export const TaskFlowPage: React.FC = () => {
                           ? "border-emerald-700/60 bg-emerald-950/70 text-emerald-400"
                           : "border-[#48413a] bg-[#211e19] text-[#e8ad55]"
                       }`}>
-                        {task.completed ? <Check size={14} /> : index + 1}
+                        {index + 1}
                       </span>
                     </div>
                     <button
@@ -201,21 +269,72 @@ export const TaskFlowPage: React.FC = () => {
                     >
                       <GripVertical size={18} />
                     </button>
-                    <input
-                      type="checkbox"
-                      checked={task.completed}
-                      disabled={isBusy}
+                    <button
+                      type="button"
                       aria-label={`Mark ${task.title} ${task.completed ? "incomplete" : "complete"}`}
-                      onChange={(event) => void runAction(() =>
-                        setTaskCompleted(task.id, event.target.checked)
+                      aria-pressed={task.completed}
+                      disabled={isBusy}
+                      onClick={() => void runAction(() =>
+                        setTaskCompleted(task.id, !task.completed)
                       )}
-                      className="h-4 w-4 shrink-0 cursor-pointer accent-[#e8ad55] disabled:cursor-not-allowed"
-                    />
-                    <span className={`min-w-0 flex-1 break-words text-sm ${
-                      task.completed ? "text-gray-600 line-through" : "text-gray-200"
-                    }`}>
-                      {task.title}
-                    </span>
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        task.completed
+                          ? "border-[#e8ad55] bg-[#e8ad55] text-[#17130d]"
+                          : "border-gray-500 text-transparent hover:border-[#e8ad55]"
+                      }`}
+                    >
+                      {task.completed && <Check size={14} strokeWidth={3} />}
+                    </button>
+                    <div className="min-w-0 flex-1 text-right" onDoubleClick={() => openDetailsEdit(task)}>
+                      {inlineEdit?.id === task.id ? (
+                        <input
+                          ref={inlineInputRef}
+                          value={inlineEdit.value}
+                          maxLength={200}
+                          disabled={isBusy || isSavingInline}
+                          aria-label={`Edit ${task.title}`}
+                          onChange={(event) => {
+                            setError(null);
+                            setInlineEdit({ id: task.id, value: event.target.value });
+                          }}
+                          onBlur={() => {
+                            if (skipInlineBlurRef.current) {
+                              skipInlineBlurRef.current = false;
+                              return;
+                            }
+                            setIsSavingInline(true);
+                            void finishInlineEdit(task, inlineEdit.value).finally(() => {
+                              setIsSavingInline(false);
+                            });
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              skipInlineBlurRef.current = true;
+                              void finishInlineEdit(task, inlineEdit.value);
+                            } else if (event.key === "Escape") {
+                              skipInlineBlurRef.current = true;
+                              setInlineEdit(null);
+                            }
+                          }}
+                          className="w-full rounded-md border border-[#e8ad55]/60 bg-[#101114] px-2 py-1 text-right text-sm text-white outline-none focus:border-[#e8ad55]"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setError(null);
+                            setInlineEdit({ id: task.id, value: task.title });
+                          }}
+                          className={`block w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-md px-2 py-1 text-right text-sm transition hover:bg-[#202229] ${
+                            task.completed ? "text-gray-600 line-through" : "text-gray-200"
+                          }`}
+                          title="Click to edit title; double-click to edit details"
+                        >
+                          {task.title}
+                        </button>
+                      )}
+                    </div>
                     <button
                       type="button"
                       aria-label={`Delete ${task.title}`}
@@ -233,6 +352,75 @@ export const TaskFlowPage: React.FC = () => {
           )}
         </div>
       </div>
+      {detailsEdit && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setDetailsEdit(null);
+          }}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="task-flow-details-title"
+            onSubmit={(event) => void saveDetailsEdit(event)}
+            className="w-full max-w-xl rounded-2xl border border-[#343741] bg-[#17191f] p-5 shadow-2xl sm:p-6"
+          >
+            <h2 id="task-flow-details-title" className="mb-5 text-lg font-semibold text-white">
+              Edit task
+            </h2>
+            <label htmlFor="task-flow-details-name" className="mb-2 block text-sm text-gray-300">
+              Title
+            </label>
+            <input
+              id="task-flow-details-name"
+              autoFocus
+              value={detailsEdit.title}
+              onChange={(event) => {
+                setError(null);
+                setDetailsEdit({ ...detailsEdit, title: event.target.value });
+              }}
+              maxLength={200}
+              required
+              className="mb-4 w-full rounded-lg border border-[#343741] bg-[#101114] px-3 py-2.5 text-sm text-white outline-none focus:border-[#e8ad55]"
+            />
+            <label htmlFor="task-flow-details-description" className="mb-2 block text-sm text-gray-300">
+              Description
+            </label>
+            <textarea
+              id="task-flow-details-description"
+              value={detailsEdit.description}
+              onChange={(event) => {
+                setError(null);
+                setDetailsEdit({ ...detailsEdit, description: event.target.value });
+              }}
+              rows={8}
+              maxLength={50000}
+              placeholder="Add task details..."
+              className="w-full resize-y rounded-lg border border-[#343741] bg-[#101114] px-3 py-2.5 text-sm text-white outline-none focus:border-[#e8ad55]"
+            />
+            {error && (
+              <p role="alert" className="mt-3 text-sm text-rose-300">{error}</p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDetailsEdit(null)}
+                className="rounded-lg border border-[#343741] px-4 py-2 text-sm text-gray-300 transition hover:bg-[#24262d]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isBusy}
+                className="rounded-lg bg-[#e8ad55] px-4 py-2 text-sm font-semibold text-[#17130d] transition hover:bg-[#f0bd6c] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Save task
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   );
 };
