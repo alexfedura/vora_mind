@@ -2,12 +2,72 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum TraceNodeKind {
+    State,
+    Decision,
+    Experiment,
+    Rejected,
+}
+
+impl TraceNodeKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::State => "state",
+            Self::Decision => "decision",
+            Self::Experiment => "experiment",
+            Self::Rejected => "rejected",
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum TraceNodeStatus {
+    Accepted,
+    Rejected,
+    Pending,
+    Current,
+    Abandoned,
+}
+
+impl TraceNodeStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::Rejected => "rejected",
+            Self::Pending => "pending",
+            Self::Current => "current",
+            Self::Abandoned => "abandoned",
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum TraceEdgeKind {
+    Main,
+    Branch,
+    Rejected,
+}
+
+impl TraceEdgeKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Main => "main",
+            Self::Branch => "branch",
+            Self::Rejected => "rejected",
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TraceNodeData {
     pub id: String,
-    pub kind: String,
+    pub kind: TraceNodeKind,
     pub title: String,
-    pub status: String,
+    pub status: TraceNodeStatus,
     #[serde(default, rename = "whyAmIHere")]
     pub why_am_i_here: Option<String>,
     #[serde(default)]
@@ -33,7 +93,7 @@ pub struct TraceNodeData {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Alternative {
     pub title: String,
-    pub status: String,
+    pub status: TraceNodeStatus,
     #[serde(default)]
     pub reason: Option<String>,
 }
@@ -43,7 +103,7 @@ pub struct TraceEdgeData {
     pub id: String,
     pub source: String,
     pub target: String,
-    pub kind: String,
+    pub kind: TraceEdgeKind,
     #[serde(default)]
     pub label: Option<String>,
 }
@@ -206,8 +266,8 @@ fn parse_decision_md(content: &str) -> Option<TraceNodeData> {
     let body = &after[end + 4..];
 
     let mut id = String::new();
-    let mut kind = "decision".to_string();
-    let mut status = "pending".to_string();
+    let mut kind = "decision";
+    let mut status = "pending";
     let mut created_at: Option<String> = None;
     let mut parent_id: Option<String> = None;
     let mut title = String::new();
@@ -221,9 +281,9 @@ fn parse_decision_md(content: &str) -> Option<TraceNodeData> {
         if let Some(v) = line.strip_prefix("id:") {
             id = v.trim().to_string();
         } else if let Some(v) = line.strip_prefix("kind:") {
-            kind = v.trim().to_string();
+            kind = v.trim();
         } else if let Some(v) = line.strip_prefix("status:") {
-            status = v.trim().to_string();
+            status = v.trim();
         } else if let Some(v) = line.strip_prefix("created:") {
             created_at = Some(v.trim().to_string());
         } else if let Some(v) = line.strip_prefix("parent:") {
@@ -266,6 +326,22 @@ fn parse_decision_md(content: &str) -> Option<TraceNodeData> {
     if id.is_empty() {
         return None;
     }
+
+    let kind = match kind {
+        "state" => TraceNodeKind::State,
+        "decision" => TraceNodeKind::Decision,
+        "experiment" => TraceNodeKind::Experiment,
+        "rejected" => TraceNodeKind::Rejected,
+        _ => return None,
+    };
+    let status = match status {
+        "accepted" => TraceNodeStatus::Accepted,
+        "rejected" => TraceNodeStatus::Rejected,
+        "pending" => TraceNodeStatus::Pending,
+        "current" => TraceNodeStatus::Current,
+        "abandoned" => TraceNodeStatus::Abandoned,
+        _ => return None,
+    };
 
     Some(TraceNodeData {
         id,
@@ -361,8 +437,8 @@ pub fn trace_save_decision_md(app: AppHandle, node: TraceNodeData) -> Result<Str
     let mut md = String::new();
     md.push_str("---\n");
     md.push_str(&format!("id: {}\n", node.id));
-    md.push_str(&format!("kind: {}\n", node.kind));
-    md.push_str(&format!("status: {}\n", node.status));
+    md.push_str(&format!("kind: {}\n", node.kind.as_str()));
+    md.push_str(&format!("status: {}\n", node.status.as_str()));
     if let Some(c) = &node.created_at {
         md.push_str(&format!("created: {}\n", c));
     }
@@ -384,7 +460,7 @@ pub fn trace_save_decision_md(app: AppHandle, node: TraceNodeData) -> Result<Str
     if !node.alternatives.is_empty() {
         md.push_str("## Alternatives\n\n");
         for a in &node.alternatives {
-            md.push_str(&format!("- {} — {}", a.title, a.status));
+            md.push_str(&format!("- {} — {}", a.title, a.status.as_str()));
             if let Some(r) = &a.reason {
                 md.push_str(&format!(": {}", r));
             }
