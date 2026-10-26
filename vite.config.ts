@@ -17,7 +17,6 @@ export default defineConfig(async () => ({
     },
   },
   clearScreen: false,
-  clearScreen: false,
   base: "./",
   build: {
     outDir: "dist",
