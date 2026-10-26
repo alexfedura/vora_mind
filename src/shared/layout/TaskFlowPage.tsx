@@ -1,13 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Check, CheckCircle2, GripVertical, ListTodo, Plus, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, GripVertical, ListTodo, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
-import type { TaskFlowItem } from "@/types";
+import type { TaskFlowItem, TaskFlowType } from "@/types";
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export const TaskFlowPage: React.FC = () => {
+interface TaskFlowPageProps {
+  taskType: TaskFlowType;
+}
+
+export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
   const tasks = useAppStore((state) => state.taskFlowItems);
   const loadTasks = useAppStore((state) => state.loadTaskFlowItems);
   const createTask = useAppStore((state) => state.createTaskFlowItem);
@@ -53,7 +57,7 @@ export const TaskFlowPage: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        await loadTasks();
+        await loadTasks(taskType);
       } catch (cause) {
         console.error("Could not load Task Flow items:", cause);
         if (!cancelled) setError(getErrorMessage(cause));
@@ -63,7 +67,7 @@ export const TaskFlowPage: React.FC = () => {
     };
     void load();
     return () => { cancelled = true; };
-  }, [loadTasks]);
+  }, [loadTasks, taskType]);
 
   const runAction = async (action: () => Promise<void>): Promise<boolean> => {
     setError(null);
@@ -124,7 +128,7 @@ export const TaskFlowPage: React.FC = () => {
     const nextTitle = title.trim();
     if (!nextTitle) return;
     await runAction(async () => {
-      await createTask(nextTitle);
+      await createTask(nextTitle, taskType);
       setTitle("");
     });
   };
@@ -138,7 +142,7 @@ export const TaskFlowPage: React.FC = () => {
     const [movedTask] = nextTasks.splice(sourceIndex, 1);
     if (!movedTask) return;
     nextTasks.splice(targetIndex, 0, movedTask);
-    await runAction(() => reorderTasks(nextTasks.map((task) => task.id)));
+    await runAction(() => reorderTasks(nextTasks.map((task) => task.id), taskType));
   };
 
   const completedCount = tasks.filter((task) => task.completed).length;
@@ -149,12 +153,16 @@ export const TaskFlowPage: React.FC = () => {
         <div className="mx-auto flex w-full max-w-4xl items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#e8ad55]">
-              <ListTodo size={15} />
+              {taskType === "ai" ? <Sparkles size={15} /> : <ListTodo size={15} />}
               Workspace
             </div>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">Task Flow</h1>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+              {taskType === "ai" ? "AI Tasks" : "Task Flow"}
+            </h1>
             <p className="mt-1 text-sm text-gray-400">
-              Keep your priorities in order. Drag any task to move it through your timeline.
+              {taskType === "ai"
+                ? "Keep AI-related tasks separate and move them through your priority timeline."
+                : "Keep your priorities in order. Drag any task to move it through your timeline."}
             </p>
           </div>
           <div className="shrink-0 rounded-xl border border-[#30333c] bg-[#1a1c22] px-3 py-2 text-right">
@@ -173,7 +181,7 @@ export const TaskFlowPage: React.FC = () => {
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               maxLength={200}
-              placeholder="What needs to get done?"
+              placeholder={taskType === "ai" ? "What AI-related task needs to get done?" : "What needs to get done?"}
               disabled={isBusy}
               className="min-w-0 flex-1 rounded-xl border border-[#343741] bg-[#17191f] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#e8ad55]/70 disabled:opacity-60"
             />
@@ -183,7 +191,7 @@ export const TaskFlowPage: React.FC = () => {
               className="flex shrink-0 items-center gap-2 rounded-xl bg-[#e8ad55] px-4 py-3 text-sm font-semibold text-[#17130d] transition hover:bg-[#f0bd6c] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Plus size={16} />
-              Add task
+              {taskType === "ai" ? "Add AI task" : "Add task"}
             </button>
           </form>
 
@@ -199,7 +207,7 @@ export const TaskFlowPage: React.FC = () => {
               <span>{error}</span>
               <button
                 type="button"
-                onClick={() => void runAction(loadTasks)}
+                onClick={() => void runAction(() => loadTasks(taskType))}
                 className="shrink-0 font-semibold underline underline-offset-2"
               >
                 Reload list

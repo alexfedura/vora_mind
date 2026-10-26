@@ -187,15 +187,17 @@ fn task_flow_now() -> Result<i64, String> {
 #[tauri::command]
 fn get_task_flow_items(
     state: State<AppState>,
+    task_type: mind::task_flow::TaskFlowType,
 ) -> Result<Vec<mind::task_flow::TaskFlowItem>, String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;
-    mind::task_flow::list_tasks(&conn).map_err(|error| error.to_string())
+    mind::task_flow::list_tasks(&conn, task_type).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 fn create_task_flow_item(
     state: State<AppState>,
     title: String,
+    task_type: mind::task_flow::TaskFlowType,
 ) -> Result<mind::task_flow::TaskFlowItem, String> {
     let title = title.trim();
     if title.is_empty() || title.chars().count() > 200 {
@@ -203,7 +205,7 @@ fn create_task_flow_item(
     }
     let id = format!("task_{}", uuid::Uuid::now_v7());
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
-    mind::task_flow::create_task(&mut conn, &id, title, task_flow_now()?)
+    mind::task_flow::create_task(&mut conn, &id, title, task_type, task_flow_now()?)
         .map_err(|error| error.to_string())
 }
 
@@ -238,9 +240,10 @@ fn set_task_flow_item_completed(
 fn reorder_task_flow_items(
     state: State<AppState>,
     ids: Vec<String>,
+    task_type: mind::task_flow::TaskFlowType,
 ) -> Result<Vec<mind::task_flow::TaskFlowItem>, String> {
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
-    mind::task_flow::reorder_tasks(&mut conn, &ids, task_flow_now()?)
+    mind::task_flow::reorder_tasks(&mut conn, &ids, task_type, task_flow_now()?)
         .map_err(|error| error.to_string())
 }
 
