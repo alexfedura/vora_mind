@@ -144,11 +144,10 @@ export const useTraceStore = create<TraceState>()((set, get) => ({
         projects,
         selectedProjectId: currentProject?.id ?? graphProject?.id ?? existingProjects[0]?.id ?? null,
         projectsLoading: false,
-        lastError: null,
       });
     } catch (e) {
       console.warn("scan_ecosystem failed:", e);
-      set({ projectsLoading: false, lastError: String(e) });
+      set({ projectsLoading: false });
     }
   },
 
@@ -184,7 +183,7 @@ export const useTraceStore = create<TraceState>()((set, get) => ({
       });
     } catch (e) {
       console.warn("sync_from_disk failed:", e);
-      set({ syncing: false, lastError: String(e) });
+      set({ syncing: false });
     }
   },
 
@@ -193,10 +192,7 @@ export const useTraceStore = create<TraceState>()((set, get) => ({
     try {
       const list = await recentDecisions(10);
       set({ recent: list });
-    } catch (e) {
-      console.warn("recent_decisions failed:", e);
-      set({ lastError: String(e) });
-    }
+    } catch (e) { console.warn("recent_decisions failed:", e); }
   },
 
   exportGraph: async () => {
