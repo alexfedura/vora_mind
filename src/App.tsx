@@ -67,6 +67,7 @@ import { RectangleToolIcon } from "./components/market/RectangleToolIcon";
 import { LeftSidebar } from "./shared/layout/LeftSidebar";
 import { TaskFlowPage } from "./shared/layout/TaskFlowPage";
 import { JournalPage } from "./shared/layout/JournalPage";
+import { QuestionsBoardPage } from "./shared/layout/QuestionsBoardPage";
 import { BoardsPanel } from "./shared/layout/BoardsPanel";
 import { RightDrawer } from "./shared/layout/RightDrawer";
 import { ReplayController } from "./shared/canvas/ReplayController";
@@ -359,7 +360,8 @@ function AppContent() {
   const [activeOpenPanel, setActiveOpenPanel] = useState<OpenPanel>("none");
   const [isTaskFlowOpen, setIsTaskFlowOpen] = useState(false);
   const [isJournalOpen, setIsJournalOpen] = useState(false);
-  const isWorkspacePageOpen = isTaskFlowOpen || isJournalOpen;
+  const [isQuestionsBoardOpen, setIsQuestionsBoardOpen] = useState(false);
+  const isWorkspacePageOpen = isTaskFlowOpen || isJournalOpen || isQuestionsBoardOpen;
   const [lastActivePanel, setLastActivePanel] = useState<"boards" | "sidebar">("boards");
   const [boards, setBoards] = useState<BoardItem[]>([]);
   const [boardsLoaded, setBoardsLoaded] = useState(false);
@@ -2371,23 +2373,34 @@ function AppContent() {
               isLibraryOpen={isRightDrawerOpen}
               isTaskFlowOpen={isTaskFlowOpen}
               isJournalOpen={isJournalOpen}
+              isQuestionsBoardOpen={isQuestionsBoardOpen}
               onAddNewCard={handleCreateCardInLibraryOnly}
               onToggleLibrary={toggleRightDrawer}
               onOpenTaskFlow={() => {
                 setIsJournalOpen(false);
+                setIsQuestionsBoardOpen(false);
                 setIsTaskFlowOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
               }}
               onOpenJournal={() => {
                 setIsTaskFlowOpen(false);
+                setIsQuestionsBoardOpen(false);
                 setIsJournalOpen(true);
+                setLastActivePanel("sidebar");
+                setActiveOpenPanel("sidebar");
+              }}
+              onOpenQuestionsBoard={() => {
+                setIsTaskFlowOpen(false);
+                setIsJournalOpen(false);
+                setIsQuestionsBoardOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
               }}
               onOpenBoards={() => {
                 setIsTaskFlowOpen(false);
                 setIsJournalOpen(false);
+                setIsQuestionsBoardOpen(false);
                 setLastActivePanel("boards");
                 setActiveOpenPanel("boards");
               }}
@@ -2427,6 +2440,14 @@ function AppContent() {
       >
         {isTaskFlowOpen ? <TaskFlowPage /> : isJournalOpen ? (
           <JournalPage onGoHome={() => {
+            setIsJournalOpen(false);
+            setIsTaskFlowOpen(false);
+            setIsQuestionsBoardOpen(false);
+            setActiveOpenPanel("none");
+          }} />
+        ) : isQuestionsBoardOpen ? (
+          <QuestionsBoardPage onGoHome={() => {
+            setIsQuestionsBoardOpen(false);
             setIsJournalOpen(false);
             setIsTaskFlowOpen(false);
             setActiveOpenPanel("none");

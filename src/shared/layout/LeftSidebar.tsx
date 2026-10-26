@@ -6,6 +6,7 @@ import {
   Layout,
   FolderKanban,
   BookOpen,
+  CircleHelp,
   ListTodo,
   Library as LibraryIcon,
   Tag,
@@ -22,10 +23,12 @@ interface LeftSidebarProps {
   isLibraryOpen: boolean;
   isTaskFlowOpen: boolean;
   isJournalOpen: boolean;
+  isQuestionsBoardOpen: boolean;
   onAddNewCard: () => void;
   onOpenBoards: () => void;
   onOpenTaskFlow: () => void;
   onOpenJournal: () => void;
+  onOpenQuestionsBoard: () => void;
   onToggleLibrary: () => void;
 }
 
@@ -35,10 +38,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   isLibraryOpen,
   isTaskFlowOpen,
   isJournalOpen,
+  isQuestionsBoardOpen,
   onAddNewCard,
   onOpenBoards,
   onOpenTaskFlow,
   onOpenJournal,
+  onOpenQuestionsBoard,
   onToggleLibrary,
 }) => {
   return (
@@ -108,6 +113,19 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           >
             <BookOpen size={16} />
             <span>Journal</span>
+          </button>
+          <button
+            type="button"
+            onClick={onOpenQuestionsBoard}
+            aria-current={isQuestionsBoardOpen ? "page" : undefined}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition ${
+              isQuestionsBoardOpen
+                ? "bg-[#1d212d] text-purple-400 font-semibold"
+                : "hover:bg-[#1b1e27] hover:text-gray-200"
+            }`}
+          >
+            <CircleHelp size={16} />
+            <span>Questions Board</span>
           </button>
           <button
             onClick={onToggleLibrary}
