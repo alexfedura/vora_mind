@@ -161,7 +161,8 @@ pub fn reorder_tasks(
 ) -> Result<Vec<TaskFlowItem>> {
     let transaction = conn.transaction()?;
     let existing_ids = {
-        let mut statement = transaction.prepare("SELECT id FROM task_flow_items WHERE task_type = ?1")?;
+        let mut statement =
+            transaction.prepare("SELECT id FROM task_flow_items WHERE task_type = ?1")?;
         let rows = statement.query_map([task_type.as_str()], |row| row.get::<_, String>(0))?;
         rows.collect::<Result<HashSet<_>>>()?
     };
@@ -363,22 +364,10 @@ mod tests {
             2,
         )
         .expect("create regular task B");
-        create_task(
-            &mut connection,
-            "ai-a",
-            "AI A",
-            TaskFlowType::Ai,
-            3,
-        )
-        .expect("create AI task A");
-        create_task(
-            &mut connection,
-            "ai-b",
-            "AI B",
-            TaskFlowType::Ai,
-            4,
-        )
-        .expect("create AI task B");
+        create_task(&mut connection, "ai-a", "AI A", TaskFlowType::Ai, 3)
+            .expect("create AI task A");
+        create_task(&mut connection, "ai-b", "AI B", TaskFlowType::Ai, 4)
+            .expect("create AI task B");
 
         let ai_order = reorder_tasks(
             &mut connection,
@@ -395,8 +384,8 @@ mod tests {
             vec!["ai-b", "ai-a"]
         );
 
-        let regular_tasks = list_tasks(&connection, TaskFlowType::Task)
-            .expect("list regular tasks");
+        let regular_tasks =
+            list_tasks(&connection, TaskFlowType::Task).expect("list regular tasks");
         assert_eq!(
             regular_tasks
                 .iter()
