@@ -3336,17 +3336,17 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
   useEffect(() => {
     zoomStateRef.current = zoomState;
     if (document.activeElement !== inputXRef.current) {
-      setInputX((zoomState.x_off_milli / 1000).toFixed(3));
+      setInputX((zoomState.x_off_milli / 1000).toFixed(4));
     }
     if (document.activeElement !== inputYRef.current) {
-      setInputY((zoomState.y_off_milli / 1000).toFixed(3));
+      setInputY((zoomState.y_off_milli / 1000).toFixed(4));
     }
   }, [zoomState.x_off_milli, zoomState.y_off_milli]);
 
   const commitX = () => {
     const val = parseFloat(inputX);
     if (!isFinite(val)) {
-      setInputX((zoomState.x_off_milli / 1000).toFixed(3));
+      setInputX((zoomState.x_off_milli / 1000).toFixed(4));
       return;
     }
     const milli = Math.round(val * 1000);
@@ -3356,7 +3356,7 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
   const commitY = () => {
     const val = parseFloat(inputY);
     if (!isFinite(val)) {
-      setInputY((zoomState.y_off_milli / 1000).toFixed(3));
+      setInputY((zoomState.y_off_milli / 1000).toFixed(4));
       return;
     }
     const milli = Math.round(val * 1000);
@@ -3373,8 +3373,8 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
     timeframeChangeInFlightRef.current = false;
     skipNextApplyRef.current = true;
     setZoomState(DEFAULT_ZOOM);
-    setInputX((DEFAULT_ZOOM.x_off_milli / 1000).toFixed(3));
-    setInputY((DEFAULT_ZOOM.y_off_milli / 1000).toFixed(3));
+    setInputX((DEFAULT_ZOOM.x_off_milli / 1000).toFixed(4));
+    setInputY((DEFAULT_ZOOM.y_off_milli / 1000).toFixed(4));
     lastAppliedRef.current = {
       cc: offsetToCandleCount(DEFAULT_ZOOM.x_off_milli),
       ym: offsetToYMilli(DEFAULT_ZOOM.y_off_milli),
