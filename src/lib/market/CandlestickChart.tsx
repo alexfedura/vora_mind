@@ -69,6 +69,7 @@ export interface CandlestickChartProps {
   emptyStateIntervalSeconds?: number;
   emptyStateReferencePrice?: number;
   replayCursorTime?: number | null;
+  secondsVisible?: boolean;
   onCrosshairMove?: (candle: CandleDto | null) => void;
   onReady?: (chart: IChartApi, series: ZigzagSeriesRef) => void;
   /** v7.0.0: "special" = pivot-line, "candlestick" = OHLC. Non-destructive toggle. */
@@ -91,6 +92,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   emptyStateIntervalSeconds = 60,
   emptyStateReferencePrice = 100,
   replayCursorTime = null,
+  secondsVisible = false,
   onCrosshairMove,
   onReady,
   displayMode = "special",
@@ -159,7 +161,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         visible: true,
         borderVisible: false,
         timeVisible: true,
-        secondsVisible: false,
+        secondsVisible,
         ticksVisible: false,
         rightOffset: 0, // v0.83.8 Part E (Suspect #5): create with 0 so LC's
         // internal setData clamp has no right-margin bias; the visual
@@ -280,6 +282,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       priceLineRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    chartRef.current?.timeScale().applyOptions({ secondsVisible });
+  }, [secondsVisible]);
 
   useEffect(() => {
     const chart = chartRef.current;

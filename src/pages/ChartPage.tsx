@@ -3977,6 +3977,7 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
                 candles={candles}
                 emptyStateIntervalSeconds={intervalWindowSeconds(activeInterval)}
                 emptyStateReferencePrice={readOfflineReferencePrice(symbol)}
+                secondsVisible={intervalWindowSeconds(activeInterval) < 60}
                 replayCursorTime={replayOpen && replayEndIndex !== null
                   ? replayTimestampOverridesRef.current?.end ?? candles[replayEndIndex]?.ts ?? null
                   : null}
