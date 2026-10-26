@@ -99,7 +99,11 @@ export const useTraceStore = create<TraceState>()((set, get) => ({
       set({ graph: g, dirty: false, lastError: null });
     } catch (e) {
       console.warn("[Vora Trace] load_from_disk failed:", e);
-      set({ lastError: String(e) });
+      set({
+        graph: { schemaVersion: "1.0", project: "vora-mind", nodes: [], edges: [] },
+        dirty: false,
+        lastError: String(e),
+      });
     }
   },
 
@@ -113,9 +117,7 @@ export const useTraceStore = create<TraceState>()((set, get) => ({
       await saveGraph(get().graph);
       // Also write each decision as .md
       for (const n of get().graph.nodes) {
-        try { await saveDecisionMd(n); } catch (e) {
-          console.warn("save_decision_md failed for", n.id, e);
-        }
+        await saveDecisionMd(n);
       }
       set({ dirty: false, saving: false, lastError: null });
     } catch (e) {

@@ -52,16 +52,6 @@ pub enum TraceEdgeKind {
     Rejected,
 }
 
-impl TraceEdgeKind {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Main => "main",
-            Self::Branch => "branch",
-            Self::Rejected => "rejected",
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TraceNodeData {
     pub id: String,
