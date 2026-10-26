@@ -716,6 +716,14 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
   const boxOverlayRef = useRef<BoxOverlay | null>(null);
   const measureRef = useRef<MeasureOverlay | null>(null);
   const rectOverlayRef = useRef<RectangleOverlay | null>(null);
+  const gradedRectOverlayRef = useRef<GradedRectangleOverlay | null>(null);
+  const gradedRectConfig = useGradedRectStore((state) => state.gradedRectConfig);
+  const setGradedRectConfig = useGradedRectStore((state) => state.setGradedRectConfig);
+  const gradedRectConfigRef = useRef(gradedRectConfig);
+  gradedRectConfigRef.current = gradedRectConfig;
+  const hydrateGradedRectConfig = useGradedRectStore((state) => state.hydrateGradedRectConfig);
+  const [gradedRectContextMenu, setGradedRectContextMenu] = useState<GradedRectContextMenu | null>(null);
+  useEffect(() => { hydrateGradedRectConfig(); }, [hydrateGradedRectConfig]);
   // v7.2.0 Part E — per-symbol persistence key: vora.drawings.<symbol>.
   // v0.86.2 (C2) — Symbol is now reactive (hook-backed).
   // Default is "XAUUSD" until C3 adds the selector.
