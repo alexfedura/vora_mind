@@ -56,10 +56,21 @@ function valueLabel(value: number): string {
 }
 
 function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`;
-  return `${Math.floor(seconds / 86400)}d ${Math.floor(seconds % 86400 / 3600)}h`;
+  const wholeSeconds = Math.floor(seconds);
+  const days = Math.floor(wholeSeconds / 86400);
+  const hours = Math.floor((wholeSeconds % 86400) / 3600);
+  const minutes = Math.floor((wholeSeconds % 3600) / 60);
+  const remainingSeconds = wholeSeconds % 60;
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  if (remainingSeconds > 0 || parts.length === 0) parts.push(`${remainingSeconds}s`);
+  return parts.join(" ");
+}
+
+function measurementValueLabel(value: number): string {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(4)}`;
 }
 
 function pricePrecision(value: number): number {
@@ -83,13 +94,13 @@ function measurementLabel(tool: GeometryToolId, first: DrawingAnchor, second: Dr
   const delta = second.price - first.price;
   const percent = first.price === 0 ? 0 : delta / Math.abs(first.price) * 100;
   const seconds = Math.abs(second.ts - first.ts);
-  if (tool === "price_range") return `${valueLabel(delta)} (${valueLabel(percent)}%)`;
+  if (tool === "price_range") return `${measurementValueLabel(delta)} (${measurementValueLabel(percent)}%)`;
   const start = Math.min(first.ts, second.ts);
   const end = Math.max(first.ts, second.ts);
   const barCount = candles.filter((candle) => candle.ts >= start && candle.ts <= end).length;
   const dateValues = `${formatDuration(seconds)} · ${barCount} bars`;
   if (tool === "date_range") return dateValues;
-  return `${valueLabel(delta)} (${valueLabel(percent)}%) · ${dateValues}`;
+  return `${measurementValueLabel(delta)} (${measurementValueLabel(percent)}%) · ${dateValues}`;
 }
 
 function makeVolumeProfile(

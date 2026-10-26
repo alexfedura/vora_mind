@@ -450,7 +450,7 @@ export class LineOverlay implements ISeriesPrimitive<Time> {
             const delta = qt.price2 - qt.price1;
             const percent = qt.price1 === 0 ? 0 : (delta / Math.abs(qt.price1)) * 100;
             const elapsed = Math.abs(qt.ts2 - qt.ts1);
-            const label = `${delta >= 0 ? "+" : ""}${delta.toFixed(2)} (${percent.toFixed(2)}%) · ${elapsed}s`;
+            const label = `${delta >= 0 ? "+" : ""}${delta.toFixed(4)} (${percent.toFixed(4)}%) · ${elapsed}s`;
             const labelX = ((nn(x1) + nn(x2)) / 2) * hr;
             const labelY = ((nn(y1) + nn(y2)) / 2) * vr - 12 * k;
             ctx.save();

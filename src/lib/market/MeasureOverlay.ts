@@ -103,7 +103,7 @@ class MeasurePaneRenderer implements IPrimitivePaneRenderer {
           const botPrice = Math.min(c.pA, c.pB);
           const dPrice = topPrice - botPrice;
           const dPct = topPrice !== 0 ? (dPrice / topPrice) * 100 : 0;
-          const text = `\u0394 ${dPrice.toFixed(2)} | ${dPct.toFixed(2)}%`;
+          const text = `\u0394 ${dPrice.toFixed(4)} | ${dPct.toFixed(4)}%`;
           ctx.font = `${11 * vr}px ui-monospace, monospace`;
           ctx.textBaseline = 'top';
           ctx.fillStyle = '#2196f3';
