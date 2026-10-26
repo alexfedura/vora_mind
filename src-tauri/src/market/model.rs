@@ -107,6 +107,7 @@ pub enum DrawingTextVerticalAlign {
 #[serde(rename_all = "snake_case")]
 pub enum DrawingKind {
     Rectangle,
+    #[serde(rename = "graded-rectangle")]
     GradedRectangle,
     Vline,
     Hline,
