@@ -14,12 +14,16 @@ const DEFAULT_CONFIG: GradedRectConfig = {
   defaultBaseline: "top",
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function parseConfig(value: string | null): GradedRectConfig {
   if (!value) return DEFAULT_CONFIG;
   try {
     const parsed: unknown = JSON.parse(value);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return DEFAULT_CONFIG;
-    const candidate = parsed as Record<string, unknown>;
+    if (!isRecord(parsed)) return DEFAULT_CONFIG;
+    const candidate = parsed;
     if (
       typeof candidate.height !== "number" ||
       !Number.isFinite(candidate.height) ||
