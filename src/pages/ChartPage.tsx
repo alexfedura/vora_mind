@@ -3300,10 +3300,10 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
       };
       setZoomState(nextZoom);
       if (document.activeElement !== inputXRef.current) {
-        setInputX((nextZoom.x_off_milli / 1000).toFixed(3));
+        setInputX((nextZoom.x_off_milli / 1000).toFixed(4));
       }
       if (document.activeElement !== inputYRef.current) {
-        setInputY((nextZoom.y_off_milli / 1000).toFixed(3));
+        setInputY((nextZoom.y_off_milli / 1000).toFixed(4));
       }
     };
 
