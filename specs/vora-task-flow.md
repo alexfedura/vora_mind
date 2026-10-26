@@ -7,7 +7,8 @@
 ## 1. Intent & System Goals
 
 * **Objective**: Add a durable, workspace-wide task list named **Task Flow**, accessible in the left sidebar between Projects and Journal.
-* **Target Workflow**: Users create tasks, mark them complete or incomplete, delete them, and drag task rows to change their saved priority order. The ordered rows form a simple timeline. In each task row, priority, drag handle, completion toggle, and title are arranged from right to left in that order. Only the task title is shown in the timeline. Clicking the title enables inline title editing; double-clicking it opens a dialog for editing the full title and description.
+* **Target Workflow**: Users create tasks, mark them complete or incomplete, delete them, and drag task rows to change their saved priority order. The ordered rows form a simple timeline.
+* **Task Editing**: Arrange priority, drag handle, completion toggle, and title from right to left. Show only the title in the timeline. Clicking a title enables inline editing; double-clicking opens a dialog for editing its title and description.
 * **Non-Goals**: Calendar dates, times, reminders, project/board assignment, recurring tasks, and adding a new drag-and-drop dependency.
 
 ## 2. Affected Architectural Boundaries
