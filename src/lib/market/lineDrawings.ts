@@ -246,6 +246,7 @@ export interface GradedRectangle extends DrawingPresentation {
   topPrice: number;
   bottomPrice: number;
   baselineSide: "top" | "bottom";
+  color: string;
   correctionStartPrice?: number;
   correctionStartTime?: number;
   selected: boolean;
@@ -253,6 +254,30 @@ export interface GradedRectangle extends DrawingPresentation {
   locked?: boolean;
   colorOpacity?: number;
   lineWidth: number;
+}
+
+export function isGradedRectangle(value: unknown): value is GradedRectangle {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const drawing = value as Record<string, unknown>;
+  const isFiniteNumber = (candidate: unknown): candidate is number =>
+    typeof candidate === "number" && Number.isFinite(candidate);
+  return drawing.type === "graded-rectangle" &&
+    typeof drawing.id === "string" &&
+    (drawing.structureType === "RBR" || drawing.structureType === "DBD") &&
+    isFiniteNumber(drawing.anchorPrice) &&
+    isFiniteNumber(drawing.anchorTime) &&
+    isFiniteNumber(drawing.startTime) &&
+    isFiniteNumber(drawing.endTime) &&
+    drawing.startTime < drawing.endTime &&
+    isFiniteNumber(drawing.topPrice) &&
+    isFiniteNumber(drawing.bottomPrice) &&
+    drawing.bottomPrice < drawing.topPrice &&
+    (drawing.baselineSide === "top" || drawing.baselineSide === "bottom") &&
+    typeof drawing.color === "string" &&
+    isFiniteNumber(drawing.lineWidth) &&
+    typeof drawing.selected === "boolean" &&
+    (drawing.correctionStartPrice === undefined || isFiniteNumber(drawing.correctionStartPrice)) &&
+    (drawing.correctionStartTime === undefined || isFiniteNumber(drawing.correctionStartTime));
 }
 
 export interface DrawingGeometrySegmentStyle {
@@ -332,6 +357,7 @@ export type DrawingAny =
 /** v7.4.4 — migrate any persisted drawing (rect legacy handled by caller). */
 export function migrateDrawingAny(d: DrawingAny): DrawingAny {
   if ((d as DrawingRect).type === "rectangle") return d;
+  if (d.type === "graded-rectangle") return d;
   const dd = d as unknown as Record<string, unknown>;
   if (typeof dd["lineWidth"] !== "number" || !Number.isFinite(dd["lineWidth"] as number)) {
     dd["lineWidth"] = 1;
