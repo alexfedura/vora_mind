@@ -13,10 +13,14 @@ export function DecisionEditor() {
   const update = useTraceStore((s) => s.updateNode);
   const del = useTraceStore((s) => s.deleteNode);
   const clear = useTraceStore((s) => s.selectNode);
+  const projectPath = useTraceStore(
+    (s) => s.projects.find((project) => project.id === s.selectedProjectId)?.path,
+  );
 
   const [draft, setDraft] = useState(node);
   const [commitSearch, setCommitSearch] = useState("");
   const [commitResults, setCommitResults] = useState<TraceGitLogEntry[]>([]);
+  const [commitSearchError, setCommitSearchError] = useState<string | null>(null);
   const [searchingCommits, setSearchingCommits] = useState(false);
   useEffect(() => { setDraft(node); setCommitResults([]); setCommitSearch(""); }, [node]);
 
@@ -144,17 +148,22 @@ export function DecisionEditor() {
                          bg-trace-bg px-2 py-1 text-xs text-trace-text"
             />
             <button
-              disabled={searchingCommits || !commitSearch}
+              disabled={searchingCommits || !commitSearch || !projectPath}
               onClick={async () => {
-                if (!draft) return;
+                if (!draft || !projectPath) return;
                 setSearchingCommits(true);
+                setCommitSearchError(null);
                 try {
                   const res = await findCommitsForFile(
-                    "D:/Workspace", commitSearch, 10
+                    projectPath, commitSearch, 10
                   );
                   setCommitResults(res);
-                } catch (e) { console.warn(e); }
-                setSearchingCommits(false);
+                } catch (e) {
+                  console.warn("Failed to search project history:", e);
+                  setCommitSearchError(String(e));
+                } finally {
+                  setSearchingCommits(false);
+                }
               }}
               className="rounded-md border border-trace-border
                          bg-trace-bg px-2 py-1 text-xs text-trace-text/80
@@ -162,6 +171,14 @@ export function DecisionEditor() {
               {searchingCommits ? "…" : "Find"}
             </button>
           </div>
+          {commitSearchError && (
+            <div className="mt-1 text-xs text-red-400">{commitSearchError}</div>
+          )}
+          {!projectPath && (
+            <div className="mt-1 text-xs text-trace-muted">
+              Select an existing project to search its Git history.
+            </div>
+          )}
           {commitResults.length > 0 && (
             <div className="mt-2 max-h-32 overflow-y-auto rounded-md
                             border border-trace-border bg-trace-bg">

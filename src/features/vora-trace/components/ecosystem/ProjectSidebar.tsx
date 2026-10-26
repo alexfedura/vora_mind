@@ -5,6 +5,8 @@ export function ProjectSidebar() {
   const projects = useTraceStore((s) => s.projects);
   const loading = useTraceStore((s) => s.projectsLoading);
   const loadProjects = useTraceStore((s) => s.loadProjects);
+  const selectedProjectId = useTraceStore((s) => s.selectedProjectId);
+  const selectProject = useTraceStore((s) => s.selectProject);
 
   useEffect(() => {
     loadProjects();
@@ -33,10 +35,17 @@ export function ProjectSidebar() {
           </div>
         )}
         {projects.map((p) => (
-          <div
+          <button
             key={p.id}
-            className="rounded-md border border-trace-border
-                       bg-trace-bg/50 p-2 text-xs"
+            type="button"
+            disabled={!p.exists}
+            onClick={() => selectProject(p.id)}
+            aria-pressed={selectedProjectId === p.id}
+            className={`w-full rounded-md border p-2 text-left text-xs transition ${
+              selectedProjectId === p.id
+                ? "border-trace-accent bg-trace-accent/10"
+                : "border-trace-border bg-trace-bg/50 hover:border-trace-accent/50"
+            } disabled:cursor-not-allowed disabled:opacity-50`}
           >
             <div className="flex items-center gap-2">
               <span className={
@@ -50,7 +59,7 @@ export function ProjectSidebar() {
               <span className="ml-auto text-trace-muted">
                 {p.role}
               </span>
-            </div>
+            </button>
             {p.git_branch && (
               <div className="mt-1 flex items-center gap-1 text-trace-muted">
                 <span>⎇</span>
