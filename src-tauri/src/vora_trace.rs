@@ -326,6 +326,14 @@ pub fn trace_save_graph(app: AppHandle, graph: TraceGraph) -> Result<(), String>
 
 #[tauri::command]
 pub fn trace_save_decision_md(app: AppHandle, node: TraceNodeData) -> Result<String, String> {
+    if node.id.is_empty()
+        || !node
+            .id
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-' || character == '_')
+    {
+        return Err("Decision ID contains unsupported characters".to_string());
+    }
     let root = trace_root(&app)?;
     let dir = root.join("decisions");
     std::fs::create_dir_all(&dir)
@@ -393,7 +401,8 @@ pub fn trace_list_decisions(app: AppHandle) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
     let entries = std::fs::read_dir(&dir)
         .map_err(|e| format!("read_dir {}: {}", dir.display(), e))?;
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("read {}: {error}", dir.display()))?;
         let p = entry.path();
         if p.extension().and_then(|s| s.to_str()) == Some("md") {
             if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
@@ -490,12 +499,14 @@ pub fn trace_read_all_decisions(app: AppHandle) -> Result<Vec<TraceNodeData>, St
     let mut out = Vec::new();
     let entries = std::fs::read_dir(&dir)
         .map_err(|e| format!("read_dir {}: {}", dir.display(), e))?;
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("read {}: {error}", dir.display()))?;
         let p = entry.path();
         if p.extension().and_then(|s| s.to_str()) != Some("md") {
             continue;
         }
-        let content = std::fs::read_to_string(&p).unwrap_or_default();
+        let content = std::fs::read_to_string(&p)
+            .map_err(|error| format!("read {}: {error}", p.display()))?;
         if let Some(node) = parse_decision_md(&content) {
             out.push(node);
         }
@@ -574,4 +585,90 @@ pub fn trace_recent_decisions(app: AppHandle, limit: usize) -> Result<Vec<TraceN
     });
     all.truncate(limit.max(1).min(50));
     Ok(all)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::migrate_legacy_data;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn temp_root(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "vora-trace-{label}-{}",
+            uuid::Uuid::now_v7()
+        ))
+    }
+
+    #[test]
+    fn migration_copies_trace_files_once_without_modifying_the_source() {
+        let source_root = temp_root("source");
+        let app_data_root = temp_root("appdata");
+        let source_graph = source_root.join(".vora").join("trace").join("graph.json");
+        let source_decision = source_root
+            .join(".vora")
+            .join("trace")
+            .join("decisions")
+            .join("D-001.md");
+        fs::create_dir_all(source_decision.parent().expect("decision parent"))
+            .expect("create legacy decision directory");
+        fs::create_dir_all(source_root.join(".vora").join("trace"))
+            .expect("create legacy graph directory");
+        fs::write(source_root.join("trace.yaml"), "schemaVersion: '1.0'\nprojects: []\n")
+            .expect("write legacy registry");
+        fs::write(&source_graph, "{\"project\":\"legacy\"}")
+            .expect("write legacy graph");
+        fs::write(&source_decision, "# Legacy decision\n")
+            .expect("write legacy decision");
+
+        migrate_legacy_data(&source_root, &app_data_root).expect("migrate legacy data");
+        let destination_root = app_data_root.join("VoraTrace");
+        assert_eq!(
+            fs::read(destination_root.join("trace.yaml")).expect("read migrated registry"),
+            b"schemaVersion: '1.0'\nprojects: []\n"
+        );
+        assert_eq!(
+            fs::read(destination_root.join(".vora").join("trace").join("graph.json"))
+                .expect("read migrated graph"),
+            b"{\"project\":\"legacy\"}"
+        );
+        assert_eq!(
+            fs::read(
+                destination_root
+                    .join(".vora")
+                    .join("trace")
+                    .join("decisions")
+                    .join("D-001.md")
+            )
+            .expect("read migrated decision"),
+            b"# Legacy decision\n"
+        );
+
+        fs::write(&source_graph, "{\"project\":\"updated-source\"}")
+            .expect("update original graph");
+        migrate_legacy_data(&source_root, &app_data_root)
+            .expect("repeat migration after marker creation");
+        assert_eq!(
+            fs::read(&source_graph).expect("read unchanged source graph"),
+            b"{\"project\":\"updated-source\"}"
+        );
+        assert_eq!(
+            fs::read(destination_root.join(".vora").join("trace").join("graph.json"))
+                .expect("read unchanged migrated graph"),
+            b"{\"project\":\"legacy\"}"
+        );
+
+        fs::remove_dir_all(source_root).expect("remove test source");
+        fs::remove_dir_all(app_data_root).expect("remove test AppData");
+    }
+
+    #[test]
+    fn migration_is_optional_when_the_legacy_project_directory_is_missing() {
+        let source_root = temp_root("missing");
+        let app_data_root = temp_root("empty-appdata");
+
+        migrate_legacy_data(&source_root, &app_data_root)
+            .expect("missing source must not block app startup");
+        assert!(!app_data_root.exists());
+    }
 }

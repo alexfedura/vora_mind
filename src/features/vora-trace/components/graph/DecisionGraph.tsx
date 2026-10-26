@@ -3,7 +3,6 @@ import {
   useNodesState, useEdgesState, addEdge,
   type Connection, type Edge, type Node, type NodeMouseHandler,
 } from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo, useCallback } from "react";
 import { useTraceStore } from "../../store/traceStore";
 import type { TraceNodeKind, TraceNodeStatus } from "@/types";

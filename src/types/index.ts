@@ -17,7 +17,7 @@ export type TraceNodeStatus = "accepted" | "rejected" | "pending" | "current" | 
 export interface TraceAlternative {
   title: string;
   status: TraceNodeStatus;
-  reason?: string;
+  reason?: string | null;
 }
 
 export interface TraceNodeData {
@@ -25,12 +25,12 @@ export interface TraceNodeData {
   kind: TraceNodeKind;
   title: string;
   status: TraceNodeStatus;
-  whyAmIHere?: string;
-  objective?: string;
-  reason?: string;
-  createdAt?: string;
+  whyAmIHere?: string | null;
+  objective?: string | null;
+  reason?: string | null;
+  createdAt?: string | null;
   parentId?: string | null;
-  gitCommit?: string;
+  gitCommit?: string | null;
   linkedCommits?: string[];
   alternatives?: TraceAlternative[];
   evidence?: string[];
@@ -57,11 +57,11 @@ export interface TraceProjectInfo {
   path: string;
   role: string;
   status: string;
-  description?: string;
+  description: string | null;
   exists: boolean;
-  git_branch?: string;
-  git_head?: string;
-  git_dirty?: boolean;
+  git_branch: string | null;
+  git_head: string | null;
+  git_dirty: boolean | null;
 }
 
 export interface TraceGitLogEntry {
