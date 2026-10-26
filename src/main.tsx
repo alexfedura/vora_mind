@@ -63,7 +63,7 @@ function AppRoutes(): React.ReactElement {
   );
 }
 
-let defaultRoute: ReturnType<typeof getDefaultRoute> = "chart";
+let defaultRoute: ReturnType<typeof getDefaultRoute> = "home";
 
 async function bootstrap(): Promise<void> {
   try {

@@ -181,35 +181,6 @@ export function PolicyPanel({
       </div>
 
       <div className="px-3 pt-2">
-        {/* v7.4.2 — Home / Chart segmented control (moved from top toolbar). */}
-        <div className="flex items-center rounded border border-[#383838] overflow-hidden mb-2" role="group" aria-label="Default route">
-          <button
-            type="button"
-            onClick={() => onDefaultRouteChange("home")}
-            className={
-              "flex-1 px-2 h-7 text-[13px] font-medium transition-colors cursor-pointer " +
-              (defaultRouteSetting === "home"
-                ? "bg-[#ff9800] text-black"
-                : "bg-[#0f0f0f] text-[#d6dbe2] hover:bg-[#2a2a2a]")
-            }
-            title="Launch into intro/home"
-          >
-            Home
-          </button>
-          <button
-            type="button"
-            onClick={() => onDefaultRouteChange("chart")}
-            className={
-              "flex-1 px-2 h-7 text-[13px] font-medium transition-colors cursor-pointer " +
-              (defaultRouteSetting === "chart"
-                ? "bg-[#ff9800] text-black"
-                : "bg-[#0f0f0f] text-[#d6dbe2] hover:bg-[#2a2a2a]")
-            }
-            title="Launch into Chart"
-          >
-            Chart
-          </button>
-        </div>
         <label className="flex items-center gap-2 text-[13px] text-[#d6dbe2] cursor-pointer select-none">
           <input
             type="checkbox"
