@@ -33,7 +33,10 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
     let has_description = {
         let mut statement = conn.prepare("PRAGMA table_info(task_flow_items)")?;
         let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
-        columns.collect::<Result<Vec<_>>>()?.iter().any(|name| name == "description")
+        columns
+            .collect::<Result<Vec<_>>>()?
+            .iter()
+            .any(|name| name == "description")
     };
     if !has_description {
         conn.execute(
@@ -45,18 +48,14 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
 }
 
 pub fn list_tasks(conn: &Connection) -> Result<Vec<TaskFlowItem>> {
-    let sql = format!("SELECT {TASK_COLUMNS} FROM task_flow_items ORDER BY position, created_at, id");
+    let sql =
+        format!("SELECT {TASK_COLUMNS} FROM task_flow_items ORDER BY position, created_at, id");
     let mut statement = conn.prepare(&sql)?;
     let rows = statement.query_map([], map_task)?;
     rows.collect()
 }
 
-pub fn create_task(
-    conn: &mut Connection,
-    id: &str,
-    title: &str,
-    now: i64,
-) -> Result<TaskFlowItem> {
+pub fn create_task(conn: &mut Connection, id: &str, title: &str, now: i64) -> Result<TaskFlowItem> {
     let title = title.trim();
     if title.is_empty() || title.chars().count() > 200 {
         return Err(rusqlite::Error::InvalidQuery);
@@ -116,11 +115,7 @@ pub fn set_completed(
     query_task(conn, id)
 }
 
-pub fn reorder_tasks(
-    conn: &mut Connection,
-    ids: &[String],
-    now: i64,
-) -> Result<Vec<TaskFlowItem>> {
+pub fn reorder_tasks(conn: &mut Connection, ids: &[String], now: i64) -> Result<Vec<TaskFlowItem>> {
     let transaction = conn.transaction()?;
     let existing_ids = {
         let mut statement = transaction.prepare("SELECT id FROM task_flow_items")?;
@@ -130,7 +125,9 @@ pub fn reorder_tasks(
     let ordered_ids: HashSet<&str> = ids.iter().map(String::as_str).collect();
     if ordered_ids.len() != ids.len()
         || existing_ids.len() != ids.len()
-        || existing_ids.iter().any(|id| !ordered_ids.contains(id.as_str()))
+        || existing_ids
+            .iter()
+            .any(|id| !ordered_ids.contains(id.as_str()))
     {
         return Err(rusqlite::Error::InvalidQuery);
     }
@@ -161,7 +158,8 @@ fn query_task(conn: &Connection, id: &str) -> Result<TaskFlowItem> {
 }
 
 fn list_tasks_in_transaction(transaction: &Transaction<'_>) -> Result<Vec<TaskFlowItem>> {
-    let sql = format!("SELECT {TASK_COLUMNS} FROM task_flow_items ORDER BY position, created_at, id");
+    let sql =
+        format!("SELECT {TASK_COLUMNS} FROM task_flow_items ORDER BY position, created_at, id");
     let mut statement = transaction.prepare(&sql)?;
     let rows = statement.query_map([], map_task)?;
     rows.collect()
@@ -211,7 +209,10 @@ mod tests {
         .expect("reorder tasks");
 
         assert_eq!(
-            reordered.iter().map(|task| task.id.as_str()).collect::<Vec<_>>(),
+            reordered
+                .iter()
+                .map(|task| task.id.as_str())
+                .collect::<Vec<_>>(),
             vec!["task-b", "task-a"]
         );
         assert!(reordered[1].completed);
