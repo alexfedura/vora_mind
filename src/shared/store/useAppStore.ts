@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 import { setSetting } from "@/shared/store/useSettingsStore";
 import { VoraCard } from "@/mind/types";
 import { createTextChangeSet, dbService } from "@/mind/services/dbService";
-import type { JournalEntry, TaskFlowItem } from "@/types";
+import type { JournalEntry, QuestionItem, TaskFlowItem } from "@/types";
 import {
   CanonicalSymbolRecord,
   LineageHistoryEntry,
@@ -30,6 +30,16 @@ export interface ExecutedTaskRecord {
 
 const journalSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const journalSaveQueues = new Map<string, Promise<void>>();
+const questionSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const questionSaveQueues = new Map<string, Promise<void>>();
+
+function sortQuestions(questions: QuestionItem[]): QuestionItem[] {
+  return [...questions].sort((left, right) =>
+    right.updatedAt - left.updatedAt ||
+    right.createdAt - left.createdAt ||
+    left.id.localeCompare(right.id)
+  );
+}
 
 interface AppState {
   // --- Mind & Canvas Existing State ---
@@ -79,6 +89,15 @@ interface AppState {
   loadJournalEntries: (startDate: string, endDate: string) => Promise<void>;
   updateJournalEntryContent: (date: string, content: string) => void;
   flushJournalEntry: (date: string) => Promise<void>;
+
+  questions: QuestionItem[];
+  questionSaveStatus: Record<string, "saving" | "saved" | "error">;
+  questionSaveError: string | null;
+  loadQuestions: () => Promise<void>;
+  createQuestion: (title: string, description: string) => Promise<QuestionItem>;
+  updateQuestion: (id: string, title: string, description: string) => void;
+  flushQuestion: (id: string) => Promise<void>;
+  deleteQuestion: (id: string) => Promise<void>;
 
   fetchCanonicalEntities: () => Promise<void>;
   selectCanonicalEntity: (entity: CanonicalSymbolRecord | null) => Promise<void>;
@@ -354,6 +373,123 @@ export const useAppStore = create<AppState>()(
         });
         journalSaveQueues.set(date, save.catch(() => undefined));
         await save;
+      },
+
+      questions: [],
+      questionSaveStatus: {},
+      questionSaveError: null,
+      loadQuestions: async () => {
+        const questions = await dbService.getQuestions();
+        set((state) => {
+          const loadedQuestions = new Map(questions.map((question) => [question.id, question]));
+          for (const question of state.questions) {
+            const saveStatus = state.questionSaveStatus[question.id];
+            const loadedQuestion = loadedQuestions.get(question.id);
+            if (
+              saveStatus === "saving" ||
+              saveStatus === "error" ||
+              (loadedQuestion && question.updatedAt > loadedQuestion.updatedAt)
+            ) {
+              loadedQuestions.set(question.id, question);
+            }
+          }
+          return { questions: sortQuestions([...loadedQuestions.values()]) };
+        });
+      },
+      createQuestion: async (title, description) => {
+        const question = await dbService.createQuestion(title, description);
+        set((state) => ({
+          questions: sortQuestions([
+            ...state.questions.filter((item) => item.id !== question.id),
+            question,
+          ]),
+          questionSaveError: null,
+        }));
+        return question;
+      },
+      updateQuestion: (id, title, description) => {
+        const currentQuestion = get().questions.find((question) => question.id === id);
+        if (!currentQuestion) return;
+
+        set((state) => ({
+          questions: sortQuestions(state.questions.map((question) =>
+            question.id === id
+              ? { ...question, title, description, updatedAt: Date.now() }
+              : question
+          )),
+          questionSaveStatus: { ...state.questionSaveStatus, [id]: "saving" },
+          questionSaveError: null,
+        }));
+        const previousTimer = questionSaveTimers.get(id);
+        if (previousTimer) clearTimeout(previousTimer);
+        questionSaveTimers.set(id, setTimeout(() => {
+          questionSaveTimers.delete(id);
+          void get().flushQuestion(id).catch(() => undefined);
+        }, 500));
+      },
+      flushQuestion: async (id) => {
+        const timer = questionSaveTimers.get(id);
+        if (timer) {
+          clearTimeout(timer);
+          questionSaveTimers.delete(id);
+        }
+
+        const previousSave = questionSaveQueues.get(id) ?? Promise.resolve();
+        const save = previousSave.catch(() => undefined).then(async () => {
+          const question = get().questions.find((item) => item.id === id);
+          if (!question) return;
+
+          set({ questionSaveStatus: { ...get().questionSaveStatus, [id]: "saving" } });
+          try {
+            const saved = await dbService.saveQuestion(
+              id,
+              question.title,
+              question.description,
+            );
+            set((state) => {
+              const latestQuestion = state.questions.find((item) => item.id === id);
+              const isCurrent = latestQuestion?.title === question.title &&
+                latestQuestion.description === question.description;
+              return {
+                questions: isCurrent
+                  ? sortQuestions(state.questions.map((item) => item.id === id ? saved : item))
+                  : state.questions,
+                questionSaveStatus: {
+                  ...state.questionSaveStatus,
+                  [id]: isCurrent ? "saved" : "saving",
+                },
+                questionSaveError: null,
+              };
+            });
+          } catch (error) {
+            console.error("Failed to save question:", error);
+            set({
+              questionSaveStatus: { ...get().questionSaveStatus, [id]: "error" },
+              questionSaveError: error instanceof Error ? error.message : String(error),
+            });
+            throw error;
+          }
+        });
+        questionSaveQueues.set(id, save.catch(() => undefined));
+        await save;
+      },
+      deleteQuestion: async (id) => {
+        const timer = questionSaveTimers.get(id);
+        if (timer) {
+          clearTimeout(timer);
+          questionSaveTimers.delete(id);
+        }
+        await get().flushQuestion(id);
+        await dbService.deleteQuestion(id);
+        set((state) => {
+          const questionSaveStatus = { ...state.questionSaveStatus };
+          delete questionSaveStatus[id];
+          return {
+            questions: state.questions.filter((question) => question.id !== id),
+            questionSaveStatus,
+            questionSaveError: null,
+          };
+        });
       },
 
       setIsIndexingWorkspace: (isIndexingWorkspace) => set({ isIndexingWorkspace }),
