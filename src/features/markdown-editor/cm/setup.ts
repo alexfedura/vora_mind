@@ -99,7 +99,7 @@ export function createEditorExtensions(
       codeLanguages: languages,
       addKeymap: true,
     }),
-    EditorState.tabSize.of(2),
+    EditorState.tabSize.of(4),
     indentUnit.of('    '),
     EditorView.contentAttributes.of({
       autocapitalize: 'sentences',
