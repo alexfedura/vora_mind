@@ -2744,6 +2744,10 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
   useEffect(() => {
     const visibleDrawings = drawingsHidden ? [] : drawings.filter((drawing) => drawing && isDrawingVisible(drawing));
     rectOverlayRef.current?.setDrawings(visibleDrawings.filter((drawing): drawing is DrawingRect => drawing.type === "rectangle"));
+    gradedRectOverlayRef.current?.setData(
+      visibleDrawings.filter((drawing): drawing is GradedRectangle => drawing.type === "graded-rectangle"),
+      candlesRef.current,
+    );
     lineOverlayRef.current?.setDrawings(visibleDrawings);
     // v7.4.4 — mid-price hint for vline handle Y (middle of visible range).
     try {
@@ -2760,6 +2764,10 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
 
   useEffect(() => {
     lineOverlayRef.current?.setCandles(candles.map(({ ts, open, high, low, close, volume }) => ({ ts, open, high, low, close, volume })));
+    gradedRectOverlayRef.current?.setData(
+      drawingsRef.current.filter((drawing): drawing is GradedRectangle => drawing.type === "graded-rectangle"),
+      candles,
+    );
   }, [candles, chartReady]);
 
   // v7.1.1 — push live preview + snap marker into the rect overlay.
