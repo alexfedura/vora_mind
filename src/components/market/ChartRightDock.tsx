@@ -14,6 +14,7 @@ import {
   MoveVertical,
   Ruler,
   Smile,
+  SquareStack,
   TrendingUp,
   X,
   type LucideIcon,
@@ -65,6 +66,7 @@ const PANEL_TITLES: Record<ChartRightPanelId, string> = {
 function drawingName(drawing: DrawingAny): string {
   switch (drawing.type) {
     case "rectangle": return "Rectangle";
+    case "graded-rectangle": return "Graded Rectangle";
     case "vline": return "Vertical line";
     case "hline": return "Horizontal line";
     case "hray": return "Horizontal ray";
@@ -86,6 +88,7 @@ function drawingName(drawing: DrawingAny): string {
 function drawingIcon(drawing: DrawingAny): LucideIcon | null {
   switch (drawing.type) {
     case "rectangle": return null;
+    case "graded-rectangle": return SquareStack;
     case "vline": return MoveVertical;
     case "hline":
     case "hray": return MoveHorizontal;

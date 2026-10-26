@@ -31,6 +31,24 @@ function cloneDrawing(drawing: DrawingAny): DrawingAny {
       const priceOffset = Math.max(0.0001, Math.abs(drawing.price_high - drawing.price_low) * 0.08);
       return { ...drawing, id, ts_start: drawing.ts_start + timeOffset, ts_end: drawing.ts_end + timeOffset, price_low: drawing.price_low + priceOffset, price_high: drawing.price_high + priceOffset, hidden: false, selected: true };
     }
+    case "graded-rectangle": {
+      const timeOffset = Math.max(60, Math.abs(drawing.endTime - drawing.startTime) * 0.08);
+      const priceOffset = Math.max(0.0001, Math.abs(drawing.topPrice - drawing.bottomPrice) * 0.08);
+      return {
+        ...drawing,
+        id,
+        anchorTime: drawing.anchorTime + timeOffset,
+        startTime: drawing.startTime + timeOffset,
+        endTime: drawing.endTime + timeOffset,
+        anchorPrice: drawing.anchorPrice + priceOffset,
+        topPrice: drawing.topPrice + priceOffset,
+        bottomPrice: drawing.bottomPrice + priceOffset,
+        ...(drawing.correctionStartPrice === undefined ? {} : { correctionStartPrice: drawing.correctionStartPrice + priceOffset }),
+        ...(drawing.correctionStartTime === undefined ? {} : { correctionStartTime: drawing.correctionStartTime + timeOffset }),
+        hidden: false,
+        selected: true,
+      };
+    }
     case "vline": return { ...drawing, id, ts: drawing.ts + 60, hidden: false, selected: true };
     case "hline": return { ...drawing, id, price: drawing.price + Math.max(0.0001, Math.abs(drawing.price) * 0.001), hidden: false, selected: true };
     case "hray": return { ...drawing, id, ts: drawing.ts + 60, price: drawing.price + Math.max(0.0001, Math.abs(drawing.price) * 0.001), hidden: false, selected: true };

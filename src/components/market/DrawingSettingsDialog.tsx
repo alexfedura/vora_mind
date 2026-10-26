@@ -63,6 +63,7 @@ function coordinatesOf(drawing: DrawingAny): Coordinates {
     case "fib-gann": return { ts1: drawing.ts1, ts2: drawing.ts2, ts3: drawing.ts3, price1: drawing.price1, price2: drawing.price2, price3: drawing.price3 };
     case "icon": return { ts: drawing.ts, price: drawing.price };
     case "geometry": return { points: drawing.points.map((point) => ({ ...point })) };
+    case "graded-rectangle": return {};
   }
 }
 
@@ -114,6 +115,7 @@ function applyCoordinates(drawing: DrawingAny, coordinates: Coordinates): Drawin
     case "fib-gann": return { ...drawing, ts1: coordinates.ts1 ?? drawing.ts1, ts2: coordinates.ts2 ?? drawing.ts2, ts3: coordinates.ts3 ?? drawing.ts3, price1: coordinates.price1 ?? drawing.price1, price2: coordinates.price2 ?? drawing.price2, price3: coordinates.price3 ?? drawing.price3 };
     case "icon": return { ...drawing, ts: coordinates.ts ?? drawing.ts, price: coordinates.price ?? drawing.price };
     case "geometry": return { ...drawing, points: coordinates.points ?? drawing.points };
+    case "graded-rectangle": return drawing;
   }
 }
 
@@ -122,6 +124,7 @@ function drawingTitle(drawing: DrawingAny): string {
   if (drawing.type === "fib-gann") return FIB_GANN_TOOL_LABELS[drawing.tool];
   if (drawing.type === "icon") return drawing.symbol;
   if (drawing.type === "geometry") return GEOMETRY_TOOL_LABELS[drawing.tool];
+  if (drawing.type === "graded-rectangle") return "Graded Rectangle";
   return ({ rectangle: "Rectangle", vline: "Vertical line", hline: "Horizontal line", hray: "Horizontal ray", trendline: "Trend line", ray: "Ray", "info-line": "Info line", "extended-line": "Extended line", "trend-angle": "Trend angle", crossline: "Crossline", "parallel-channel": "Parallel channel", pitchfork: "Pitchfork", "regression-trend": "Regression trend" }[drawing.type]);
 }
 
@@ -169,7 +172,8 @@ export function DrawingSettingsDialog({ drawing, onClose, onApply, templates, po
     document.addEventListener("keydown", closeOnEscape);
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [isPathDrawing, onClose, saveTemplateOpen, templateMenuOpen]);
-  const coordinateFields: { key: CoordinateKey; label: string }[] = drawing.type === "rectangle"
+  const coordinateFields: { key: CoordinateKey; label: string }[] = drawing.type === "graded-rectangle" ? []
+    : drawing.type === "rectangle"
     ? [{ key: "ts_start", label: "Time start" }, { key: "ts_end", label: "Time end" }, { key: "price_high", label: "Price high" }, { key: "price_low", label: "Price low" }]
     : drawing.type === "vline" ? [{ key: "ts", label: "Time" }]
       : drawing.type === "hline" ? [{ key: "price", label: "Price" }]
