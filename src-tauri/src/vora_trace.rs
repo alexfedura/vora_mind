@@ -109,8 +109,13 @@ fn copy_file_if_missing(source: &Path, destination: &Path) -> Result<(), String>
         std::fs::create_dir_all(parent)
             .map_err(|error| format!("create {}: {error}", parent.display()))?;
     }
-    std::fs::copy(source, destination)
-        .map_err(|error| format!("copy {} to {}: {error}", source.display(), destination.display()))?;
+    std::fs::copy(source, destination).map_err(|error| {
+        format!(
+            "copy {} to {}: {error}",
+            source.display(),
+            destination.display()
+        )
+    })?;
     Ok(())
 }
 
@@ -120,8 +125,8 @@ fn copy_directory_if_missing(source: &Path, destination: &Path) -> Result<(), St
     }
     std::fs::create_dir_all(destination)
         .map_err(|error| format!("create {}: {error}", destination.display()))?;
-    let entries = std::fs::read_dir(source)
-        .map_err(|error| format!("read {}: {error}", source.display()))?;
+    let entries =
+        std::fs::read_dir(source).map_err(|error| format!("read {}: {error}", source.display()))?;
     for entry in entries {
         let entry = entry.map_err(|error| format!("read {}: {error}", source.display()))?;
         let source_path = entry.path();
@@ -234,18 +239,29 @@ fn parse_decision_md(content: &str) -> Option<TraceNodeData> {
             title = line.trim_start_matches("# ").trim().to_string();
         } else if line.starts_with("## ") {
             // flush previous
-            flush_section(&current_section, &buffer, &mut why_am_i_here,
-                &mut objective, &mut reason, &mut evidence);
-            current_section = line.trim_start_matches("## ")
-                .trim().to_lowercase();
+            flush_section(
+                &current_section,
+                &buffer,
+                &mut why_am_i_here,
+                &mut objective,
+                &mut reason,
+                &mut evidence,
+            );
+            current_section = line.trim_start_matches("## ").trim().to_lowercase();
             buffer.clear();
         } else {
             buffer.push_str(line);
             buffer.push('\n');
         }
     }
-    flush_section(&current_section, &buffer, &mut why_am_i_here,
-        &mut objective, &mut reason, &mut evidence);
+    flush_section(
+        &current_section,
+        &buffer,
+        &mut why_am_i_here,
+        &mut objective,
+        &mut reason,
+        &mut evidence,
+    );
 
     if id.is_empty() {
         return None;
@@ -254,7 +270,11 @@ fn parse_decision_md(content: &str) -> Option<TraceNodeData> {
     Some(TraceNodeData {
         id,
         kind,
-        title: if title.is_empty() { "Untitled".into() } else { title },
+        title: if title.is_empty() {
+            "Untitled".into()
+        } else {
+            title
+        },
         status,
         why_am_i_here,
         objective,
@@ -282,12 +302,15 @@ fn flush_section(
         return;
     }
     match section {
-        "why am i here?" | "why am i here" =>
-            { *why = Some(trimmed.to_string()); }
-        "objective" =>
-            { *obj = Some(trimmed.to_string()); }
-        "reason" =>
-            { *reason = Some(trimmed.to_string()); }
+        "why am i here?" | "why am i here" => {
+            *why = Some(trimmed.to_string());
+        }
+        "objective" => {
+            *obj = Some(trimmed.to_string());
+        }
+        "reason" => {
+            *reason = Some(trimmed.to_string());
+        }
         "evidence" => {
             for line in trimmed.lines() {
                 let l = line.trim().trim_start_matches('-').trim();
@@ -304,40 +327,35 @@ fn flush_section(
 pub fn trace_load_graph(app: AppHandle) -> Result<TraceGraph, String> {
     let root = trace_root(&app)?;
     let path = root.join("graph.json");
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("read {}: {}", path.display(), e))?;
-    let graph: TraceGraph = serde_json::from_str(&content)
-        .map_err(|e| format!("parse graph.json: {}", e))?;
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("read {}: {}", path.display(), e))?;
+    let graph: TraceGraph =
+        serde_json::from_str(&content).map_err(|e| format!("parse graph.json: {}", e))?;
     Ok(graph)
 }
 
 #[tauri::command]
 pub fn trace_save_graph(app: AppHandle, graph: TraceGraph) -> Result<(), String> {
     let root = trace_root(&app)?;
-    std::fs::create_dir_all(&root)
-        .map_err(|e| format!("mkdir {}: {}", root.display(), e))?;
+    std::fs::create_dir_all(&root).map_err(|e| format!("mkdir {}: {}", root.display(), e))?;
     let path = root.join("graph.json");
-    let json = serde_json::to_string_pretty(&graph)
-        .map_err(|e| format!("serialize: {}", e))?;
-    std::fs::write(&path, json)
-        .map_err(|e| format!("write {}: {}", path.display(), e))?;
+    let json = serde_json::to_string_pretty(&graph).map_err(|e| format!("serialize: {}", e))?;
+    std::fs::write(&path, json).map_err(|e| format!("write {}: {}", path.display(), e))?;
     Ok(())
 }
 
 #[tauri::command]
 pub fn trace_save_decision_md(app: AppHandle, node: TraceNodeData) -> Result<String, String> {
     if node.id.is_empty()
-        || !node
-            .id
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '-' || character == '_')
+        || !node.id.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '-' || character == '_'
+        })
     {
         return Err("Decision ID contains unsupported characters".to_string());
     }
     let root = trace_root(&app)?;
     let dir = root.join("decisions");
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("mkdir {}: {}", dir.display(), e))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("mkdir {}: {}", dir.display(), e))?;
     let path = dir.join(format!("{}.md", node.id));
 
     let mut md = String::new();
@@ -386,8 +404,7 @@ pub fn trace_save_decision_md(app: AppHandle, node: TraceNodeData) -> Result<Str
         }
     }
 
-    std::fs::write(&path, md)
-        .map_err(|e| format!("write {}: {}", path.display(), e))?;
+    std::fs::write(&path, md).map_err(|e| format!("write {}: {}", path.display(), e))?;
     Ok(path.to_string_lossy().to_string())
 }
 
@@ -399,8 +416,8 @@ pub fn trace_list_decisions(app: AppHandle) -> Result<Vec<String>, String> {
         return Ok(Vec::new());
     }
     let mut out = Vec::new();
-    let entries = std::fs::read_dir(&dir)
-        .map_err(|e| format!("read_dir {}: {}", dir.display(), e))?;
+    let entries =
+        std::fs::read_dir(&dir).map_err(|e| format!("read_dir {}: {}", dir.display(), e))?;
     for entry in entries {
         let entry = entry.map_err(|error| format!("read {}: {error}", dir.display()))?;
         let p = entry.path();
@@ -420,8 +437,8 @@ pub fn trace_scan_ecosystem(app: AppHandle) -> Result<Vec<ProjectInfo>, String> 
     let content = std::fs::read_to_string(&trace_yaml)
         .map_err(|e| format!("read {}: {}", trace_yaml.display(), e))?;
 
-    let reg: RegistryYaml = serde_yaml::from_str(&content)
-        .map_err(|e| format!("parse trace.yaml: {}", e))?;
+    let reg: RegistryYaml =
+        serde_yaml::from_str(&content).map_err(|e| format!("parse trace.yaml: {}", e))?;
 
     let mut out = Vec::new();
     for p in &reg.projects {
@@ -431,8 +448,7 @@ pub fn trace_scan_ecosystem(app: AppHandle) -> Result<Vec<ProjectInfo>, String> 
         let (branch, head, dirty) = if exists && path.join(".git").exists() {
             let b = run_git(&path, &["rev-parse", "--abbrev-ref", "HEAD"]);
             let h = run_git(&path, &["rev-parse", "--short", "HEAD"]);
-            let d = run_git(&path, &["status", "--porcelain"])
-                .map(|s| !s.is_empty());
+            let d = run_git(&path, &["status", "--porcelain"]).map(|s| !s.is_empty());
             (b, h, d)
         } else {
             (None, None, None)
@@ -454,19 +470,17 @@ pub fn trace_scan_ecosystem(app: AppHandle) -> Result<Vec<ProjectInfo>, String> 
 }
 
 #[tauri::command]
-pub fn trace_git_log_for_project(project_path: String, limit: usize)
-    -> Result<Vec<GitLogEntry>, String>
-{
+pub fn trace_git_log_for_project(
+    project_path: String,
+    limit: usize,
+) -> Result<Vec<GitLogEntry>, String> {
     let path = std::path::PathBuf::from(&project_path);
     if !path.exists() {
         return Ok(Vec::new());
     }
     let n = format!("-{}", limit.max(1).min(100));
     let out = std::process::Command::new("git")
-        .args([
-            "log", &n,
-            "--pretty=format:%H|%h|%aI|%s",
-        ])
+        .args(["log", &n, "--pretty=format:%H|%h|%aI|%s"])
         .current_dir(&path)
         .output()
         .map_err(|e| format!("git exec: {}", e))?;
@@ -497,8 +511,8 @@ pub fn trace_read_all_decisions(app: AppHandle) -> Result<Vec<TraceNodeData>, St
         return Ok(Vec::new());
     }
     let mut out = Vec::new();
-    let entries = std::fs::read_dir(&dir)
-        .map_err(|e| format!("read_dir {}: {}", dir.display(), e))?;
+    let entries =
+        std::fs::read_dir(&dir).map_err(|e| format!("read_dir {}: {}", dir.display(), e))?;
     for entry in entries {
         let entry = entry.map_err(|error| format!("read {}: {error}", dir.display()))?;
         let p = entry.path();
@@ -527,7 +541,13 @@ pub fn trace_find_commits_for_file(
     }
     let n = format!("-{}", limit.max(1).min(50));
     let out = std::process::Command::new("git")
-        .args(["log", &n, "--pretty=format:%H|%h|%aI|%s", "--", &file_pattern])
+        .args([
+            "log",
+            &n,
+            "--pretty=format:%H|%h|%aI|%s",
+            "--",
+            &file_pattern,
+        ])
         .current_dir(&path)
         .output()
         .map_err(|e| format!("git exec: {}", e))?;
@@ -554,19 +574,17 @@ pub fn trace_find_commits_for_file(
 pub fn trace_export_graph_json(app: AppHandle, dest_path: String) -> Result<String, String> {
     let root = trace_root(&app)?;
     let src = root.join("graph.json");
-    let content = std::fs::read_to_string(&src)
-        .map_err(|e| format!("read {}: {}", src.display(), e))?;
-    std::fs::write(&dest_path, &content)
-        .map_err(|e| format!("write {}: {}", dest_path, e))?;
+    let content =
+        std::fs::read_to_string(&src).map_err(|e| format!("read {}: {}", src.display(), e))?;
+    std::fs::write(&dest_path, &content).map_err(|e| format!("write {}: {}", dest_path, e))?;
     Ok(dest_path)
 }
 
 #[tauri::command]
 pub fn trace_import_graph_json(src_path: String) -> Result<TraceGraph, String> {
-    let content = std::fs::read_to_string(&src_path)
-        .map_err(|e| format!("read {}: {}", src_path, e))?;
-    let graph: TraceGraph = serde_json::from_str(&content)
-        .map_err(|e| format!("parse: {}", e))?;
+    let content =
+        std::fs::read_to_string(&src_path).map_err(|e| format!("read {}: {}", src_path, e))?;
+    let graph: TraceGraph = serde_json::from_str(&content).map_err(|e| format!("parse: {}", e))?;
     Ok(graph)
 }
 
@@ -594,10 +612,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn temp_root(label: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "vora-trace-{label}-{}",
-            uuid::Uuid::now_v7()
-        ))
+        std::env::temp_dir().join(format!("vora-trace-{label}-{}", uuid::Uuid::now_v7()))
     }
 
     #[test]
@@ -614,12 +629,13 @@ mod tests {
             .expect("create legacy decision directory");
         fs::create_dir_all(source_root.join(".vora").join("trace"))
             .expect("create legacy graph directory");
-        fs::write(source_root.join("trace.yaml"), "schemaVersion: '1.0'\nprojects: []\n")
-            .expect("write legacy registry");
-        fs::write(&source_graph, "{\"project\":\"legacy\"}")
-            .expect("write legacy graph");
-        fs::write(&source_decision, "# Legacy decision\n")
-            .expect("write legacy decision");
+        fs::write(
+            source_root.join("trace.yaml"),
+            "schemaVersion: '1.0'\nprojects: []\n",
+        )
+        .expect("write legacy registry");
+        fs::write(&source_graph, "{\"project\":\"legacy\"}").expect("write legacy graph");
+        fs::write(&source_decision, "# Legacy decision\n").expect("write legacy decision");
 
         migrate_legacy_data(&source_root, &app_data_root).expect("migrate legacy data");
         let destination_root = app_data_root.join("VoraTrace");
@@ -628,8 +644,13 @@ mod tests {
             b"schemaVersion: '1.0'\nprojects: []\n"
         );
         assert_eq!(
-            fs::read(destination_root.join(".vora").join("trace").join("graph.json"))
-                .expect("read migrated graph"),
+            fs::read(
+                destination_root
+                    .join(".vora")
+                    .join("trace")
+                    .join("graph.json")
+            )
+            .expect("read migrated graph"),
             b"{\"project\":\"legacy\"}"
         );
         assert_eq!(
@@ -653,8 +674,13 @@ mod tests {
             b"{\"project\":\"updated-source\"}"
         );
         assert_eq!(
-            fs::read(destination_root.join(".vora").join("trace").join("graph.json"))
-                .expect("read unchanged migrated graph"),
+            fs::read(
+                destination_root
+                    .join(".vora")
+                    .join("trace")
+                    .join("graph.json")
+            )
+            .expect("read unchanged migrated graph"),
             b"{\"project\":\"legacy\"}"
         );
 
