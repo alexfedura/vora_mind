@@ -99,7 +99,7 @@ pub struct GitLogEntry {
     pub message: String,
 }
 
-const LEGACY_TRACE_PROJECT_ROOT: &str = r"D:\workspace\v​​ora_trace";
+const LEGACY_TRACE_PROJECT_ROOT: &str = r"D:\workspace\vora_trace";
 
 fn copy_file_if_missing(source: &Path, destination: &Path) -> Result<(), String> {
     if !source.is_file() || destination.exists() {
@@ -301,7 +301,7 @@ fn flush_section(
 }
 
 #[tauri::command]
-pub fn load_graph(app: AppHandle) -> Result<TraceGraph, String> {
+pub fn trace_load_graph(app: AppHandle) -> Result<TraceGraph, String> {
     let root = trace_root(&app)?;
     let path = root.join("graph.json");
     let content = std::fs::read_to_string(&path)
@@ -312,7 +312,7 @@ pub fn load_graph(app: AppHandle) -> Result<TraceGraph, String> {
 }
 
 #[tauri::command]
-pub fn save_graph(app: AppHandle, graph: TraceGraph) -> Result<(), String> {
+pub fn trace_save_graph(app: AppHandle, graph: TraceGraph) -> Result<(), String> {
     let root = trace_root(&app)?;
     std::fs::create_dir_all(&root)
         .map_err(|e| format!("mkdir {}: {}", root.display(), e))?;
@@ -325,7 +325,7 @@ pub fn save_graph(app: AppHandle, graph: TraceGraph) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn save_decision_md(app: AppHandle, node: TraceNodeData) -> Result<String, String> {
+pub fn trace_save_decision_md(app: AppHandle, node: TraceNodeData) -> Result<String, String> {
     let root = trace_root(&app)?;
     let dir = root.join("decisions");
     std::fs::create_dir_all(&dir)
@@ -384,7 +384,7 @@ pub fn save_decision_md(app: AppHandle, node: TraceNodeData) -> Result<String, S
 }
 
 #[tauri::command]
-pub fn list_decisions(app: AppHandle) -> Result<Vec<String>, String> {
+pub fn trace_list_decisions(app: AppHandle) -> Result<Vec<String>, String> {
     let root = trace_root(&app)?;
     let dir = root.join("decisions");
     if !dir.exists() {
@@ -406,7 +406,7 @@ pub fn list_decisions(app: AppHandle) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-pub fn scan_ecosystem(app: AppHandle) -> Result<Vec<ProjectInfo>, String> {
+pub fn trace_scan_ecosystem(app: AppHandle) -> Result<Vec<ProjectInfo>, String> {
     let trace_yaml = trace_registry_path(&app)?;
     let content = std::fs::read_to_string(&trace_yaml)
         .map_err(|e| format!("read {}: {}", trace_yaml.display(), e))?;
@@ -445,7 +445,7 @@ pub fn scan_ecosystem(app: AppHandle) -> Result<Vec<ProjectInfo>, String> {
 }
 
 #[tauri::command]
-pub fn git_log_for_project(project_path: String, limit: usize)
+pub fn trace_git_log_for_project(project_path: String, limit: usize)
     -> Result<Vec<GitLogEntry>, String>
 {
     let path = std::path::PathBuf::from(&project_path);
@@ -481,7 +481,7 @@ pub fn git_log_for_project(project_path: String, limit: usize)
 }
 
 #[tauri::command]
-pub fn read_all_decisions(app: AppHandle) -> Result<Vec<TraceNodeData>, String> {
+pub fn trace_read_all_decisions(app: AppHandle) -> Result<Vec<TraceNodeData>, String> {
     let root = trace_root(&app)?;
     let dir = root.join("decisions");
     if !dir.exists() {
@@ -505,7 +505,7 @@ pub fn read_all_decisions(app: AppHandle) -> Result<Vec<TraceNodeData>, String> 
 }
 
 #[tauri::command]
-pub fn find_commits_for_file(
+pub fn trace_find_commits_for_file(
     project_path: String,
     file_pattern: String,
     limit: usize,
@@ -540,7 +540,7 @@ pub fn find_commits_for_file(
 }
 
 #[tauri::command]
-pub fn export_graph_json(app: AppHandle, dest_path: String) -> Result<String, String> {
+pub fn trace_export_graph_json(app: AppHandle, dest_path: String) -> Result<String, String> {
     let root = trace_root(&app)?;
     let src = root.join("graph.json");
     let content = std::fs::read_to_string(&src)
@@ -551,7 +551,7 @@ pub fn export_graph_json(app: AppHandle, dest_path: String) -> Result<String, St
 }
 
 #[tauri::command]
-pub fn import_graph_json(src_path: String) -> Result<TraceGraph, String> {
+pub fn trace_import_graph_json(src_path: String) -> Result<TraceGraph, String> {
     let content = std::fs::read_to_string(&src_path)
         .map_err(|e| format!("read {}: {}", src_path, e))?;
     let graph: TraceGraph = serde_json::from_str(&content)
@@ -560,13 +560,13 @@ pub fn import_graph_json(src_path: String) -> Result<TraceGraph, String> {
 }
 
 #[tauri::command]
-pub fn app_version() -> String {
+pub fn trace_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
 #[tauri::command]
-pub fn recent_decisions(app: AppHandle, limit: usize) -> Result<Vec<TraceNodeData>, String> {
-    let mut all = read_all_decisions(app)?;
+pub fn trace_recent_decisions(app: AppHandle, limit: usize) -> Result<Vec<TraceNodeData>, String> {
+    let mut all = trace_read_all_decisions(app)?;
     all.sort_by(|a, b| {
         let a_t = a.created_at.as_deref().unwrap_or("");
         let b_t = b.created_at.as_deref().unwrap_or("");
@@ -575,4 +575,3 @@ pub fn recent_decisions(app: AppHandle, limit: usize) -> Result<Vec<TraceNodeDat
     all.truncate(limit.max(1).min(50));
     Ok(all)
 }
-
