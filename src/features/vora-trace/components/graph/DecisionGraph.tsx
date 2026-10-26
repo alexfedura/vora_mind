@@ -5,7 +5,6 @@ import {
 } from "@xyflow/react";
 import { useEffect, useMemo, useCallback } from "react";
 import { useTraceStore } from "../../store/traceStore";
-import type { TraceNodeKind, TraceNodeStatus } from "@/types";
 import { StateNode } from "./StateNode";
 import { DecisionNode } from "./DecisionNode";
 import { ExperimentNode } from "./ExperimentNode";
@@ -30,8 +29,8 @@ export function DecisionGraph() {
     () => {
       const search = filters.search.toLowerCase();
       const visibleNodes = graph.nodes.filter((n) => {
-        if (filters.kinds.length > 0 && !filters.kinds.includes(n.kind as TraceNodeKind)) return false;
-        if (filters.statuses.length > 0 && !filters.statuses.includes(n.status as TraceNodeStatus)) return false;
+        if (filters.kinds.length > 0 && !filters.kinds.includes(n.kind)) return false;
+        if (filters.statuses.length > 0 && !filters.statuses.includes(n.status)) return false;
         if (search) {
           const hay = `${n.title} ${n.reason ?? ""} ${n.whyAmIHere ?? ""}`.toLowerCase();
           if (!hay.includes(search)) return false;

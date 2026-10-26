@@ -66,7 +66,10 @@ export function DecisionEditor() {
           <Field label="Kind">
             <select
               value={draft.kind}
-              onChange={(e) => setDraft({ ...draft, kind: e.target.value as TraceNodeKind })}
+              onChange={(e) => {
+                const kind = KINDS.find((value) => value === e.target.value);
+                if (kind) setDraft({ ...draft, kind });
+              }}
               className="w-full rounded-md border border-trace-border
                          bg-trace-bg px-3 py-2 text-sm text-trace-text">
               {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
@@ -75,7 +78,10 @@ export function DecisionEditor() {
           <Field label="Status">
             <select
               value={draft.status}
-              onChange={(e) => setDraft({ ...draft, status: e.target.value as TraceNodeStatus })}
+              onChange={(e) => {
+                const status = STATUSES.find((value) => value === e.target.value);
+                if (status) setDraft({ ...draft, status });
+              }}
               className="w-full rounded-md border border-trace-border
                          bg-trace-bg px-3 py-2 text-sm text-trace-text">
               {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}

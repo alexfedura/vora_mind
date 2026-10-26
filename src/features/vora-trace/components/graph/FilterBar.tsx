@@ -57,7 +57,7 @@ export function FilterBar() {
           const active =
             c.value === "all"
               ? filters.kinds.length === 0
-              : filters.kinds.includes(c.value as TraceNodeKind);
+              : filters.kinds.includes(c.value)}
           return (
             <button
               key={c.value}

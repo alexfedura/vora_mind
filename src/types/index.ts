@@ -13,6 +13,7 @@ export interface TaskFlowItem {
 
 export type TraceNodeKind = "state" | "decision" | "experiment" | "rejected";
 export type TraceNodeStatus = "accepted" | "rejected" | "pending" | "current" | "abandoned";
+export type TraceEdgeKind = "main" | "branch" | "rejected";
 
 export interface TraceAlternative {
   title: string;
@@ -41,7 +42,7 @@ export interface TraceEdgeData {
   id: string;
   source: string;
   target: string;
-  kind: "main" | "branch" | "rejected";
+  kind: TraceEdgeKind;
   label?: string;
 }
 
