@@ -17,11 +17,9 @@ interface GradedDrag {
   drawingId: string;
   kind: "body" | "left" | "right";
   startX: number;
-  startY: number;
   original: GradedRectangle;
   startTime: number;
   endTime: number;
-  anchorTime: number;
   anchorPrice: number;
 }
 
@@ -224,11 +222,9 @@ export function registerGradedRectTool(context: GradedRectToolContext): () => vo
             drawingId: hitDrawing.id,
             kind: handle,
             startX: x,
-            startY: y,
             original: hitDrawing,
             startTime: hitDrawing.startTime,
             endTime: hitDrawing.endTime,
-            anchorTime: hitDrawing.anchorTime,
             anchorPrice: price,
           };
           setPan(false);
@@ -243,11 +239,9 @@ export function registerGradedRectTool(context: GradedRectToolContext): () => vo
             drawingId: hitDrawing.id,
             kind: "body",
             startX: x,
-            startY: y,
             original: hitDrawing,
             startTime: hitDrawing.startTime,
             endTime: hitDrawing.endTime,
-            anchorTime: hitDrawing.anchorTime,
             anchorPrice: price,
           };
           setPan(false);
@@ -298,6 +292,7 @@ export function registerGradedRectTool(context: GradedRectToolContext): () => vo
       topPrice,
       bottomPrice,
       baselineSide,
+      color: "#a855f7",
       selected: true,
       lineWidth: 2,
     };

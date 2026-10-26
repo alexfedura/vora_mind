@@ -769,9 +769,12 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
           d.type === "regression-trend" ||
           d.type === "icon" ||
           d.type === "geometry" ||
-          d.type === "fib-gann"
+          d.type === "fib-gann" ||
+          d.type === "graded-rectangle"
         ))
+        .filter((d) => d.type !== "graded-rectangle" || isGradedRectangle(d))
         .map((d) => {
+          if (d.type === "graded-rectangle") return { ...d, selected: false };
           if (d.type === "rectangle") {
             const r = d as DrawingRect;
             if (r.borderColor && r.fillColor !== undefined && r.fillOpacity !== undefined) return r;
@@ -839,9 +842,12 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
           d.type === "regression-trend" ||
           d.type === "icon" ||
           d.type === "geometry" ||
-          d.type === "fib-gann"
+          d.type === "fib-gann" ||
+          d.type === "graded-rectangle"
         ))
+        .filter((d) => d.type !== "graded-rectangle" || isGradedRectangle(d))
         .map((d) => {
+          if (d.type === "graded-rectangle") return { ...d, selected: false };
           if (d.type === "rectangle") {
             const r = d as DrawingRect;
             return (r.borderColor && r.fillColor !== undefined && r.fillOpacity !== undefined) ? r : migrateDrawingRect(r);
