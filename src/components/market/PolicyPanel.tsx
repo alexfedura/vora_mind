@@ -113,8 +113,6 @@ export function PolicyPanel({
   validationError,
   autoDetect,
   onAutoDetectChange,
-  defaultRouteSetting,
-  onDefaultRouteChange,
   drawings: _drawings,
 }: Props & {
   /** v7.2.0 Part A — master switch for the auto RBR/DBD detection pipeline. */
