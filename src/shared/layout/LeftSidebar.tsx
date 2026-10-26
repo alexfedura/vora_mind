@@ -9,6 +9,7 @@ import {
   CircleHelp,
   ListTodo,
   Sparkles,
+  GitBranch,
   Library as LibraryIcon,
   Tag,
   Highlighter,
@@ -24,12 +25,14 @@ interface LeftSidebarProps {
   isLibraryOpen: boolean;
   isTaskFlowOpen: boolean;
   isAiTasksOpen: boolean;
+  isVoraTraceOpen: boolean;
   isJournalOpen: boolean;
   isQuestionsBoardOpen: boolean;
   onAddNewCard: () => void;
   onOpenBoards: () => void;
   onOpenTaskFlow: () => void;
   onOpenAiTasks: () => void;
+  onOpenVoraTrace: () => void;
   onOpenJournal: () => void;
   onOpenQuestionsBoard: () => void;
   onToggleLibrary: () => void;
@@ -41,12 +44,14 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   isLibraryOpen,
   isTaskFlowOpen,
   isAiTasksOpen,
+  isVoraTraceOpen,
   isJournalOpen,
   isQuestionsBoardOpen,
   onAddNewCard,
   onOpenBoards,
   onOpenTaskFlow,
   onOpenAiTasks,
+  onOpenVoraTrace,
   onOpenJournal,
   onOpenQuestionsBoard,
   onToggleLibrary,
@@ -118,6 +123,19 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           >
             <Sparkles size={16} />
             <span>AI Tasks</span>
+          </button>
+          <button
+            type="button"
+            onClick={onOpenVoraTrace}
+            aria-current={isVoraTraceOpen ? "page" : undefined}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition ${
+              isVoraTraceOpen
+                ? "bg-[#1d212d] text-purple-400 font-semibold"
+                : "hover:bg-[#1b1e27] hover:text-gray-200"
+            }`}
+          >
+            <GitBranch size={16} />
+            <span>Vora Trace</span>
           </button>
           <button
             type="button"

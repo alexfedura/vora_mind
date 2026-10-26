@@ -66,6 +66,7 @@ import { PathToolIcon } from "./components/market/PathToolIcon";
 import { RectangleToolIcon } from "./components/market/RectangleToolIcon";
 import { LeftSidebar } from "./shared/layout/LeftSidebar";
 import { TaskFlowPage } from "./shared/layout/TaskFlowPage";
+import VoraTraceApp from "./features/vora-trace/App";
 import { JournalPage } from "./shared/layout/JournalPage";
 import { QuestionsBoardPage } from "./shared/layout/QuestionsBoardPage";
 import { BoardsPanel } from "./shared/layout/BoardsPanel";
@@ -360,9 +361,10 @@ function AppContent() {
   const [activeOpenPanel, setActiveOpenPanel] = useState<OpenPanel>("none");
   const [isTaskFlowOpen, setIsTaskFlowOpen] = useState(false);
   const [isAiTasksOpen, setIsAiTasksOpen] = useState(false);
+  const [isVoraTraceOpen, setIsVoraTraceOpen] = useState(false);
   const [isJournalOpen, setIsJournalOpen] = useState(false);
   const [isQuestionsBoardOpen, setIsQuestionsBoardOpen] = useState(false);
-  const isWorkspacePageOpen = isTaskFlowOpen || isAiTasksOpen || isJournalOpen || isQuestionsBoardOpen;
+  const isWorkspacePageOpen = isTaskFlowOpen || isAiTasksOpen || isVoraTraceOpen || isJournalOpen || isQuestionsBoardOpen;
   const [lastActivePanel, setLastActivePanel] = useState<"boards" | "sidebar">("boards");
   const [boards, setBoards] = useState<BoardItem[]>([]);
   const [boardsLoaded, setBoardsLoaded] = useState(false);
@@ -2154,6 +2156,7 @@ function AppContent() {
     if (next === "boards") {
       setIsTaskFlowOpen(false);
       setIsAiTasksOpen(false);
+      setIsVoraTraceOpen(false);
       setIsJournalOpen(false);
       setIsQuestionsBoardOpen(false);
     }
@@ -2167,6 +2170,7 @@ function AppContent() {
     if (next === "boards") {
       setIsTaskFlowOpen(false);
       setIsAiTasksOpen(false);
+      setIsVoraTraceOpen(false);
       setIsJournalOpen(false);
       setIsQuestionsBoardOpen(false);
     }
@@ -2384,6 +2388,7 @@ function AppContent() {
               isLibraryOpen={isRightDrawerOpen}
               isTaskFlowOpen={isTaskFlowOpen}
               isAiTasksOpen={isAiTasksOpen}
+              isVoraTraceOpen={isVoraTraceOpen}
               isJournalOpen={isJournalOpen}
               isQuestionsBoardOpen={isQuestionsBoardOpen}
               onAddNewCard={handleCreateCardInLibraryOnly}
@@ -2398,15 +2403,26 @@ function AppContent() {
               }}
               onOpenAiTasks={() => {
                 setIsTaskFlowOpen(false);
+                setIsVoraTraceOpen(false);
                 setIsJournalOpen(false);
                 setIsQuestionsBoardOpen(false);
                 setIsAiTasksOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
               }}
+              onOpenVoraTrace={() => {
+                setIsTaskFlowOpen(false);
+                setIsAiTasksOpen(false);
+                setIsJournalOpen(false);
+                setIsQuestionsBoardOpen(false);
+                setIsVoraTraceOpen(true);
+                setLastActivePanel("sidebar");
+                setActiveOpenPanel("sidebar");
+              }}
               onOpenJournal={() => {
                 setIsTaskFlowOpen(false);
                 setIsAiTasksOpen(false);
+                setIsVoraTraceOpen(false);
                 setIsQuestionsBoardOpen(false);
                 setIsJournalOpen(true);
                 setLastActivePanel("sidebar");
@@ -2415,6 +2431,7 @@ function AppContent() {
               onOpenQuestionsBoard={() => {
                 setIsTaskFlowOpen(false);
                 setIsAiTasksOpen(false);
+                setIsVoraTraceOpen(false);
                 setIsJournalOpen(false);
                 setIsQuestionsBoardOpen(true);
                 setLastActivePanel("sidebar");
@@ -2423,6 +2440,7 @@ function AppContent() {
               onOpenBoards={() => {
                 setIsTaskFlowOpen(false);
                 setIsAiTasksOpen(false);
+                setIsVoraTraceOpen(false);
                 setIsJournalOpen(false);
                 setIsQuestionsBoardOpen(false);
                 setLastActivePanel("boards");
@@ -2462,7 +2480,11 @@ function AppContent() {
           isTextToolActive ? "cursor-text" : activeShapeTool || isAddCardToolActive ? "cursor-crosshair" : ""
         }`}
       >
-        {isTaskFlowOpen || isAiTasksOpen ? (
+        {isVoraTraceOpen ? (
+          <div className="absolute inset-0 z-20 overflow-hidden">
+            <VoraTraceApp />
+          </div>
+        ) : isTaskFlowOpen || isAiTasksOpen ? (
           <TaskFlowPage taskType={isAiTasksOpen ? "ai" : "task"} />
         ) : isJournalOpen ? (
           <JournalPage onGoHome={() => {

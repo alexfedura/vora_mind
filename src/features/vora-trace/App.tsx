@@ -8,6 +8,7 @@ import { ProjectSidebar } from "./components/ecosystem/ProjectSidebar";
 import { AboutDialog } from "./components/app/AboutDialog";
 import { RecentList } from "./components/app/RecentList";
 import { useTraceStore } from "./store/traceStore";
+import "./index.css";
 
 export default function App() {
   const loadFromDisk = useTraceStore((s) => s.loadFromDisk);
@@ -50,7 +51,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-trace-bg">
+    <div className="trace-workspace flex h-full w-full flex-col bg-trace-bg text-trace-text">
       <header className="flex items-center gap-3 border-b border-trace-border bg-trace-panel px-6 py-3">
         <div className="text-lg font-semibold text-trace-text">
           <span className="text-trace-accent">◆</span> Vora Trace

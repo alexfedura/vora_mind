@@ -1,6 +1,20 @@
 @import "tailwindcss";
 @import "@xyflow/react/dist/style.css";
 
+@theme {
+  --color-trace-bg: #0f1117;
+  --color-trace-panel: #181b23;
+  --color-trace-border: #2a2e3a;
+  --color-trace-text: #e6e8ee;
+  --color-trace-muted: #8a90a0;
+  --color-trace-accent: #8b5cf6;
+  --color-trace-state: #3b82f6;
+  --color-trace-dec: #8b5cf6;
+  --color-trace-exp: #f59e0b;
+  --color-trace-rej: #ef4444;
+  --color-trace-ok: #10b981;
+}
+
 :root {
   --vora-chart-bg: #0f0f0f;
   --vora-chart-panel: #0f0f0f;
