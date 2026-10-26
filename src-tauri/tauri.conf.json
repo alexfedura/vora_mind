@@ -7,7 +7,7 @@
     "beforeDevCommand": "pnpm dev:frontend",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build",
-    "frontendDist": "C:/vora-compile/frontend"
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [

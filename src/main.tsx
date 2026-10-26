@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import App from "./App";
 import { SourcesPage } from "./pages/SourcesPage";
 import { ChartPage } from "./pages/ChartPage";
@@ -82,9 +82,9 @@ async function bootstrap(): Promise<void> {
     <React.StrictMode>
       <FontSettingsController />
       <UpdaterProvider>
-        <BrowserRouter>
+        <HashRouter>
           <AppRoutes />
-        </BrowserRouter>
+        </HashRouter>
       </UpdaterProvider>
     </React.StrictMode>,
   );

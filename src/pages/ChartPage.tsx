@@ -324,7 +324,7 @@ function RestoreOverlay({ visible, name }: { visible: boolean; name: string }): 
 }
 
 export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true }) => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const snapshotIdFromUrl = searchParams.get("snapshot");
   const playNarrativeFromUrl = searchParams.get("playNarrative") === "1";
   const [currentM, setCurrentM] = useState<number>(() => {
@@ -1050,12 +1050,12 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
   }, []);
   const closeNarrativePlayback = useCallback((): void => {
     setNarrativePlaybackSnapshot(null);
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("playNarrative");
-      window.history.replaceState({}, "", url.toString());
-    } catch { /* ignore */ }
-  }, []);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("playNarrative");
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   useEffect(() => {
     if (!isRecording) return;
@@ -2227,16 +2227,16 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
         if (isCurrentRestore()) {
           setRestoreOverlay({ visible: false, name: "" });
           setPreserveViewport(false);
-          try {
-            const url = new URL(window.location.href);
-            url.searchParams.delete("snapshot");
-            window.history.replaceState({}, "", url.toString());
-          } catch { /* ignore */ }
+          setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            next.delete("snapshot");
+            return next;
+          }, { replace: true });
         }
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartReady, snapshotIdFromUrl, symbol, playNarrativeFromUrl]);
+  }, [chartReady, snapshotIdFromUrl, symbol, playNarrativeFromUrl, setSearchParams]);
 
   // v6.4.18: pivot inspector — fetch engine pivots for current M.
   // DISABLED in v0.83.1: heavy per-timeframe scale scan.
