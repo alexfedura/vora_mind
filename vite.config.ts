@@ -21,6 +21,7 @@ export default defineConfig(async () => ({
   clearScreen: false,
   build: {
     outDir: path.resolve(compileDirectory, "frontend"),
+    emptyOutDir: true,
   },
   server: {
     port: 1420,
