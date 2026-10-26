@@ -1287,6 +1287,8 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
   }, []);
   // v7.4.0 — active tool id for the floating toolbar (rect/measure are functional).
   const [activeTool, setActiveTool] = useState<string>("cursor");
+  const gradedActiveToolRef = useRef(activeTool);
+  gradedActiveToolRef.current = activeTool;
   // v0.83.0 — Live Snapshot capture: builds the full snapshot from live refs.
   const handleSaveSnapshot = useCallback(async (input: { name: string; notes: string; tags: string[]; saveMode: "STANDARD" | NarrativeMode }) => {
     const chart = chartRef.current;
@@ -1326,12 +1328,25 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
     const isLineTool = isLineToolId(id);
     if (id === "cursor") {
       setActiveTool("cursor");
+      setGradedRectContextMenu(null);
       setRectToolActive(false);
       setRectPreview(null);
       rectDragRef.current = null;
       setRectSnap(null);
       setMeasureActive(false);
       setMeasurePending(null);
+      return;
+    }
+    if (id === "graded-rectangle") {
+      setRectToolActive(false);
+      setRectPreview(null);
+      rectDragRef.current = null;
+      setRectSnap(null);
+      setMeasureActive(false);
+      setMeasurePending(null);
+      setTrendPreview(null);
+      setGradedRectContextMenu(null);
+      setActiveTool((previous) => previous === "graded-rectangle" ? "cursor" : "graded-rectangle");
       return;
     }
     if (id === "rect") {
