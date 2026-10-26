@@ -1,6 +1,6 @@
 # Tauri + React + Typescript
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+Vora Mind is a local-first desktop workspace built with Tauri, React, and TypeScript.
 
 ## Stable and Development Builds
 
@@ -20,7 +20,7 @@ One-time updater setup:
 2. Put the generated public key in `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`.
 3. Add the private key contents and its password as the GitHub Actions secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
 
-To manually select a release version, ensure the working tree is clean and run `pnpm release:patch`, `pnpm release:minor`, or `pnpm release:major`. The script synchronizes the package, Tauri, Cargo, and Cargo lock versions, creates a conventional release commit and annotated `vX.Y.Z` tag, and pushes them to `origin`; the push to `main` starts the release workflow. Use `pnpm release:verify` to check synchronized versions, or `node scripts/release.js patch --dry-run` to preview the next version.
+To manually select a release version, ensure the working tree is clean and run `pnpm release:patch`, `pnpm release:minor`, or `pnpm release:major`. The script synchronizes the package, Tauri, Cargo, and Cargo lock versions, creates a conventional release commit and annotated `vX.Y.Z` tag, and pushes them to `origin`; pushing the tag starts the release workflow. Use `pnpm release:verify` to check synchronized versions, or `node scripts/release.js patch --dry-run` to preview the next version.
 
 ## Vora Trace
 
