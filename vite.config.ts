@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
 const host = process.env.TAURI_DEV_HOST;
+const compileDirectory = process.env.VORA_COMPILE_DIR ?? "C:/vora-compile";
 
 export default defineConfig(async () => ({
   plugins: [
@@ -18,6 +19,9 @@ export default defineConfig(async () => ({
   },
 
   clearScreen: false,
+  build: {
+    outDir: path.resolve(compileDirectory, "frontend"),
+  },
   server: {
     port: 1420,
     strictPort: true,

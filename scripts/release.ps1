@@ -43,7 +43,7 @@ pnpm tauri build
 
 # 4. تولید چک‌سام‌های SHA256 و مانیفست انتشار
 Write-Host "`n[4/4] Generating Artifact SHA256 Checksums..." -ForegroundColor Yellow
-$bundleDir = Join-Path $ProjectRoot "src-tauri/target/release/bundle/nsis"
+$bundleDir = "C:\vora-compile\cargo-target\release\bundle\nsis"
 if (Test-Path $bundleDir) {
     $setupExe = Get-ChildItem -Path $bundleDir -Filter "*setup.exe" | Select-Object -First 1
     if ($setupExe) {

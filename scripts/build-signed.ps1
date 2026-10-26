@@ -1,6 +1,6 @@
 param (
     [string]$KeyPath = (Join-Path (Join-Path $HOME ".tauri") "vora.key"),
-    [string]$BundleDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) "target\release\bundle")
+    [string]$BundleDirectory = "C:\vora-compile\cargo-target\release\bundle"
 )
 
 $ErrorActionPreference = "Stop"

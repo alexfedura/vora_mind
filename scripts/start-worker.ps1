@@ -38,7 +38,11 @@ if ($existing) {
 Write-Host "[*] Building vora_worker binary..." -ForegroundColor Yellow
 cargo build --manifest-path "$TauriDir\Cargo.toml" --bin vora_worker
 
-$BinaryPath = Join-Path $TauriDir "target\debug\vora_worker.exe"
+$BinaryPath = Join-Path (Join-Path $env:USERPROFILE "..") "vora-compile\cargo-target\debug\vora_worker.exe"
+$BinaryPath = [System.IO.Path]::GetFullPath($BinaryPath)
+if (-not (Test-Path -LiteralPath $BinaryPath -PathType Leaf)) {
+    throw "Worker build completed, but its binary was not found at $BinaryPath."
+}
 $proc = Start-Process -FilePath $BinaryPath -ArgumentList "serve", "$Port" -WorkingDirectory $TauriDir -RedirectStandardOutput $LogOut -RedirectStandardError $LogErr -PassThru -WindowStyle Hidden
 
 Write-Host "Worker Daemon started successfully!" -ForegroundColor Green
