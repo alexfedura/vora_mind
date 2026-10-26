@@ -16,7 +16,6 @@ export interface GradedRectContextMenu {
 interface GradedDrag {
   drawingId: string;
   kind: "body" | "left" | "right";
-  startX: number;
   original: GradedRectangle;
   startTime: number;
   endTime: number;
@@ -221,7 +220,6 @@ export function registerGradedRectTool(context: GradedRectToolContext): () => vo
           drag = {
             drawingId: hitDrawing.id,
             kind: handle,
-            startX: x,
             original: hitDrawing,
             startTime: hitDrawing.startTime,
             endTime: hitDrawing.endTime,
@@ -238,7 +236,6 @@ export function registerGradedRectTool(context: GradedRectToolContext): () => vo
           drag = {
             drawingId: hitDrawing.id,
             kind: "body",
-            startX: x,
             original: hitDrawing,
             startTime: hitDrawing.startTime,
             endTime: hitDrawing.endTime,
