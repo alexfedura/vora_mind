@@ -12,7 +12,7 @@ import type { PivotDto } from "./marketApi";
 import type { GradedRectangle } from "./lineDrawings";
 import { drawingTimeToCoordinate } from "./drawingCoordinates";
 
-const GRADED_RECT_COLOR = "#a855f7";
+import { hexWithOpacity } from "./RectangleOverlay";
 
 type PaneRenderTarget = Parameters<IPrimitivePaneRenderer["draw"]>[0];
 
@@ -58,9 +58,9 @@ class GradedRectangleRenderer implements IPrimitivePaneRenderer {
               : latest.close >= drawing.topPrice
           );
 
-          ctx.fillStyle = engulfed ? "rgba(239,68,68,0.20)" : "rgba(168,85,247,0.13)";
+          ctx.fillStyle = engulfed ? "rgba(239,68,68,0.20)" : hexWithOpacity(drawing.color, 0.13);
           ctx.fillRect(x * hr, y * vr, rectWidth * hr, rectHeight * vr);
-          ctx.strokeStyle = engulfed ? "#ef4444" : GRADED_RECT_COLOR;
+          ctx.strokeStyle = engulfed ? "#ef4444" : drawing.color;
           ctx.lineWidth = drawing.selected ? 2.5 * Math.min(hr, vr) : 1.8 * Math.min(hr, vr);
           ctx.strokeRect(x * hr, y * vr, rectWidth * hr, rectHeight * vr);
 
@@ -69,12 +69,16 @@ class GradedRectangleRenderer implements IPrimitivePaneRenderer {
           if (anchorX !== null && anchorY !== null) {
             ctx.beginPath();
             ctx.fillStyle = "#f5d0fe";
-            ctx.strokeStyle = GRADED_RECT_COLOR;
+            ctx.strokeStyle = drawing.color;
             ctx.lineWidth = 2 * Math.min(hr, vr);
             ctx.arc(anchorX * hr, anchorY * vr, 5 * Math.min(hr, vr), 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
           }
+          ctx.font = `${10 * vr}px ui-monospace, monospace`;
+          ctx.textBaseline = "top";
+          ctx.fillStyle = engulfed ? "#fecaca" : drawing.color;
+          ctx.fillText(`${drawing.structureType} · baseline ${drawing.baselineSide}`, x * hr + 4 * hr, y * vr + 4 * vr);
 
           if (drawing.correctionStartPrice !== undefined && drawing.correctionStartTime !== undefined && latest) {
             const correctionX = drawingTimeToCoordinate(timeScale, drawing.correctionStartTime);
@@ -187,5 +191,3 @@ export class GradedRectangleOverlay implements ISeriesPrimitive<Time> {
     return [new GradedRectanglePaneView(this.drawings, this.candles, this.hoverPivot, this.chart, this.series)];
   }
 }
-
-export { GRADED_RECT_COLOR };
