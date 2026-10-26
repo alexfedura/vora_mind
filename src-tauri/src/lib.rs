@@ -2,6 +2,7 @@ extern crate self as vora_lib;
 
 pub mod forge;
 pub mod mind;
+pub mod vora_trace;
 
 use crate::mind::canvas_db::{AppState, BoardSummary, EdgeInput, NodeInput, SnapshotSummary};
 use crate::mind::resolver::{ResolvedSnapshot, SnapshotResolver};
@@ -1315,6 +1316,18 @@ pub fn run() {
             set_task_flow_item_completed,
             reorder_task_flow_items,
             delete_task_flow_item,
+            vora_trace::trace_load_graph,
+            vora_trace::trace_save_graph,
+            vora_trace::trace_save_decision_md,
+            vora_trace::trace_list_decisions,
+            vora_trace::trace_scan_ecosystem,
+            vora_trace::trace_git_log_for_project,
+            vora_trace::trace_read_all_decisions,
+            vora_trace::trace_find_commits_for_file,
+            vora_trace::trace_export_graph_json,
+            vora_trace::trace_import_graph_json,
+            vora_trace::trace_app_version,
+            vora_trace::trace_recent_decisions,
             get_journal_entries,
             save_journal_entry,
             get_questions,
