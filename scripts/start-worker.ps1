@@ -7,6 +7,7 @@
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $TauriDir = Join-Path $ProjectRoot "src-tauri"
+$env:CARGO_TARGET_DIR = "C:\vora-compile\cargo-target"
 $LogDir = Join-Path $TauriDir "logs"
 
 if (-not (Test-Path $LogDir)) {

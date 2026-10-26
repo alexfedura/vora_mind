@@ -4,6 +4,7 @@ param (
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
+$env:CARGO_TARGET_DIR = "C:\vora-compile\cargo-target"
 
 # خواندن نسخه از فایل مرجع VERSION در صورت عدم ارسال دستی
 $VersionFile = Join-Path $ProjectRoot "VERSION"

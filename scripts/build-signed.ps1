@@ -36,6 +36,7 @@ try {
 
     Push-Location $ProjectRoot
     $locationPushed = $true
+    $env:CARGO_TARGET_DIR = "C:\vora-compile\cargo-target"
 
     Write-Host "Building Vora with the updater key at: $($ResolvedKeyPath.Path)"
     & pnpm tauri:build
