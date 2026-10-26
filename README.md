@@ -20,6 +20,10 @@ One-time updater setup:
 
 To manually select a release version, ensure the working tree is clean and run `pnpm release:patch`, `pnpm release:minor`, or `pnpm release:major`. The script synchronizes the package, Tauri, Cargo, and Cargo lock versions, creates a conventional release commit and annotated `vX.Y.Z` tag, and pushes them to `origin`; the push to `main` starts the release workflow. Use `pnpm release:verify` to check synchronized versions, or `node scripts/release.js patch --dry-run` to preview the next version.
 
+## Vora Trace
+
+Vora Trace is available as a workspace in the left sidebar. Its graph, decision Markdown, and project registry are stored under Vora Mind's AppData directory. On first launch, existing Trace files are copied from `D:\workspace\vora_trace`; the source project is left unchanged. Git history search uses the selected existing project in the Trace ecosystem sidebar.
+
 ## Recommended IDE Setup
 
 - [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
