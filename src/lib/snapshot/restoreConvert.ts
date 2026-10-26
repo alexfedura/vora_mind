@@ -35,6 +35,31 @@ export function snapshotToDrawings(list: SnapshotDrawing[]): DrawingAny[] {
       if (!point) continue;
       out.push({ id: d.id, type: "icon", category: d.category, symbol: d.symbol, size: d.size, name: d.name, text: d.text, textColor: d.textColor, textOpacity: d.textOpacity, textSize: d.textSize, textBold: d.textBold, textItalic: d.textItalic, textAlignHorizontal: d.textAlignHorizontal, textAlignVertical: d.textAlignVertical, ts: Math.floor(point.ts / 1000), price: point.price, color: d.color, lineWidth: d.lineWidth, selected: false, locked: d.locked, style: d.style });
     }
+    else if (d.type === "graded-rectangle") {
+      const first = d.points[0];
+      const second = d.points[1];
+      if (!first || !second) continue;
+      out.push({
+        id: d.id,
+        type: "graded-rectangle",
+        structureType: d.structureType,
+        anchorPrice: d.anchorPrice,
+        anchorTime: Math.floor(d.anchorTime / 1000),
+        startTime: Math.floor(first.ts / 1000),
+        endTime: Math.floor(second.ts / 1000),
+        topPrice: first.price,
+        bottomPrice: second.price,
+        baselineSide: d.baselineSide,
+        correctionStartPrice: d.correctionStartPrice,
+        correctionStartTime: d.correctionStartTime === undefined ? undefined : Math.floor(d.correctionStartTime / 1000),
+        color: d.color,
+        lineWidth: d.lineWidth,
+        selected: false,
+        locked: d.locked,
+        hidden: d.hidden,
+        style: d.style,
+      });
+    }
     else if (d.type === "vline") out.push({ id: d.id, type: "vline", ts: Math.floor((d.points[0]?.ts ?? 0) / 1000), color: d.color, lineWidth: d.lineWidth, selected: false, locked: d.locked, style: d.style });
     else if (d.type === "hline") out.push({ id: d.id, type: "hline", price: d.points[0]?.price ?? 0, color: d.color, lineWidth: d.lineWidth, selected: false, locked: d.locked, style: d.style });
     else if (d.type === "hray") out.push({ id: d.id, type: "hray", ts: Math.floor((d.points[0]?.ts ?? 0) / 1000), price: d.points[0]?.price ?? 0, color: d.color, lineWidth: d.lineWidth, selected: false, locked: d.locked, style: d.style });

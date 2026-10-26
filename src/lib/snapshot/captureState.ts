@@ -118,6 +118,28 @@ export function captureDrawings(drawings: DrawingAny[]): SnapshotDrawing[] {
       });
       continue;
     }
+    if (d.type === "graded-rectangle") {
+      out.push({
+        id: d.id,
+        type: "graded-rectangle",
+        structureType: d.structureType,
+        anchorPrice: d.anchorPrice,
+        anchorTime: d.anchorTime * 1000,
+        baselineSide: d.baselineSide,
+        correctionStartPrice: d.correctionStartPrice,
+        correctionStartTime: d.correctionStartTime === undefined ? undefined : d.correctionStartTime * 1000,
+        points: [
+          { ts: d.startTime * 1000, price: d.topPrice },
+          { ts: d.endTime * 1000, price: d.bottomPrice },
+        ],
+        color: colorOf(d, "#a855f7"),
+        lineWidth,
+        style,
+        locked,
+        hidden: d.hidden,
+      });
+      continue;
+    }
     if (d.type === "rectangle") {
       const r = d as DrawingRect;
       out.push({

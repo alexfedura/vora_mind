@@ -86,6 +86,15 @@ export type SnapshotDrawing = SnapshotDrawingBase & (
   | { type: "icon"; category: DrawingIconCategory; symbol: string; size: number }
   | { type: "fib-gann"; tool: FibGannToolId }
   | { type: "geometry"; tool: GeometryToolId }
+  | {
+      type: "graded-rectangle";
+      structureType: "RBR" | "DBD";
+      anchorPrice: number;
+      anchorTime: number;
+      baselineSide: "top" | "bottom";
+      correctionStartPrice?: number;
+      correctionStartTime?: number;
+    }
 );
 
 export interface SnapshotPolicy {

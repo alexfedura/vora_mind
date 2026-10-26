@@ -20,6 +20,7 @@ interface GradedDrag {
   startTime: number;
   endTime: number;
   anchorPrice: number;
+  resizedWidth?: number;
 }
 
 export interface GradedRectToolContext {
@@ -118,10 +119,7 @@ export function registerGradedRectTool(context: GradedRectToolContext): () => vo
           drawingTimeToCoordinate(chart.timeScale(), nextEndTime) ?? x,
         );
         if (startLogical !== null && endLogical !== null) {
-          context.setConfig({
-            ...context.configRef.current,
-            width: Math.max(1, Math.abs(Number(endLogical) - Number(startLogical))),
-          });
+          drag.resizedWidth = Math.max(1, Math.abs(Number(endLogical) - Number(startLogical)));
         }
         context.setDrawings((current) => current.map((drawing) =>
           drawing.type === "graded-rectangle" && drawing.id === drag?.drawingId
@@ -145,6 +143,9 @@ export function registerGradedRectTool(context: GradedRectToolContext): () => vo
             bottomPrice: drag.original.bottomPrice + deltaPrice,
             ...(drag.original.correctionStartPrice === undefined ? {} : {
               correctionStartPrice: drag.original.correctionStartPrice + deltaPrice,
+            }),
+            ...(drag.original.correctionStartTime === undefined ? {} : {
+              correctionStartTime: drag.original.correctionStartTime + deltaTime,
             }),
             selected: true,
           };
@@ -304,6 +305,9 @@ export function registerGradedRectTool(context: GradedRectToolContext): () => vo
 
   const onUp = (): void => {
     if (!drag) return;
+    if (drag.resizedWidth !== undefined) {
+      context.setConfig({ ...context.configRef.current, width: drag.resizedWidth });
+    }
     drag = null;
     setPan(true);
   };
