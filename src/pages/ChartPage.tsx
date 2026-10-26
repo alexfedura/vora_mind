@@ -2277,10 +2277,10 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
         setPivots(ps);
         const w = window as unknown as { __vora?: Record<string, unknown> };
         w.__vora = { ...(w.__vora ?? {}), pivots: ps };
-      } catch {
+      } catch (error: unknown) {
         if (!cancelled) {
           setPivots([]);
-          console.error("Could not load swing pivots for the Graded Rectangle tool.");
+          console.error("Could not load swing pivots for the Graded Rectangle tool:", error);
         }
       }
     })();
