@@ -18,6 +18,9 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 - Users can move to adjacent days, choose a date, or open a month view.
 - The month view displays one card per day, with saved text previews, in a four-column date grid; selecting a card opens that day's entry.
 - The description is Markdown, multiline, and has no application-level length limit. The editor provides live formatting for headings, lists, emphasis, links, and code while preserving the Markdown source in the database.
+- Markdown list markers use a prominent, consistent size whether their source is visible during editing or rendered as a live-preview marker. List alignment inherits the editor direction so numeric or English text in an RTL journal does not flip the list layout.
+- Tab indents the current Markdown line or selection by one four-space level; Shift+Tab outdents one level. Home and End move to the current visual line boundary, including wrapped lines, and their Shift variants extend the selection.
+- Mixed-direction list markers and text retain consistent alignment and color while moving the selection through the live-preview editor.
 - Edits are saved automatically and remain available after restarting the app.
 
 ## Data and Boundaries
@@ -38,4 +41,6 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 - Month/day navigation and previews reflect saved entries.
 - Empty and long descriptions can be saved and reloaded.
 - Typing Markdown list markers (for example, `- `) and pressing Enter continues lists; headings and other supported Markdown render in the live editor.
+- Bullet and ordered-list markers remain legible and the same size in active and inactive lines; nested list indentation follows full Tab levels.
+- RTL journal lines beginning with numeric ordered-list markers such as `1.` stay right-aligned, and Home/End target visual line boundaries on wrapped text.
 - TypeScript and Rust checks pass; focused Rust tests verify journal upsert, retrieval, and date scoping.

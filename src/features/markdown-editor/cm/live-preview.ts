@@ -38,7 +38,7 @@ const strikeMark = Decoration.mark({ class: 'vm-md-strike' });
 const codeMark = Decoration.mark({ class: 'vm-md-code' });
 const linkMark = Decoration.mark({ class: 'vm-md-link' });
 const listLine = Decoration.line({
-  attributes: { class: 'vm-md-list-line', dir: 'auto' },
+  attributes: { class: 'vm-md-list-line' },
 });
 const headingMarks = [
   Decoration.mark({ class: 'vm-md-h1' }),

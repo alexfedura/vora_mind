@@ -3,7 +3,9 @@
  * This is the single source of truth for the editor extension set.
  */
 import {
+  EditorSelection,
   EditorState,
+  Prec,
   type Extension,
 } from '@codemirror/state';
 import {
@@ -51,6 +53,24 @@ export interface CreateEditorExtensionsOptions {
   extra?: Extension[];
 }
 
+function visualLineBoundary(forward: boolean, extend: boolean) {
+  return (view: EditorView): boolean => {
+    const selection = view.state.selection;
+    const ranges = selection.ranges.map((range) => {
+      const boundary = view.moveToLineBoundary(range, forward, true);
+      return extend
+        ? EditorSelection.range(range.anchor, boundary.head)
+        : EditorSelection.cursor(boundary.head, boundary.assoc);
+    });
+    view.dispatch({
+      selection: EditorSelection.create(ranges, selection.mainIndex),
+      scrollIntoView: true,
+      userEvent: 'select',
+    });
+    return true;
+  };
+}
+
 /** Create the base extensions, optionally adding live preview and host extensions. */
 export function createEditorExtensions(
   options: CreateEditorExtensionsOptions = {},
@@ -80,7 +100,7 @@ export function createEditorExtensions(
       addKeymap: true,
     }),
     EditorState.tabSize.of(2),
-    indentUnit.of('  '),
+    indentUnit.of('    '),
     EditorView.contentAttributes.of({
       autocapitalize: 'sentences',
       autocorrect: 'on',
@@ -93,6 +113,20 @@ export function createEditorExtensions(
   if (options.extra?.length) extensions.push(...options.extra);
 
   extensions.push(
+    Prec.high(
+      keymap.of([
+        {
+          key: 'Home',
+          run: visualLineBoundary(false, false),
+          shift: visualLineBoundary(false, true),
+        },
+        {
+          key: 'End',
+          run: visualLineBoundary(true, false),
+          shift: visualLineBoundary(true, true),
+        },
+      ]),
+    ),
     keymap.of([
       ...closeBracketsKeymap,
       ...defaultKeymap,

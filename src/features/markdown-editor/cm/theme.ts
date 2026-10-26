@@ -154,7 +154,7 @@ export const vmHighlightStyle = HighlightStyle.define([
     padding: '1px 4px',
   },
   { tag: t.quote, color: v('fgMuted'), fontStyle: 'italic' },
-  { tag: t.list, color: v('fgMuted') },
+  { tag: t.list, color: v('fgMuted'), fontSize: '1.2em', fontWeight: '700' },
   { tag: t.contentSeparator, color: v('border') },
   { tag: t.processingInstruction, color: v('fgFaint') },
   { tag: t.meta, color: v('fgFaint') },
