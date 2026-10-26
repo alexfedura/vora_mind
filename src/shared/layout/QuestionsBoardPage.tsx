@@ -92,9 +92,13 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
     }
   };
 
-  const handleGoHome = (): void => {
+  const handleGoHome = async (): Promise<void> => {
     if (selectedQuestionId) {
-      void flushQuestion(selectedQuestionId).catch(() => undefined);
+      try {
+        await flushQuestion(selectedQuestionId);
+      } catch {
+        return;
+      }
     }
     onGoHome();
   };
