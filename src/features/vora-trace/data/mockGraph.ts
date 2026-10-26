@@ -1,4 +1,4 @@
-import type { TraceGraph } from "../types/trace";
+import type { TraceGraph } from "@/types";
 
 export const mockGraph: TraceGraph = {
   schemaVersion: "1.0.0",

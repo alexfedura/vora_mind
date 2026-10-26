@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { appVersion, isTauri } from "../../services/traceApi";
+import { appVersion, isTauri } from "@/mind/services/traceService";
 
 export function AboutDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [version, setVersion] = useState("--");

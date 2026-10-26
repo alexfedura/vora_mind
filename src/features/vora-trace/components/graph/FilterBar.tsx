@@ -1,7 +1,7 @@
 import { useTraceStore } from "../../store/traceStore";
-import type { NodeKind, NodeStatus } from "../../types/trace";
+import type { TraceNodeKind, TraceNodeStatus } from "@/types";
 
-const KIND_CHIPS: { label: string; value: NodeKind | "all" }[] = [
+const KIND_CHIPS: { label: string; value: TraceNodeKind | "all" }[] = [
   { label: "All", value: "all" },
   { label: "State", value: "state" },
   { label: "Decision", value: "decision" },
@@ -9,7 +9,7 @@ const KIND_CHIPS: { label: string; value: NodeKind | "all" }[] = [
   { label: "Rejected", value: "rejected" },
 ];
 
-const STATUS_CHIPS: { label: string; value: NodeStatus }[] = [
+const STATUS_CHIPS: { label: string; value: TraceNodeStatus }[] = [
   { label: "accepted", value: "accepted" },
   { label: "rejected", value: "rejected" },
   { label: "pending", value: "pending" },
@@ -20,7 +20,7 @@ export function FilterBar() {
   const filters = useTraceStore((s) => s.filters);
   const setFilters = useTraceStore((s) => s.setFilters);
 
-  const toggleKind = (k: NodeKind | "all") => {
+  const toggleKind = (k: TraceNodeKind | "all") => {
     if (k === "all") {
       setFilters({ kinds: [] });
       return;
@@ -57,7 +57,7 @@ export function FilterBar() {
           const active =
             c.value === "all"
               ? filters.kinds.length === 0
-              : filters.kinds.includes(c.value as NodeKind);
+              : filters.kinds.includes(c.value as TraceNodeKind);
           return (
             <button
               key={c.value}

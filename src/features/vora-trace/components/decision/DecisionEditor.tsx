@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useTraceStore } from "../../store/traceStore";
-import { findCommitsForFile, type GitLogEntry } from "../../services/traceApi";
-import type { NodeKind, NodeStatus } from "../../types/trace";
+import { findCommitsForFile } from "@/mind/services/traceService";
+import type { TraceGitLogEntry, TraceNodeKind, TraceNodeStatus } from "@/types";
 
-const KINDS: NodeKind[] = ["state", "decision", "experiment", "rejected"];
-const STATUSES: NodeStatus[] =
+const KINDS: TraceNodeKind[] = ["state", "decision", "experiment", "rejected"];
+const STATUSES: TraceNodeStatus[] =
   ["pending", "accepted", "rejected", "current", "abandoned"];
 
 export function DecisionEditor() {
@@ -16,7 +16,7 @@ export function DecisionEditor() {
 
   const [draft, setDraft] = useState(node);
   const [commitSearch, setCommitSearch] = useState("");
-  const [commitResults, setCommitResults] = useState<GitLogEntry[]>([]);
+  const [commitResults, setCommitResults] = useState<TraceGitLogEntry[]>([]);
   const [searchingCommits, setSearchingCommits] = useState(false);
   useEffect(() => { setDraft(node); setCommitResults([]); setCommitSearch(""); }, [node]);
 
@@ -66,7 +66,7 @@ export function DecisionEditor() {
           <Field label="Kind">
             <select
               value={draft.kind}
-              onChange={(e) => setDraft({ ...draft, kind: e.target.value as NodeKind })}
+              onChange={(e) => setDraft({ ...draft, kind: e.target.value as TraceNodeKind })}
               className="w-full rounded-md border border-trace-border
                          bg-trace-bg px-3 py-2 text-sm text-trace-text">
               {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
@@ -75,7 +75,7 @@ export function DecisionEditor() {
           <Field label="Status">
             <select
               value={draft.status}
-              onChange={(e) => setDraft({ ...draft, status: e.target.value as NodeStatus })}
+              onChange={(e) => setDraft({ ...draft, status: e.target.value as TraceNodeStatus })}
               className="w-full rounded-md border border-trace-border
                          bg-trace-bg px-3 py-2 text-sm text-trace-text">
               {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}

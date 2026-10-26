@@ -1,14 +1,13 @@
 import { create } from "zustand";
 import type {
-  TraceGraph, TraceNodeData, TraceEdgeData, NodeKind, NodeStatus,
-} from "../types/trace";
+  TraceEdgeData, TraceGraph, TraceNodeData, TraceNodeKind, TraceNodeStatus,
+} from "@/types";
 import { mockGraph } from "../data/mockGraph";
 import {
-  loadGraph, saveGraph, saveDecisionMd, isTauri,
+  chooseGraphExportPath, chooseGraphImportPath, loadGraph, saveGraph, saveDecisionMd, isTauri,
   scanEcosystem, readAllDecisions,
   exportGraphJson, importGraphJson, recentDecisions,
-  type ProjectInfo,
-} from "../services/traceApi";
+} from "@/mind/services/traceService";
 
 interface TraceState {
   graph: TraceGraph;
@@ -17,13 +16,13 @@ interface TraceState {
   dirty: boolean;
   saving: boolean;
   lastError: string | null;
-  projects: ProjectInfo[];
+  projects: import("@/types").TraceProjectInfo[];
   projectsLoading: boolean;
   syncing: boolean;
   lastSyncAt: string | null;
 
-  filters: { search: string; kinds: NodeKind[]; statuses: NodeStatus[] };
-  setFilters: (patch: Partial<{ search: string; kinds: NodeKind[]; statuses: NodeStatus[] }>) => void;
+  filters: { search: string; kinds: TraceNodeKind[]; statuses: TraceNodeStatus[] };
+  setFilters: (patch: Partial<{ search: string; kinds: TraceNodeKind[]; statuses: TraceNodeStatus[] }>) => void;
 
   selectNode: (id: string | null) => void;
   hoverNode: (id: string | null) => void;
@@ -39,7 +38,7 @@ interface TraceState {
   exportGraph: () => Promise<string | null>;
   importGraph: () => Promise<void>;
 
-  addNode: (kind: NodeKind, title: string) => string;
+  addNode: (kind: TraceNodeKind, title: string) => string;
   updateNode: (id: string, patch: Partial<TraceNodeData>) => void;
   deleteNode: (id: string) => void;
 
@@ -56,7 +55,7 @@ function nextId(prefix: string, existing: string[]): string {
   return `${prefix}-${String(max + 1).padStart(3, "0")}`;
 }
 
-function prefixFor(kind: NodeKind): string {
+function prefixFor(kind: TraceNodeKind): string {
   switch (kind) {
     case "decision": return "D";
     case "experiment": return "E";
@@ -65,7 +64,7 @@ function prefixFor(kind: NodeKind): string {
   }
 }
 
-type FilterState = { search: string; kinds: NodeKind[]; statuses: NodeStatus[] };
+type FilterState = { search: string; kinds: TraceNodeKind[]; statuses: TraceNodeStatus[] };
 
 export const useTraceStore = create<TraceState>()((set, get) => ({
   graph: mockGraph,
@@ -79,7 +78,7 @@ export const useTraceStore = create<TraceState>()((set, get) => ({
   syncing: false,
   lastSyncAt: null,
   recent: [],
-  filters: { search: "", kinds: [] as NodeKind[], statuses: [] as NodeStatus[] },
+  filters: { search: "", kinds: [] as TraceNodeKind[], statuses: [] as TraceNodeStatus[] },
 
   setFilters: (patch: Partial<FilterState>) => {
     const cur = get().filters;
@@ -180,12 +179,7 @@ export const useTraceStore = create<TraceState>()((set, get) => ({
 
   exportGraph: async () => {
     if (!isTauri()) return null;
-    const { save } = await import("@tauri-apps/plugin-dialog");
-    const dest = await save({
-      title: "Export Trace Graph",
-      defaultPath: "vora-trace-graph.json",
-      filters: [{ name: "JSON", extensions: ["json"] }],
-    });
+    const dest = await chooseGraphExportPath();
     if (!dest) return null;
     try {
       await exportGraphJson(dest);
@@ -198,13 +192,8 @@ export const useTraceStore = create<TraceState>()((set, get) => ({
 
   importGraph: async () => {
     if (!isTauri()) return;
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const src = await open({
-      title: "Import Trace Graph",
-      multiple: false,
-      filters: [{ name: "JSON", extensions: ["json"] }],
-    });
-    if (!src || typeof src !== "string") return;
+    const src = await chooseGraphImportPath();
+    if (!src) return;
     try {
       const g = await importGraphJson(src);
       set({ graph: g, dirty: true });
