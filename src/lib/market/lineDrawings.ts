@@ -256,9 +256,13 @@ export interface GradedRectangle extends DrawingPresentation {
   lineWidth: number;
 }
 
+function isDrawingRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export function isGradedRectangle(value: unknown): value is GradedRectangle {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const drawing = value as Record<string, unknown>;
+  if (!isDrawingRecord(value)) return false;
+  const drawing = value;
   const isFiniteNumber = (candidate: unknown): candidate is number =>
     typeof candidate === "number" && Number.isFinite(candidate);
   return drawing.type === "graded-rectangle" &&

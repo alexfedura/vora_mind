@@ -28,8 +28,7 @@ import {
   type DrawingRect,
   type TrendPreview,
 } from "@/lib/market/RectangleOverlay";
-import type { DrawingAny, LineToolId } from "@/lib/market/lineDrawings";
-import type { GradedRectangle } from "@/lib/market/lineDrawings";
+import { isGradedRectangle, type DrawingAny, type GradedRectangle, type LineToolId } from "@/lib/market/lineDrawings";
 import { HLINE_WIDTH_KEY, HRAY_WIDTH_KEY, LINE_COLOR_KEY, RECT_WIDTH_KEY, TREND_WIDTH_KEY, VLINE_WIDTH_KEY, isAnnotationToolId, migrateDrawingAny, readLineColor, readLineWidth } from "@/lib/market/lineDrawings";
 import { isDrawingVisible, type DrawingIconSelection } from "@/lib/market/drawingTypes";
 import type { ChartDrawingAlert } from "@/lib/market/drawingTypes";
