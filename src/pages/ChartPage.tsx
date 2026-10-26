@@ -2265,7 +2265,7 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
   // DISABLED in v0.83.1: heavy per-timeframe scale scan.
   // Do not re-enable without a hardware upgrade plan.
   useEffect(() => {
-    if (!ENABLE_SCALE_RECALC) {
+    if (!ENABLE_SCALE_RECALC && activeTool !== "graded-rectangle") {
       return;
     }
     let cancelled = false;
@@ -2278,11 +2278,14 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
         const w = window as unknown as { __vora?: Record<string, unknown> };
         w.__vora = { ...(w.__vora ?? {}), pivots: ps };
       } catch {
-        if (!cancelled) setPivots([]);
+        if (!cancelled) {
+          setPivots([]);
+          console.error("Could not load swing pivots for the Graded Rectangle tool.");
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [debouncedM, symbol]);
+  }, [activeTool, debouncedM, symbol]);
 
   useEffect(() => { pivotsRef.current = pivots; }, [pivots]);
 
