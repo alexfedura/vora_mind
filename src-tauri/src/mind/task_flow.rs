@@ -340,5 +340,76 @@ mod tests {
         let tasks = list_tasks(&connection, TaskFlowType::Task).expect("list migrated tasks");
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].description, "");
+        assert_eq!(tasks[0].task_type, TaskFlowType::Task);
+    }
+
+    #[test]
+    fn ai_and_regular_tasks_have_independent_lists_and_ordering() {
+        let mut connection = Connection::open_in_memory().expect("open in-memory database");
+        init_schema(&connection).expect("initialize Task Flow schema");
+        create_task(
+            &mut connection,
+            "regular-a",
+            "Regular A",
+            TaskFlowType::Task,
+            1,
+        )
+        .expect("create regular task A");
+        create_task(
+            &mut connection,
+            "regular-b",
+            "Regular B",
+            TaskFlowType::Task,
+            2,
+        )
+        .expect("create regular task B");
+        create_task(
+            &mut connection,
+            "ai-a",
+            "AI A",
+            TaskFlowType::Ai,
+            3,
+        )
+        .expect("create AI task A");
+        create_task(
+            &mut connection,
+            "ai-b",
+            "AI B",
+            TaskFlowType::Ai,
+            4,
+        )
+        .expect("create AI task B");
+
+        let ai_order = reorder_tasks(
+            &mut connection,
+            &["ai-b".to_string(), "ai-a".to_string()],
+            TaskFlowType::Ai,
+            5,
+        )
+        .expect("reorder AI tasks");
+        assert_eq!(
+            ai_order
+                .iter()
+                .map(|task| task.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["ai-b", "ai-a"]
+        );
+
+        let regular_tasks = list_tasks(&connection, TaskFlowType::Task)
+            .expect("list regular tasks");
+        assert_eq!(
+            regular_tasks
+                .iter()
+                .map(|task| task.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["regular-a", "regular-b"]
+        );
+        assert!(reorder_tasks(
+            &mut connection,
+            &["regular-a".to_string(), "ai-a".to_string()],
+            TaskFlowType::Task,
+            6,
+        )
+        .is_err());
     }
 }
