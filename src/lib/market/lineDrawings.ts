@@ -250,6 +250,7 @@ export interface GradedRectangle extends DrawingPresentation {
   correctionStartPrice?: number;
   correctionStartTime?: number;
   selected: boolean;
+  hovered?: boolean;
   hidden?: boolean;
   locked?: boolean;
   colorOpacity?: number;

@@ -90,7 +90,7 @@ export function isDrawingVisible(drawing: DrawingPresentation): boolean {
   return drawing.hidden !== true;
 }
 
-export type DrawingKind = "rectangle" | "vline" | "hline" | "hray" | "trendline" | "ray" | "info-line" | "extended-line" | "trend-angle" | "crossline" | "parallel-channel" | "pitchfork" | "regression-trend" | "fib-gann" | "icon" | "geometry";
+export type DrawingKind = "rectangle" | "graded-rectangle" | "vline" | "hline" | "hray" | "trendline" | "ray" | "info-line" | "extended-line" | "trend-angle" | "crossline" | "parallel-channel" | "pitchfork" | "regression-trend" | "fib-gann" | "icon" | "geometry";
 export type DrawingAlertCondition = "entering_drawing" | "crossing";
 
 export interface DrawingStyleTemplateSettings {

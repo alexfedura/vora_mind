@@ -107,6 +107,7 @@ pub enum DrawingTextVerticalAlign {
 #[serde(rename_all = "snake_case")]
 pub enum DrawingKind {
     Rectangle,
+    GradedRectangle,
     Vline,
     Hline,
     Hray,
@@ -118,6 +119,7 @@ impl DrawingKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Rectangle => "rectangle",
+            Self::GradedRectangle => "graded-rectangle",
             Self::Vline => "vline",
             Self::Hline => "hline",
             Self::Hray => "hray",

@@ -58,7 +58,9 @@ class GradedRectangleRenderer implements IPrimitivePaneRenderer {
               : latest.close >= drawing.topPrice
           );
 
-          ctx.fillStyle = engulfed ? "rgba(239,68,68,0.20)" : hexWithOpacity(drawing.color, 0.13);
+          ctx.fillStyle = engulfed
+            ? "rgba(239,68,68,0.20)"
+            : hexWithOpacity(drawing.color, 0.13 * (drawing.colorOpacity ?? 1));
           ctx.fillRect(x * hr, y * vr, rectWidth * hr, rectHeight * vr);
           ctx.strokeStyle = engulfed ? "#ef4444" : drawing.color;
           ctx.lineWidth = drawing.selected ? 2.5 * Math.min(hr, vr) : 1.8 * Math.min(hr, vr);

@@ -16,11 +16,12 @@ function drawingTitle(drawing: DrawingAny): string {
   if (drawing.type === "fib-gann") return FIB_GANN_TOOL_LABELS[drawing.tool];
   if (drawing.type === "icon") return drawing.symbol;
   if (drawing.type === "geometry") return GEOMETRY_TOOL_LABELS[drawing.tool];
+  if (drawing.type === "graded-rectangle") return "Graded Rectangle";
   return ({ rectangle: "Rectangle", vline: "Vertical line", hline: "Horizontal line", hray: "Horizontal ray", trendline: "Trend line", ray: "Ray", "info-line": "Info line", "extended-line": "Extended line", "trend-angle": "Trend angle", crossline: "Crossline", "parallel-channel": "Parallel channel", pitchfork: "Pitchfork", "regression-trend": "Regression trend" }[drawing.type]);
 }
 
 export function CreateDrawingAlertDialog({ symbol, timeframe, drawing, onClose, onCreate }: CreateDrawingAlertDialogProps): React.ReactElement {
-  const initialCondition = drawing.type === "rectangle" ? "entering_drawing" : "crossing";
+  const initialCondition = drawing.type === "rectangle" || drawing.type === "graded-rectangle" ? "entering_drawing" : "crossing";
   const [condition, setCondition] = useState<ChartDrawingAlert["condition"]>(initialCondition);
   const [triggerOnce, setTriggerOnce] = useState(true);
   const [expiration, setExpiration] = useState("never");
