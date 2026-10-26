@@ -448,8 +448,8 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
     }));
   }, [zoomState.x_off_milli, zoomState.y_off_milli]);
   const initialChartViewResetRef = useRef(false);
-  const [inputX, setInputX] = useState<string>("0.000");
-  const [inputY, setInputY] = useState<string>("0.000");
+  const [inputX, setInputX] = useState<string>("0.0000");
+  const [inputY, setInputY] = useState<string>("0.0000");
   const zoomStateRef = useRef(zoomState);
   zoomStateRef.current = zoomState;
   const inputXRef = useRef<HTMLInputElement | null>(null);
@@ -664,8 +664,8 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
         skipNextApplyRef.current = true;
         zoomStateRef.current = nextZoom;
         setZoomState(nextZoom);
-        setInputX((nextZoom.x_off_milli / 1000).toFixed(3));
-        setInputY((nextZoom.y_off_milli / 1000).toFixed(3));
+        setInputX((nextZoom.x_off_milli / 1000).toFixed(4));
+        setInputY((nextZoom.y_off_milli / 1000).toFixed(4));
       }
 
       chart.priceScale("right").setVisibleRange({
