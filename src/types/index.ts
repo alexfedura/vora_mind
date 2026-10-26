@@ -11,6 +11,66 @@ export interface TaskFlowItem {
   updatedAt: number;
 }
 
+export type TraceNodeKind = "state" | "decision" | "experiment" | "rejected";
+export type TraceNodeStatus = "accepted" | "rejected" | "pending" | "current" | "abandoned";
+
+export interface TraceAlternative {
+  title: string;
+  status: TraceNodeStatus;
+  reason?: string;
+}
+
+export interface TraceNodeData {
+  id: string;
+  kind: TraceNodeKind;
+  title: string;
+  status: TraceNodeStatus;
+  whyAmIHere?: string;
+  objective?: string;
+  reason?: string;
+  createdAt?: string;
+  parentId?: string | null;
+  gitCommit?: string;
+  linkedCommits?: string[];
+  alternatives?: TraceAlternative[];
+  evidence?: string[];
+  next?: string[];
+}
+
+export interface TraceEdgeData {
+  id: string;
+  source: string;
+  target: string;
+  kind: "main" | "branch" | "rejected";
+  label?: string;
+}
+
+export interface TraceGraph {
+  schemaVersion: string;
+  project: string;
+  nodes: TraceNodeData[];
+  edges: TraceEdgeData[];
+}
+
+export interface TraceProjectInfo {
+  id: string;
+  path: string;
+  role: string;
+  status: string;
+  description?: string;
+  exists: boolean;
+  git_branch?: string;
+  git_head?: string;
+  git_dirty?: boolean;
+}
+
+export interface TraceGitLogEntry {
+  hash: string;
+  short: string;
+  date: string;
+  message: string;
+}
+
 export interface JournalEntry {
   date: string;
   content: string;
