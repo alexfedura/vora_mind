@@ -31,7 +31,7 @@ export function FilterBar() {
     });
   };
 
-  const toggleStatus = (s: NodeStatus) => {
+  const toggleStatus = (s: TraceNodeStatus) => {
     const cur = filters.statuses;
     setFilters({
       statuses: cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s],
