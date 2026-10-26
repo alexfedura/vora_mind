@@ -2946,6 +2946,25 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
   }, [chartReady, interactionLocked]);
   useMarqueeSelection(marqueeCtx);
   useRectTool(rectCtx);
+  const gradedRectCtx = useMemo(() => {
+    if (!chartReady || !chartRef.current || !seriesRef.current || !chartContainerRef.current) return null;
+    return {
+      container: chartContainerRef.current,
+      chart: chartRef.current,
+      series: seriesRef.current as unknown as object,
+      activeToolRef: gradedActiveToolRef,
+      drawingsRef: interactionDrawingsRef,
+      candlesRef,
+      pivotsRef,
+      configRef: gradedRectConfigRef,
+      setConfig: setGradedRectConfig,
+      setDrawings,
+      pushHistory: pushDrawingsHistory,
+      setHoverPivot: (pivot: PivotDto | null) => gradedRectOverlayRef.current?.setHoverPivot(pivot),
+      onContextMenu: setGradedRectContextMenu,
+    };
+  }, [chartReady, pushDrawingsHistory, setGradedRectConfig]);
+  useGradedRectTool(gradedRectCtx);
 
   // v7.4.4 — line tools wiring (registers alongside rect tool; ignores
   // events when no line tool is active, except line select/drag).
