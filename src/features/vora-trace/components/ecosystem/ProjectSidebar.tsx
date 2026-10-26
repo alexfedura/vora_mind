@@ -59,7 +59,7 @@ export function ProjectSidebar() {
               <span className="ml-auto text-trace-muted">
                 {p.role}
               </span>
-            </button>
+            </div>
             {p.git_branch && (
               <div className="mt-1 flex items-center gap-1 text-trace-muted">
                 <span>⎇</span>
@@ -71,7 +71,7 @@ export function ProjectSidebar() {
                 )}
               </div>
             )}
-          </div>
+          </button>
         ))}
       </div>
     </div>
