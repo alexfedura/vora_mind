@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Manager};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TraceNodeData {
@@ -98,32 +99,82 @@ pub struct GitLogEntry {
     pub message: String,
 }
 
-fn trace_root() -> Result<PathBuf, String> {
-    // Resolve D:\Workspace\vora_trace\.vora\trace
-    // Strategy: try exe dir, then cwd, then fallback.
-    let candidates = [
-        std::env::current_dir().ok(),
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf())),
-    ];
-    for c in candidates.into_iter().flatten() {
-        // Walk up looking for trace.yaml
-        let mut dir = c.clone();
-        for _ in 0..6 {
-            if dir.join("trace.yaml").exists() {
-                let root = dir.join(".vora").join("trace");
-                return Ok(root);
-            }
-            if let Some(parent) = dir.parent() {
-                dir = parent.to_path_buf();
-            } else {
-                break;
-            }
+const LEGACY_TRACE_PROJECT_ROOT: &str = r"D:\workspace\v​​ora_trace";
+
+fn copy_file_if_missing(source: &Path, destination: &Path) -> Result<(), String> {
+    if !source.is_file() || destination.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("create {}: {error}", parent.display()))?;
+    }
+    std::fs::copy(source, destination)
+        .map_err(|error| format!("copy {} to {}: {error}", source.display(), destination.display()))?;
+    Ok(())
+}
+
+fn copy_directory_if_missing(source: &Path, destination: &Path) -> Result<(), String> {
+    if !source.is_dir() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(destination)
+        .map_err(|error| format!("create {}: {error}", destination.display()))?;
+    let entries = std::fs::read_dir(source)
+        .map_err(|error| format!("read {}: {error}", source.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("read {}: {error}", source.display()))?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_directory_if_missing(&source_path, &destination_path)?;
+        } else {
+            copy_file_if_missing(&source_path, &destination_path)?;
         }
     }
-    // Fallback for dev mode
-    Ok(PathBuf::from("D:/Workspace/vora_trace/.vora/trace"))
+    Ok(())
+}
+
+fn migrate_legacy_data(source_root: &Path, app_data_root: &Path) -> Result<(), String> {
+    if !source_root.is_dir() {
+        return Ok(());
+    }
+    let destination_root = app_data_root.join("VoraTrace");
+    let marker = destination_root.join(".legacy-migration-v1-complete");
+    if marker.is_file() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(&destination_root)
+        .map_err(|error| format!("create {}: {error}", destination_root.display()))?;
+    copy_file_if_missing(
+        &source_root.join("trace.yaml"),
+        &destination_root.join("trace.yaml"),
+    )?;
+    copy_directory_if_missing(
+        &source_root.join(".vora").join("trace"),
+        &destination_root.join(".vora").join("trace"),
+    )?;
+    std::fs::write(&marker, "Vora Trace data copied to Vora Mind AppData.\n")
+        .map_err(|error| format!("write {}: {error}", marker.display()))?;
+    Ok(())
+}
+
+fn trace_root(app: &AppHandle) -> Result<PathBuf, String> {
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("resolve Vora Mind AppData: {error}"))?;
+    migrate_legacy_data(Path::new(LEGACY_TRACE_PROJECT_ROOT), &app_data)?;
+    Ok(app_data.join("VoraTrace").join(".vora").join("trace"))
+}
+
+fn trace_registry_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("resolve Vora Mind AppData: {error}"))?;
+    migrate_legacy_data(Path::new(LEGACY_TRACE_PROJECT_ROOT), &app_data)?;
+    Ok(app_data.join("VoraTrace").join("trace.yaml"))
 }
 
 fn run_git(cwd: &std::path::Path, args: &[&str]) -> Option<String> {
@@ -250,8 +301,8 @@ fn flush_section(
 }
 
 #[tauri::command]
-fn load_graph() -> Result<TraceGraph, String> {
-    let root = trace_root()?;
+pub fn load_graph(app: AppHandle) -> Result<TraceGraph, String> {
+    let root = trace_root(&app)?;
     let path = root.join("graph.json");
     let content = std::fs::read_to_string(&path)
         .map_err(|e| format!("read {}: {}", path.display(), e))?;
@@ -261,8 +312,8 @@ fn load_graph() -> Result<TraceGraph, String> {
 }
 
 #[tauri::command]
-fn save_graph(graph: TraceGraph) -> Result<(), String> {
-    let root = trace_root()?;
+pub fn save_graph(app: AppHandle, graph: TraceGraph) -> Result<(), String> {
+    let root = trace_root(&app)?;
     std::fs::create_dir_all(&root)
         .map_err(|e| format!("mkdir {}: {}", root.display(), e))?;
     let path = root.join("graph.json");
@@ -274,8 +325,8 @@ fn save_graph(graph: TraceGraph) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn save_decision_md(node: TraceNodeData) -> Result<String, String> {
-    let root = trace_root()?;
+pub fn save_decision_md(app: AppHandle, node: TraceNodeData) -> Result<String, String> {
+    let root = trace_root(&app)?;
     let dir = root.join("decisions");
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("mkdir {}: {}", dir.display(), e))?;
@@ -333,8 +384,8 @@ fn save_decision_md(node: TraceNodeData) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn list_decisions() -> Result<Vec<String>, String> {
-    let root = trace_root()?;
+pub fn list_decisions(app: AppHandle) -> Result<Vec<String>, String> {
+    let root = trace_root(&app)?;
     let dir = root.join("decisions");
     if !dir.exists() {
         return Ok(Vec::new());
@@ -355,15 +406,8 @@ fn list_decisions() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-fn scan_ecosystem() -> Result<Vec<ProjectInfo>, String> {
-    let root = trace_root()?;
-    // trace.yaml lives one level up from .vora/trace
-    let trace_yaml = root
-        .parent()                    // .vora
-        .and_then(|p| p.parent())     // vora_trace
-        .map(|p| p.join("trace.yaml"))
-        .ok_or_else(|| "cannot resolve trace.yaml".to_string())?;
-
+pub fn scan_ecosystem(app: AppHandle) -> Result<Vec<ProjectInfo>, String> {
+    let trace_yaml = trace_registry_path(&app)?;
     let content = std::fs::read_to_string(&trace_yaml)
         .map_err(|e| format!("read {}: {}", trace_yaml.display(), e))?;
 
@@ -401,7 +445,7 @@ fn scan_ecosystem() -> Result<Vec<ProjectInfo>, String> {
 }
 
 #[tauri::command]
-fn git_log_for_project(project_path: String, limit: usize)
+pub fn git_log_for_project(project_path: String, limit: usize)
     -> Result<Vec<GitLogEntry>, String>
 {
     let path = std::path::PathBuf::from(&project_path);
@@ -437,8 +481,8 @@ fn git_log_for_project(project_path: String, limit: usize)
 }
 
 #[tauri::command]
-fn read_all_decisions() -> Result<Vec<TraceNodeData>, String> {
-    let root = trace_root()?;
+pub fn read_all_decisions(app: AppHandle) -> Result<Vec<TraceNodeData>, String> {
+    let root = trace_root(&app)?;
     let dir = root.join("decisions");
     if !dir.exists() {
         return Ok(Vec::new());
@@ -461,7 +505,7 @@ fn read_all_decisions() -> Result<Vec<TraceNodeData>, String> {
 }
 
 #[tauri::command]
-fn find_commits_for_file(
+pub fn find_commits_for_file(
     project_path: String,
     file_pattern: String,
     limit: usize,
@@ -495,10 +539,9 @@ fn find_commits_for_file(
     Ok(entries)
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 #[tauri::command]
-fn export_graph_json(dest_path: String) -> Result<String, String> {
-    let root = trace_root()?;
+pub fn export_graph_json(app: AppHandle, dest_path: String) -> Result<String, String> {
+    let root = trace_root(&app)?;
     let src = root.join("graph.json");
     let content = std::fs::read_to_string(&src)
         .map_err(|e| format!("read {}: {}", src.display(), e))?;
@@ -508,7 +551,7 @@ fn export_graph_json(dest_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn import_graph_json(src_path: String) -> Result<TraceGraph, String> {
+pub fn import_graph_json(src_path: String) -> Result<TraceGraph, String> {
     let content = std::fs::read_to_string(&src_path)
         .map_err(|e| format!("read {}: {}", src_path, e))?;
     let graph: TraceGraph = serde_json::from_str(&content)
@@ -517,13 +560,13 @@ fn import_graph_json(src_path: String) -> Result<TraceGraph, String> {
 }
 
 #[tauri::command]
-fn app_version() -> String {
+pub fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
 #[tauri::command]
-fn recent_decisions(limit: usize) -> Result<Vec<TraceNodeData>, String> {
-    let mut all = read_all_decisions()?;
+pub fn recent_decisions(app: AppHandle, limit: usize) -> Result<Vec<TraceNodeData>, String> {
+    let mut all = read_all_decisions(app)?;
     all.sort_by(|a, b| {
         let a_t = a.created_at.as_deref().unwrap_or("");
         let b_t = b.created_at.as_deref().unwrap_or("");
@@ -532,28 +575,4 @@ fn recent_decisions(limit: usize) -> Result<Vec<TraceNodeData>, String> {
     all.truncate(limit.max(1).min(50));
     Ok(all)
 }
-
-pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![
-            load_graph,
-            save_graph,
-            save_decision_md,
-            list_decisions,
-            scan_ecosystem,
-            git_log_for_project,
-            read_all_decisions,
-            find_commits_for_file,
-            export_graph_json,
-            import_graph_json,
-            app_version,
-            recent_decisions,
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
-}
-
 
