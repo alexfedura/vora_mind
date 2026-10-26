@@ -235,6 +235,26 @@ export interface DrawingGeometry extends DrawingPresentation {
   style?: LineStyle;
 }
 
+export interface GradedRectangle extends DrawingPresentation {
+  id: string;
+  type: "graded-rectangle";
+  structureType: "RBR" | "DBD";
+  anchorPrice: number;
+  anchorTime: number;
+  startTime: number;
+  endTime: number;
+  topPrice: number;
+  bottomPrice: number;
+  baselineSide: "top" | "bottom";
+  correctionStartPrice?: number;
+  correctionStartTime?: number;
+  selected: boolean;
+  hidden?: boolean;
+  locked?: boolean;
+  colorOpacity?: number;
+  lineWidth: number;
+}
+
 export interface DrawingGeometrySegmentStyle {
   color?: string;
   colorOpacity?: number;
@@ -292,6 +312,7 @@ export function applyGeometryPathStyle(
 /** v7.4.4 — shared drawings union (rectangle + line tools). */
 export type DrawingAny =
   | DrawingRect
+  | GradedRectangle
   | DrawingVerticalLine
   | DrawingHorizontalLine
   | DrawingHorizontalRay
