@@ -1,6 +1,6 @@
 # Vora Trace Integration
 
-> **Status**: IMPLEMENTING
+> **Status**: READY FOR RELEASE
 > **Target Scope**: `layout | types | services | tauri | config`
 
 ## 1. Intent
@@ -24,8 +24,8 @@ Register Trace's graph load/save, decision Markdown, ecosystem scan, Git log/fil
 
 ## 4. Verification
 
-- TypeScript and production frontend build succeed.
-- Rust check succeeds and Trace command tests cover data-path selection and missing-data behavior.
-- Existing Trace data remains untouched while the migrated AppData copy is readable and writable.
-- Vora Mind routes and the Trace page render without Trace global styles leaking to other pages.
-- Bump the synchronized Vora Mind version, create a release tag, and push after checks pass.
+- `pnpm build` succeeds, including TypeScript checking and the production Vite build.
+- `cargo check --manifest-path src-tauri\Cargo.toml` succeeds.
+- `cargo test --manifest-path src-tauri\Cargo.toml vora_trace::tests --lib` passes both migration tests, covering one-time copying without source modification and missing-source startup.
+- The Trace workspace is included in the production bundle, and its styles are scoped to the embedded page.
+- Release version verification confirms synchronized `0.2.31` files; release tag `v0.2.32` is pending.
