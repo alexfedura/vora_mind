@@ -271,9 +271,10 @@ export function registerGradedRectTool(context: GradedRectToolContext): () => vo
     const logical = logicalAtCoordinate(chart, x);
     if (logical === null) return;
     const config = context.configRef.current;
+    const anchorTime = timestampAtLogical(logical, context.candlesRef.current);
     const startTime = timestampAtLogical(logical - config.width / 2, context.candlesRef.current);
     const endTime = timestampAtLogical(logical + config.width / 2, context.candlesRef.current);
-    if (startTime === null || endTime === null) return;
+    if (anchorTime === null || startTime === null || endTime === null) return;
 
     const structureType = pivot.kind === "H" ? "RBR" : "DBD";
     const baselineSide = structureType === "DBD" ? "bottom" : config.defaultBaseline;
@@ -284,7 +285,7 @@ export function registerGradedRectTool(context: GradedRectToolContext): () => vo
       type: "graded-rectangle",
       structureType,
       anchorPrice: pivot.price,
-      anchorTime: pivot.ts,
+      anchorTime,
       startTime: Math.min(startTime, endTime),
       endTime: Math.max(startTime, endTime),
       topPrice,
