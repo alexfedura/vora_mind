@@ -11,7 +11,7 @@ import type {
   TextLinkInput,
   TextLinkField,
 } from "@/mind/types";
-import type { JournalEntry, QuestionItem, TaskFlowItem } from "@/types";
+import type { JournalEntry, QuestionItem, TaskFlowItem, TaskFlowType } from "@/types";
 
 export interface CardDto {
   id: string;
@@ -177,12 +177,12 @@ export const dbService = {
     await invoke("delete_question", { id });
   },
 
-  async getTaskFlowItems(): Promise<TaskFlowItem[]> {
-    return await invoke<TaskFlowItem[]>("get_task_flow_items");
+  async getTaskFlowItems(taskType: TaskFlowType): Promise<TaskFlowItem[]> {
+    return await invoke<TaskFlowItem[]>("get_task_flow_items", { taskType });
   },
 
-  async createTaskFlowItem(title: string): Promise<TaskFlowItem> {
-    return await invoke<TaskFlowItem>("create_task_flow_item", { title });
+  async createTaskFlowItem(title: string, taskType: TaskFlowType): Promise<TaskFlowItem> {
+    return await invoke<TaskFlowItem>("create_task_flow_item", { title, taskType });
   },
 
   async updateTaskFlowItem(id: string, title: string, description: string): Promise<TaskFlowItem> {
@@ -193,8 +193,8 @@ export const dbService = {
     return await invoke<TaskFlowItem>("set_task_flow_item_completed", { id, completed });
   },
 
-  async reorderTaskFlowItems(ids: string[]): Promise<TaskFlowItem[]> {
-    return await invoke<TaskFlowItem[]>("reorder_task_flow_items", { ids });
+  async reorderTaskFlowItems(ids: string[], taskType: TaskFlowType): Promise<TaskFlowItem[]> {
+    return await invoke<TaskFlowItem[]>("reorder_task_flow_items", { ids, taskType });
   },
 
   async deleteTaskFlowItem(id: string): Promise<void> {

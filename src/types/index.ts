@@ -1,7 +1,10 @@
+export type TaskFlowType = "task" | "ai";
+
 export interface TaskFlowItem {
   id: string;
   title: string;
   description: string;
+  taskType: TaskFlowType;
   completed: boolean;
   position: number;
   createdAt: number;

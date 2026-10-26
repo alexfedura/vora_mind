@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 import { setSetting } from "@/shared/store/useSettingsStore";
 import { VoraCard } from "@/mind/types";
 import { createTextChangeSet, dbService } from "@/mind/services/dbService";
-import type { JournalEntry, QuestionItem, TaskFlowItem } from "@/types";
+import type { JournalEntry, QuestionItem, TaskFlowItem, TaskFlowType } from "@/types";
 import {
   CanonicalSymbolRecord,
   LineageHistoryEntry,
@@ -77,11 +77,11 @@ interface AppState {
   clearExecutedTasks: () => void;
 
   taskFlowItems: TaskFlowItem[];
-  loadTaskFlowItems: () => Promise<void>;
-  createTaskFlowItem: (title: string) => Promise<void>;
+  loadTaskFlowItems: (taskType: TaskFlowType) => Promise<void>;
+  createTaskFlowItem: (title: string, taskType: TaskFlowType) => Promise<void>;
   updateTaskFlowItem: (id: string, title: string, description: string) => Promise<void>;
   setTaskFlowItemCompleted: (id: string, completed: boolean) => Promise<void>;
-  reorderTaskFlowItems: (ids: string[]) => Promise<void>;
+  reorderTaskFlowItems: (ids: string[], taskType: TaskFlowType) => Promise<void>;
   deleteTaskFlowItem: (id: string) => Promise<void>;
 
   journalEntries: Record<string, JournalEntry>;
@@ -263,12 +263,12 @@ export const useAppStore = create<AppState>()(
       clearExecutedTasks: () => set({ executedTasks: [] }),
 
       taskFlowItems: [],
-      loadTaskFlowItems: async () => {
-        const taskFlowItems = await dbService.getTaskFlowItems();
+      loadTaskFlowItems: async (taskType) => {
+        const taskFlowItems = await dbService.getTaskFlowItems(taskType);
         set({ taskFlowItems });
       },
-      createTaskFlowItem: async (title) => {
-        const task = await dbService.createTaskFlowItem(title);
+      createTaskFlowItem: async (title, taskType) => {
+        const task = await dbService.createTaskFlowItem(title, taskType);
         set((state) => ({
           taskFlowItems: [...state.taskFlowItems, task].sort((left, right) =>
             left.position - right.position
@@ -287,8 +287,8 @@ export const useAppStore = create<AppState>()(
           taskFlowItems: state.taskFlowItems.map((item) => item.id === id ? task : item),
         }));
       },
-      reorderTaskFlowItems: async (ids) => {
-        const taskFlowItems = await dbService.reorderTaskFlowItems(ids);
+      reorderTaskFlowItems: async (ids, taskType) => {
+        const taskFlowItems = await dbService.reorderTaskFlowItems(ids, taskType);
         set({ taskFlowItems });
       },
       deleteTaskFlowItem: async (id) => {
