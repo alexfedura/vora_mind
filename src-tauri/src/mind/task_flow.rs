@@ -2,19 +2,37 @@ use rusqlite::{params, Connection, Result, Transaction};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskFlowType {
+    Task,
+    Ai,
+}
+
+impl TaskFlowType {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Task => "task",
+            Self::Ai => "ai",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskFlowItem {
     pub id: String,
     pub title: String,
     pub description: String,
+    pub task_type: TaskFlowType,
     pub completed: bool,
     pub position: i64,
     pub created_at: i64,
     pub updated_at: i64,
 }
 
-const TASK_COLUMNS: &str = "id, title, description, completed, position, created_at, updated_at";
+const TASK_COLUMNS: &str =
+    "id, title, description, task_type, completed, position, created_at, updated_at";
 
 pub fn init_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -22,6 +40,7 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 200),
             description TEXT NOT NULL DEFAULT '',
+            task_type TEXT NOT NULL DEFAULT 'task' CHECK(task_type IN ('task', 'ai')),
             completed INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1)),
             position INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
@@ -30,13 +49,14 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_task_flow_items_position
             ON task_flow_items(position, created_at, id);",
     )?;
-    let has_description = {
+    let (has_description, has_task_type) = {
         let mut statement = conn.prepare("PRAGMA table_info(task_flow_items)")?;
         let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
-        columns
-            .collect::<Result<Vec<_>>>()?
-            .iter()
-            .any(|name| name == "description")
+        let columns = columns.collect::<Result<Vec<_>>>()?;
+        (
+            columns.iter().any(|name| name == "description"),
+            columns.iter().any(|name| name == "task_type"),
+        )
     };
     if !has_description {
         conn.execute(
@@ -44,32 +64,50 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             [],
         )?;
     }
+    if !has_task_type {
+        conn.execute(
+            "ALTER TABLE task_flow_items ADD COLUMN task_type TEXT NOT NULL DEFAULT 'task'",
+            [],
+        )?;
+    }
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_task_flow_items_type_position
+            ON task_flow_items(task_type, position, created_at, id);",
+    )?;
     Ok(())
 }
 
-pub fn list_tasks(conn: &Connection) -> Result<Vec<TaskFlowItem>> {
-    let sql =
-        format!("SELECT {TASK_COLUMNS} FROM task_flow_items ORDER BY position, created_at, id");
+pub fn list_tasks(conn: &Connection, task_type: TaskFlowType) -> Result<Vec<TaskFlowItem>> {
+    let sql = format!(
+        "SELECT {TASK_COLUMNS} FROM task_flow_items
+         WHERE task_type = ?1 ORDER BY position, created_at, id"
+    );
     let mut statement = conn.prepare(&sql)?;
-    let rows = statement.query_map([], map_task)?;
+    let rows = statement.query_map([task_type.as_str()], map_task)?;
     rows.collect()
 }
 
-pub fn create_task(conn: &mut Connection, id: &str, title: &str, now: i64) -> Result<TaskFlowItem> {
+pub fn create_task(
+    conn: &mut Connection,
+    id: &str,
+    title: &str,
+    task_type: TaskFlowType,
+    now: i64,
+) -> Result<TaskFlowItem> {
     let title = title.trim();
     if title.is_empty() || title.chars().count() > 200 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     let transaction = conn.transaction()?;
     let position: i64 = transaction.query_row(
-        "SELECT COALESCE(MAX(position) + 1, 0) FROM task_flow_items",
-        [],
+        "SELECT COALESCE(MAX(position) + 1, 0) FROM task_flow_items WHERE task_type = ?1",
+        [task_type.as_str()],
         |row| row.get(0),
     )?;
     transaction.execute(
-        "INSERT INTO task_flow_items (id, title, position, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?4)",
-        params![id, title, position, now],
+        "INSERT INTO task_flow_items (id, title, task_type, position, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+        params![id, title, task_type.as_str(), position, now],
     )?;
     let task = query_task(&transaction, id)?;
     transaction.commit()?;
@@ -115,11 +153,16 @@ pub fn set_completed(
     query_task(conn, id)
 }
 
-pub fn reorder_tasks(conn: &mut Connection, ids: &[String], now: i64) -> Result<Vec<TaskFlowItem>> {
+pub fn reorder_tasks(
+    conn: &mut Connection,
+    ids: &[String],
+    task_type: TaskFlowType,
+    now: i64,
+) -> Result<Vec<TaskFlowItem>> {
     let transaction = conn.transaction()?;
     let existing_ids = {
-        let mut statement = transaction.prepare("SELECT id FROM task_flow_items")?;
-        let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+        let mut statement = transaction.prepare("SELECT id FROM task_flow_items WHERE task_type = ?1")?;
+        let rows = statement.query_map([task_type.as_str()], |row| row.get::<_, String>(0))?;
         rows.collect::<Result<HashSet<_>>>()?
     };
     let ordered_ids: HashSet<&str> = ids.iter().map(String::as_str).collect();
@@ -135,11 +178,12 @@ pub fn reorder_tasks(conn: &mut Connection, ids: &[String], now: i64) -> Result<
     for (index, id) in ids.iter().enumerate() {
         let position = i64::try_from(index).map_err(|_| rusqlite::Error::InvalidQuery)?;
         transaction.execute(
-            "UPDATE task_flow_items SET position = ?1, updated_at = ?2 WHERE id = ?3",
-            params![position, now, id],
+            "UPDATE task_flow_items SET position = ?1, updated_at = ?2
+             WHERE id = ?3 AND task_type = ?4",
+            params![position, now, id, task_type.as_str()],
         )?;
     }
-    let tasks = list_tasks_in_transaction(&transaction)?;
+    let tasks = list_tasks_in_transaction(&transaction, task_type)?;
     transaction.commit()?;
     Ok(tasks)
 }
@@ -157,23 +201,34 @@ fn query_task(conn: &Connection, id: &str) -> Result<TaskFlowItem> {
     conn.query_row(&sql, [id], map_task)
 }
 
-fn list_tasks_in_transaction(transaction: &Transaction<'_>) -> Result<Vec<TaskFlowItem>> {
-    let sql =
-        format!("SELECT {TASK_COLUMNS} FROM task_flow_items ORDER BY position, created_at, id");
+fn list_tasks_in_transaction(
+    transaction: &Transaction<'_>,
+    task_type: TaskFlowType,
+) -> Result<Vec<TaskFlowItem>> {
+    let sql = format!(
+        "SELECT {TASK_COLUMNS} FROM task_flow_items
+         WHERE task_type = ?1 ORDER BY position, created_at, id"
+    );
     let mut statement = transaction.prepare(&sql)?;
-    let rows = statement.query_map([], map_task)?;
+    let rows = statement.query_map([task_type.as_str()], map_task)?;
     rows.collect()
 }
 
 fn map_task(row: &rusqlite::Row<'_>) -> Result<TaskFlowItem> {
+    let task_type = match row.get::<_, String>(3)?.as_str() {
+        "task" => TaskFlowType::Task,
+        "ai" => TaskFlowType::Ai,
+        _ => return Err(rusqlite::Error::InvalidQuery),
+    };
     Ok(TaskFlowItem {
         id: row.get(0)?,
         title: row.get(1)?,
         description: row.get(2)?,
-        completed: row.get(3)?,
-        position: row.get(4)?,
-        created_at: row.get(5)?,
-        updated_at: row.get(6)?,
+        task_type,
+        completed: row.get(4)?,
+        position: row.get(5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
     })
 }
 
@@ -181,7 +236,7 @@ fn map_task(row: &rusqlite::Row<'_>) -> Result<TaskFlowItem> {
 mod tests {
     use super::{
         create_task, delete_task, init_schema, list_tasks, reorder_tasks, set_completed,
-        update_task,
+        update_task, TaskFlowType,
     };
     use rusqlite::Connection;
 
@@ -190,8 +245,22 @@ mod tests {
         let mut connection = Connection::open_in_memory().expect("open in-memory database");
         init_schema(&connection).expect("initialize Task Flow schema");
 
-        create_task(&mut connection, "task-a", "First task", 1).expect("create first task");
-        create_task(&mut connection, "task-b", "Second task", 2).expect("create second task");
+        create_task(
+            &mut connection,
+            "task-a",
+            "First task",
+            TaskFlowType::Task,
+            1,
+        )
+        .expect("create first task");
+        create_task(
+            &mut connection,
+            "task-b",
+            "Second task",
+            TaskFlowType::Task,
+            2,
+        )
+        .expect("create second task");
         update_task(
             &connection,
             "task-a",
@@ -204,6 +273,7 @@ mod tests {
         let reordered = reorder_tasks(
             &mut connection,
             &["task-b".to_string(), "task-a".to_string()],
+            TaskFlowType::Task,
             5,
         )
         .expect("reorder tasks");
@@ -220,7 +290,7 @@ mod tests {
         assert_eq!(reordered[1].description, "Full task details");
 
         delete_task(&connection, "task-b").expect("delete second task");
-        let remaining = list_tasks(&connection).expect("list remaining tasks");
+        let remaining = list_tasks(&connection, TaskFlowType::Task).expect("list remaining tasks");
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].id, "task-a");
     }
@@ -229,12 +299,20 @@ mod tests {
     fn reorder_rejects_missing_or_duplicate_task_ids() {
         let mut connection = Connection::open_in_memory().expect("open in-memory database");
         init_schema(&connection).expect("initialize Task Flow schema");
-        create_task(&mut connection, "task-a", "First task", 1).expect("create task");
+        create_task(
+            &mut connection,
+            "task-a",
+            "First task",
+            TaskFlowType::Task,
+            1,
+        )
+        .expect("create task");
 
-        assert!(reorder_tasks(&mut connection, &[], 2).is_err());
+        assert!(reorder_tasks(&mut connection, &[], TaskFlowType::Task, 2).is_err());
         assert!(reorder_tasks(
             &mut connection,
             &["task-a".to_string(), "task-a".to_string()],
+            TaskFlowType::Task,
             2,
         )
         .is_err());
@@ -259,7 +337,7 @@ mod tests {
             .expect("create legacy Task Flow schema");
 
         init_schema(&connection).expect("migrate Task Flow schema");
-        let tasks = list_tasks(&connection).expect("list migrated tasks");
+        let tasks = list_tasks(&connection, TaskFlowType::Task).expect("list migrated tasks");
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].description, "");
     }
