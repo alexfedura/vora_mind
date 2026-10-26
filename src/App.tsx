@@ -359,9 +359,10 @@ function AppContent() {
 
   const [activeOpenPanel, setActiveOpenPanel] = useState<OpenPanel>("none");
   const [isTaskFlowOpen, setIsTaskFlowOpen] = useState(false);
+  const [isAiTasksOpen, setIsAiTasksOpen] = useState(false);
   const [isJournalOpen, setIsJournalOpen] = useState(false);
   const [isQuestionsBoardOpen, setIsQuestionsBoardOpen] = useState(false);
-  const isWorkspacePageOpen = isTaskFlowOpen || isJournalOpen || isQuestionsBoardOpen;
+  const isWorkspacePageOpen = isTaskFlowOpen || isAiTasksOpen || isJournalOpen || isQuestionsBoardOpen;
   const [lastActivePanel, setLastActivePanel] = useState<"boards" | "sidebar">("boards");
   const [boards, setBoards] = useState<BoardItem[]>([]);
   const [boardsLoaded, setBoardsLoaded] = useState(false);
@@ -2150,7 +2151,12 @@ function AppContent() {
     const next = activeOpenPanel === "none"
       ? lastActivePanel
       : activeOpenPanel === "boards" ? "sidebar" : "boards";
-    if (next === "boards") setIsTaskFlowOpen(false);
+    if (next === "boards") {
+      setIsTaskFlowOpen(false);
+      setIsAiTasksOpen(false);
+      setIsJournalOpen(false);
+      setIsQuestionsBoardOpen(false);
+    }
     setActiveOpenPanel(next);
     setLastActivePanel(next);
   };
@@ -2158,7 +2164,12 @@ function AppContent() {
   const handleLeftContextMenu = (event: React.MouseEvent<HTMLButtonElement>): void => {
     event.preventDefault();
     const next = activeOpenPanel === "none" ? lastActivePanel : "none";
-    if (next === "boards") setIsTaskFlowOpen(false);
+    if (next === "boards") {
+      setIsTaskFlowOpen(false);
+      setIsAiTasksOpen(false);
+      setIsJournalOpen(false);
+      setIsQuestionsBoardOpen(false);
+    }
     setActiveOpenPanel(next);
     if (next !== "none") setLastActivePanel(next);
   };
@@ -2372,19 +2383,30 @@ function AppContent() {
               hasActiveBoard={Boolean(activeBoardId)}
               isLibraryOpen={isRightDrawerOpen}
               isTaskFlowOpen={isTaskFlowOpen}
+              isAiTasksOpen={isAiTasksOpen}
               isJournalOpen={isJournalOpen}
               isQuestionsBoardOpen={isQuestionsBoardOpen}
               onAddNewCard={handleCreateCardInLibraryOnly}
               onToggleLibrary={toggleRightDrawer}
               onOpenTaskFlow={() => {
+                setIsAiTasksOpen(false);
                 setIsJournalOpen(false);
                 setIsQuestionsBoardOpen(false);
                 setIsTaskFlowOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
               }}
+              onOpenAiTasks={() => {
+                setIsTaskFlowOpen(false);
+                setIsJournalOpen(false);
+                setIsQuestionsBoardOpen(false);
+                setIsAiTasksOpen(true);
+                setLastActivePanel("sidebar");
+                setActiveOpenPanel("sidebar");
+              }}
               onOpenJournal={() => {
                 setIsTaskFlowOpen(false);
+                setIsAiTasksOpen(false);
                 setIsQuestionsBoardOpen(false);
                 setIsJournalOpen(true);
                 setLastActivePanel("sidebar");
@@ -2392,6 +2414,7 @@ function AppContent() {
               }}
               onOpenQuestionsBoard={() => {
                 setIsTaskFlowOpen(false);
+                setIsAiTasksOpen(false);
                 setIsJournalOpen(false);
                 setIsQuestionsBoardOpen(true);
                 setLastActivePanel("sidebar");
@@ -2399,6 +2422,7 @@ function AppContent() {
               }}
               onOpenBoards={() => {
                 setIsTaskFlowOpen(false);
+                setIsAiTasksOpen(false);
                 setIsJournalOpen(false);
                 setIsQuestionsBoardOpen(false);
                 setLastActivePanel("boards");
@@ -2438,10 +2462,13 @@ function AppContent() {
           isTextToolActive ? "cursor-text" : activeShapeTool || isAddCardToolActive ? "cursor-crosshair" : ""
         }`}
       >
-        {isTaskFlowOpen ? <TaskFlowPage /> : isJournalOpen ? (
+        {isTaskFlowOpen || isAiTasksOpen ? (
+          <TaskFlowPage taskType={isAiTasksOpen ? "ai" : "task"} />
+        ) : isJournalOpen ? (
           <JournalPage onGoHome={() => {
             setIsJournalOpen(false);
             setIsTaskFlowOpen(false);
+            setIsAiTasksOpen(false);
             setIsQuestionsBoardOpen(false);
             setActiveOpenPanel("none");
           }} />
@@ -2450,6 +2477,7 @@ function AppContent() {
             setIsQuestionsBoardOpen(false);
             setIsJournalOpen(false);
             setIsTaskFlowOpen(false);
+            setIsAiTasksOpen(false);
             setActiveOpenPanel("none");
           }} />
         ) : (
@@ -2815,6 +2843,7 @@ function AppContent() {
           type="button"
           onClick={() => {
             setIsTaskFlowOpen(false);
+            setIsAiTasksOpen(false);
             setIsJournalOpen(true);
             setActiveOpenPanel("none");
           }}

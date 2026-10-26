@@ -8,6 +8,7 @@ import {
   BookOpen,
   CircleHelp,
   ListTodo,
+  Sparkles,
   Library as LibraryIcon,
   Tag,
   Highlighter,
@@ -22,11 +23,13 @@ interface LeftSidebarProps {
   hasActiveBoard: boolean;
   isLibraryOpen: boolean;
   isTaskFlowOpen: boolean;
+  isAiTasksOpen: boolean;
   isJournalOpen: boolean;
   isQuestionsBoardOpen: boolean;
   onAddNewCard: () => void;
   onOpenBoards: () => void;
   onOpenTaskFlow: () => void;
+  onOpenAiTasks: () => void;
   onOpenJournal: () => void;
   onOpenQuestionsBoard: () => void;
   onToggleLibrary: () => void;
@@ -37,11 +40,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   hasActiveBoard,
   isLibraryOpen,
   isTaskFlowOpen,
+  isAiTasksOpen,
   isJournalOpen,
   isQuestionsBoardOpen,
   onAddNewCard,
   onOpenBoards,
   onOpenTaskFlow,
+  onOpenAiTasks,
   onOpenJournal,
   onOpenQuestionsBoard,
   onToggleLibrary,
@@ -100,6 +105,19 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           >
             <ListTodo size={16} />
             <span>Task Flow</span>
+          </button>
+          <button
+            type="button"
+            onClick={onOpenAiTasks}
+            aria-current={isAiTasksOpen ? "page" : undefined}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition ${
+              isAiTasksOpen
+                ? "bg-[#1d212d] text-purple-400 font-semibold"
+                : "hover:bg-[#1b1e27] hover:text-gray-200"
+            }`}
+          >
+            <Sparkles size={16} />
+            <span>AI Tasks</span>
           </button>
           <button
             type="button"
