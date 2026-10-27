@@ -66,9 +66,10 @@ export const InquiryTriagePanel: React.FC = () => {
 
   const handleTriage = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    if (!form?.id) return;
+    if (!form) return;
     const formData = form;
     const questionId = formData.id;
+    if (questionId === null) return;
     setBusyId(questionId);
     setActionError(null);
     try {
