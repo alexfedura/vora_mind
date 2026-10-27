@@ -177,6 +177,38 @@ export const dbService = {
     await invoke("delete_question", { id });
   },
 
+  async triageQuestion(
+    id: string,
+    impact: number,
+    feasibility: number,
+    urgency: number,
+    triageNotes?: string,
+  ): Promise<QuestionItem> {
+    return await invoke<QuestionItem>("triage_question", {
+      id,
+      impact,
+      feasibility,
+      urgency,
+      triageNotes,
+    });
+  },
+
+  async untriageQuestion(id: string): Promise<QuestionItem> {
+    return await invoke<QuestionItem>("untriage_question", { id });
+  },
+
+  async archiveQuestion(id: string): Promise<QuestionItem> {
+    return await invoke<QuestionItem>("archive_question", { id });
+  },
+
+  async selectQuestionForPromotion(id: string): Promise<QuestionItem> {
+    return await invoke<QuestionItem>("select_for_promotion", { id });
+  },
+
+  async unselectQuestionForPromotion(id: string): Promise<QuestionItem> {
+    return await invoke<QuestionItem>("unselect_for_promotion", { id });
+  },
+
   async getTaskFlowItems(taskType: TaskFlowType): Promise<TaskFlowItem[]> {
     return await invoke<TaskFlowItem[]>("get_task_flow_items", { taskType });
   },

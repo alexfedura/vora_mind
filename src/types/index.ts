@@ -83,6 +83,15 @@ export interface QuestionItem {
   id: string;
   title: string;
   description: string;
+  status: "parked" | "triaged" | "archived" | "promoted";
+  impact: number | null;
+  feasibility: number | null;
+  urgency: number | null;
+  priorityScore: number | null;
+  triageNotes: string | null;
+  triagedAt: number | null;
+  isSelectedForPromotion: boolean;
+  promotedToHypothesisId: string | null;
   createdAt: number;
   updatedAt: number;
 }

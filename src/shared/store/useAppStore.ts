@@ -99,6 +99,17 @@ interface AppState {
   updateQuestion: (id: string, title: string, description: string) => void;
   flushQuestion: (id: string) => Promise<void>;
   deleteQuestion: (id: string) => Promise<void>;
+  triageQuestion: (
+    id: string,
+    impact: number,
+    feasibility: number,
+    urgency: number,
+    triageNotes?: string,
+  ) => Promise<QuestionItem>;
+  untriageQuestion: (id: string) => Promise<QuestionItem>;
+  archiveQuestion: (id: string) => Promise<QuestionItem>;
+  selectQuestionForPromotion: (id: string) => Promise<QuestionItem>;
+  unselectQuestionForPromotion: (id: string) => Promise<QuestionItem>;
 
   fetchCanonicalEntities: () => Promise<void>;
   selectCanonicalEntity: (entity: CanonicalSymbolRecord | null) => Promise<void>;
@@ -497,6 +508,188 @@ export const useAppStore = create<AppState>()(
             questionSaveError: null,
           };
         });
+      },
+      triageQuestion: async (id, impact, feasibility, urgency, triageNotes) => {
+        const previousQuestion = get().questions.find((question) => question.id === id);
+        if (!previousQuestion) throw new Error(`Question not found: ${id}`);
+        const optimisticQuestion: QuestionItem = {
+          ...previousQuestion,
+          status: "triaged",
+          impact,
+          feasibility,
+          urgency,
+          priorityScore: impact * feasibility * urgency,
+          triageNotes: triageNotes ?? null,
+          triagedAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        set((state) => ({
+          questions: sortQuestions(state.questions.map((question) =>
+            question.id === id ? optimisticQuestion : question
+          )),
+        }));
+        try {
+          const question = await dbService.triageQuestion(
+            id,
+            impact,
+            feasibility,
+            urgency,
+            triageNotes,
+          );
+          set((state) => ({
+            questions: sortQuestions(state.questions.map((item) =>
+              item.id === id ? question : item
+            )),
+          }));
+          return question;
+        } catch (error) {
+          set((state) => ({
+            questions: sortQuestions(state.questions.map((question) =>
+              question.id === id ? previousQuestion : question
+            )),
+          }));
+          throw error;
+        }
+      },
+      untriageQuestion: async (id) => {
+        const previousQuestion = get().questions.find((question) => question.id === id);
+        if (!previousQuestion) throw new Error(`Question not found: ${id}`);
+        const optimisticQuestion: QuestionItem = {
+          ...previousQuestion,
+          status: "parked",
+          impact: null,
+          feasibility: null,
+          urgency: null,
+          priorityScore: null,
+          triageNotes: null,
+          triagedAt: null,
+          isSelectedForPromotion: false,
+          updatedAt: Date.now(),
+        };
+        set((state) => ({
+          questions: sortQuestions(state.questions.map((question) =>
+            question.id === id ? optimisticQuestion : question
+          )),
+        }));
+        try {
+          const question = await dbService.untriageQuestion(id);
+          set((state) => ({
+            questions: sortQuestions(state.questions.map((item) =>
+              item.id === id ? question : item
+            )),
+          }));
+          return question;
+        } catch (error) {
+          set((state) => ({
+            questions: sortQuestions(state.questions.map((question) =>
+              question.id === id ? previousQuestion : question
+            )),
+          }));
+          throw error;
+        }
+      },
+      archiveQuestion: async (id) => {
+        const previousQuestion = get().questions.find((question) => question.id === id);
+        if (!previousQuestion) throw new Error(`Question not found: ${id}`);
+        const optimisticQuestion: QuestionItem = {
+          ...previousQuestion,
+          status: "archived",
+          impact: null,
+          feasibility: null,
+          urgency: null,
+          priorityScore: null,
+          triageNotes: null,
+          triagedAt: null,
+          isSelectedForPromotion: false,
+          updatedAt: Date.now(),
+        };
+        set((state) => ({
+          questions: sortQuestions(state.questions.map((question) =>
+            question.id === id ? optimisticQuestion : question
+          )),
+        }));
+        try {
+          const question = await dbService.archiveQuestion(id);
+          set((state) => ({
+            questions: sortQuestions(state.questions.map((item) =>
+              item.id === id ? question : item
+            )),
+          }));
+          return question;
+        } catch (error) {
+          set((state) => ({
+            questions: sortQuestions(state.questions.map((question) =>
+              question.id === id ? previousQuestion : question
+            )),
+          }));
+          throw error;
+        }
+      },
+      selectQuestionForPromotion: async (id) => {
+        const currentQuestions = get().questions;
+        const previousSelectedId = currentQuestions.find(
+          (question) => question.isSelectedForPromotion,
+        )?.id ?? null;
+        const targetQuestion = currentQuestions.find((question) => question.id === id);
+        if (!targetQuestion) throw new Error(`Question not found: ${id}`);
+        const previousSelection = currentQuestions
+          .filter((question) => question.isSelectedForPromotion)
+          .map((question) => question.id);
+        set((state) => ({
+          questions: sortQuestions(state.questions.map((question) => ({
+            ...question,
+            isSelectedForPromotion: question.id === id,
+          }))),
+        }));
+        try {
+          const question = await dbService.selectQuestionForPromotion(id);
+          set((state) => ({
+            questions: sortQuestions(state.questions.map((item) =>
+              item.id === id
+                ? question
+                : item.id === previousSelectedId
+                  ? { ...item, isSelectedForPromotion: false }
+                  : item
+            )),
+          }));
+          return question;
+        } catch (error) {
+          const previousSelectedIds = new Set(previousSelection);
+          set((state) => ({
+            questions: sortQuestions(state.questions.map((item) => ({
+              ...item,
+              isSelectedForPromotion: previousSelectedIds.has(item.id),
+            }))),
+          }));
+          throw error;
+        }
+      },
+      unselectQuestionForPromotion: async (id) => {
+        const previousQuestion = get().questions.find((question) => question.id === id);
+        if (!previousQuestion) throw new Error(`Question not found: ${id}`);
+        set((state) => ({
+          questions: sortQuestions(state.questions.map((question) =>
+            question.id === id
+              ? { ...question, isSelectedForPromotion: false, updatedAt: Date.now() }
+              : question
+          )),
+        }));
+        try {
+          const question = await dbService.unselectQuestionForPromotion(id);
+          set((state) => ({
+            questions: sortQuestions(state.questions.map((item) =>
+              item.id === id ? question : item
+            )),
+          }));
+          return question;
+        } catch (error) {
+          set((state) => ({
+            questions: sortQuestions(state.questions.map((item) =>
+              item.id === id ? previousQuestion : item
+            )),
+          }));
+          throw error;
+        }
       },
 
       setIsIndexingWorkspace: (isIndexingWorkspace) => set({ isIndexingWorkspace }),
