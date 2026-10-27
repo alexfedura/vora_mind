@@ -147,7 +147,7 @@ pub fn fetch_local_candles(
     let rows = statement
         .query_map(
             params![
-                parquet_glob.to_string_lossy().as_ref(),
+                parquet_glob.to_string_lossy().replace('\\', "/"),
                 start_ts,
                 end_ts,
                 limit as i64
