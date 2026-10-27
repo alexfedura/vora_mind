@@ -1,11 +1,11 @@
 import { useMemo, useState, type ReactElement } from "react";
 import { Search } from "lucide-react";
-import { ONLINE_MARKET_INSTRUMENTS } from "@/lib/market/marketApi";
+import { LOCAL_MARKET_INSTRUMENTS } from "@/lib/market/marketApi";
 import { useMarketSymbol } from "@/lib/market/useMarketSymbol";
 
 export function WatchlistPanel(): ReactElement {
   const { symbol, setSymbol } = useMarketSymbol();
-  const items = ONLINE_MARKET_INSTRUMENTS;
+  const items = LOCAL_MARKET_INSTRUMENTS;
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
