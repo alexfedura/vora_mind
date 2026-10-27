@@ -12,7 +12,10 @@ fn build_candle_query(interval_minutes: u32) -> String {
     format!(
         "WITH ticks AS (
             SELECT
-                time_bucket(INTERVAL '{interval_minutes} minutes', to_timestamp(ts)) AS bucket,
+                time_bucket(
+                    INTERVAL '{interval_minutes} minutes',
+                    TIMESTAMP 'epoch' + ts * INTERVAL '1 second'
+                ) AS bucket,
                 ts,
                 price,
                 volume
