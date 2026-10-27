@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Check, CheckCircle2, GripVertical, ListTodo, Plus, Sparkles, Trash2 } from "lucide-react";
+import { InquiryTriagePanel } from "@/shared/layout/InquiryTriagePanel";
 import { useAppStore } from "@/shared/store/useAppStore";
 import type { TaskFlowItem, TaskFlowType } from "@/types";
 
@@ -12,6 +13,7 @@ interface TaskFlowPageProps {
 }
 
 export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
+  const [activeTab, setActiveTab] = useState<"tasks" | "triage">("tasks");
   const tasks = useAppStore((state) => state.taskFlowItems);
   const loadTasks = useAppStore((state) => state.loadTaskFlowItems);
   const createTask = useAppStore((state) => state.createTaskFlowItem);
@@ -173,6 +175,31 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-7 sm:px-10">
+        {taskType === "task" && (
+          <div className="mx-auto mb-6 flex w-full max-w-4xl gap-2 border-b border-[#292c34] pb-3">
+            {([
+              ["tasks", "Tasks"],
+              ["triage", "Triage"],
+            ] as const).map(([tab, label]) => (
+              <button
+                key={tab}
+                type="button"
+                aria-pressed={activeTab === tab}
+                onClick={() => setActiveTab(tab)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  activeTab === tab
+                    ? "bg-[#252a37] text-white"
+                    : "text-gray-400 hover:bg-[#222734] hover:text-white"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {taskType === "task" && activeTab === "triage" ? (
+          <InquiryTriagePanel />
+        ) : (
         <div className="mx-auto w-full max-w-4xl">
           <form onSubmit={(event) => void handleCreate(event)} className="flex gap-2">
             <label className="sr-only" htmlFor="task-flow-title">New task</label>
@@ -359,6 +386,7 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
             </div>
           )}
         </div>
+        )}
       </div>
       {detailsEdit && (
         <div

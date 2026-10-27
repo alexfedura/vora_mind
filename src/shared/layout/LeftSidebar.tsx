@@ -161,7 +161,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             }`}
           >
             <CircleHelp size={16} />
-            <span>Questions Board</span>
+            <span>Inquiry Queue</span>
           </button>
           <button
             onClick={onToggleLibrary}
