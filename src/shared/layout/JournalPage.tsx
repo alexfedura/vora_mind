@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Clock3, House, Menu } from "lucide-react";
+import { CalendarDays, CandlestickChart, ChevronLeft, ChevronRight, Clock3, House, Menu } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { MarkdownTextEditor } from "@/features/markdown-editor/MarkdownTextEditor";
 
@@ -213,35 +214,21 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
               </button>
               <div
                 role="menu"
-                aria-label="Journal navigation"
-                className={`absolute right-0 top-full z-50 mt-1 min-w-[11rem] rounded-xl border border-[#2a2a2a] bg-[#181818]/90 p-1.5 shadow-lg backdrop-blur transition-all duration-200 ${
+                aria-label="Chart navigation"
+                className={`absolute right-0 top-full z-50 mt-1 flex flex-col gap-1 rounded-xl border border-[#2a2a2a] bg-[#181818]/90 p-1 shadow-lg backdrop-blur transition-all duration-200 ${
                   isHomeMenuOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0"
                 }`}
               >
-                <button
-                  type="button"
+                <Link
+                  to="/chart"
                   role="menuitem"
-                  onClick={() => {
-                    setIsMonthView(false);
-                    setIsHomeMenuOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition hover:bg-[#1c202d] hover:text-violet-300"
+                  aria-label="Go to Chart"
+                  title="Go to Chart"
+                  onClick={() => setIsHomeMenuOpen(false)}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
                 >
-                  <BookOpen size={15} aria-hidden="true" />
-                  <span>Journal</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setIsHomeMenuOpen(false);
-                    onGoHome();
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition hover:bg-[#1c202d] hover:text-violet-300"
-                >
-                  <House size={15} aria-hidden="true" />
-                  <span>Home</span>
-                </button>
+                  <CandlestickChart size={16} aria-hidden="true" />
+                </Link>
               </div>
             </div>
           </div>
