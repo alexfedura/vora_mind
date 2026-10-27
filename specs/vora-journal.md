@@ -12,12 +12,11 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 - Selecting **Journal** opens a dedicated workspace page without canvas controls.
 - A Home button in the Journal header returns directly to the main canvas; hide
   the duplicate Home shortcut from the upper-left toolbar while Journal is open.
-- The Journal shortcut in the Home toolbar opens a compact navigation menu with
-  Journal first and Go to Chart second; the separate Chart shortcut is omitted
-  to keep the toolbar uncluttered.
-- The Home button in the Journal header returns directly to the main canvas.
-- A Journal shortcut beside the Library and Chart controls in the Home toolbar
-  opens Journal for quick switching between those destinations.
+- The Home button in the Journal header returns directly to the main canvas when
+  clicked; hovering or keyboard-focusing it changes its icon to a menu indicator
+  and reveals Journal first and Home second.
+- The Home toolbar contains a direct Journal shortcut beside Library. There is
+  no separate Chart shortcut or Go to Chart menu item.
 - The default view opens today's entry. The selected date and weekday are shown in the top navigation bar, replacing the separate Workspace/Journal title block; there is no editable title field.
 - Users can move to adjacent days, choose a date, or open a month view.
 - The month view displays one card per day, with saved text previews, in a four-column date grid; selecting a card opens that day's entry.
@@ -38,8 +37,9 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 
 - Journal is selectable from the left menu and active styling uses VORA purple/indigo.
 - The Journal header Home button returns to the main canvas in one click.
-- The Home toolbar shows Journal and Go to Chart in the Journal navigation menu,
-  with no separate Chart shortcut; selecting Go to Chart opens the chart view.
+- Hovering or focusing the Journal header Home button reveals a menu with
+  Journal first and Home second; clicking the button itself still opens Home.
+- The Home toolbar has a direct Journal shortcut and no separate Chart shortcut.
 - Today's entry opens without an editable title; its date is the only heading.
 - Daily view has no divider below the date or decorative editor frame; the editor uses the available content width without a highlighted active-line background.
 - On medium and wider screens, the daily editor occupies 70% of its content container, leaving balanced 15% side margins; on smaller screens it uses the full available width.
