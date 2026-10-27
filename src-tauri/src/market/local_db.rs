@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use duckdb::Connection;
+use duckdb::{params, Connection};
 use tauri::Manager;
 
 use super::ipc::CandleDto;
@@ -177,7 +177,7 @@ pub fn fetch_local_candles(
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use duckdb::{params, Connection};
+    use duckdb::Connection;
 
     use super::fetch_local_candles;
     use crate::market::ipc::CandleDto;
