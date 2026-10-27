@@ -18,6 +18,7 @@ import {
   PanelRight,
   PanelRightClose,
   History,
+  CandlestickChart,
   Type,
   PlusSquare,
   Minus,
@@ -2879,7 +2880,7 @@ function AppContent() {
         >
           <button
             type="button"
-            onClick={() => setIsJournalMenuOpen((open) => !open)}
+            onClick={() => setIsJournalMenuOpen(true)}
             aria-label="Open Journal menu"
             aria-haspopup="menu"
             aria-expanded={isJournalMenuOpen}
