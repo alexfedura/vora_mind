@@ -489,21 +489,23 @@ mod tests {
 
     #[test]
     fn archive_is_allowed_from_parked_or_triaged_and_is_terminal() {
-        let connection = Connection::open_in_memory().expect("open in-memory database");
+        let mut connection = Connection::open_in_memory().expect("open in-memory database");
         init_schema(&connection).expect("initialize schema");
         create_question(&connection, "parked", "Parked", "", 1).expect("create parked");
         create_question(&connection, "triaged", "Triaged", "", 1).expect("create triaged");
         triage_question(&connection, "triaged", 2, 3, 4, Some("Notes"), 2)
             .expect("triage question");
+        select_for_promotion(&mut connection, "triaged", 3).expect("select triaged question");
 
         let archived_parked =
             archive_question(&connection, "parked", 3).expect("archive parked question");
         let archived_triaged =
-            archive_question(&connection, "triaged", 4).expect("archive triaged question");
+            archive_question(&connection, "triaged", 4).expect("archive selected triaged question");
         assert_eq!(archived_parked.status, "archived");
         assert_eq!(archived_triaged.status, "archived");
         assert_eq!(archived_triaged.priority_score, None);
         assert_eq!(archived_triaged.triaged_at, None);
+        assert!(!archived_triaged.is_selected_for_promotion);
         assert!(archive_question(&connection, "parked", 5).is_err());
         assert!(triage_question(&connection, "triaged", 2, 3, 4, None, 5).is_err());
     }
@@ -539,12 +541,17 @@ mod tests {
     }
 
     #[test]
-    fn unselect_requires_current_selection_and_promotion_is_never_performed() {
-        let connection = Connection::open_in_memory().expect("open in-memory database");
+    fn unselect_requires_current_selection_and_lifecycle_commands_never_promote() {
+        let mut connection = Connection::open_in_memory().expect("open in-memory database");
         init_schema(&connection).expect("initialize schema");
         create_question(&connection, "one", "One", "", 1).expect("create question");
         triage_question(&connection, "one", 1, 2, 3, None, 2).expect("triage question");
         assert!(super::unselect_for_promotion(&connection, "one", 3).is_err());
+        select_for_promotion(&mut connection, "one", 4).expect("select question");
+        super::unselect_for_promotion(&connection, "one", 5).expect("unselect question");
+        triage_question(&connection, "one", 2, 3, 4, None, 6).expect("update triage");
+        untriage_question(&connection, "one", 7).expect("untriage question");
+        archive_question(&connection, "one", 8).expect("archive question");
         assert_eq!(
             connection
                 .query_row(
