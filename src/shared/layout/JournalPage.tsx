@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CalendarDays, CandlestickChart, ChevronLeft, ChevronRight, Clock3, House, Menu } from "lucide-react";
+import { CalendarDays, CandlestickChart, ChevronLeft, ChevronRight, Clock3, Menu } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { MarkdownTextEditor } from "@/features/markdown-editor/MarkdownTextEditor";
@@ -208,9 +208,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
                 title="Home"
                 className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#343741] bg-[#1a1c22] text-gray-300 transition hover:border-purple-500/40 hover:bg-purple-500/10 hover:text-white"
               >
-                {isHomeMenuOpen
-                  ? <Menu size={17} aria-hidden="true" />
-                  : <House size={17} aria-hidden="true" />}
+                <Menu size={17} aria-hidden="true" />
               </button>
               <div
                 role="menu"
