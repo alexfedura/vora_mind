@@ -1,6 +1,6 @@
 [package]
 name = "vora_mind"
-version = "0.2.40"
+version = "0.2.41"
 description = "A Tauri App"
 edition = "2021"
 default-run = "vora_mind"
