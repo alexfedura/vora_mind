@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use duckdb::{params, Connection};
@@ -79,29 +78,6 @@ pub fn resolve_tick_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> 
         .map_err(|error| format!("Could not resolve bundled tick-data directory: {error}"))
 }
 
-fn contains_parquet_file(directory: &Path) -> Result<bool, String> {
-    let entries = fs::read_dir(directory)
-        .map_err(|error| format!("Could not read tick-data directory: {error}"))?;
-
-    for entry in entries {
-        let entry = entry.map_err(|error| format!("Could not inspect tick-data entry: {error}"))?;
-        let path = entry.path();
-        if path.is_dir() {
-            if contains_parquet_file(&path)? {
-                return Ok(true);
-            }
-        } else if path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("parquet"))
-        {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
-}
-
 pub fn fetch_local_candles(
     data_dir: PathBuf,
     symbol: String,
@@ -134,13 +110,6 @@ pub fn fetch_local_candles(
             symbol.to_ascii_uppercase()
         ));
     }
-    if !contains_parquet_file(&symbol_dir)? {
-        return Err(format!(
-            "No Parquet tick files found for symbol {}",
-            symbol.to_ascii_uppercase()
-        ));
-    }
-
     let parquet_glob = symbol_dir.join("**").join("*.parquet");
     let connection = Connection::open_in_memory()
         .map_err(|error| format!("Could not open in-memory DuckDB: {error}"))?;
