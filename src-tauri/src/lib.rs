@@ -1409,7 +1409,7 @@ pub fn run() {
             crate::source::ipc::src_create_extract,
             crate::source::ipc::src_create_link,
             crate::source::ipc::src_mark_extract_reviewed,
-            crate::market::ipc::mkt_fetch_historical_duka,
+            crate::market::ipc::mkt_fetch_local_candles,
             crate::market::ipc::mkt_detect_boxes,
             crate::market::ipc::mkt_cancel_request,
             crate::market::ipc::mkt_get_symbol_origin,

@@ -32,6 +32,9 @@
     "targets": [
       "nsis"
     ],
+    "resources": [
+      "../data/ticks/**/*"
+    ],
     "windows": {
       "nsis": {
         "installMode": "currentUser"

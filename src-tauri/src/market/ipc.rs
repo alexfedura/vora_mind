@@ -3,10 +3,10 @@
 //! Exposes 7 commands to the frontend:
 //! Exposes online historical candles and market analysis commands to the frontend.
 
-use crate::market::timeframe::MAX_STEP;
 use crate::market::{db, model::*};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tauri::Manager;
 
 // ── DTOs ─────────────────────────────────────────────────
 
@@ -39,48 +39,28 @@ fn err<E: std::fmt::Display>(e: E) -> String {
 
 // ── Commands ──────────────────────────────────────────────
 
-/// Fetch older candles from Dukascopy, returning cached history when available.
 #[tauri::command]
-pub async fn mkt_fetch_historical_duka(
+pub async fn mkt_fetch_local_candles(
+    app: tauri::AppHandle,
     symbol: String,
-    timeframe: String,
-    end_timestamp: i64,
+    interval_minutes: u32,
+    start_ts: i64,
+    end_ts: i64,
     limit: usize,
-    use_local_proxy: bool,
-    proxy_protocol: String,
-    proxy_host: String,
-    proxy_port: u16,
 ) -> Result<Vec<CandleDto>, String> {
-    if limit == 0 || limit > 5_000 {
-        return Err("DUKASCOPY_INVALID_LIMIT: expected 1..=5000".to_string());
-    }
-    if let Some(candles) =
-        super::dukascopy::cached_candles(&symbol, &timeframe, end_timestamp, limit).await
-    {
-        return Ok(candles);
-    }
-    let policy = super::http_client::PolicySettings {
-        use_local_proxy,
-        proxy_protocol,
-        proxy_host,
-        proxy_port,
-    };
-    let fetched = match super::dukascopy::fetch_duka_candles(
-        &symbol,
-        &timeframe,
-        end_timestamp,
-        limit,
-        &policy,
-    )
+    let data_dir = super::local_db::resolve_tick_data_dir(&app)?;
+    tokio::task::spawn_blocking(move || {
+        super::local_db::fetch_local_candles(
+            data_dir,
+            symbol,
+            interval_minutes,
+            start_ts,
+            end_ts,
+            limit,
+        )
+    })
     .await
-    {
-        Ok(candles) => candles,
-        Err(provider_error) => return Err(provider_error),
-    };
-    Ok(
-        super::dukascopy::cache_and_get_older(&symbol, &timeframe, end_timestamp, limit, fetched)
-            .await,
-    )
+    .map_err(|error| format!("Local candle query task failed: {error}"))?
 }
 
 /// 7. Detect boxes for (symbol, step). v5.1.10 returns { boxes, chains }

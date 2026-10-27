@@ -42,16 +42,16 @@ export interface MarketInstrument {
   row_count: number;
 }
 
-export const ONLINE_MARKET_INSTRUMENTS: MarketInstrument[] = [
-  { id: "dukascopy-XAUUSD", symbol: "XAUUSD", kind: "Dukascopy", row_count: 0 },
-  { id: "dukascopy-XAGUSD", symbol: "XAGUSD", kind: "Dukascopy", row_count: 0 },
-  { id: "dukascopy-EURUSD", symbol: "EURUSD", kind: "Dukascopy", row_count: 0 },
-  { id: "dukascopy-GBPUSD", symbol: "GBPUSD", kind: "Dukascopy", row_count: 0 },
-  { id: "dukascopy-USDJPY", symbol: "USDJPY", kind: "Dukascopy", row_count: 0 },
-  { id: "dukascopy-AUDUSD", symbol: "AUDUSD", kind: "Dukascopy", row_count: 0 },
-  { id: "dukascopy-USDCAD", symbol: "USDCAD", kind: "Dukascopy", row_count: 0 },
-  { id: "dukascopy-USDCHF", symbol: "USDCHF", kind: "Dukascopy", row_count: 0 },
-  { id: "dukascopy-NZDUSD", symbol: "NZDUSD", kind: "Dukascopy", row_count: 0 },
+export const LOCAL_MARKET_INSTRUMENTS: MarketInstrument[] = [
+  { id: "local-XAUUSD", symbol: "XAUUSD", kind: "Local Parquet", row_count: 0 },
+  { id: "local-XAGUSD", symbol: "XAGUSD", kind: "Local Parquet", row_count: 0 },
+  { id: "local-EURUSD", symbol: "EURUSD", kind: "Local Parquet", row_count: 0 },
+  { id: "local-GBPUSD", symbol: "GBPUSD", kind: "Local Parquet", row_count: 0 },
+  { id: "local-USDJPY", symbol: "USDJPY", kind: "Local Parquet", row_count: 0 },
+  { id: "local-AUDUSD", symbol: "AUDUSD", kind: "Local Parquet", row_count: 0 },
+  { id: "local-USDCAD", symbol: "USDCAD", kind: "Local Parquet", row_count: 0 },
+  { id: "local-USDCHF", symbol: "USDCHF", kind: "Local Parquet", row_count: 0 },
+  { id: "local-NZDUSD", symbol: "NZDUSD", kind: "Local Parquet", row_count: 0 },
 ];
 
 export interface CandleDto {
@@ -65,53 +65,14 @@ export interface CandleDto {
   first_extreme: "high_first" | "low_first" | "same";
 }
 
-export async function mktFetchHistoricalDuka(req: {
+export async function mktFetchLocalCandles(req: {
   symbol: string;
-  timeframe: string;
-  endTimestamp: number;
+  intervalMinutes: number;
+  startTs: number;
+  endTs: number;
   limit: number;
 }): Promise<CandleDto[]> {
-  let useLocalProxy = false;
-  let proxyProtocol: "socks5" | "http" = "socks5";
-  let proxyHost = "127.0.0.1";
-  let proxyPort = 10808;
-  try {
-    const storedPolicy: unknown = JSON.parse(
-      getSetting("vora.policy.M") ?? "null",
-    );
-    if (
-      typeof storedPolicy === "object" &&
-      storedPolicy !== null &&
-      "use_local_proxy" in storedPolicy
-    ) {
-      const policy = storedPolicy as Record<string, unknown>;
-      useLocalProxy = policy.use_local_proxy === true;
-      if (policy.proxy_protocol === "http" || policy.proxy_protocol === "socks5") {
-        proxyProtocol = policy.proxy_protocol;
-      }
-      if (typeof policy.proxy_host === "string") {
-        proxyHost = policy.proxy_host;
-      }
-      if (
-        typeof policy.proxy_port === "number" &&
-        Number.isInteger(policy.proxy_port) &&
-        policy.proxy_port >= 1 &&
-        policy.proxy_port <= 65535
-      ) {
-        proxyPort = policy.proxy_port;
-      }
-    }
-  } catch {
-    useLocalProxy = false;
-  }
-
-  return invoke<CandleDto[]>("mkt_fetch_historical_duka", {
-    ...req,
-    useLocalProxy,
-    proxyProtocol,
-    proxyHost,
-    proxyPort,
-  });
+  return invoke<CandleDto[]>("mkt_fetch_local_candles", req);
 }
 
 // M-Scale helpers
