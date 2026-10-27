@@ -24,6 +24,7 @@ export const InquiryTriagePanel: React.FC = () => {
   const questionSaveError = useAppStore((state) => state.questionSaveError);
   const loadQuestions = useAppStore((state) => state.loadQuestions);
   const triageQuestion = useAppStore((state) => state.triageQuestion);
+  const untriageQuestion = useAppStore((state) => state.untriageQuestion);
   const selectQuestionForPromotion = useAppStore((state) =>
     state.selectQuestionForPromotion
   );
@@ -89,7 +90,7 @@ export const InquiryTriagePanel: React.FC = () => {
     }
   };
 
-  const runSelectionAction = async (
+  const runQuestionAction = async (
     id: string,
     action: (questionId: string) => Promise<QuestionItem>,
   ): Promise<void> => {
@@ -98,11 +99,76 @@ export const InquiryTriagePanel: React.FC = () => {
     try {
       await action(id);
     } catch (error) {
-      console.error("Could not update inquiry selection:", error);
+      console.error("Could not update inquiry:", error);
       setActionError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusyId(null);
     }
+  };
+
+  const renderTriageForm = (question: QuestionItem): React.ReactNode => {
+    if (form?.id !== question.id) return null;
+
+    return (
+      <form onSubmit={(event) => void handleTriage(event)} className="mt-4 space-y-4">
+        <div>
+          <label className="mb-1 block text-xs text-gray-500">Inquiry</label>
+          <p className="text-sm text-gray-300">{question.title}</p>
+        </div>
+        {([
+          ["impact", "Impact"],
+          ["feasibility", "Feasibility"],
+          ["urgency", "Urgency"],
+        ] as const).map(([field, label]) => (
+          <label key={field} className="block">
+            <span className="mb-1 flex justify-between text-xs text-gray-400">
+              <span>{label}</span>
+              <span>{form[field]}</span>
+            </span>
+            <input
+              type="range"
+              min={1}
+              max={5}
+              step={1}
+              value={form[field]}
+              onChange={(event) => setForm({
+                ...form,
+                [field]: Number(event.target.value),
+              })}
+              className="w-full accent-[#e8ad55]"
+            />
+          </label>
+        ))}
+        <p className="rounded-lg bg-[#101114] px-3 py-2 text-sm text-gray-300">
+          Priority: {form.impact} × {form.feasibility} × {form.urgency} = {form.impact * form.feasibility * form.urgency}
+        </p>
+        <label className="block">
+          <span className="mb-1 block text-xs text-gray-400">Notes (optional)</span>
+          <textarea
+            value={form.notes}
+            onChange={(event) => setForm({ ...form, notes: event.target.value })}
+            rows={3}
+            className="w-full resize-y rounded-lg border border-[#343741] bg-[#101114] px-3 py-2 text-sm text-gray-200 outline-none focus:border-[#e8ad55]"
+          />
+        </label>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setForm(null)}
+            className="rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d]"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={busyId === question.id}
+            className="rounded-lg bg-[#e8ad55] px-3 py-2 text-xs font-semibold text-[#17130d] transition hover:bg-[#f0bd6c] disabled:opacity-50"
+          >
+            {busyId === question.id ? "Triaging..." : "Triage"}
+          </button>
+        </div>
+      </form>
+    );
   };
 
   const displayError = actionError || questionSaveError || loadError;
@@ -171,66 +237,7 @@ export const InquiryTriagePanel: React.FC = () => {
                     >
                       {question.title}
                     </button>
-                    {form?.id === question.id && (
-                      <form onSubmit={(event) => void handleTriage(event)} className="mt-4 space-y-4">
-                        <div>
-                          <label className="mb-1 block text-xs text-gray-500">Inquiry</label>
-                          <p className="text-sm text-gray-300">{question.title}</p>
-                        </div>
-                        {([
-                          ["impact", "Impact"],
-                          ["feasibility", "Feasibility"],
-                          ["urgency", "Urgency"],
-                        ] as const).map(([field, label]) => (
-                          <label key={field} className="block">
-                            <span className="mb-1 flex justify-between text-xs text-gray-400">
-                              <span>{label}</span>
-                              <span>{form[field]}</span>
-                            </span>
-                            <input
-                              type="range"
-                              min={1}
-                              max={5}
-                              step={1}
-                              value={form[field]}
-                              onChange={(event) => setForm({
-                                ...form,
-                                [field]: Number(event.target.value),
-                              })}
-                              className="w-full accent-[#e8ad55]"
-                            />
-                          </label>
-                        ))}
-                        <p className="rounded-lg bg-[#101114] px-3 py-2 text-sm text-gray-300">
-                          Priority: {form.impact} × {form.feasibility} × {form.urgency} = {form.impact * form.feasibility * form.urgency}
-                        </p>
-                        <label className="block">
-                          <span className="mb-1 block text-xs text-gray-400">Notes (optional)</span>
-                          <textarea
-                            value={form.notes}
-                            onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                            rows={3}
-                            className="w-full resize-y rounded-lg border border-[#343741] bg-[#101114] px-3 py-2 text-sm text-gray-200 outline-none focus:border-[#e8ad55]"
-                          />
-                        </label>
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setForm(null)}
-                            className="rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d]"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="submit"
-                            disabled={busyId === question.id}
-                            className="rounded-lg bg-[#e8ad55] px-3 py-2 text-xs font-semibold text-[#17130d] transition hover:bg-[#f0bd6c] disabled:opacity-50"
-                          >
-                            {busyId === question.id ? "Triaging..." : "Triage"}
-                          </button>
-                        </div>
-                      </form>
-                    )}
+                    {renderTriageForm(question)}
                   </li>
                 ))}
               </ul>
@@ -250,47 +257,75 @@ export const InquiryTriagePanel: React.FC = () => {
                 {rankedInquiries.map((question, index) => (
                   <li
                     key={question.id}
-                    className="flex flex-wrap items-center gap-3 rounded-xl border border-[#292c34] bg-[#17191f] p-3"
+                    className="rounded-xl border border-[#292c34] bg-[#17191f] p-3"
                   >
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 text-xs font-semibold text-blue-300">
-                      {index + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="break-words text-sm font-medium text-gray-200">{question.title}</p>
-                      <span className="mt-1 inline-flex rounded-full border border-blue-500/20 bg-blue-500/5 px-2.5 py-1 text-xs text-blue-200">
-                        I{question.impact}·F{question.feasibility}·U{question.urgency}→{question.priorityScore}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 text-xs font-semibold text-blue-300">
+                        {index + 1}
                       </span>
-                    </div>
-                    {question.isSelectedForPromotion ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300">
-                          ★ Selected
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words text-sm font-medium text-gray-200">{question.title}</p>
+                        <span className="mt-1 inline-flex rounded-full border border-blue-500/20 bg-blue-500/5 px-2.5 py-1 text-xs text-blue-200">
+                          I{question.impact}·F{question.feasibility}·U{question.urgency}→{question.priorityScore}
                         </span>
+                      </div>
+                      {question.isSelectedForPromotion ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300">
+                            ★ Selected
+                          </span>
+                          <button
+                            type="button"
+                            disabled={busyId === question.id}
+                            onClick={() => void runQuestionAction(
+                              question.id,
+                              unselectQuestionForPromotion,
+                            )}
+                            className="rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
+                          >
+                            Unselect
+                          </button>
+                        </div>
+                      ) : (
                         <button
                           type="button"
                           disabled={busyId === question.id}
-                          onClick={() => void runSelectionAction(
+                          onClick={() => void runQuestionAction(
                             question.id,
-                            unselectQuestionForPromotion,
+                            selectQuestionForPromotion,
                           )}
-                          className="rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
+                          className="rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/25 disabled:opacity-50"
                         >
-                          Unselect
+                          Select for Promotion
                         </button>
-                      </div>
-                    ) : (
+                      )}
                       <button
                         type="button"
                         disabled={busyId === question.id}
-                        onClick={() => void runSelectionAction(
-                          question.id,
-                          selectQuestionForPromotion,
-                        )}
-                        className="rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/25 disabled:opacity-50"
+                        onClick={() => {
+                          setActionError(null);
+                          setForm({
+                            id: question.id,
+                            impact: question.impact ?? 3,
+                            feasibility: question.feasibility ?? 3,
+                            urgency: question.urgency ?? 3,
+                            notes: question.triageNotes ?? "",
+                          });
+                        }}
+                        className="rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
                       >
-                        Select for Promotion
+                        Edit Scores
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        disabled={busyId === question.id}
+                        onClick={() => void runQuestionAction(question.id, untriageQuestion)}
+                        className="rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
+                      >
+                        Untriage
+                      </button>
+                    </div>
+                    {renderTriageForm(question)}
                   </li>
                 ))}
               </ol>

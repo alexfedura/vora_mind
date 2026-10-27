@@ -164,7 +164,9 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
             <p className="mt-1 text-sm text-gray-400">
               {taskType === "ai"
                 ? "Keep AI-related tasks separate and move them through your priority timeline."
-                : "Keep your priorities in order. Drag any task to move it through your timeline."}
+                : activeTab === "triage"
+                  ? "Prioritize your inquiries and select the next one to pursue."
+                  : "Keep your priorities in order. Drag any task to move it through your timeline."}
             </p>
           </div>
           <div className="shrink-0 rounded-xl border border-[#30333c] bg-[#1a1c22] px-3 py-2 text-right">
