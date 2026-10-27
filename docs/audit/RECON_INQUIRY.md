@@ -423,12 +423,24 @@ All six names are registered in `generate_handler!` at `src-tauri/src/lib.rs:131
 **FACT —** TypeScript type fields mirror the Rust DTO; service wrappers invoke the same command names. (`src/types/index.ts:1-11`; `src/mind/services/dbService.ts:180-202`)
 
 ```ts
-async getTaskFlowItems(taskType: TaskFlowType): Promise<TaskFlowItem[]>
-async createTaskFlowItem(title: string, taskType: TaskFlowType): Promise<TaskFlowItem>
-async updateTaskFlowItem(id: string, title: string, description: string): Promise<TaskFlowItem>
-async setTaskFlowItemCompleted(id: string, completed: boolean): Promise<TaskFlowItem>
-async reorderTaskFlowItems(ids: string[], taskType: TaskFlowType): Promise<TaskFlowItem[]>
-async deleteTaskFlowItem(id: string): Promise<void>
+async getTaskFlowItems(taskType: TaskFlowType): Promise<TaskFlowItem[]> {
+  return await invoke<TaskFlowItem[]>("get_task_flow_items", { taskType });
+},
+async createTaskFlowItem(title: string, taskType: TaskFlowType): Promise<TaskFlowItem> {
+  return await invoke<TaskFlowItem>("create_task_flow_item", { title, taskType });
+},
+async updateTaskFlowItem(id: string, title: string, description: string): Promise<TaskFlowItem> {
+  return await invoke<TaskFlowItem>("update_task_flow_item", { id, title, description });
+},
+async setTaskFlowItemCompleted(id: string, completed: boolean): Promise<TaskFlowItem> {
+  return await invoke<TaskFlowItem>("set_task_flow_item_completed", { id, completed });
+},
+async reorderTaskFlowItems(ids: string[], taskType: TaskFlowType): Promise<TaskFlowItem[]> {
+  return await invoke<TaskFlowItem[]>("reorder_task_flow_items", { ids, taskType });
+},
+async deleteTaskFlowItem(id: string): Promise<void> {
+  await invoke("delete_task_flow_item", { id });
+},
 ```
 
 **FACT —** The store has one `taskFlowItems` array and actions that call `dbService`; it updates the array only after service calls succeed. This array is not included in Zustand’s `partialize` persisted subset. (`src/shared/store/useAppStore.ts:79-85, 265-299, 553-562`)
