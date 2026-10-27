@@ -100,7 +100,7 @@
 
 Notation: `!` = `NOT NULL`; `?` = nullable; `PK` = primary key; `FK` = foreign key; omitted defaults mean no SQL default was declared. SQLite affinity types are shown as declared. The runtime workspace schemas are initialized from Rust; [src-tauri/src/schema.sql](../../src-tauri/src/schema.sql) is an additional older/duplicated SQL schema and is not the canvas initializer.
 
-#### Canvas/board database (13 tables)
+#### Canvas/board database (14 tables)
 
 | Table | Fields (declared type, nullability/default) and relations |
 |---|---|
@@ -161,7 +161,7 @@ Sources: [task_flow.rs](../../src-tauri/src/mind/task_flow.rs#L1-L80), [journal.
 
 No foreign keys are declared in these market tables. Indexes are on candle symbol/time and timeframe/time, box symbol/step and chain, and alert symbol/enabled/time. [schema_market.sql](../../src-tauri/schema_market.sql#L1-L105), [market/db.rs](../../src-tauri/src/market/db.rs#L1-L120).
 
-#### Forge index tables (17 tables)
+#### Forge index tables (16 tables)
 
 | Table | Fields (all not-null unless `?`) and relations |
 |---|---|
@@ -218,12 +218,16 @@ Indexes are task status/priority/time and descending cluster-log timestamp. [vor
 | State family | Values | Enforcement / observed transitions |
 |---|---|---|
 | Trace node status | `accepted`, `rejected`, `pending`, `current`, `abandoned`; node kinds `state`, `decision`, `experiment`, `rejected`; edge kinds `main`, `branch`, `rejected`. [vora_trace.rs](../../src-tauri/src/vora_trace.rs#L1-L55), [src/types/index.ts](../../src/types/index.ts#L14-L16) | `addNode` defaults rejected nodes to `rejected`, other nodes to `pending`; editor/store can update node status. No centralized allowed-transition graph found. [traceStore.ts](../../src/features/vora-trace/store/traceStore.ts#L215-L245) |
-| Worker task status | Observed `PENDING`, `CLAIMED`, `HEALING`, `COMPLETED`, `FAILED`. [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L25-L45), [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L801-L870), [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L1300-L1320) | Claim sets `PENDING → CLAIMED`; execution may set `HEALING`, then terminal `COMPLETED`/`FAILED`; stale recovery resets to `PENDING`. Status is a free-form SQL string, not an enum/CHECK. [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L380-L400), [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L801-L870) |
+| Worker task status | Observed `PENDING`, `CLAIMED`, `PLANNING`, `TESTING`, `SIMULATING`, `HEALING`, `COMPLETED`, `FAILED`. [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L801-L870), [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L880-L960), [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L1080-L1105), [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L1300-L1320) | Claim sets `PENDING → CLAIMED`; execution advances through planning/testing and sometimes simulation, may enter healing, then terminal `COMPLETED`/`FAILED`; stale recovery resets to `PENDING`. Status is a free-form SQL string, not an enum/CHECK. [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L380-L400), [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L801-L870) |
+| Worker heartbeat status | Observed `IDLE`, `BUSY`, `DEGRADED`; persisted as free-form `TEXT`. [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L25-L45), [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L899-L920) | Set to `BUSY` during a task, `IDLE` on task exit, and `DEGRADED` in an error path; no typed enum/CHECK. [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L899-L920), [vora_worker.rs](../../src-tauri/src/bin/vora_worker.rs#L940-L990) |
 | Task Flow | `TaskFlowType`: `task` / `ai`; `completed: boolean`. [task_flow.rs](../../src-tauri/src/mind/task_flow.rs#L1-L35), [src/types/index.ts](../../src/types/index.ts#L1-L12) | Completion toggles a boolean; no multi-stage status machine. [lib.rs](../../src-tauri/src/lib.rs#L189-L257) |
 | Source status | SQL defaults to `active`; comments describe `active|archived`; model property is `String`. [schema_source.sql](../../src-tauri/schema_source.sql#L8-L23), [source/model.rs](../../src-tauri/src/source/model.rs#L180-L245) | Creation normalizes an empty status to `active`; no typed transition enforcement found. Revision event types are `create|update|correct|retract|review`, but these are audit-event kinds, not current statuses. [source/db.rs](../../src-tauri/src/source/db.rs#L70-L120), [source/model.rs](../../src-tauri/src/source/model.rs#L155-L178) |
 | Settings save state | `saving`, `saved`, `error`. [useAppStore.ts](../../src/shared/store/useAppStore.ts#L85-L105) | Per-entry debounce/queued saves; status does not represent a domain entity lifecycle. [useAppStore.ts](../../src/shared/store/useAppStore.ts#L1-L32) |
 | Updater | `idle`, `checking`, `downloading`, `ready`, `installing`, `error`. [UpdaterProvider.tsx](../../src/shared/components/UpdaterProvider.tsx#L1-L32) | UI/update flow state; not a persistent workflow. |
 | Forge semantic resolution | `Resolved`, `Ambiguous`, `Unresolved`, `DynamicFallback`. [forge/model.rs](../../src-tauri/src/forge/model.rs#L518-L565) | Resolution outcome, not a workflow status; resolver chooses the variant. [forge/resolver.rs](../../src-tauri/src/forge/resolver.rs#L210-L260) |
+| Forge semantic edge status (TS mirror) | `Resolved`, `Ambiguous`, `Unresolved`, `DynamicFallback`. [forgeService.ts](../../src/forge/services/forgeService.ts#L81-L95) | Frontend representation of Rust resolution outcomes. |
+| Forge planner phase | `RootMutation`, `CallSiteMigration`, `InterfaceSync`, `DeepCascadeAdaptation`, `TestVerification`. [planner.rs](../../src-tauri/src/forge/planner.rs#L1-L18) | Ordered plan classification, not a persisted entity status; `PlanStep.phase` holds one phase. |
+| Chart display mode | `special`, `candlestick`. [ChartPage.tsx](../../src/pages/ChartPage.tsx#L1204-L1206) | Page-local rendering mode, not a domain lifecycle. |
 
 Other persisted domain enums include source kind/transform/confidence/creator/link/revision types and market timeframe/drawing/alert/box types; these are detailed in [source/model.rs](../../src-tauri/src/source/model.rs#L1-L178) and [market/model.rs](../../src-tauri/src/market/model.rs#L1-L190). They do not form state machines.
 
