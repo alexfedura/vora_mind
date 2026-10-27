@@ -10,7 +10,7 @@ export interface ChartIntervalOption {
 
 const INTERVAL_GROUPS: ReadonlyArray<{ group: IntervalGroupName; values: ReadonlyArray<{ value: number; unit: string; labelUnit: string }>; enabled: boolean }> = [
   { group: "Ticks", values: [1, 10, 100, 1000].map((value) => ({ value, unit: "t", labelUnit: "tick" })), enabled: false },
-  { group: "Seconds", values: [1, 5, 10, 15, 30].map((value) => ({ value, unit: "s", labelUnit: "second" })), enabled: true },
+  { group: "Seconds", values: [1, 5, 10, 15, 30].map((value) => ({ value, unit: "s", labelUnit: "second" })), enabled: false },
   { group: "Minutes", values: [1, 2, 3, 5, 10, 15, 30, 45].map((value) => ({ value, unit: "m", labelUnit: "minute" })), enabled: true },
   { group: "Hours", values: [1, 2, 3, 4, 6, 8, 12].map((value) => ({ value, unit: "h", labelUnit: "hour" })), enabled: true },
   { group: "Days", values: [1, 2, 3, 5, 10].map((value) => ({ value, unit: "d", labelUnit: "day" })), enabled: true },
@@ -28,9 +28,9 @@ export const CHART_INTERVAL_OPTIONS: ChartIntervalOption[] = [
     label: `${value} ${labelUnit}${value === 1 ? "" : "s"}`,
     group,
     enabled,
-    ...(!enabled ? { disabledReason: group === "Ticks" ? "Raw ordered tick data is not available in the current candle feed" : "Range bars need a verified instrument tick size" } : {}),
+    ...(!enabled ? { disabledReason: group === "Ticks" ? "Tick-count bars are not available in the local time-bucket feed" : group === "Seconds" ? "The local candle command currently supports whole-minute intervals only" : "Range bars need a verified instrument tick size" } : {}),
   }))),
-  ...M_SCALE_SECONDS.map((_seconds, step) => ({ key: `M${step}`, label: `M${step} · ${M_SCALE_LABELS[step]}`, group: "VORA M-scale" as const, enabled: true })),
+  ...M_SCALE_SECONDS.map((_seconds, step) => ({ key: `M${step}`, label: `M${step} · ${M_SCALE_LABELS[step]}`, group: "VORA M-scale" as const, enabled: false, disabledReason: "VORA M-scale buckets are not whole-minute intervals" })),
 ];
 
 const LABEL_BY_KEY = new Map(CHART_INTERVAL_OPTIONS.map((option) => [option.key, option.label]));
@@ -44,8 +44,9 @@ export function intervalGroupName(key: string): IntervalGroupName | null {
 }
 
 export function isIntervalEnabled(key: string): boolean {
-  return CHART_INTERVAL_OPTIONS.some((option) => option.key === key && option.enabled)
-    || parseCustomInterval(key) !== null;
+  const option = CHART_INTERVAL_OPTIONS.find((candidate) => candidate.key === key);
+  return (option ? option.enabled : parseCustomInterval(key) !== null)
+    && chartIntervalMinutes(key) !== null;
 }
 
 export function parseCustomInterval(key: string): { amount: number; unit: "s" | "m" | "h" | "d" | "w" | "mo" } | null {
@@ -61,7 +62,14 @@ export function parseCustomInterval(key: string): { amount: number; unit: "s" | 
 }
 
 export function isChartIntervalKey(key: string): boolean {
-  return CHART_INTERVAL_OPTIONS.some((option) => option.key === key && option.enabled) || parseCustomInterval(key) !== null;
+  return isIntervalEnabled(key);
+}
+
+export function chartIntervalMinutes(key: string): number | null {
+  const option = CHART_INTERVAL_OPTIONS.find((candidate) => candidate.key === key);
+  if (!option && parseCustomInterval(key) === null) return null;
+  const seconds = intervalWindowSeconds(key);
+  return seconds >= 60 && seconds % 60 === 0 ? seconds / 60 : null;
 }
 
 export function intervalWindowSeconds(key: string): number {
