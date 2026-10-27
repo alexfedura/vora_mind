@@ -3,6 +3,7 @@
 //! Exposes local historical candles and market analysis commands to the frontend.
 
 use crate::market::{db, model::*};
+use crate::market::timeframe::MAX_STEP;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
