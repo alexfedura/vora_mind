@@ -229,9 +229,7 @@ mod tests {
             )
             .expect("test ticks should be inserted");
         writer
-            .execute_batch(&format!(
-                "COPY ticks TO '{sql_path}' (FORMAT PARQUET);"
-            ))
+            .execute_batch(&format!("COPY ticks TO '{sql_path}' (FORMAT PARQUET);"))
             .expect("test Parquet file should be written");
 
         let candles = fetch_local_candles(
@@ -278,15 +276,9 @@ mod tests {
         std::fs::create_dir_all(data_dir.join("XAUUSD"))
             .expect("symbol directory should be created");
 
-        assert!(fetch_local_candles(
-            data_dir.clone(),
-            "../XAUUSD".to_string(),
-            1,
-            0,
-            60,
-            10,
-        )
-        .is_err());
+        assert!(
+            fetch_local_candles(data_dir.clone(), "../XAUUSD".to_string(), 1, 0, 60, 10,).is_err()
+        );
         assert!(fetch_local_candles(data_dir, "XAUUSD".to_string(), 0, 0, 60, 10).is_err());
     }
 }
