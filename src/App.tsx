@@ -18,7 +18,6 @@ import {
   PanelRight,
   PanelRightClose,
   History,
-  CandlestickChart,
   Type,
   PlusSquare,
   Minus,
@@ -363,6 +362,7 @@ function AppContent() {
   const [isAiTasksOpen, setIsAiTasksOpen] = useState(false);
   const [isVoraTraceOpen, setIsVoraTraceOpen] = useState(false);
   const [isJournalOpen, setIsJournalOpen] = useState(false);
+  const [isJournalMenuOpen, setIsJournalMenuOpen] = useState(false);
   const [isQuestionsBoardOpen, setIsQuestionsBoardOpen] = useState(false);
   const isWorkspacePageOpen = isTaskFlowOpen || isAiTasksOpen || isVoraTraceOpen || isJournalOpen || isQuestionsBoardOpen;
   const [lastActivePanel, setLastActivePanel] = useState<"boards" | "sidebar">("boards");
@@ -2866,29 +2866,63 @@ function AppContent() {
         >
           {isRightDrawerOpen ? <PanelRightClose size={16} /> : <PanelRight size={16} />}
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setIsTaskFlowOpen(false);
-            setIsAiTasksOpen(false);
-            setIsVoraTraceOpen(false);
-            setIsJournalOpen(true);
-            setActiveOpenPanel("none");
+        <div
+          className="group relative"
+          onMouseEnter={() => setIsJournalMenuOpen(true)}
+          onMouseLeave={() => setIsJournalMenuOpen(false)}
+          onFocusCapture={() => setIsJournalMenuOpen(true)}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
+              setIsJournalMenuOpen(false);
+            }
           }}
-          aria-label="Open Journal"
-          title="Journal"
-          className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_FLOATING_CONTROL_BORDER_CLASS} ${CANVAS_FLOATING_CONTROL_BACKGROUND_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
         >
-          <BookOpen size={16} />
-        </button>
-        <Link
-          to="/chart"
-          aria-label="Open chart"
-          title="Chart"
-          className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_FLOATING_CONTROL_BORDER_CLASS} ${CANVAS_FLOATING_CONTROL_BACKGROUND_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
-        >
-          <CandlestickChart size={16} />
-        </Link>
+          <button
+            type="button"
+            onClick={() => setIsJournalMenuOpen((open) => !open)}
+            aria-label="Open Journal menu"
+            aria-haspopup="menu"
+            aria-expanded={isJournalMenuOpen}
+            title="Journal"
+            className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_FLOATING_CONTROL_BORDER_CLASS} ${CANVAS_FLOATING_CONTROL_BACKGROUND_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
+          >
+            <BookOpen size={16} />
+          </button>
+          <div
+            role="menu"
+            aria-label="Journal navigation"
+            className={`absolute right-0 top-full z-50 mt-1 min-w-[11rem] rounded-xl border border-[#2a2a2a] bg-[#181818]/90 p-1.5 shadow-lg backdrop-blur transition-all duration-200 ${
+              isJournalMenuOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0"
+            }`}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setIsTaskFlowOpen(false);
+                setIsAiTasksOpen(false);
+                setIsVoraTraceOpen(false);
+                setIsQuestionsBoardOpen(false);
+                setIsJournalOpen(true);
+                setActiveOpenPanel("none");
+                setIsJournalMenuOpen(false);
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition hover:bg-[#1c202d] hover:text-violet-300"
+            >
+              <BookOpen size={15} aria-hidden="true" />
+              <span>Journal</span>
+            </button>
+            <Link
+              to="/chart"
+              role="menuitem"
+              onClick={() => setIsJournalMenuOpen(false)}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium text-gray-200 transition hover:bg-[#1c202d] hover:text-violet-300"
+            >
+              <CandlestickChart size={15} aria-hidden="true" />
+              <span>Go to Chart</span>
+            </Link>
+          </div>
+        </div>
       </div>}
 
       {/* سایدبار کتابخانه یادداشت‌ها (Mind) */}
