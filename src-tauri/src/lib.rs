@@ -314,6 +314,70 @@ fn delete_question(state: State<AppState>, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn triage_question(
+    state: State<AppState>,
+    id: String,
+    impact: i64,
+    feasibility: i64,
+    urgency: i64,
+    triage_notes: Option<String>,
+) -> Result<mind::questions::QuestionItem, String> {
+    let now = task_flow_now()?;
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::questions::triage_question(
+        &conn,
+        &id,
+        impact,
+        feasibility,
+        urgency,
+        triage_notes.as_deref(),
+        now,
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn untriage_question(
+    state: State<AppState>,
+    id: String,
+) -> Result<mind::questions::QuestionItem, String> {
+    let now = task_flow_now()?;
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::questions::untriage_question(&conn, &id, now).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn archive_question(
+    state: State<AppState>,
+    id: String,
+) -> Result<mind::questions::QuestionItem, String> {
+    let now = task_flow_now()?;
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::questions::archive_question(&conn, &id, now).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn select_for_promotion(
+    state: State<AppState>,
+    id: String,
+) -> Result<mind::questions::QuestionItem, String> {
+    let now = task_flow_now()?;
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::questions::select_for_promotion(&mut conn, &id, now)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn unselect_for_promotion(
+    state: State<AppState>,
+    id: String,
+) -> Result<mind::questions::QuestionItem, String> {
+    let now = task_flow_now()?;
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::questions::unselect_for_promotion(&conn, &id, now).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn get_board_versions(
     state: State<AppState>,
     board_id: String,
@@ -1334,6 +1398,11 @@ pub fn run() {
             create_question,
             save_question,
             delete_question,
+            triage_question,
+            untriage_question,
+            archive_question,
+            select_for_promotion,
+            unselect_for_promotion,
             get_board_versions,
             create_board_version,
             checkout_board_version,
