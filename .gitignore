@@ -58,6 +58,13 @@ pnpm-debug.log*
 # =========================================================
 # OS & System Files (Windows, macOS, Linux)
 # =========================================================
+!/data/
+/data/*
+!/data/ticks/
+/data/ticks/*
+!/data/ticks/XAUUSD/
+/data/ticks/XAUUSD/*
+!/data/ticks/XAUUSD/README.md
 Thumbs.db
 [Dd]esktop.ini
 .DS_Store
