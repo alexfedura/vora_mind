@@ -38,9 +38,8 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
     )?;
     let columns = {
         let mut statement = conn.prepare("PRAGMA table_info(questions)")?;
-        statement
-            .query_map([], |row| row.get::<_, String>(1))?
-            .collect::<Result<Vec<_>>>()?
+        let rows = statement.query_map([], |row| row.get::<_, String>(1))?;
+        rows.collect::<Result<Vec<_>>>()?
     };
     for (column, alter_sql) in [
         (
@@ -296,7 +295,7 @@ mod tests {
     use super::{
         archive_question, create_question, delete_question, init_schema, list_questions,
         query_question, save_question, select_for_promotion, triage_question,
-        unselect_for_promotion, untriage_question,
+        untriage_question,
     };
     use rusqlite::Connection;
 
@@ -373,7 +372,7 @@ mod tests {
                     ))
                 })
                 .expect("query table info")
-                .collect::<Result<Vec<_>>>()
+                .collect::<rusqlite::Result<Vec<_>>>()
                 .expect("collect table info")
         };
         println!("Final PRAGMA table_info(questions): {columns:?}");
