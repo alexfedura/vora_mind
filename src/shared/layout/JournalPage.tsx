@@ -1,18 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, House, LayoutGrid, PlusSquare, Type } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, House, LayoutGrid } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { MarkdownTextEditor } from "@/features/markdown-editor/MarkdownTextEditor";
-import { PathToolIcon } from "@/components/market/PathToolIcon";
-import { RectangleToolIcon } from "@/components/market/RectangleToolIcon";
-
-type CanvasTool = "card" | "rectangle" | "path" | "text";
-
-const canvasToolMenuItems: { tool: CanvasTool; label: string; icon: React.ReactNode }[] = [
-  { tool: "card", label: "Add New Card", icon: <PlusSquare size={16} /> },
-  { tool: "rectangle", label: "Rectangle tool", icon: <RectangleToolIcon size={16} /> },
-  { tool: "path", label: "Path tool", icon: <PathToolIcon size={16} /> },
-  { tool: "text", label: "Text Tool", icon: <Type size={16} /> },
-];
 
 function dateKey(date: Date): string {
   const year = date.getFullYear();
@@ -60,15 +49,9 @@ function getMonthBounds(date: Date): [string, string] {
 
 interface JournalPageProps {
   onGoHome: () => void;
-  onActivateCanvasTool: (tool: CanvasTool) => void;
-  canUseCanvasTools: boolean;
 }
 
-export const JournalPage: React.FC<JournalPageProps> = ({
-  onGoHome,
-  onActivateCanvasTool,
-  canUseCanvasTools,
-}) => {
+export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
   const entries = useAppStore((state) => state.journalEntries);
   const saveStatus = useAppStore((state) => state.journalSaveStatus);
   const saveError = useAppStore((state) => state.journalSaveError);
