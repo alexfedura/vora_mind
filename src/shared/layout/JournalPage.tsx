@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, House, Menu } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Clock3, House, Menu } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { MarkdownTextEditor } from "@/features/markdown-editor/MarkdownTextEditor";
 
