@@ -1,7 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, House } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, House, LayoutGrid, PlusSquare, Type } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { MarkdownTextEditor } from "@/features/markdown-editor/MarkdownTextEditor";
+import { PathToolIcon } from "@/components/market/PathToolIcon";
+import { RectangleToolIcon } from "@/components/market/RectangleToolIcon";
+
+type CanvasTool = "card" | "rectangle" | "path" | "text";
+
+const canvasToolMenuItems: { tool: CanvasTool; label: string; icon: React.ReactNode }[] = [
+  { tool: "card", label: "Add New Card", icon: <PlusSquare size={16} /> },
+  { tool: "rectangle", label: "Rectangle tool", icon: <RectangleToolIcon size={16} /> },
+  { tool: "path", label: "Path tool", icon: <PathToolIcon size={16} /> },
+  { tool: "text", label: "Text Tool", icon: <Type size={16} /> },
+];
 
 function dateKey(date: Date): string {
   const year = date.getFullYear();
@@ -49,9 +60,15 @@ function getMonthBounds(date: Date): [string, string] {
 
 interface JournalPageProps {
   onGoHome: () => void;
+  onActivateCanvasTool: (tool: CanvasTool) => void;
+  canUseCanvasTools: boolean;
 }
 
-export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
+export const JournalPage: React.FC<JournalPageProps> = ({
+  onGoHome,
+  onActivateCanvasTool,
+  canUseCanvasTools,
+}) => {
   const entries = useAppStore((state) => state.journalEntries);
   const saveStatus = useAppStore((state) => state.journalSaveStatus);
   const saveError = useAppStore((state) => state.journalSaveError);
@@ -62,6 +79,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
   const [isMonthView, setIsMonthView] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isHomeMenuOpen, setIsHomeMenuOpen] = useState(false);
   const selectedDay = useMemo(() => dateFromKey(selectedDate), [selectedDate]);
   const [monthStart, monthEnd] = getMonthBounds(selectedDay);
   const daysInMonth = new Date(selectedDay.getFullYear(), selectedDay.getMonth() + 1, 0).getDate();
@@ -186,15 +204,51 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
             >
               Today
             </button>
-            <button
-              type="button"
-              onClick={onGoHome}
-              aria-label="Go to Home"
-              title="Home"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#343741] bg-[#1a1c22] text-gray-300 transition hover:border-purple-500/40 hover:bg-purple-500/10 hover:text-white"
+            <div
+              className="group relative"
+              onMouseEnter={() => setIsHomeMenuOpen(true)}
+              onMouseLeave={() => setIsHomeMenuOpen(false)}
+              onFocusCapture={() => setIsHomeMenuOpen(true)}
+              onBlurCapture={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) {
+                  setIsHomeMenuOpen(false);
+                }
+              }}
             >
-              <House size={17} aria-hidden="true" />
-            </button>
+              <button
+                type="button"
+                onClick={onGoHome}
+                aria-label="Go to Home"
+                aria-haspopup="true"
+                aria-expanded={isHomeMenuOpen}
+                title="Home"
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#343741] bg-[#1a1c22] text-gray-300 transition hover:border-purple-500/40 hover:bg-purple-500/10 hover:text-white"
+              >
+                {isHomeMenuOpen
+                  ? <LayoutGrid size={17} aria-hidden="true" />
+                  : <House size={17} aria-hidden="true" />}
+              </button>
+              <div
+                aria-label="Canvas tools"
+                className={`absolute right-0 top-full z-50 mt-1 flex flex-col gap-1 rounded-xl border border-[#2a2a2a] bg-[#181818]/90 p-1 shadow-lg backdrop-blur transition-all duration-200 ${
+                  isHomeMenuOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0"
+                }`}
+              >
+                {canvasToolMenuItems.map(({ tool, label, icon }) => (
+                  <button
+                    key={tool}
+                    type="button"
+                    aria-label={label}
+                    title={label}
+                    disabled={!canUseCanvasTools}
+                    onClick={() => onActivateCanvasTool(tool)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {icon}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -297,7 +351,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
                 placeholder="Write about your day... (Markdown supported)"
                 direction="auto"
                 ariaLabel={`Journal entry for ${selectedDate}`}
-                className="vm-journal-markdown-editor min-h-[55vh] w-full bg-transparent text-gray-200"
+                className="vm-journal-markdown-editor vm-journal-entry-editor min-h-[55vh] w-full bg-transparent text-gray-200"
               />
             </div>
           )}

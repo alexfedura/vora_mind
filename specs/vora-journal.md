@@ -12,6 +12,9 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 - Selecting **Journal** opens a dedicated workspace page without canvas controls.
 - A Home button in the Journal header returns directly to the main canvas; hide
   the duplicate Home shortcut from the upper-left toolbar while Journal is open.
+- Hovering or keyboard-focusing the Journal Home button changes its icon to a
+  menu indicator and reveals icon-only shortcuts for the canvas card, rectangle,
+  path, and text tools. Selecting one returns to the canvas with that tool active.
 - A Journal shortcut beside the Library and Chart controls in the Home toolbar
   opens Journal for quick switching between those destinations.
 - The default view opens today's entry. The selected date and weekday are shown in the top navigation bar, replacing the separate Workspace/Journal title block; there is no editable title field.
@@ -34,12 +37,18 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 
 - Journal is selectable from the left menu and active styling uses VORA purple/indigo.
 - The Journal header Home button returns to the main canvas in one click.
+- Hovering or focusing Home reveals icon-only canvas tool shortcuts; selecting a
+  shortcut activates the matching tool on the canvas.
 - Today's entry opens without an editable title; its date is the only heading.
 - Daily view has no divider below the date or decorative editor frame; the editor uses the available content width without a highlighted active-line background.
 - On medium and wider screens, the daily editor occupies 70% of its content container, leaving balanced 15% side margins; on smaller screens it uses the full available width.
 - The daily editor starts 30px below the header divider, 50% more top spacing than the previous 20px.
+- The daily editor provides blank scroll space after the last line so it can be
+  moved toward the vertical middle without inserting a newline.
 - Month/day navigation and previews reflect saved entries.
 - Empty and long descriptions can be saved and reloaded.
+- The last journal line can be scrolled toward the vertical middle without
+  adding a newline.
 - Typing Markdown list markers (for example, `- `) and pressing Enter continues lists; headings and other supported Markdown render in the live editor.
 - Bullet and ordered-list markers remain legible and the same size in active and inactive lines; nested list indentation follows full Tab levels.
 - RTL journal lines beginning with numeric ordered-list markers such as `1.` stay right-aligned, and Home/End target visual line boundaries on wrapped text.

@@ -417,6 +417,10 @@
   padding: 0;
 }
 
+.vm-journal-entry-editor .cm-content {
+  padding-bottom: 50vh;
+}
+
 .vm-journal-markdown-editor .cm-gutters {
   display: none;
 }
