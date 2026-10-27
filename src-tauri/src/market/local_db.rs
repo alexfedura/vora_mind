@@ -114,8 +114,8 @@ pub fn fetch_local_candles(
     {
         return Err("Invalid symbol: only ASCII letters, digits, '_' and '-' are allowed".into());
     }
-    if interval_minutes == 0 || interval_minutes > 525_600 {
-        return Err("Invalid interval_minutes: expected 1..=525600".into());
+    if interval_minutes == 0 || interval_minutes > 527_040 {
+        return Err("Invalid interval_minutes: expected 1..=527040".into());
     }
     if start_ts >= end_ts {
         return Err("Invalid time range: start_ts must be less than end_ts".into());

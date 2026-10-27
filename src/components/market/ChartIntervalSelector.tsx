@@ -157,7 +157,7 @@ export function ChartIntervalSelector({ value, onChange }: ChartIntervalSelector
           {customIntervals.length > 0 && <>
             <div className="chart-interval-picker__heading">Custom</div>
             {customIntervals.map((interval) => <div key={`custom-${interval}`} className={`chart-interval-picker__row${value === interval ? " is-selected" : ""}`}>
-              <button type="button" role="menuitem" onClick={() => selectInterval(interval)}>{interval}</button>
+              <button type="button" role="menuitem" disabled={!isIntervalEnabled(interval)} title={isIntervalEnabled(interval) ? intervalLabel(interval) : "This interval is no longer supported"} onClick={() => selectInterval(interval)}>{interval}</button>
               <button type="button" aria-label={`${favorites.includes(interval) ? "Remove" : "Add"} ${interval} ${favorites.includes(interval) ? "from" : "to"} favorites`} title={favorites.includes(interval) ? "Remove from favorites" : "Add to favorites"} aria-pressed={favorites.includes(interval)} onClick={() => toggleFavorite(interval)}><Star size={16} fill={favorites.includes(interval) ? "currentColor" : "none"} /></button>
             </div>)}
           </>}
