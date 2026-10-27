@@ -175,7 +175,7 @@ export function MarketWorkspace(props: WorkspaceProps): React.ReactElement {
     }
   };
 
-  const displayName = symbol || "Select online instrument";
+  const displayName = symbol || "Select local instrument";
   const selectedSourcePrice = lastCandle ? formatPrice(lastCandle.close) : "—";
 
   return (
@@ -196,7 +196,7 @@ export function MarketWorkspace(props: WorkspaceProps): React.ReactElement {
         <div className="market-topbar__right">
           <span className={`market-badge ${error ? "is-warning" : ""}`}>
             <i className={`market-status-dot ${error ? "is-error" : ""}`} />
-            {error ? "FEED UNAVAILABLE" : "DUKASCOPY ONLINE"}
+            {error ? "DATA UNAVAILABLE" : "LOCAL PARQUET"}
           </span>
           <button type="button" className="market-icon-button" title="More workspace actions" aria-label="More workspace actions" onClick={() => toggleMenu("settings")}>
             <MoreHorizontal size={17} />
@@ -217,7 +217,7 @@ export function MarketWorkspace(props: WorkspaceProps): React.ReactElement {
               <ChevronDown size={13} />
             </button>
             {openMenu === "symbol" && (
-              <div className="market-menu" role="dialog" aria-label="Search online symbols">
+              <div className="market-menu" role="dialog" aria-label="Search local symbols">
                 <label className="market-symbol-search">
                   <Search size={14} />
                   <input
@@ -225,12 +225,12 @@ export function MarketWorkspace(props: WorkspaceProps): React.ReactElement {
                     type="search"
                     value={sourceQuery}
                     onChange={(event) => setSourceQuery(event.target.value)}
-                    placeholder="Search online symbols"
+                    placeholder="Search local symbols"
                   />
                 </label>
                 <div className="market-symbol-list">
                   {filteredSources.length === 0 ? (
-                    <div className="market-watchlist-empty">No matching online instruments.</div>
+                    <div className="market-watchlist-empty">No matching local instruments.</div>
                   ) : filteredSources.map((source) => (
                     <button key={source.id} type="button" className="market-source-option" onClick={() => chooseSource(source)}>
                       <span><span className="market-source-option__symbol">{source.symbol}</span><span className="market-source-option__meta">{source.kind} · {source.row_count.toLocaleString()} rows</span></span>
@@ -366,7 +366,7 @@ export function MarketWorkspace(props: WorkspaceProps): React.ReactElement {
             ) : !loading ? (
               <div className="market-chart-empty">
                 <Database size={23} />
-                <strong>No online candles for {symbol} {timeframe}</strong>
+                <strong>No local candles for {symbol} {timeframe}</strong>
                 <p>{error ? presentMarketError(error) : "No local Parquet data was returned for this instrument and timeframe."}</p>
               </div>
             ) : (
@@ -395,7 +395,7 @@ export function MarketWorkspace(props: WorkspaceProps): React.ReactElement {
             </div>
             {rightPanel === "watchlist" ? (
               <>
-                <label className="market-watchlist-search"><Search size={13} /><input value={sourceQuery} onChange={(event) => setSourceQuery(event.target.value)} placeholder="Filter online symbols" /></label>
+                <label className="market-watchlist-search"><Search size={13} /><input value={sourceQuery} onChange={(event) => setSourceQuery(event.target.value)} placeholder="Filter local symbols" /></label>
                 <div className="market-watchlist-columns"><span>SYMBOL</span><span style={{ textAlign: "right" }}>ROWS</span><span style={{ textAlign: "right" }}>LAST</span></div>
                 <div className="market-watchlist-list">
                   {filteredSources.length === 0 ?                   <div className="market-watchlist-empty">No local instruments match this filter.</div> : filteredSources.map((source) => (

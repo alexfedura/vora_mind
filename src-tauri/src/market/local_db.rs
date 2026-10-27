@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use duckdb::{params, Connection};
+use duckdb::Connection;
 use tauri::Manager;
 
 use super::ipc::CandleDto;
