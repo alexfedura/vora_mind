@@ -218,7 +218,7 @@ deleteQuestion: async (id) => {
 
 The state/action type declaration is at `src/shared/store/useAppStore.ts:91-102`.
 
-**FACT — Persistence distinction:** Zustand `partialize` persists only board cards and `executedTasks`; `questions` are not serialized into Zustand storage. SQLite is the durable source for question rows, while the store array/statuses are a runtime cache. (`src/shared/store/useAppStore.ts:553-562`; DB CRUD at `src-tauri/src/mind/questions.rs:30-87`)
+**FACT — Persistence distinction:** Zustand `partialize` persists only board cards and `executedTasks`; `questions` are not serialized into Zustand storage. SQLite is the durable source for question rows, while the store array/statuses are a runtime cache. (`src/shared/store/useAppStore.ts:553-561`; DB CRUD at `src-tauri/src/mind/questions.rs:30-87`)
 
 ### UI, filtering, and tests
 
@@ -316,7 +316,7 @@ The excerpt above omits styling attributes for readability; the full detail/list
 
 **FACT — Filtering/sorting:** The Questions Board has no visible search/filter control. It renders all loaded `questions`; ordering comes from the store’s `sortQuestions` helper and the backend’s matching `ORDER BY`. (`src/shared/layout/QuestionsBoardPage.tsx:311-365`; `src/shared/store/useAppStore.ts:36-42`; `src-tauri/src/mind/questions.rs:30-36`)
 
-**FACT — Tests:** `questions.rs` has Rust unit tests for CRUD, list order, empty/long descriptions, invalid titles, and missing updates/deletes (`src-tauri/src/mind/questions.rs:104-165`). No Questions Board frontend test file was found; `package.json` has build scripts but no test script (`package.json:6-17`).
+**FACT — Tests:** `questions.rs` has Rust unit tests for CRUD, list order, empty/long descriptions, invalid titles, and missing updates/deletes (`src-tauri/src/mind/questions.rs:104-161`). No Questions Board frontend test file was found; `package.json` has build scripts but no test script (`package.json:6-17`).
 
 ## 2. PLANNING — FULL STACK TRACE
 
@@ -443,11 +443,11 @@ async deleteTaskFlowItem(id: string): Promise<void> {
 },
 ```
 
-**FACT —** The store has one `taskFlowItems` array and actions that call `dbService`; it updates the array only after service calls succeed. This array is not included in Zustand’s `partialize` persisted subset. (`src/shared/store/useAppStore.ts:79-85, 265-299, 553-562`)
+**FACT —** The store has one `taskFlowItems` array and actions that call `dbService`; it updates the array only after service calls succeed. This array is not included in Zustand’s `partialize` persisted subset. (`src/shared/store/useAppStore.ts:79-85, 265-299, 553-561`)
 
 ### UI, mount, and relationships
 
-**FACT —** `TaskFlowPage` accepts `taskType: TaskFlowType`; the same component serves Task Flow and AI Tasks. It loads the selected list in an effect, has a local error/reload path, create form, empty/loading states, drag reorder, inline title editor, detail dialog, completion toggle, and delete action. (`src/shared/layout/TaskFlowPage.tsx:6-149, 150-435`)
+**FACT —** `TaskFlowPage` accepts `taskType: TaskFlowType`; the same component serves Task Flow and AI Tasks. It loads the selected list in an effect, has a local error/reload path, create form, empty/loading states, drag reorder, inline title editor, detail dialog, completion toggle, and delete action. (`src/shared/layout/TaskFlowPage.tsx:6-149, 150-434`)
 
 Relevant excerpts (unrelated presentation markup omitted):
 
@@ -695,7 +695,7 @@ No `main.tsx`, `App.tsx`, `portable_db.rs`, migration table, dependency, or new 
 
 | Phase | Files | Acceptance criteria | Tests |
 |---|---|---|---|
-| **1 — Schema + read-only Triage** | Spec; `questions.rs`; `types/index.ts`; `TaskFlowPage.tsx`; new `InquiryTriagePanel.tsx`; optionally `QuestionsBoardPage.tsx` and `LeftSidebar.tsx` for visible rename. No new IPC if expanded `get_questions` suffices. | Existing questions migrate with `kind=question`, `status=parked`, null scores/link; existing CRUD and Questions Board remain usable; Triage appears inside Planning and is read-only. | Rust tests for new and legacy schemas, defaults, DTO round-trip, idempotent second initialization; manual build and UI smoke checks. Existing backend test pattern is in `questions.rs:104-165`. |
+| **1 — Schema + read-only Triage** | Spec; `questions.rs`; `types/index.ts`; `TaskFlowPage.tsx`; new `InquiryTriagePanel.tsx`; optionally `QuestionsBoardPage.tsx` and `LeftSidebar.tsx` for visible rename. No new IPC if expanded `get_questions` suffices. | Existing questions migrate with `kind=question`, `status=parked`, null scores/link; existing CRUD and Questions Board remain usable; Triage appears inside Planning and is read-only. | Rust tests for new and legacy schemas, defaults, DTO round-trip, idempotent second initialization; manual build and UI smoke checks. Existing backend test pattern is in `questions.rs:104-161`. |
 | **2 — Interactive Triage** | `questions.rs`; `lib.rs`; `types/index.ts`; `dbService.ts`; `useAppStore.ts`; `InquiryTriagePanel.tsx`; possibly QuestionsBoard page. | Persist kind/status/priority/impact/feasibility through store → typed service → IPC → SQLite; selected inquiry is single-select; score order only after urgency semantics are specified. | Rust update/validation tests, invalid values and not-found tests; build/type-check; manual restart persistence check. Use Task Flow transactional reorder tests as a pattern (`task_flow.rs:156-189, 299-321`). |
 | **3 — Promotion hook (stub only)** | `questions.rs`; `lib.rs`; `dbService.ts`; `useAppStore.ts`; `InquiryTriagePanel.tsx`; shared types. | Promote action records `promoted`; no hypothesis row or FK is created; link remains null until a later hypothesis feature. | Rust transition/invalid-status tests and one manual UI check that the promoted row leaves or updates the parked/triage list as specified. |
 
