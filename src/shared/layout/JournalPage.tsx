@@ -213,7 +213,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
               <div
                 role="menu"
                 aria-label="Chart navigation"
-                className={`absolute right-0 top-full z-50 mt-1 flex flex-col gap-1 rounded-xl border border-[#2a2a2a] bg-[#181818]/90 p-1 shadow-lg backdrop-blur transition-all duration-200 ${
+                className={`absolute right-0 top-full z-50 mt-1 flex h-9 w-9 flex-col overflow-hidden rounded-xl border border-[#2a2a2a] bg-[#181818]/90 p-0 shadow-lg backdrop-blur transition-all duration-200 ${
                   isHomeMenuOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0"
                 }`}
               >
@@ -223,7 +223,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
                   aria-label="Go to Chart"
                   title="Go to Chart"
                   onClick={() => setIsHomeMenuOpen(false)}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
+                  className="flex h-full w-full shrink-0 items-center justify-center text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
                 >
                   <CandlestickChart size={16} aria-hidden="true" />
                 </Link>
