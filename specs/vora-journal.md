@@ -15,8 +15,8 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 - The Home button in the Journal header returns directly to the main canvas when
   clicked; its menu icon stays visible and hovering or keyboard-focusing it
   reveals a compact menu with one icon-only Go to Chart action.
-- The Home toolbar has a menu button beside Library that opens Journal first
-  and Chart second.
+- The Home toolbar has a menu button beside Library that opens a square,
+  icon-only menu the same size as its trigger, with Journal and Chart actions.
 - The default view opens today's entry. The selected date and weekday are shown in the top navigation bar, replacing the separate Workspace/Journal title block; there is no editable title field.
 - Users can move to adjacent days, choose a date, or open a month view.
 - The month view displays one card per day, with saved text previews, in a four-column date grid; selecting a card opens that day's entry.
@@ -39,8 +39,8 @@ Add a daily journal to the left navigation. Each entry is keyed by its local cal
 - The Journal header Home button returns to the main canvas in one click.
 - The Journal header button keeps its menu icon visible and reveals one
   icon-only Go to Chart action on hover or focus; clicking the button opens Home.
-- The Home toolbar has a Journal menu with Journal first and Chart second, with
-  no separate Chart shortcut.
+- The Home toolbar menu contains icon-only Journal and Chart actions in a panel
+  the same size as the menu trigger; no separate Chart shortcut is shown.
 - Today's entry opens without an editable title; its date is the only heading.
 - Daily view has no divider below the date or decorative editor frame; the editor uses the available content width without a highlighted active-line background.
 - On medium and wider screens, the daily editor occupies 70% of its content container, leaving balanced 15% side margins; on smaller screens it uses the full available width.

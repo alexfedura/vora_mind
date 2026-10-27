@@ -2893,7 +2893,7 @@ function AppContent() {
           <div
             role="menu"
             aria-label="Journal and chart navigation"
-            className={`absolute right-0 top-full z-50 mt-1 min-w-[11rem] rounded-xl border border-[#2a2a2a] bg-[#181818]/90 p-1.5 shadow-lg backdrop-blur transition-all duration-200 ${
+            className={`absolute right-0 top-full z-50 mt-1 flex h-9 w-9 items-center justify-center gap-0 overflow-hidden rounded-lg border border-[#2a2a2a] bg-[#181818]/90 p-0 shadow-lg backdrop-blur transition-all duration-200 ${
               isJournalMenuOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0"
             }`}
           >
@@ -2909,19 +2909,21 @@ function AppContent() {
                 setActiveOpenPanel("none");
                 setIsJournalMenuOpen(false);
               }}
-              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition hover:bg-[#1c202d] hover:text-violet-300"
+              aria-label="Journal"
+              title="Journal"
+              className="flex h-full w-1/2 shrink-0 items-center justify-center text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
             >
-              <BookOpen size={15} aria-hidden="true" />
-              <span>Journal</span>
+              <BookOpen size={16} aria-hidden="true" />
             </button>
             <Link
               to="/chart"
               role="menuitem"
+              aria-label="Chart"
+              title="Chart"
               onClick={() => setIsJournalMenuOpen(false)}
-              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium text-gray-200 transition hover:bg-[#1c202d] hover:text-violet-300"
+              className="flex h-full w-1/2 shrink-0 items-center justify-center text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
             >
-              <CandlestickChart size={15} aria-hidden="true" />
-              <span>Chart</span>
+              <CandlestickChart size={16} aria-hidden="true" />
             </Link>
           </div>
         </div>
