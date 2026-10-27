@@ -1,4 +1,9 @@
+param(
+    [switch]$DryRun
+)
+
 $ErrorActionPreference = 'Stop'
+$script:DryRun = $DryRun
 
 function Write-Log {
     param([string]$Message)
@@ -201,10 +206,6 @@ function Invoke-AutoRelease {
         Write-Log "Release failed: $($_.Exception.Message)"
     }
 }
-
-param(
-    [switch]$DryRun
-)
 
 try {
     Invoke-AutoRelease
