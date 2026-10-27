@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { Link, useSearchParams } from "react-router-dom";
 import type { IChartApi, MouseEventParams, UTCTimestamp, Time } from "lightweight-charts";
 import {
-  mktFetchHistoricalDuka,
+  mktFetchLocalCandles,
   detectBoxes,
   cancelRequest,
   getScaleRegistry,
@@ -98,7 +98,7 @@ import { ChartRightDock, type ChartRightPanelId } from "@/components/market/Char
 import { ChartDrawingToolbar } from "@/components/market/ChartDrawingToolbar";
 import { ChartIntervalSelector } from "@/components/market/ChartIntervalSelector";
 import { ChartReplayFooter, ChartReplayToolbar, type ReplayRange, type ReplayUpdateInterval } from "@/components/market/ChartReplayToolbar";
-import { intervalWindowSeconds, isChartIntervalKey, nearestMScaleStep } from "@/lib/market/chartIntervals";
+import { chartIntervalMinutes, intervalWindowSeconds, isChartIntervalKey, nearestMScaleStep } from "@/lib/market/chartIntervals";
 import { deleteSetting, getSetting, setSetting } from "@/shared/store/useSettingsStore";
 import "./ChartPage.css";
 import {
@@ -1973,16 +1973,22 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
       if (myId === reqIdRef.current) setLoading(false);
     }, 20_000);
     try {
-      // Fetch the latest online candles, or end just after the restore anchor.
+      // Fetch the latest local candles, or end just after the restore anchor.
       const LIMIT = 5000;
-      const halfWindowSec = Math.floor((LIMIT / 2) * intervalWindowSeconds(interval));
+      const intervalMinutes = chartIntervalMinutes(interval);
+      if (intervalMinutes === null) {
+        throw new Error(`Local candle data requires a whole-minute interval: ${interval}`);
+      }
+      const intervalSeconds = intervalMinutes * 60;
+      const halfWindowSec = Math.floor((LIMIT / 2) * intervalSeconds);
       const endTimestamp = typeof anchorTsSec === "number" && anchorTsSec > 0
         ? anchorTsSec + halfWindowSec
         : Math.floor(Date.now() / 1000);
-      const res = await mktFetchHistoricalDuka({
+      const res = await mktFetchLocalCandles({
         symbol,
-        timeframe: interval,
-        endTimestamp,
+        intervalMinutes,
+        startTs: endTimestamp - LIMIT * intervalSeconds,
+        endTs: endTimestamp,
         limit: LIMIT,
       });
       const lastCandle = res[res.length - 1];
@@ -2184,10 +2190,17 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
         const targetInterval = parseSnapshotInterval(snap.chart.interval);
         if (targetInterval === null) { showSnapshotToast("Restore failed: unsupported interval"); return; }
         const targetM = nearestMScaleStep(targetInterval);
-        const rows = await mktFetchHistoricalDuka({
+        const intervalMinutes = chartIntervalMinutes(targetInterval);
+        if (intervalMinutes === null) {
+          showSnapshotToast("Restore failed: interval must be a whole number of minutes");
+          return;
+        }
+        const endTimestamp = Math.floor(Date.now() / 1000);
+        const rows = await mktFetchLocalCandles({
           symbol: targetSymbol,
-          timeframe: targetInterval,
-          endTimestamp: Math.floor(Date.now() / 1000),
+          intervalMinutes,
+          startTs: endTimestamp - 5000 * intervalMinutes * 60,
+          endTs: endTimestamp,
           limit: 5000,
         });
         if (!isCurrentRestore()) return;
@@ -2836,6 +2849,11 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
     const currentCandles = candlesRef.current;
     const endTimestamp = currentCandles[0]?.ts;
     if (endTimestamp === undefined || !Number.isFinite(endTimestamp)) return;
+    const intervalMinutes = chartIntervalMinutes(debouncedInterval);
+    if (intervalMinutes === null) {
+      setError(`Local candle data requires a whole-minute interval: ${debouncedInterval}`);
+      return;
+    }
     const boundaryKey = `${context}:${endTimestamp}`;
     if (blockedOlderBoundaryRef.current === boundaryKey) return;
     const retryAfter = olderRetryAfterRef.current;
@@ -2844,10 +2862,11 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
     isFetchingOlderRef.current = true;
     setIsFetchingOlder(true);
     try {
-      const olderCandles = await mktFetchHistoricalDuka({
+      const olderCandles = await mktFetchLocalCandles({
         symbol,
-        timeframe: debouncedInterval,
-        endTimestamp,
+        intervalMinutes,
+        startTs: endTimestamp - 500 * intervalMinutes * 60,
+        endTs: endTimestamp,
         limit: 500,
       });
       if (olderFetchContextRef.current !== context) return;
@@ -2878,13 +2897,9 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
         const message = fetchError instanceof Error ? fetchError.message : String(fetchError);
         olderRetryAfterRef.current = {
           boundary: boundaryKey,
-          timestamp: Date.now() + (message.startsWith("DUKASCOPY_RATE_LIMIT") ? 30_000 : 10_000),
+          timestamp: Date.now() + 10_000,
         };
-        setError(message.startsWith("DUKASCOPY_CONNECTION_FAILED")
-          ? "Dukascopy is unreachable. Older online candles could not be loaded."
-          : message.startsWith("DUKASCOPY_RATE_LIMIT")
-            ? "Dukascopy is temporarily rate-limiting requests. Try again shortly."
-            : message);
+        setError(message);
       }
     } finally {
       isFetchingOlderRef.current = false;

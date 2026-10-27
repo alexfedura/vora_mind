@@ -98,8 +98,8 @@ export function ChartIntervalSelector({ value, onChange }: ChartIntervalSelector
   const addCustomInterval = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const interval = normalizeCustomInterval(customAmount, customUnit);
-    if (!interval) {
-      setCustomError("Enter a valid interval from 1 second to 12 months.");
+    if (!interval || !isIntervalEnabled(interval)) {
+      setCustomError("Choose a whole-minute interval from 1 minute to 12 months.");
       return;
     }
     setCustomIntervals((previous) => {

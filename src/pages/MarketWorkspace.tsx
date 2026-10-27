@@ -76,10 +76,7 @@ function formatUtc(timestamp: number): string {
 
 function presentMarketError(error: string): string {
   if (error.includes("Cannot read properties of undefined") && error.includes("invoke")) {
-    return "The browser preview cannot access VoraMind's network feed. Open this page in the desktop app to load Dukascopy data.";
-  }
-  if (error.startsWith("DUKASCOPY_CONNECTION_FAILED")) {
-    return "Dukascopy could not be reached. Check the internet connection and try again.";
+    return "The browser preview cannot access local tick files. Open this page in the desktop app to load Parquet data.";
   }
   return error;
 }
@@ -301,7 +298,7 @@ export function MarketWorkspace(props: WorkspaceProps): React.ReactElement {
         </div>
 
         <div className="market-toolbar__right">
-          <button type="button" className="market-icon-button" onClick={onRefresh} disabled={loading} title="Refresh Dukascopy candles" aria-label="Refresh Dukascopy candles">
+          <button type="button" className="market-icon-button" onClick={onRefresh} disabled={loading} title="Refresh local candles" aria-label="Refresh local candles">
             <RefreshCw size={15} className={loading ? "market-spin" : ""} />
           </button>
           <div className="market-menu-anchor">
@@ -370,12 +367,12 @@ export function MarketWorkspace(props: WorkspaceProps): React.ReactElement {
               <div className="market-chart-empty">
                 <Database size={23} />
                 <strong>No online candles for {symbol} {timeframe}</strong>
-                <p>{error ? presentMarketError(error) : "No data was returned by Dukascopy for this instrument and timeframe."}</p>
+                <p>{error ? presentMarketError(error) : "No local Parquet data was returned for this instrument and timeframe."}</p>
               </div>
             ) : (
-              <div className="market-chart-loading"><RefreshCw size={15} className="market-spin" /> Loading Dukascopy candles…</div>
+              <div className="market-chart-loading"><RefreshCw size={15} className="market-spin" /> Loading local candles…</div>
             )}
-            {loading && candles.length > 0 && <div className="market-chart-loading"><RefreshCw size={14} className="market-spin" /> Updating Dukascopy candles…</div>}
+            {loading && candles.length > 0 && <div className="market-chart-loading"><RefreshCw size={14} className="market-spin" /> Updating local candles…</div>}
           </section>
           <div className="market-rangebar" aria-label="Historical range presets">
             <span className="market-rangebar__label">RANGE</span>
@@ -401,7 +398,7 @@ export function MarketWorkspace(props: WorkspaceProps): React.ReactElement {
                 <label className="market-watchlist-search"><Search size={13} /><input value={sourceQuery} onChange={(event) => setSourceQuery(event.target.value)} placeholder="Filter online symbols" /></label>
                 <div className="market-watchlist-columns"><span>SYMBOL</span><span style={{ textAlign: "right" }}>ROWS</span><span style={{ textAlign: "right" }}>LAST</span></div>
                 <div className="market-watchlist-list">
-                  {filteredSources.length === 0 ? <div className="market-watchlist-empty">No online instruments match this filter.</div> : filteredSources.map((source) => (
+                  {filteredSources.length === 0 ?                   <div className="market-watchlist-empty">No local instruments match this filter.</div> : filteredSources.map((source) => (
                     <button key={source.id} type="button" className={`market-watchlist-row ${activeSource?.id === source.id ? "is-selected" : ""}`} onClick={() => chooseSource(source)} aria-pressed={activeSource?.id === source.id}>
                       <span className="market-watchlist-row__symbol">{source.symbol}<span className="market-watchlist-row__kind">{source.kind}</span></span>
                       <span className="market-watchlist-row__value">{source.row_count.toLocaleString("en-US")}</span>
@@ -424,7 +421,7 @@ export function MarketWorkspace(props: WorkspaceProps): React.ReactElement {
                 ) : <div className="market-watchlist-empty">No instrument metadata is available.</div>}
               </div>
             )}
-            <div className="market-watchlist-footer"><span>{sources.length} online feed{sources.length === 1 ? "" : "s"}</span><span>DUKASCOPY</span></div>
+            <div className="market-watchlist-footer"><span>{sources.length} local instruments</span><span>PARQUET</span></div>
           </aside>
         )}
 
@@ -438,7 +435,7 @@ export function MarketWorkspace(props: WorkspaceProps): React.ReactElement {
 
       <footer className="market-statusbar">
         <div className="market-status-group">
-          <span className="market-status-item market-status-accent"><i className={`market-status-dot ${error ? "is-error" : ""}`} />{error ? "DUKASCOPY FEED ISSUE" : "DUKASCOPY LIVE FEED"}</span>
+          <span className="market-status-item market-status-accent"><i className={`market-status-dot ${error ? "is-error" : ""}`} />{error ? "LOCAL DATA ISSUE" : "LOCAL PARQUET"}</span>
           <span className="market-status-item">{symbol || "—"}</span>
           <span className="market-status-item">{timeframe}</span>
           <span className="market-status-item">{candles.length.toLocaleString("en-US")} candles</span>
