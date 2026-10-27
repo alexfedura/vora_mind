@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, House } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, House, Menu } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { MarkdownTextEditor } from "@/features/markdown-editor/MarkdownTextEditor";
 
@@ -62,6 +62,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
   const [isMonthView, setIsMonthView] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isHomeMenuOpen, setIsHomeMenuOpen] = useState(false);
   const selectedDay = useMemo(() => dateFromKey(selectedDate), [selectedDate]);
   const [monthStart, monthEnd] = getMonthBounds(selectedDay);
   const daysInMonth = new Date(selectedDay.getFullYear(), selectedDay.getMonth() + 1, 0).getDate();
@@ -186,15 +187,63 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
             >
               Today
             </button>
-            <button
-              type="button"
-              onClick={onGoHome}
-              aria-label="Go to Home"
-              title="Home"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#343741] bg-[#1a1c22] text-gray-300 transition hover:border-purple-500/40 hover:bg-purple-500/10 hover:text-white"
+            <div
+              className="group relative"
+              onMouseEnter={() => setIsHomeMenuOpen(true)}
+              onMouseLeave={() => setIsHomeMenuOpen(false)}
+              onFocusCapture={() => setIsHomeMenuOpen(true)}
+              onBlurCapture={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) {
+                  setIsHomeMenuOpen(false);
+                }
+              }}
             >
-              <House size={17} aria-hidden="true" />
-            </button>
+              <button
+                type="button"
+                onClick={onGoHome}
+                aria-label="Go to Home"
+                aria-haspopup="menu"
+                aria-expanded={isHomeMenuOpen}
+                title="Home"
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#343741] bg-[#1a1c22] text-gray-300 transition hover:border-purple-500/40 hover:bg-purple-500/10 hover:text-white"
+              >
+                {isHomeMenuOpen
+                  ? <Menu size={17} aria-hidden="true" />
+                  : <House size={17} aria-hidden="true" />}
+              </button>
+              <div
+                role="menu"
+                aria-label="Journal navigation"
+                className={`absolute right-0 top-full z-50 mt-1 min-w-[11rem] rounded-xl border border-[#2a2a2a] bg-[#181818]/90 p-1.5 shadow-lg backdrop-blur transition-all duration-200 ${
+                  isHomeMenuOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0"
+                }`}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsMonthView(false);
+                    setIsHomeMenuOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition hover:bg-[#1c202d] hover:text-violet-300"
+                >
+                  <BookOpen size={15} aria-hidden="true" />
+                  <span>Journal</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsHomeMenuOpen(false);
+                    onGoHome();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition hover:bg-[#1c202d] hover:text-violet-300"
+                >
+                  <House size={15} aria-hidden="true" />
+                  <span>Home</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </header>
