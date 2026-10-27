@@ -150,17 +150,14 @@ pub fn triage_question(
     triage_notes: Option<&str>,
     now: i64,
 ) -> Result<QuestionItem> {
-    if !(1..=5).contains(&impact)
-        || !(1..=5).contains(&feasibility)
-        || !(1..=5).contains(&urgency)
+    if !(1..=5).contains(&impact) || !(1..=5).contains(&feasibility) || !(1..=5).contains(&urgency)
     {
         return Err(rusqlite::Error::InvalidQuery);
     }
-    let status: String = conn.query_row(
-        "SELECT status FROM questions WHERE id = ?1",
-        [id],
-        |row| row.get(0),
-    )?;
+    let status: String =
+        conn.query_row("SELECT status FROM questions WHERE id = ?1", [id], |row| {
+            row.get(0)
+        })?;
     if status != "parked" && status != "triaged" {
         return Err(rusqlite::Error::InvalidQuery);
     }
@@ -212,17 +209,12 @@ pub fn archive_question(conn: &Connection, id: &str, now: i64) -> Result<Questio
     query_question(conn, id)
 }
 
-pub fn select_for_promotion(
-    conn: &mut Connection,
-    id: &str,
-    now: i64,
-) -> Result<QuestionItem> {
+pub fn select_for_promotion(conn: &mut Connection, id: &str, now: i64) -> Result<QuestionItem> {
     let transaction = conn.transaction()?;
-    let status: String = transaction.query_row(
-        "SELECT status FROM questions WHERE id = ?1",
-        [id],
-        |row| row.get(0),
-    )?;
+    let status: String =
+        transaction.query_row("SELECT status FROM questions WHERE id = ?1", [id], |row| {
+            row.get(0)
+        })?;
     if status != "triaged" {
         return Err(rusqlite::Error::InvalidQuery);
     }
@@ -241,11 +233,7 @@ pub fn select_for_promotion(
     Ok(question)
 }
 
-pub fn unselect_for_promotion(
-    conn: &Connection,
-    id: &str,
-    now: i64,
-) -> Result<QuestionItem> {
+pub fn unselect_for_promotion(conn: &Connection, id: &str, now: i64) -> Result<QuestionItem> {
     let changed = conn.execute(
         "UPDATE questions
          SET is_selected_for_promotion = 0, updated_at = ?1
@@ -294,8 +282,7 @@ fn map_question(row: &rusqlite::Row<'_>) -> Result<QuestionItem> {
 mod tests {
     use super::{
         archive_question, create_question, delete_question, init_schema, list_questions,
-        query_question, save_question, select_for_promotion, triage_question,
-        untriage_question,
+        query_question, save_question, select_for_promotion, triage_question, untriage_question,
     };
     use rusqlite::Connection;
 
@@ -334,7 +321,9 @@ mod tests {
 
         delete_question(&connection, "question-1").expect("delete question");
         assert_eq!(
-            list_questions(&connection).expect("list remaining questions").len(),
+            list_questions(&connection)
+                .expect("list remaining questions")
+                .len(),
             1
         );
         assert!(delete_question(&connection, "question-1").is_err());
@@ -377,7 +366,10 @@ mod tests {
         };
         println!("Final PRAGMA table_info(questions): {columns:?}");
         assert_eq!(
-            columns.iter().map(|column| column.1.as_str()).collect::<Vec<_>>(),
+            columns
+                .iter()
+                .map(|column| column.1.as_str())
+                .collect::<Vec<_>>(),
             vec![
                 "id",
                 "title",
@@ -463,8 +455,7 @@ mod tests {
     fn triage_rejects_out_of_range_values_and_archived_questions() {
         let connection = Connection::open_in_memory().expect("open in-memory database");
         init_schema(&connection).expect("initialize schema");
-        create_question(&connection, "candidate", "Candidate", "", 1)
-            .expect("create candidate");
+        create_question(&connection, "candidate", "Candidate", "", 1).expect("create candidate");
 
         for invalid in [0, 6] {
             assert!(triage_question(&connection, "candidate", invalid, 3, 3, None, 2).is_err());
@@ -531,9 +522,11 @@ mod tests {
         select_for_promotion(&mut connection, "first", 4).expect("select first");
         let second = select_for_promotion(&mut connection, "second", 5).expect("select second");
         assert!(second.is_selected_for_promotion);
-        assert!(!query_question(&connection, "first")
-            .expect("read first question")
-            .is_selected_for_promotion);
+        assert!(
+            !query_question(&connection, "first")
+                .expect("read first question")
+                .is_selected_for_promotion
+        );
         let selected_count: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM questions WHERE is_selected_for_promotion = 1",
@@ -554,8 +547,11 @@ mod tests {
         assert!(super::unselect_for_promotion(&connection, "one", 3).is_err());
         assert_eq!(
             connection
-                .query_row("SELECT COUNT(*) FROM questions WHERE status = 'promoted'", [], |row| row
-                    .get::<_, i64>(0))
+                .query_row(
+                    "SELECT COUNT(*) FROM questions WHERE status = 'promoted'",
+                    [],
+                    |row| row.get::<_, i64>(0)
+                )
                 .expect("count promoted questions"),
             0
         );
