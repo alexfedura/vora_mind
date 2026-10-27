@@ -2893,7 +2893,7 @@ function AppContent() {
           <div
             role="menu"
             aria-label="Journal and chart navigation"
-            className={`absolute right-0 top-full z-50 mt-1 flex h-9 w-9 items-center justify-center gap-0 overflow-hidden rounded-lg border border-[#2a2a2a] bg-[#181818]/90 p-0 shadow-lg backdrop-blur transition-all duration-200 ${
+            className={`absolute right-0 top-full z-50 mt-1 flex h-[4.5rem] w-9 flex-col items-center justify-center gap-0 overflow-hidden rounded-lg border border-[#2a2a2a] bg-[#181818]/90 p-0 shadow-lg backdrop-blur transition-all duration-200 ${
               isJournalMenuOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0"
             }`}
           >
@@ -2911,7 +2911,7 @@ function AppContent() {
               }}
               aria-label="Journal"
               title="Journal"
-              className="flex h-full w-1/2 shrink-0 items-center justify-center text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
+              className="flex h-1/2 w-full shrink-0 items-center justify-center text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
             >
               <BookOpen size={16} aria-hidden="true" />
             </button>
@@ -2921,7 +2921,7 @@ function AppContent() {
               aria-label="Chart"
               title="Chart"
               onClick={() => setIsJournalMenuOpen(false)}
-              className="flex h-full w-1/2 shrink-0 items-center justify-center text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
+              className="flex h-1/2 w-full shrink-0 items-center justify-center text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
             >
               <CandlestickChart size={16} aria-hidden="true" />
             </Link>
