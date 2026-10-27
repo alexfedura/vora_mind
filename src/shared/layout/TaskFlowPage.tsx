@@ -159,7 +159,7 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
               Workspace
             </div>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">
-              {taskType === "ai" ? "AI Tasks" : "Task Flow"}
+              {taskType === "ai" ? "AI Tasks" : "Planning"}
             </h1>
             <p className="mt-1 text-sm text-gray-400">
               {taskType === "ai"
