@@ -105,7 +105,7 @@ Notation: `!` = `NOT NULL`; `?` = nullable; `PK` = primary key; `FK` = foreign k
 | Table | Fields (declared type, nullability/default) and relations |
 |---|---|
 | `mind_boards` | `id TEXT PK`, `title TEXT!`, `created_at INTEGER!`, `updated_at INTEGER!`, `active_version_id TEXT?`, `branch_origin_version_id TEXT?`, `library_item_group_id TEXT?`. |
-| `mind_board_versions` | `id TEXT PK`, `board_id TEXT! FK mind_boards`, `version_major/minor/patch INTEGER!`, `parent_version_id TEXT? FK self`, `forked_from_version_id TEXT? FK self`, `snapshot_json TEXT!`, `created_at INTEGER!`; unique history index is non-unique. |
+| `mind_board_versions` | `id TEXT PK`, `board_id TEXT! FK mind_boards`, `version_major/minor/patch INTEGER!`, `parent_version_id TEXT? FK self`, `forked_from_version_id TEXT? FK self`, `snapshot_json TEXT!`, `created_at INTEGER!`; history index `(board_id, created_at, id)`. |
 | `library_item_groups` | `id TEXT PK`, `name/version TEXT!`, `snapshot_json TEXT!`, `created_at/updated_at INTEGER!`, `deleted_at INTEGER?`. |
 | `library_item_group_versions` | `id TEXT PK`, `group_id TEXT! FK library_item_groups ON DELETE CASCADE`, `version TEXT!`, `snapshot_json TEXT!`, `created_at INTEGER!`; unique `(group_id, version)`. |
 | `objects` | `id TEXT PK`, `type TEXT!`, `board_id TEXT!`, `created_at/updated_at INTEGER!`, `deleted_at INTEGER?`, `metadata JSON?`; board relationship is not declared as an FK in this table. |
@@ -175,7 +175,7 @@ No foreign keys are declared in these market tables. Indexes are on candle symbo
 | `canonical_entities` | `entity_id TEXT PK`, `workspace_id/lineage_id/initial_name TEXT!`, `created_at INTEGER!`; FKs workspace/lineage. |
 | `canonical_entity_versions` | `entity_id/snapshot_id/symbol_id/lineage_id/canonical_signature/canonical_namespace/canonical_name TEXT!`, `created_at INTEGER!`; composite PK `(entity_id,snapshot_id)`, FKs entity/snapshot/lineage. |
 | `forge_audit_trail` | `id INTEGER PK AUTOINCREMENT`, `task_id/workspace_id/intent/target_symbol/target_file/status TEXT!`, `base_snapshot_id/committed_snapshot_id TEXT?`, `healing_attempts INTEGER! DEFAULT 0`, `error_payload TEXT?`, `created_at INTEGER!`; FK workspace. |
-| `code_files` | `file_id TEXT PK`, `file_path TEXT! UNIQUE`, `content_hash/lineage_parent_id TEXT!/?`, `last_indexed_at INTEGER!`. |
+| `code_files` | `file_id TEXT PK`, `file_path TEXT! UNIQUE`, `content_hash TEXT!`, `lineage_parent_id TEXT?`, `last_indexed_at INTEGER!`. |
 | `code_symbols` | `id TEXT PK`, `file_id/module_namespace/file_path/name/kind/scope_path/qualified_scope/signature/canonical_signature/body_hash/visibility TEXT!`, `lineage_id TEXT?`, `start_line/end_line/start_byte/end_byte INTEGER!`; FK file with cascade delete. |
 | `code_scopes` | `scope_id TEXT PK`, `file_id TEXT!`, `parent_scope_id TEXT?`, `visible_bindings_json TEXT!`; FK file with cascade delete. |
 | `code_imports` | `id INTEGER PK AUTOINCREMENT`, `file_id TEXT?`, `file_path/source_module/imported_name TEXT!`, `alias TEXT?`, `line INTEGER!`; FK file path with cascade delete. |
@@ -344,9 +344,9 @@ Routes: [src/main.tsx](../../src/main.tsx#L28-L65); panels: [src/App.tsx](../../
 - **FACT:** Frontend has strict TypeScript compiler checks; no frontend test framework, test files, or test script were found. [tsconfig.json](../../tsconfig.json#L1-L31), [package.json](../../package.json#L1-L24)
 - **FACT:** Rust has module unit tests and named integration tests covering contracts, semantic lineage, worker lifecycle, cluster, load balancing, self-healing and diagnostics. See [src-tauri/Cargo.toml](../../src-tauri/Cargo.toml#L58-L100) and [src-tauri/tests/](../../src-tauri/tests).
 - **FACT:** Coverage is not configured or reported; **UNKNOWN** current percentage.
-- **FACT:** No linter is configured in package scripts. Vite build includes TypeScript type-check through `pnpm build`; release CI installs dependencies and builds a Windows NSIS package but does not run test/typecheck steps explicitly before the Tauri build. [package.json](../../package.json#L6-L24), [release.yml](../../.github/workflows/release.yml#L25-L75)
+- **FACT:** No linter is configured in package scripts. Release CI does not invoke Rust tests or lint; its Tauri build runs the configured `beforeBuildCommand` (`pnpm build`), which performs TypeScript checking and Vite bundling. [package.json](../../package.json#L6-L24), [src-tauri/tauri.conf.json](../../src-tauri/tauri.conf.json#L1-L15), [release.yml](../../.github/workflows/release.yml#L25-L75)
 - **FACT:** CI/release is triggered on `v*` tags, targets `windows-latest` and NSIS; deployment support also includes a Docker worker image and systemd service. [release.yml](../../.github/workflows/release.yml#L1-L20), [Dockerfile.worker](../../Dockerfile.worker#L1-L48), [vora-worker.service](../../deploy/systemd/vora-worker.service#L1-L20)
-- **FACT:** No lint/type-check/test workflow, code coverage, or frontend test command was found. **UNKNOWN:** private/local CI outside tracked GitHub workflows.
+- **FACT:** No dedicated lint/test workflow, code coverage, or frontend test command was found; type-checking is part of the production frontend build. **UNKNOWN:** private/local CI outside tracked GitHub workflows.
 
 ## 10. EXTENSION POINTS & CONVENTIONS I MUST FOLLOW
 
