@@ -94,6 +94,19 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             <Layout size={16} />
             <span>My desk</span>
           </button>
+          <button
+            type="button"
+            onClick={onOpenQuestionsBoard}
+            aria-current={isQuestionsBoardOpen ? "page" : undefined}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition ${
+              isQuestionsBoardOpen
+                ? "bg-[#1d212d] text-purple-400 font-semibold"
+                : "hover:bg-[#1b1e27] hover:text-gray-200"
+            }`}
+          >
+            <CircleHelp size={16} />
+            <span>Inquiry Queue</span>
+          </button>
           <button className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#1b1e27] hover:text-gray-200 transition">
             <FolderKanban size={16} />
             <span>Projects</span>
@@ -149,19 +162,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           >
             <BookOpen size={16} />
             <span>Journal</span>
-          </button>
-          <button
-            type="button"
-            onClick={onOpenQuestionsBoard}
-            aria-current={isQuestionsBoardOpen ? "page" : undefined}
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition ${
-              isQuestionsBoardOpen
-                ? "bg-[#1d212d] text-purple-400 font-semibold"
-                : "hover:bg-[#1b1e27] hover:text-gray-200"
-            }`}
-          >
-            <CircleHelp size={16} />
-            <span>Inquiry Queue</span>
           </button>
           <button
             onClick={onToggleLibrary}
