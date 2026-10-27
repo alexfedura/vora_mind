@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use duckdb::{params, Connection};
 use tauri::Manager;
