@@ -26,19 +26,12 @@ fn build_candle_query(interval_minutes: u32) -> String {
                 max(price) AS high,
                 min(price) AS low,
                 last(price ORDER BY ts) AS close,
+                arg_max(ts, price ORDER BY ts) AS high_ts,
+                arg_min(ts, price ORDER BY ts) AS low_ts,
                 sum(volume) AS volume,
                 count(*) AS tick_count
             FROM ticks
             GROUP BY bucket
-        ),
-        extreme_times AS (
-            SELECT
-                aggregated.bucket,
-                min(ticks.ts) FILTER (WHERE ticks.price = aggregated.high) AS high_ts,
-                min(ticks.ts) FILTER (WHERE ticks.price = aggregated.low) AS low_ts
-            FROM aggregated
-            JOIN ticks USING (bucket)
-            GROUP BY aggregated.bucket, aggregated.high, aggregated.low
         ),
         candles AS (
             SELECT
@@ -51,12 +44,11 @@ fn build_candle_query(interval_minutes: u32) -> String {
                 aggregated.tick_count,
                 CASE
                     WHEN aggregated.high = aggregated.low
-                        OR extreme_times.high_ts = extreme_times.low_ts THEN 'same'
-                    WHEN extreme_times.high_ts < extreme_times.low_ts THEN 'high_first'
+                        OR aggregated.high_ts = aggregated.low_ts THEN 'same'
+                    WHEN aggregated.high_ts < aggregated.low_ts THEN 'high_first'
                     ELSE 'low_first'
                 END AS first_extreme
             FROM aggregated
-            JOIN extreme_times USING (bucket)
         )
         SELECT ts, open, high, low, close, volume, tick_count, first_extreme
         FROM candles
