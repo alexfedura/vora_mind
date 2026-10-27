@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, CircleHelp, House, Plus, Trash2 } from "lucide-react";
 import { MarkdownTextEditor } from "@/features/markdown-editor/MarkdownTextEditor";
 import { useAppStore } from "@/shared/store/useAppStore";
@@ -17,17 +17,56 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
   const updateQuestion = useAppStore((state) => state.updateQuestion);
   const flushQuestion = useAppStore((state) => state.flushQuestion);
   const deleteQuestion = useAppStore((state) => state.deleteQuestion);
+  const untriageQuestion = useAppStore((state) => state.untriageQuestion);
+  const archiveQuestion = useAppStore((state) => state.archiveQuestion);
+  const selectQuestionForPromotion = useAppStore((state) =>
+    state.selectQuestionForPromotion
+  );
+  const unselectQuestionForPromotion = useAppStore((state) =>
+    state.unselectQuestionForPromotion
+  );
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+  const [questionFilter, setQuestionFilter] = useState<
+    "all" | "parked" | "triaged" | "archived" | "selected"
+  >("parked");
   const [isCreating, setIsCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingNew, setIsSavingNew] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUpdatingInquiry, setIsUpdatingInquiry] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const selectedQuestion = questions.find((question) => question.id === selectedQuestionId);
   const selectedSaveStatus = selectedQuestionId ? saveStatus[selectedQuestionId] : undefined;
+  const filteredQuestions = useMemo(() => {
+    const filtered = questions.filter((question) => {
+      switch (questionFilter) {
+        case "parked":
+          return question.status === "parked";
+        case "triaged":
+          return question.status === "triaged";
+        case "archived":
+          return question.status === "archived";
+        case "selected":
+          return question.isSelectedForPromotion;
+        case "all":
+          return true;
+      }
+    });
+    return filtered.sort((left, right) => {
+      if (questionFilter === "parked" || questionFilter === "archived") {
+        return right.updatedAt - left.updatedAt;
+      }
+      if (questionFilter === "triaged" || questionFilter === "selected") {
+        return (right.priorityScore ?? -1) - (left.priorityScore ?? -1) ||
+          right.updatedAt - left.updatedAt;
+      }
+      return (right.priorityScore ?? -1) - (left.priorityScore ?? -1) ||
+        right.updatedAt - left.updatedAt;
+    });
+  }, [questions, questionFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +142,19 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
     onGoHome();
   };
 
+  const runInquiryAction = async (action: () => Promise<unknown>): Promise<void> => {
+    setIsUpdatingInquiry(true);
+    setActionError(null);
+    try {
+      await action();
+    } catch (error) {
+      console.error("Could not update inquiry:", error);
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsUpdatingInquiry(false);
+    }
+  };
+
   const renderErrors = (): React.ReactNode => {
     if (!loadError && !actionError && !(saveError && selectedSaveStatus === "error")) return null;
     return (
@@ -166,10 +218,10 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
             )}
             <div className="min-w-0">
               <h1 className="truncate text-2xl font-semibold tracking-tight text-white">
-                {selectedQuestion?.title || "Questions Board"}
+                {selectedQuestion?.title || "Inquiry Queue"}
               </h1>
               <p className="mt-1 text-sm text-purple-300">
-                {selectedQuestion ? "Question details" : "Keep track of questions worth exploring"}
+                {selectedQuestion ? "Question details" : "Keep track of inquiries worth exploring"}
               </p>
             </div>
           </div>
@@ -255,6 +307,86 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                     ? "Saved"
                     : ""}
               </p>
+              <div className="mt-6 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
+                {selectedQuestion.status === "parked" ? (
+                  <p className="text-sm text-gray-500">
+                    Open Triage in Planning to prioritize this inquiry.
+                  </p>
+                ) : selectedQuestion.status === "triaged" ? (
+                  <>
+                    <span className="inline-flex rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-300">
+                      Triaged
+                    </span>
+                    <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                      <div><dt className="text-xs text-gray-500">Impact</dt><dd className="mt-1 text-gray-200">{selectedQuestion.impact}</dd></div>
+                      <div><dt className="text-xs text-gray-500">Feasibility</dt><dd className="mt-1 text-gray-200">{selectedQuestion.feasibility}</dd></div>
+                      <div><dt className="text-xs text-gray-500">Urgency</dt><dd className="mt-1 text-gray-200">{selectedQuestion.urgency}</dd></div>
+                      <div><dt className="text-xs text-gray-500">Priority score</dt><dd className="mt-1 text-gray-200">{selectedQuestion.priorityScore}</dd></div>
+                      <div className="col-span-2 sm:col-span-4">
+                        <dt className="text-xs text-gray-500">Triage notes</dt>
+                        <dd className="mt-1 whitespace-pre-wrap text-gray-300">{selectedQuestion.triageNotes || "No notes"}</dd>
+                      </div>
+                      <div className="col-span-2 sm:col-span-4">
+                        <dt className="text-xs text-gray-500">Triaged at</dt>
+                        <dd className="mt-1 text-gray-300">
+                          {selectedQuestion.triagedAt === null
+                            ? "—"
+                            : new Date(selectedQuestion.triagedAt).toLocaleString()}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={isUpdatingInquiry}
+                        onClick={() => void runInquiryAction(() =>
+                          untriageQuestion(selectedQuestion.id)
+                        )}
+                        className="rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
+                      >
+                        Untriage
+                      </button>
+                      {selectedQuestion.isSelectedForPromotion ? (
+                        <button
+                          type="button"
+                          disabled={isUpdatingInquiry}
+                          onClick={() => void runInquiryAction(() =>
+                            unselectQuestionForPromotion(selectedQuestion.id)
+                          )}
+                          className="rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
+                        >
+                          Unselect
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isUpdatingInquiry}
+                          onClick={() => void runInquiryAction(() =>
+                            selectQuestionForPromotion(selectedQuestion.id)
+                          )}
+                          className="rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/25 disabled:opacity-50"
+                        >
+                          Select for Promotion
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={isUpdatingInquiry}
+                        onClick={() => void runInquiryAction(() =>
+                          archiveQuestion(selectedQuestion.id)
+                        )}
+                        className="rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-400 transition hover:border-rose-500/40 hover:text-rose-300 disabled:opacity-50"
+                      >
+                        Archive
+                      </button>
+                    </div>
+                  </>
+                ) : selectedQuestion.status === "archived" ? (
+                  <span className="inline-flex rounded-full border border-gray-700 bg-gray-800/50 px-2.5 py-1 text-xs font-medium text-gray-500">
+                    Archived
+                  </span>
+                ) : null}
+              </div>
             </div>
           ) : (
             <>
@@ -308,13 +440,39 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                 </form>
               )}
 
+              <div className="mb-5 flex flex-wrap gap-2">
+                {([
+                  ["all", "All"],
+                  ["parked", "Parked"],
+                  ["triaged", "Triaged"],
+                  ["archived", "Archived"],
+                  ["selected", "Selected"],
+                ] as const).map(([filter, label]) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    aria-pressed={questionFilter === filter}
+                    onClick={() => setQuestionFilter(filter)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                      questionFilter === filter
+                        ? "bg-[#252a37] text-white"
+                        : "text-gray-400 hover:bg-[#222734] hover:text-white"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               {isLoading ? (
                 <p className="py-12 text-center text-sm text-gray-500">Loading questions...</p>
-              ) : questions.length === 0 ? (
+              ) : filteredQuestions.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-[#343741] px-6 py-14 text-center">
                   <CircleHelp size={32} className="mx-auto text-gray-600" />
-                  <p className="mt-4 text-sm font-semibold text-gray-300">No questions yet</p>
-                  <p className="mt-1 text-xs text-gray-500">Create a question to start your board.</p>
+                  <p className="mt-4 text-sm font-semibold text-gray-300">
+                    {questions.length === 0 ? "No inquiries yet" : "No inquiries in this filter"}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">Create an inquiry to start your queue.</p>
                   {!isCreating && (
                     <button
                       type="button"
@@ -327,7 +485,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {questions.map((question: QuestionItem) => (
+                  {filteredQuestions.map((question: QuestionItem) => (
                     <button
                       key={question.id}
                       type="button"
@@ -337,9 +495,26 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                       }}
                       className="flex min-h-44 flex-col rounded-2xl border border-[#2d3038] bg-[#191b20] p-5 text-left transition hover:border-purple-500/40 hover:bg-[#1d1f26]"
                     >
-                      <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-purple-300">
-                        <CircleHelp size={14} />
-                        Question
+                      <span className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide">
+                        <span className={`rounded-full border px-2.5 py-1 ${
+                          question.status === "parked"
+                            ? "border-gray-700 bg-gray-800/50 text-gray-400"
+                            : question.status === "triaged"
+                              ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
+                              : "border-gray-800 bg-gray-900/70 text-gray-500"
+                        }`}>
+                          {question.status === "promoted" ? "Promoted" : question.status}
+                        </span>
+                        {question.status === "triaged" && (
+                          <span className="rounded-full border border-blue-500/20 bg-blue-500/5 px-2.5 py-1 text-blue-200">
+                            I{question.impact}·F{question.feasibility}·U{question.urgency}→{question.priorityScore}
+                          </span>
+                        )}
+                        {question.isSelectedForPromotion && (
+                          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">
+                            ★ Selected
+                          </span>
+                        )}
                       </span>
                       <span className="mt-4 line-clamp-2 break-words text-base font-semibold text-white">
                         {question.title}
