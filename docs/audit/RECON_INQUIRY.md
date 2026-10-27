@@ -35,6 +35,24 @@ pub struct QuestionItem {
 
 `QUESTION_COLUMNS` selects the same five fields; `map_question` maps them from SQLite in that order. (`src-tauri/src/mind/questions.rs:14, 89-101`)
 
+**FACT — Complete questions schema initializer:** (`src-tauri/src/mind/questions.rs:16-28`)
+
+```rust
+pub fn init_schema(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS questions (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL CHECK(length(trim(title)) BETWEEN 1 AND 200),
+            description TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_questions_updated_at
+            ON questions(updated_at DESC, created_at DESC, id);",
+    )
+}
+```
+
 ### Rust IPC commands
 
 **FACT —** Command bodies lock `AppState.db`, delegate to `mind::questions`, and convert Rust/SQLite errors to `String`. `create_question` creates a UUIDv7-based `question_…` ID; `save_question` updates title/description and timestamp; delete returns `()` or an error. (`src-tauri/src/lib.rs:279-314`)
@@ -73,27 +91,11 @@ async deleteQuestion(id: string): Promise<void> {
 },
 ```
 
-`QuestionItem` in `src/types/index.ts` mirrors the Rust fields as camelCase (`id`, `title`, `description`, `createdAt`, `updatedAt`). (`src/types/index.ts:1-18` for the adjacent types; question declaration is in the same file at the question model block.)
+`QuestionItem` in `src/types/index.ts` mirrors the Rust fields as camelCase (`id`, `title`, `description`, `createdAt`, `updatedAt`). (`src/types/index.ts:82-88`)
 
 **FACT —** `useAppStore` holds `questions`, `questionSaveStatus`, and `questionSaveError`. Loading reconciles unsaved in-memory edits; create/load/save results are sorted by descending `updatedAt`, descending `createdAt`, then ascending ID. Title/description edits update memory immediately and debounce persistence by 500ms; per-ID save queues serialize writes. (`src/shared/store/useAppStore.ts:36-42, 91-102, 385-496`)
 
-```ts
-questions: [],
-questionSaveStatus: {},
-questionSaveError: null,
-loadQuestions: async () => {
-  const questions = await dbService.getQuestions();
-  // Merge DB results with newer local edits, then sort.
-},
-updateQuestion: (id, title, description) => {
-  // Optimistic update; schedule flushQuestion(id) after 500ms.
-},
-flushQuestion: async (id) => {
-  // Save through dbService.saveQuestion; retain visible save status/error.
-},
-```
-
-The excerpt above marks elided implementation; the complete questions store state/actions are at `src/shared/store/useAppStore.ts:91-102, 385-500`.
+The complete questions store state/actions are at `src/shared/store/useAppStore.ts:91-102, 385-500`; this source range includes DB load reconciliation, optimistic updates, the 500ms debounce, per-ID queued saves, visible save errors, and deletion. The state declaration is `questions: QuestionItem[]`, save status/error maps, and `loadQuestions/createQuestion/updateQuestion/flushQuestion/deleteQuestion` (`src/shared/store/useAppStore.ts:91-102`).
 
 **FACT — Persistence distinction:** Zustand `partialize` persists only board cards and `executedTasks`; `questions` are not serialized into Zustand storage. SQLite is the durable source for question rows, while the store array/statuses are a runtime cache. (`src/shared/store/useAppStore.ts:553-562`; DB CRUD at `src-tauri/src/mind/questions.rs:30-87`)
 
