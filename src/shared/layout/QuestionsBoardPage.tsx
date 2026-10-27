@@ -503,7 +503,13 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                               ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
                               : "border-gray-800 bg-gray-900/70 text-gray-500"
                         }`}>
-                          {question.status === "promoted" ? "Promoted" : question.status}
+                          {question.status === "parked"
+                            ? "Parked"
+                            : question.status === "triaged"
+                              ? "Triaged"
+                              : question.status === "archived"
+                                ? "Archived"
+                                : "Promoted"}
                         </span>
                         {question.status === "triaged" && (
                           <span className="rounded-full border border-blue-500/20 bg-blue-500/5 px-2.5 py-1 text-blue-200">
