@@ -2280,20 +2280,6 @@ function AppContent() {
     : previewSettings?.lineStyle === "dotted"
       ? `${previewSettings.lineWidth} ${previewSettings.lineWidth * 2}`
       : undefined;
-  const activateJournalCanvasTool = (tool: "card" | "rectangle" | "path" | "text"): void => {
-    setIsJournalOpen(false);
-    setIsTaskFlowOpen(false);
-    setIsAiTasksOpen(false);
-    setIsVoraTraceOpen(false);
-    setIsQuestionsBoardOpen(false);
-    setActiveOpenPanel("none");
-    setIsAddCardToolActive(tool === "card");
-    setIsTextToolActive(tool === "text");
-    setActiveShapeTool(tool === "rectangle" || tool === "path" ? tool : null);
-    rectangleStartRef.current = null;
-    pathPointsRef.current = [];
-    setShapePreview(null);
-  };
   const floatingControlsLeft = activeOpenPanel === "none" ? 14 : "calc(14rem + 10px)";
   const canvasControlsLeft = activeOpenPanel === "none" ? 16 : "calc(14rem + 16px)";
 
@@ -2511,8 +2497,6 @@ function AppContent() {
               setIsQuestionsBoardOpen(false);
               setActiveOpenPanel("none");
             }}
-            onActivateCanvasTool={activateJournalCanvasTool}
-            canUseCanvasTools={Boolean(canvasBoardId)}
           />
         ) : isQuestionsBoardOpen ? (
           <QuestionsBoardPage onGoHome={() => {

@@ -201,10 +201,10 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
               <button
                 type="button"
                 onClick={onGoHome}
-                aria-label="Go to Home"
+                aria-label="Go to chart"
                 aria-haspopup="true"
                 aria-expanded={isHomeMenuOpen}
-                title="Home"
+                title="Go to chart"
                 className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#343741] bg-[#1a1c22] text-gray-300 transition hover:border-purple-500/40 hover:bg-purple-500/10 hover:text-white"
               >
                 {isHomeMenuOpen
@@ -212,24 +212,19 @@ export const JournalPage: React.FC<JournalPageProps> = ({ onGoHome }) => {
                   : <House size={17} aria-hidden="true" />}
               </button>
               <div
-                aria-label="Canvas tools"
-                className={`absolute right-0 top-full z-50 mt-1 flex flex-col gap-1 rounded-xl border border-[#2a2a2a] bg-[#181818]/90 p-1 shadow-lg backdrop-blur transition-all duration-200 ${
+                aria-label="Go to chart menu"
+                className={`absolute right-0 top-full z-50 mt-1 min-w-[11rem] rounded-xl border border-[#2a2a2a] bg-[#181818]/90 p-1.5 shadow-lg backdrop-blur transition-all duration-200 ${
                   isHomeMenuOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0"
                 }`}
               >
-                {canvasToolMenuItems.map(({ tool, label, icon }) => (
-                  <button
-                    key={tool}
-                    type="button"
-                    aria-label={label}
-                    title={label}
-                    disabled={!canUseCanvasTools}
-                    onClick={() => onActivateCanvasTool(tool)}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {icon}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  onClick={onGoHome}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition hover:bg-[#1c202d] hover:text-violet-300"
+                >
+                  <LayoutGrid size={15} aria-hidden="true" />
+                  <span>Go to Chart</span>
+                </button>
               </div>
             </div>
           </div>
