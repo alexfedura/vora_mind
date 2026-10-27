@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -346,6 +346,8 @@ function loadShapeDefaults(): VoraShapeDefaults {
 }
 
 function AppContent() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const {
     toggleRightDrawer,
     isRightDrawerOpen,
@@ -367,6 +369,18 @@ function AppContent() {
   const [isJournalMenuOpen, setIsJournalMenuOpen] = useState(false);
   const [isQuestionsBoardOpen, setIsQuestionsBoardOpen] = useState(false);
   const isWorkspacePageOpen = isTaskFlowOpen || isAiTasksOpen || isVoraTraceOpen || isJournalOpen || isQuestionsBoardOpen;
+
+  useEffect(() => {
+    if (!isRecord(location.state) || location.state.openJournal !== true) return;
+    setIsTaskFlowOpen(false);
+    setIsAiTasksOpen(false);
+    setIsVoraTraceOpen(false);
+    setIsQuestionsBoardOpen(false);
+    setIsJournalOpen(true);
+    setActiveOpenPanel("none");
+    navigate("/home", { replace: true, state: null });
+  }, [location.state, navigate]);
+
   const [lastActivePanel, setLastActivePanel] = useState<"boards" | "sidebar">("boards");
   const [boards, setBoards] = useState<BoardItem[]>([]);
   const [boardsLoaded, setBoardsLoaded] = useState(false);

@@ -57,6 +57,9 @@ import {
 import {
   AlertCircle,
   Camera,
+  House,
+  Menu,
+  BookOpen,
   RotateCcw,
   Sliders,
   Video,
@@ -1279,6 +1282,7 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
       return stored === null ? true : stored === "true";
     } catch { return true; }
   });
+  const [isHomeMenuOpen, setIsHomeMenuOpen] = useState(false);
   useEffect(() => {
     try { setSetting("vora.chart.values_tooltip.long_press", String(valuesTooltipOnLongPress)); } catch { /* ignore */ }
   }, [valuesTooltipOnLongPress]);
@@ -3810,19 +3814,68 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
             className="w-20 px-2 py-0.5 text-center font-mono tabular-nums text-xs bg-[#0f0f0f] border border-[#383838] rounded text-[#ff9800] whitespace-nowrap shrink-0 focus:outline-none focus:border-[#ff9800]"
           />
 
-          {/* Spacer */}
-          <div className="flex-1" />
-
-          {/* Policy panel toggle (MKT-6b-3.6) */}
-          <button
-            onClick={() => setPanelOpen((v) => !v)}
-            className="w-7 h-7 shrink-0 flex items-center justify-center rounded hover:bg-[#2a2a2a] text-[#787b86] hover:text-[#d6dbe2]"
-            title={panelOpen ? "Hide policy panel" : "Show policy panel"}
+          <div
+            className="group relative z-40 shrink-0"
+            onMouseEnter={() => setIsHomeMenuOpen(true)}
+            onMouseLeave={() => setIsHomeMenuOpen(false)}
+            onFocusCapture={() => setIsHomeMenuOpen(true)}
+            onBlurCapture={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setIsHomeMenuOpen(false);
+              }
+            }}
           >
-            <Sliders size={14} />
-          </button>
+            <button
+              type="button"
+              onClick={() => setIsHomeMenuOpen(true)}
+              aria-label="Open Home and Journal menu"
+              aria-haspopup="menu"
+              aria-expanded={isHomeMenuOpen}
+              title="Home and Journal"
+              className="w-7 h-7 shrink-0 flex items-center justify-center rounded hover:bg-[#2a2a2a] text-[#787b86] hover:text-[#ff9800]"
+            >
+              <Menu size={16} />
+            </button>
+            <div
+              role="menu"
+              aria-label="Home and Journal navigation"
+              className={`absolute left-0 top-full z-50 mt-1 flex h-14 w-7 flex-col overflow-hidden rounded border border-[#2a2a2a] bg-[#0f0f0f]/95 p-0 shadow-lg backdrop-blur transition-all duration-200 ${
+                isHomeMenuOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0"
+              }`}
+            >
+              <Link
+                to="/home"
+                role="menuitem"
+                aria-label="Home"
+                title="Home"
+                onClick={() => setIsHomeMenuOpen(false)}
+                className="flex h-7 w-full shrink-0 items-center justify-center text-[#787b86] transition hover:bg-[#2a2a2a] hover:text-[#ff9800]"
+              >
+                <House size={16} aria-hidden="true" />
+              </Link>
+              <Link
+                to="/home"
+                state={{ openJournal: true }}
+                role="menuitem"
+                aria-label="Journal"
+                title="Journal"
+                onClick={() => setIsHomeMenuOpen(false)}
+                className="flex h-7 w-full shrink-0 items-center justify-center text-[#787b86] transition hover:bg-[#2a2a2a] hover:text-[#ff9800]"
+              >
+                <BookOpen size={16} aria-hidden="true" />
+              </Link>
+            </div>
+          </div>
 
           {/* v0.83.0 — Take Snapshot + Snapshots list */}
+          <Link
+            to="/snapshots"
+            className="w-7 h-7 shrink-0 flex items-center justify-center rounded hover:bg-[#2a2a2a] text-[#787b86] hover:text-[#ff9800]"
+            aria-label="Open saved snapshots"
+            data-name="open-snapshots"
+          >
+            <Camera size={20} />
+          </Link>
           <button
             type="button"
             onClick={handleRecordingButtonClick}
@@ -3834,14 +3887,17 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
           >
             <Video size={20} />
           </button>
-          <Link
-            to="/snapshots"
-            className="w-7 h-7 shrink-0 flex items-center justify-center rounded hover:bg-[#2a2a2a] text-[#787b86] hover:text-[#ff9800]"
-            aria-label="Open saved snapshots"
-            data-name="open-snapshots"
+          {/* Policy panel toggle (MKT-6b-3.6) */}
+          <button
+            onClick={() => setPanelOpen((v) => !v)}
+            className="w-7 h-7 shrink-0 flex items-center justify-center rounded hover:bg-[#2a2a2a] text-[#787b86] hover:text-[#d6dbe2]"
+            title={panelOpen ? "Hide policy panel" : "Show policy panel"}
           >
-            <Camera size={20} />
-          </Link>
+            <Sliders size={14} />
+          </button>
+
+          {/* Spacer */}
+          <div className="flex-1" />
         </div>
       </header>
       <main className={`chart-shell__main${rightPanel ? " chart-shell__main--panel-open" : ""}`}>
