@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { getSetting } from "@/shared/store/useSettingsStore";
 import type { ChartDrawingAlert, DrawingStyleTemplate } from "@/lib/market/drawingTypes";
 
 export async function listDrawingTemplates(): Promise<DrawingStyleTemplate[]> {

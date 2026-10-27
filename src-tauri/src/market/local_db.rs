@@ -132,7 +132,8 @@ pub fn fetch_local_candles(
                 aggregated.volume,
                 aggregated.tick_count,
                 CASE
-                    WHEN aggregated.high = aggregated.low THEN 'same'
+                    WHEN aggregated.high = aggregated.low
+                        OR extreme_times.high_ts = extreme_times.low_ts THEN 'same'
                     WHEN extreme_times.high_ts < extreme_times.low_ts THEN 'high_first'
                     ELSE 'low_first'
                 END AS first_extreme

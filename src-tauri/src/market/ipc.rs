@@ -1,12 +1,10 @@
 //! Tauri IPC layer for the market module.
 //!
-//! Exposes 7 commands to the frontend:
-//! Exposes online historical candles and market analysis commands to the frontend.
+//! Exposes local historical candles and market analysis commands to the frontend.
 
 use crate::market::{db, model::*};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::Manager;
 
 // ── DTOs ─────────────────────────────────────────────────
 
