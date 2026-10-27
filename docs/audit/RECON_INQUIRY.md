@@ -174,6 +174,53 @@ pub struct TaskFlowItem {
 }
 ```
 
+**FACT — Complete Task Flow schema initializer:** (`src-tauri/src/mind/task_flow.rs:37-77`)
+
+```rust
+pub fn init_schema(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS task_flow_items (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 200),
+            description TEXT NOT NULL DEFAULT '',
+            task_type TEXT NOT NULL DEFAULT 'task' CHECK(task_type IN ('task', 'ai')),
+            completed INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1)),
+            position INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_task_flow_items_position
+            ON task_flow_items(position, created_at, id);",
+    )?;
+    let (has_description, has_task_type) = {
+        let mut statement = conn.prepare("PRAGMA table_info(task_flow_items)")?;
+        let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+        let columns = columns.collect::<Result<Vec<_>>>()?;
+        (
+            columns.iter().any(|name| name == "description"),
+            columns.iter().any(|name| name == "task_type"),
+        )
+    };
+    if !has_description {
+        conn.execute(
+            "ALTER TABLE task_flow_items ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+    }
+    if !has_task_type {
+        conn.execute(
+            "ALTER TABLE task_flow_items ADD COLUMN task_type TEXT NOT NULL DEFAULT 'task'",
+            [],
+        )?;
+    }
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_task_flow_items_type_position
+            ON task_flow_items(task_type, position, created_at, id);",
+    )?;
+    Ok(())
+}
+```
+
 **FACT — IPC signatures and behavior:** (`src-tauri/src/lib.rs:189-253`)
 
 | Command | Signature (excluding boilerplate state argument where noted) | Behavior |
