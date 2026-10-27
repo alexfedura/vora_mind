@@ -312,7 +312,7 @@ Representative source excerpts for the list/detail branch (`src/shared/layout/Qu
 )}
 ```
 
-The excerpt above omits styling attributes for readability; the full relevant JSX, including all classes and create form, is at the cited source range.
+The excerpt above omits styling attributes for readability; the full detail/list JSX and create form are at the cited source range.
 
 **FACT — Filtering/sorting:** The Questions Board has no visible search/filter control. It renders all loaded `questions`; ordering comes from the store’s `sortQuestions` helper and the backend’s matching `ORDER BY`. (`src/shared/layout/QuestionsBoardPage.tsx:311-365`; `src/shared/store/useAppStore.ts:36-42`; `src-tauri/src/mind/questions.rs:30-36`)
 
@@ -514,13 +514,36 @@ if !has_task_type {
 
 **FACT —** The `questions` table’s only check is the title length/trim check; no trigger is created alongside it. (`src-tauri/src/mind/questions.rs:16-28`). The migration should be owned by `src-tauri/src/mind/questions.rs`, next to its schema, CRUD queries, and tests. Workspace schema initialization already calls `questions::init_schema`, so `portable_db.rs` need not change for an in-place migration (`src-tauri/src/mind/portable_db.rs:883-892`).
 
-**FACT — `_vora_meta`:** Market initialization creates `_vora_meta(key TEXT PRIMARY KEY, value TEXT)` and uses keyed markers; some historical migrations use ignored errors/`.ok()` and are not a safe template for this change (`src-tauri/src/market/db.rs:113-118, 127-174`). `initialize_workspace_schema` calls `questions::init_schema` before `market::db::init_schema`, so `_vora_meta` is not guaranteed to have been created earlier on a fresh DB (`src-tauri/src/mind/portable_db.rs:883-892`).
+**FACT — `_vora_meta`:** Market initialization creates `_vora_meta(key TEXT PRIMARY KEY, value TEXT)` and uses keyed markers; some historical migrations use ignored errors/`.ok()` and are not a safe template for this change (`src-tauri/src/market/db.rs:113-118, 127-174`). Example marker read/write (the `.unwrap_or` and ignored `ALTER` errors here are legacy shortcuts, not recommended for the new migration): (`src-tauri/src/market/db.rs:153-174`)
+
+```rust
+const MIGRATION_KEY_V630B: &str = "v6_3_0b_column_rename";
+let done_b: Option<String> = conn
+    .query_row(
+        "SELECT value FROM _vora_meta WHERE key = ?1",
+        [MIGRATION_KEY_V630B],
+        |r| r.get(0),
+    )
+    .optional()
+    .unwrap_or(None);
+if done_b.is_none() {
+    let _ = conn.execute("ALTER TABLE market_boxes RENAME COLUMN m_scale TO step", []);
+    // ...
+    conn.execute(
+        "INSERT OR REPLACE INTO _vora_meta(key, value) VALUES(?1, '1')",
+        [MIGRATION_KEY_V630B],
+    )
+    .ok();
+}
+```
+
+`initialize_workspace_schema` calls `questions::init_schema` before `market::db::init_schema`, so `_vora_meta` is not guaranteed to have been created earlier on a fresh DB (`src-tauri/src/mind/portable_db.rs:883-892`).
 
 **INFERENCE —** A version marker can gate this additive migration, but the migration must first ensure `_vora_meta` exists (without adding a separate metadata table), and only write its marker after every column is checked/added successfully. Alternatively, the six PRAGMA column checks are already idempotent and avoid coupling the question migration to the market metadata owner. The repository has no questions-specific schema version key today (`src-tauri/src/mind/questions.rs:16-28`; metadata keys are market-owned at `src-tauri/src/market/db.rs:113-174`).
 
 ### Error-propagating idempotent recipe (recommended shape)
 
-**INFERENCE —** Apply this static-name pattern inside `questions::init_schema`, preferably in a transaction; do not copy `_`/`.ok()` error suppression used by legacy market migrations. If using a marker, create/verify `_vora_meta` before reading it and commit the marker only after all alterations succeed.
+**INFERENCE —** Apply this static-name pattern inside `questions::init_schema`; do not copy `_`/`.ok()` error suppression used by legacy market migrations. `init_schema` currently accepts `&Connection`, so retain per-statement error propagation and add the marker only after all alterations succeed (`src-tauri/src/mind/questions.rs:16-28`).
 
 ```rust
 let columns = {
