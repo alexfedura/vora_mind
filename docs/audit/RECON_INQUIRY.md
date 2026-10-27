@@ -95,7 +95,128 @@ async deleteQuestion(id: string): Promise<void> {
 
 **FACT —** `useAppStore` holds `questions`, `questionSaveStatus`, and `questionSaveError`. Loading reconciles unsaved in-memory edits; create/load/save results are sorted by descending `updatedAt`, descending `createdAt`, then ascending ID. Title/description edits update memory immediately and debounce persistence by 500ms; per-ID save queues serialize writes. (`src/shared/store/useAppStore.ts:36-42, 91-102, 385-496`)
 
-The complete questions store state/actions are at `src/shared/store/useAppStore.ts:91-102, 385-500`; this source range includes DB load reconciliation, optimistic updates, the 500ms debounce, per-ID queued saves, visible save errors, and deletion. The state declaration is `questions: QuestionItem[]`, save status/error maps, and `loadQuestions/createQuestion/updateQuestion/flushQuestion/deleteQuestion` (`src/shared/store/useAppStore.ts:91-102`).
+Complete questions store slice (with no unrelated state): (`src/shared/store/useAppStore.ts:385-500`)
+
+```ts
+questions: [],
+questionSaveStatus: {},
+questionSaveError: null,
+loadQuestions: async () => {
+  const questions = await dbService.getQuestions();
+  set((state) => {
+    const loadedQuestions = new Map(questions.map((question) => [question.id, question]));
+    for (const question of state.questions) {
+      const saveStatus = state.questionSaveStatus[question.id];
+      const loadedQuestion = loadedQuestions.get(question.id);
+      if (
+        saveStatus === "saving" ||
+        saveStatus === "error" ||
+        (loadedQuestion && question.updatedAt > loadedQuestion.updatedAt)
+      ) {
+        loadedQuestions.set(question.id, question);
+      }
+    }
+    return { questions: sortQuestions([...loadedQuestions.values()]) };
+  });
+},
+createQuestion: async (title, description) => {
+  const question = await dbService.createQuestion(title, description);
+  set((state) => ({
+    questions: sortQuestions([
+      ...state.questions.filter((item) => item.id !== question.id),
+      question,
+    ]),
+    questionSaveError: null,
+  }));
+  return question;
+},
+updateQuestion: (id, title, description) => {
+  const currentQuestion = get().questions.find((question) => question.id === id);
+  if (!currentQuestion) return;
+
+  set((state) => ({
+    questions: sortQuestions(state.questions.map((question) =>
+      question.id === id
+        ? { ...question, title, description, updatedAt: Date.now() }
+        : question
+    )),
+    questionSaveStatus: { ...state.questionSaveStatus, [id]: "saving" },
+    questionSaveError: null,
+  }));
+  const previousTimer = questionSaveTimers.get(id);
+  if (previousTimer) clearTimeout(previousTimer);
+  questionSaveTimers.set(id, setTimeout(() => {
+    questionSaveTimers.delete(id);
+    void get().flushQuestion(id).catch(() => undefined);
+  }, 500));
+},
+flushQuestion: async (id) => {
+  const timer = questionSaveTimers.get(id);
+  if (timer) {
+    clearTimeout(timer);
+    questionSaveTimers.delete(id);
+  }
+
+  const previousSave = questionSaveQueues.get(id) ?? Promise.resolve();
+  const save = previousSave.catch(() => undefined).then(async () => {
+    const question = get().questions.find((item) => item.id === id);
+    if (!question) return;
+
+    set({ questionSaveStatus: { ...get().questionSaveStatus, [id]: "saving" } });
+    try {
+      const saved = await dbService.saveQuestion(
+        id,
+        question.title,
+        question.description,
+      );
+      set((state) => {
+        const latestQuestion = state.questions.find((item) => item.id === id);
+        const isCurrent = latestQuestion?.title === question.title &&
+          latestQuestion.description === question.description;
+        return {
+          questions: isCurrent
+            ? sortQuestions(state.questions.map((item) => item.id === id ? saved : item))
+            : state.questions,
+          questionSaveStatus: {
+            ...state.questionSaveStatus,
+            [id]: isCurrent ? "saved" : "saving",
+          },
+          questionSaveError: null,
+        };
+      });
+    } catch (error) {
+      console.error("Failed to save question:", error);
+      set({
+        questionSaveStatus: { ...get().questionSaveStatus, [id]: "error" },
+        questionSaveError: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  });
+  questionSaveQueues.set(id, save.catch(() => undefined));
+  await save;
+},
+deleteQuestion: async (id) => {
+  const timer = questionSaveTimers.get(id);
+  if (timer) {
+    clearTimeout(timer);
+    questionSaveTimers.delete(id);
+  }
+  await get().flushQuestion(id);
+  await dbService.deleteQuestion(id);
+  set((state) => {
+    const questionSaveStatus = { ...state.questionSaveStatus };
+    delete questionSaveStatus[id];
+    return {
+      questions: state.questions.filter((question) => question.id !== id),
+      questionSaveStatus,
+      questionSaveError: null,
+    };
+  });
+},
+```
+
+The state/action type declaration is at `src/shared/store/useAppStore.ts:91-102`.
 
 **FACT — Persistence distinction:** Zustand `partialize` persists only board cards and `executedTasks`; `questions` are not serialized into Zustand storage. SQLite is the durable source for question rows, while the store array/statuses are a runtime cache. (`src/shared/store/useAppStore.ts:553-562`; DB CRUD at `src-tauri/src/mind/questions.rs:30-87`)
 
@@ -129,6 +250,69 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
 ```
 
 Source: `src/shared/layout/QuestionsBoardPage.tsx:6-49`. The omitted handlers create rows, flush edits before returning home/list, ask `window.confirm` before deletion, and render retryable load/save errors (`:51-148`). The detail view edits title and Markdown description; the list view provides a create form, loading and empty states, and a card grid (`:219-365`). Each card sets `selectedQuestionId`; the detail view is conditional on that selected row (`:219-220, 330-365`).
+
+Representative source excerpts for the list/detail branch (`src/shared/layout/QuestionsBoardPage.tsx:219-365`; create form markup at `:272-310` omitted):
+
+```tsx
+{selectedQuestion ? (
+  <div className="mx-auto w-full md:w-[70%]">
+    <label htmlFor="question-title">Question summary</label>
+    <input
+      id="question-title"
+      type="text"
+      maxLength={200}
+      value={selectedQuestion.title}
+      onChange={(event) =>
+        updateQuestion(selectedQuestion.id, event.target.value, selectedQuestion.description)
+      }
+      onBlur={() => void flushQuestion(selectedQuestion.id).catch(() => undefined)}
+    />
+    <MarkdownTextEditor
+      key={selectedQuestion.id}
+      value={selectedQuestion.description}
+      onChange={(description) =>
+        updateQuestion(selectedQuestion.id, selectedQuestion.title, description)
+      }
+      onBlur={() => void flushQuestion(selectedQuestion.id).catch(() => undefined)}
+      placeholder="Write the full question here... (Markdown supported)"
+      direction="auto"
+      ariaLabel={`Full question: ${selectedQuestion.title}`}
+    />
+  </div>
+) : (
+  <>
+    {isLoading ? (
+      <p>Loading questions...</p>
+    ) : questions.length === 0 ? (
+      <div>
+        <p>No questions yet</p>
+        <button type="button" onClick={() => setIsCreating(true)}>
+          Add your first question
+        </button>
+      </div>
+    ) : (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {questions.map((question: QuestionItem) => (
+          <button
+            key={question.id}
+            type="button"
+            onClick={() => {
+              setActionError(null);
+              setSelectedQuestionId(question.id);
+            }}
+          >
+            <span>Question</span>
+            <span>{question.title}</span>
+            <span>{question.description || "No details added yet"}</span>
+          </button>
+        ))}
+      </div>
+    )}
+  </>
+)}
+```
+
+The excerpt above omits styling attributes for readability; the full relevant JSX, including all classes and create form, is at the cited source range.
 
 **FACT — Filtering/sorting:** The Questions Board has no visible search/filter control. It renders all loaded `questions`; ordering comes from the store’s `sortQuestions` helper and the backend’s matching `ORDER BY`. (`src/shared/layout/QuestionsBoardPage.tsx:311-365`; `src/shared/store/useAppStore.ts:36-42`; `src-tauri/src/mind/questions.rs:30-36`)
 
