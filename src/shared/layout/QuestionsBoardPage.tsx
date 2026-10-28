@@ -405,6 +405,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                     type="text"
                     required
                     maxLength={200}
+                    dir="auto"
                     value={newTitle}
                     onChange={(event) => setNewTitle(event.target.value)}
                     autoFocus
