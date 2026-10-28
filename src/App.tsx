@@ -2473,7 +2473,9 @@ function AppContent() {
         onPointerUpCapture={isWorkspacePageOpen ? undefined : handleCanvasPointerUp}
         onDoubleClickCapture={isWorkspacePageOpen ? undefined : handleCanvasDoubleClick}
         onKeyDown={isWorkspacePageOpen ? undefined : handleCanvasKeyDown}
-        className={`w-full h-full relative bg-background flex-1 ${isSpacePanActive ? "space-pan-active" : ""} ${
+        className={`w-full h-full relative bg-background flex-1 transition-all duration-300 ease-in-out ${
+          isWorkspacePageOpen && activeOpenPanel === "sidebar" ? "ml-56" : "ml-0"
+        } ${isSpacePanActive ? "space-pan-active" : ""} ${
           isTextToolActive ? "cursor-text" : activeShapeTool || isAddCardToolActive ? "cursor-crosshair" : ""
         }`}
       >
