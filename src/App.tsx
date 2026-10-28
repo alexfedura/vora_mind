@@ -2171,7 +2171,6 @@ function AppContent() {
       setIsAiTasksOpen(false);
       setIsVoraTraceOpen(false);
       setIsJournalOpen(false);
-      setIsQuestionsBoardOpen(false);
     }
     setActiveOpenPanel(next);
     setLastActivePanel(next);
