@@ -182,9 +182,9 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-7 sm:px-10">
         <div className="mx-auto mb-6 flex w-full max-w-4xl gap-2 border-b border-[#292c34] pb-3">
           {([
-            ["tasks", "Tasks"],
             ["queue", "Queue"],
             ["triage", "Triage"],
+            ["tasks", "Tasks"],
           ] as const).map(([tab, label]) => (
             <button
               key={tab}
