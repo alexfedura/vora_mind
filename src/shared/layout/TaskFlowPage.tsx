@@ -172,7 +172,7 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
                     : "Keep your priorities in order. Drag any task to move it through your timeline."}
             </p>
           </div>
-          <div className="shrink-0 rounded-xl border border-[#30333c] bg-[#1a1c22] px-3 py-2 text-right">
+          <div className="shrink-0 rounded-xl border border-[#30333c] bg-[#1a1c22] px-3 py-2 text-center">
             <p className="text-lg font-semibold leading-none text-white">{completedCount}/{tasks.length}</p>
             <p className="mt-1 text-[10px] uppercase tracking-wider text-gray-500">completed</p>
           </div>
