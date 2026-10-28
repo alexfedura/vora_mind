@@ -69,7 +69,6 @@ import { LeftSidebar } from "./shared/layout/LeftSidebar";
 import { TaskFlowPage } from "./shared/layout/TaskFlowPage";
 import VoraTraceApp from "./features/vora-trace/App";
 import { JournalPage } from "./shared/layout/JournalPage";
-import { QuestionsBoardPage } from "./shared/layout/QuestionsBoardPage";
 import { BoardsPanel } from "./shared/layout/BoardsPanel";
 import { RightDrawer } from "./shared/layout/RightDrawer";
 import { ReplayController } from "./shared/canvas/ReplayController";
@@ -367,15 +366,13 @@ function AppContent() {
   const [isVoraTraceOpen, setIsVoraTraceOpen] = useState(false);
   const [isJournalOpen, setIsJournalOpen] = useState(false);
   const [isJournalMenuOpen, setIsJournalMenuOpen] = useState(false);
-  const [isQuestionsBoardOpen, setIsQuestionsBoardOpen] = useState(false);
-  const isWorkspacePageOpen = isTaskFlowOpen || isAiTasksOpen || isVoraTraceOpen || isJournalOpen || isQuestionsBoardOpen;
+  const isWorkspacePageOpen = isTaskFlowOpen || isAiTasksOpen || isVoraTraceOpen || isJournalOpen;
 
   useEffect(() => {
     if (!isRecord(location.state) || location.state.openJournal !== true) return;
     setIsTaskFlowOpen(false);
     setIsAiTasksOpen(false);
     setIsVoraTraceOpen(false);
-    setIsQuestionsBoardOpen(false);
     setIsJournalOpen(true);
     setActiveOpenPanel("none");
     navigate("/home", { replace: true, state: null });
@@ -2406,14 +2403,12 @@ function AppContent() {
               isAiTasksOpen={isAiTasksOpen}
               isVoraTraceOpen={isVoraTraceOpen}
               isJournalOpen={isJournalOpen}
-              isQuestionsBoardOpen={isQuestionsBoardOpen}
               onAddNewCard={handleCreateCardInLibraryOnly}
               onToggleLibrary={toggleRightDrawer}
               onOpenTaskFlow={() => {
                 setIsAiTasksOpen(false);
                 setIsVoraTraceOpen(false);
                 setIsJournalOpen(false);
-                setIsQuestionsBoardOpen(false);
                 setIsTaskFlowOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
@@ -2422,7 +2417,6 @@ function AppContent() {
                 setIsTaskFlowOpen(false);
                 setIsVoraTraceOpen(false);
                 setIsJournalOpen(false);
-                setIsQuestionsBoardOpen(false);
                 setIsAiTasksOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
@@ -2431,7 +2425,6 @@ function AppContent() {
                 setIsTaskFlowOpen(false);
                 setIsAiTasksOpen(false);
                 setIsJournalOpen(false);
-                setIsQuestionsBoardOpen(false);
                 setIsVoraTraceOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
@@ -2440,17 +2433,7 @@ function AppContent() {
                 setIsTaskFlowOpen(false);
                 setIsAiTasksOpen(false);
                 setIsVoraTraceOpen(false);
-                setIsQuestionsBoardOpen(false);
                 setIsJournalOpen(true);
-                setLastActivePanel("sidebar");
-                setActiveOpenPanel("sidebar");
-              }}
-              onOpenQuestionsBoard={() => {
-                setIsTaskFlowOpen(false);
-                setIsAiTasksOpen(false);
-                setIsVoraTraceOpen(false);
-                setIsJournalOpen(false);
-                setIsQuestionsBoardOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
               }}
@@ -2459,7 +2442,6 @@ function AppContent() {
                 setIsAiTasksOpen(false);
                 setIsVoraTraceOpen(false);
                 setIsJournalOpen(false);
-                setIsQuestionsBoardOpen(false);
                 setLastActivePanel("boards");
                 setActiveOpenPanel("boards");
               }}
