@@ -5,7 +5,7 @@ import { useAppStore } from "@/shared/store/useAppStore";
 import type { QuestionItem } from "@/types";
 
 interface QuestionsBoardPageProps {
-  onGoHome: () => void;
+  onGoHome?: () => void;
 }
 
 export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome }) => {
@@ -139,7 +139,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
         return;
       }
     }
-    onGoHome();
+    onGoHome?.();
   };
 
   const runInquiryAction = async (action: () => Promise<unknown>): Promise<void> => {
@@ -200,7 +200,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
   };
 
   return (
-    <section className="absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-[#101114] text-gray-200">
+    <section className="flex w-full min-h-0 flex-col overflow-hidden text-gray-200">
       <header className="border-b border-[#292c34] bg-[#14161b] px-6 py-5 sm:px-10">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3 pl-12 sm:pl-14">
@@ -251,15 +251,17 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                 New question
               </button>
             )}
-            <button
-              type="button"
-              onClick={handleGoHome}
-              aria-label="Go to Home"
-              title="Home"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#343741] bg-[#1a1c22] text-gray-300 transition hover:border-purple-500/40 hover:bg-purple-500/10 hover:text-white"
-            >
-              <House size={17} />
-            </button>
+            {onGoHome && (
+              <button
+                type="button"
+                onClick={() => void handleGoHome()}
+                aria-label="Go to Home"
+                title="Home"
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#343741] bg-[#1a1c22] text-gray-300 transition hover:border-purple-500/40 hover:bg-purple-500/10 hover:text-white"
+              >
+                <House size={17} />
+              </button>
+            )}
           </div>
         </div>
       </header>
