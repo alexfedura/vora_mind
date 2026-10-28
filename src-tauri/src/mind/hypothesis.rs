@@ -188,7 +188,12 @@ mod tests {
         connection
     }
 
-    fn promote(conn: &mut Connection, inquiry_id: &str, id: &str, now: i64) -> rusqlite::Result<super::Hypothesis> {
+    fn promote(
+        conn: &mut Connection,
+        inquiry_id: &str,
+        id: &str,
+        now: i64,
+    ) -> rusqlite::Result<super::Hypothesis> {
         promote_inquiry(
             conn,
             id,
@@ -247,14 +252,16 @@ mod tests {
         assert_eq!(promoted_id.as_deref(), Some("hypothesis-1"));
         assert!(!selected);
         assert!(promote(&mut connection, "inquiry-1", "hypothesis-2", 11).is_err());
-        assert_eq!(list_hypotheses(&connection).expect("list hypotheses").len(), 1);
+        assert_eq!(
+            list_hypotheses(&connection).expect("list hypotheses").len(),
+            1
+        );
     }
 
     #[test]
     fn promotion_rejects_an_inquiry_that_is_not_selected() {
         let mut connection = setup();
-        create_question(&connection, "inquiry-1", "A question", "", 1)
-            .expect("create inquiry");
+        create_question(&connection, "inquiry-1", "A question", "", 1).expect("create inquiry");
         triage_question(&connection, "inquiry-1", 3, 3, 3, None, 2).expect("triage inquiry");
 
         assert!(promote(&mut connection, "inquiry-1", "hypothesis-1", 10).is_err());
