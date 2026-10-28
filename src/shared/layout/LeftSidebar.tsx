@@ -6,7 +6,6 @@ import {
   Layout,
   FolderKanban,
   BookOpen,
-  CircleHelp,
   ListTodo,
   Sparkles,
   GitBranch,
