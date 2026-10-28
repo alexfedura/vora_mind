@@ -218,6 +218,7 @@ export const InquiryTriagePanel: React.FC = () => {
                 {awaitingTriage.map((question) => (
                   <li
                     key={question.id}
+                    dir="auto"
                     className="rounded-xl border border-[#292c34] bg-[#17191f] p-3"
                   >
                     <button
@@ -233,7 +234,7 @@ export const InquiryTriagePanel: React.FC = () => {
                           notes: "",
                         });
                       }}
-                      className="w-full text-left text-sm font-medium text-gray-200 transition hover:text-white"
+                      className="w-full text-start text-sm font-medium text-gray-200 transition hover:text-white"
                     >
                       {question.title}
                     </button>
@@ -257,6 +258,7 @@ export const InquiryTriagePanel: React.FC = () => {
                 {rankedInquiries.map((question, index) => (
                   <li
                     key={question.id}
+                    dir="auto"
                     className="rounded-xl border border-[#292c34] bg-[#17191f] p-3"
                   >
                     <div className="flex flex-wrap items-center gap-3">

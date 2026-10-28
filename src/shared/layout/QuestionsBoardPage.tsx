@@ -491,13 +491,17 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                     <button
                       key={question.id}
                       type="button"
+                      dir="auto"
                       onClick={() => {
                         setActionError(null);
                         setSelectedQuestionId(question.id);
                       }}
-                      className="flex min-h-44 flex-col rounded-2xl border border-[#2d3038] bg-[#191b20] p-5 text-left transition hover:border-purple-500/40 hover:bg-[#1d1f26]"
+                      className="flex min-h-44 flex-col rounded-2xl border border-[#2d3038] bg-[#191b20] p-5 text-start transition hover:border-purple-500/40 hover:bg-[#1d1f26]"
                     >
-                      <span className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide">
+                      <span className="order-2 mt-4 line-clamp-2 break-words text-base font-semibold text-white">
+                        {question.title}
+                      </span>
+                      <span className="order-1 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide">
                         <span className={`rounded-full border px-2.5 py-1 ${
                           question.status === "parked"
                             ? "border-gray-700 bg-gray-800/50 text-gray-400"
@@ -524,12 +528,9 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                           </span>
                         )}
                       </span>
-                      <span className="mt-4 line-clamp-2 break-words text-base font-semibold text-white">
-                        {question.title}
-                      </span>
                       <span
                         dir="auto"
-                        className={`mt-2 line-clamp-4 whitespace-pre-wrap break-words text-sm ${
+                        className={`order-3 mt-2 line-clamp-4 whitespace-pre-wrap break-words text-sm ${
                           question.description ? "text-gray-400" : "text-gray-600"
                         }`}
                       >
