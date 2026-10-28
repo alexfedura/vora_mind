@@ -180,29 +180,30 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-7 sm:px-10">
-        {taskType === "task" && (
-          <div className="mx-auto mb-6 flex w-full max-w-4xl gap-2 border-b border-[#292c34] pb-3">
-            {([
-              ["tasks", "Tasks"],
-              ["triage", "Triage"],
-            ] as const).map(([tab, label]) => (
-              <button
-                key={tab}
-                type="button"
-                aria-pressed={activeTab === tab}
-                onClick={() => setActiveTab(tab)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                  activeTab === tab
-                    ? "bg-[#252a37] text-white"
-                    : "text-gray-400 hover:bg-[#222734] hover:text-white"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-        {taskType === "task" && activeTab === "triage" ? (
+        <div className="mx-auto mb-6 flex w-full max-w-4xl gap-2 border-b border-[#292c34] pb-3">
+          {([
+            ["tasks", "Tasks"],
+            ["queue", "Queue"],
+            ["triage", "Triage"],
+          ] as const).map(([tab, label]) => (
+            <button
+              key={tab}
+              type="button"
+              aria-pressed={activeTab === tab}
+              onClick={() => setActiveTab(tab)}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                activeTab === tab
+                  ? "bg-[#252a37] text-white"
+                  : "text-gray-400 hover:bg-[#222734] hover:text-white"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {activeTab === "queue" ? (
+          <QuestionsBoardPage />
+        ) : activeTab === "triage" ? (
           <InquiryTriagePanel />
         ) : (
         <div className="mx-auto w-full max-w-4xl">
