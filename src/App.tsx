@@ -13,7 +13,6 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import {
-  PanelLeft,
   LayoutGrid,
   PanelRight,
   PanelRightClose,
@@ -2162,22 +2161,7 @@ function AppContent() {
     return () => document.removeEventListener("keydown", handlePathFinish);
   }, [activeShapeTool, finishPath]);
 
-  const handleLeftClick = () => {
-    const next = activeOpenPanel === "none"
-      ? lastActivePanel
-      : activeOpenPanel === "boards" ? "sidebar" : "boards";
-    if (next === "boards") {
-      setIsTaskFlowOpen(false);
-      setIsAiTasksOpen(false);
-      setIsVoraTraceOpen(false);
-      setIsJournalOpen(false);
-    }
-    setActiveOpenPanel(next);
-    setLastActivePanel(next);
-  };
-
-  const handleLeftContextMenu = (event: React.MouseEvent<HTMLButtonElement>): void => {
-    event.preventDefault();
+  const handleMenuToggle = () => {
     const next = activeOpenPanel === "none" ? lastActivePanel : "none";
     if (next === "boards") {
       setIsTaskFlowOpen(false);
@@ -2370,13 +2354,13 @@ function AppContent() {
 
       <div className="absolute top-3.5 z-40 flex w-[57px] justify-center" style={{ left: floatingControlsLeft }}>
           <button
-            onClick={handleLeftClick}
-            onContextMenu={handleLeftContextMenu}
+            type="button"
+            onClick={handleMenuToggle}
             className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_FLOATING_CONTROL_BORDER_CLASS} ${CANVAS_FLOATING_CONTROL_BACKGROUND_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
-            title="Left click: Switch menu | Right click: Open or close menu"
-            aria-label={activeOpenPanel === "sidebar" ? "Switch to boards" : "Switch menu"}
+            title="Open or close menu"
+            aria-label={activeOpenPanel === "none" ? "Open menu" : "Close menu"}
           >
-            {activeOpenPanel === "sidebar" ? <PanelLeft size={16} /> : <LayoutGrid size={16} />}
+            <LayoutGrid size={16} />
           </button>
       </div>
       {!isWorkspacePageOpen && <div className="absolute top-[67.5px] z-40 flex w-[57px] justify-center" style={{ left: floatingControlsLeft }}>
