@@ -499,7 +499,10 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                           setSelectedQuestionId(question.id);
                         }}
                         onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
+                          if (
+                            event.target === event.currentTarget &&
+                            (event.key === "Enter" || event.key === " ")
+                          ) {
                             event.preventDefault();
                             setActionError(null);
                             setSelectedQuestionId(question.id);
@@ -509,31 +512,31 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                       >
                         <div className="flex justify-between items-start w-full mb-4">
                           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide">
-                          <span className={`rounded-full border px-2.5 py-1 ${
-                            question.status === "parked"
-                              ? "border-gray-700 bg-gray-800/50 text-gray-400"
-                              : question.status === "triaged"
-                                ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
-                                : "border-gray-800 bg-gray-900/70 text-gray-500"
-                          }`}>
-                            {question.status === "parked"
-                              ? "Parked"
-                              : question.status === "triaged"
-                                ? "Triaged"
-                                : question.status === "archived"
-                                  ? "Archived"
-                                  : "Promoted"}
-                          </span>
-                          {question.status === "triaged" && (
-                            <span className="rounded-full border border-blue-500/20 bg-blue-500/5 px-2.5 py-1 text-blue-200">
-                              I{question.impact}·F{question.feasibility}·U{question.urgency}→{question.priorityScore}
+                            <span className={`rounded-full border px-2.5 py-1 ${
+                              question.status === "parked"
+                                ? "border-gray-700 bg-gray-800/50 text-gray-400"
+                                : question.status === "triaged"
+                                  ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
+                                  : "border-gray-800 bg-gray-900/70 text-gray-500"
+                            }`}>
+                              {question.status === "parked"
+                                ? "Parked"
+                                : question.status === "triaged"
+                                  ? "Triaged"
+                                  : question.status === "archived"
+                                    ? "Archived"
+                                    : "Promoted"}
                             </span>
-                          )}
-                          {question.isSelectedForPromotion && (
-                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">
-                              ★ Selected
-                            </span>
-                          )}
+                            {question.status === "triaged" && (
+                              <span className="rounded-full border border-blue-500/20 bg-blue-500/5 px-2.5 py-1 text-blue-200">
+                                I{question.impact}·F{question.feasibility}·U{question.urgency}→{question.priorityScore}
+                              </span>
+                            )}
+                            {question.isSelectedForPromotion && (
+                              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">
+                                ★ Selected
+                              </span>
+                            )}
                           </div>
                           <button
                             type="button"
