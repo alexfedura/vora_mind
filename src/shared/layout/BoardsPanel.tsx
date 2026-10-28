@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Check, Folder, FolderPlus, GitBranch, History, Pencil, Trash2, X } from "lucide-react";
+import { Check, Folder, FolderPlus, GitBranch, History, PanelLeft, Pencil, Trash2, X } from "lucide-react";
 import type { BoardItem } from "@/mind/types";
 import type { BoardVersionIncrement, BoardVersionSummary } from "@/mind/services/dbService";
 import { WorkspaceMenuFooter } from "@/shared/layout/WorkspaceMenuFooter";
@@ -10,6 +10,7 @@ interface BoardsPanelProps {
   shouldStartCreatingBoard: boolean;
   onStartCreatingBoardHandled: () => void;
   onFirstBoardCreationStateChange: (isCreating: boolean) => void;
+  onGoToVoraMenu: () => void;
   activeBoardId: string;
   onSelectBoard: (boardId: string) => Promise<void>;
   onCreateBoard: (title: string) => Promise<void>;
@@ -29,6 +30,7 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
   shouldStartCreatingBoard,
   onStartCreatingBoardHandled,
   onFirstBoardCreationStateChange,
+  onGoToVoraMenu,
   activeBoardId,
   onSelectBoard,
   onCreateBoard,
@@ -158,19 +160,30 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
       <div className="flex min-h-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-between border-b border-[#2a2a2a] px-4 pr-2">
           <span className="text-xs font-semibold text-zinc-200">Boards</span>
-          <button
-            type="button"
-            aria-label="Create Board"
-            title="Create Board"
-            onClick={() => {
-              setError(null);
-              setIsCreating(true);
-              if (boards.length === 0) onFirstBoardCreationStateChange(true);
-            }}
-            className="rounded-md p-1.5 text-zinc-400 transition hover:bg-[#202430] hover:text-white"
-          >
-            <FolderPlus size={16} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Create Board"
+              title="Create Board"
+              onClick={() => {
+                setError(null);
+                setIsCreating(true);
+                if (boards.length === 0) onFirstBoardCreationStateChange(true);
+              }}
+              className="rounded-md p-1.5 text-zinc-400 transition hover:bg-[#202430] hover:text-white"
+            >
+              <FolderPlus size={16} />
+            </button>
+            <button
+              type="button"
+              aria-label="Go to Vora menu"
+              title="Go to Vora menu"
+              onClick={onGoToVoraMenu}
+              className="rounded-md p-1.5 text-zinc-400 transition hover:bg-[#202430] hover:text-white"
+            >
+              <PanelLeft size={16} />
+            </button>
+          </div>
         </header>
 
         {isCreating && (

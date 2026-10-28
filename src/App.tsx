@@ -2451,6 +2451,10 @@ function AppContent() {
               shouldStartCreatingBoard={shouldStartCreatingBoard}
               onStartCreatingBoardHandled={() => setShouldStartCreatingBoard(false)}
               onFirstBoardCreationStateChange={setIsCreatingFirstBoard}
+              onGoToVoraMenu={() => {
+                setLastActivePanel("sidebar");
+                setActiveOpenPanel("sidebar");
+              }}
               activeBoardId={activeBoardId}
               onSelectBoard={handleSelectBoard}
               onCreateBoard={handleCreateBoard}
