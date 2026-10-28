@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Check, CheckCircle2, GripVertical, ListTodo, Plus, Sparkles, Trash2 } from "lucide-react";
 import { InquiryTriagePanel } from "@/shared/layout/InquiryTriagePanel";
+import { QuestionsBoardPage } from "@/shared/layout/QuestionsBoardPage";
 import { useAppStore } from "@/shared/store/useAppStore";
 import type { TaskFlowItem, TaskFlowType } from "@/types";
 
@@ -13,7 +14,7 @@ interface TaskFlowPageProps {
 }
 
 export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
-  const [activeTab, setActiveTab] = useState<"tasks" | "triage">("tasks");
+  const [activeTab, setActiveTab] = useState<"tasks" | "queue" | "triage">("queue");
   const tasks = useAppStore((state) => state.taskFlowItems);
   const loadTasks = useAppStore((state) => state.loadTaskFlowItems);
   const createTask = useAppStore((state) => state.createTaskFlowItem);
@@ -164,9 +165,11 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
             <p className="mt-1 text-sm text-gray-400">
               {taskType === "ai"
                 ? "Keep AI-related tasks separate and move them through your priority timeline."
-                : activeTab === "triage"
-                  ? "Prioritize your inquiries and select the next one to pursue."
-                  : "Keep your priorities in order. Drag any task to move it through your timeline."}
+                : activeTab === "queue"
+                  ? "Keep track of inquiries worth exploring and revisit them in context."
+                  : activeTab === "triage"
+                    ? "Prioritize your inquiries and select the next one to pursue."
+                    : "Keep your priorities in order. Drag any task to move it through your timeline."}
             </p>
           </div>
           <div className="shrink-0 rounded-xl border border-[#30333c] bg-[#1a1c22] px-3 py-2 text-right">

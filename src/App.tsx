@@ -2492,19 +2492,9 @@ function AppContent() {
               setIsTaskFlowOpen(false);
               setIsAiTasksOpen(false);
               setIsVoraTraceOpen(false);
-              setIsQuestionsBoardOpen(false);
               setActiveOpenPanel("none");
             }}
           />
-        ) : isQuestionsBoardOpen ? (
-          <QuestionsBoardPage onGoHome={() => {
-            setIsQuestionsBoardOpen(false);
-            setIsJournalOpen(false);
-            setIsTaskFlowOpen(false);
-            setIsAiTasksOpen(false);
-            setIsVoraTraceOpen(false);
-            setActiveOpenPanel("none");
-          }} />
         ) : (
           <>
         {libraryBoardSession && (
@@ -2900,7 +2890,6 @@ function AppContent() {
                 setIsTaskFlowOpen(false);
                 setIsAiTasksOpen(false);
                 setIsVoraTraceOpen(false);
-                setIsQuestionsBoardOpen(false);
                 setIsJournalOpen(true);
                 setActiveOpenPanel("none");
                 setIsJournalMenuOpen(false);
