@@ -1403,6 +1403,8 @@ pub fn run() {
             archive_question,
             select_for_promotion,
             unselect_for_promotion,
+            mind::hypothesis::promote_to_hypothesis,
+            mind::hypothesis::get_hypotheses,
             get_board_versions,
             create_board_version,
             checkout_board_version,
