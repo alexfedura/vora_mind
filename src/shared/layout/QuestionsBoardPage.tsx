@@ -489,55 +489,69 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
               ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {filteredQuestions.map((question: QuestionItem) => (
-                    <button
-                      key={question.id}
-                      type="button"
-                      dir="auto"
-                      onClick={() => {
-                        setActionError(null);
-                        setSelectedQuestionId(question.id);
-                      }}
-                      className="flex min-h-44 flex-col rounded-2xl border border-[#2d3038] bg-[#191b20] p-5 text-start transition hover:border-purple-500/40 hover:bg-[#1d1f26]"
-                    >
-                      <span className="order-2 mt-4 line-clamp-2 break-words text-base font-semibold text-white">
-                        {question.title}
-                      </span>
-                      <span className="order-1 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide">
-                        <span className={`rounded-full border px-2.5 py-1 ${
-                          question.status === "parked"
-                            ? "border-gray-700 bg-gray-800/50 text-gray-400"
-                            : question.status === "triaged"
-                              ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
-                              : "border-gray-800 bg-gray-900/70 text-gray-500"
-                        }`}>
-                          {question.status === "parked"
-                            ? "Parked"
-                            : question.status === "triaged"
-                              ? "Triaged"
-                              : question.status === "archived"
-                                ? "Archived"
-                                : "Promoted"}
-                        </span>
-                        {question.status === "triaged" && (
-                          <span className="rounded-full border border-blue-500/20 bg-blue-500/5 px-2.5 py-1 text-blue-200">
-                            I{question.impact}·F{question.feasibility}·U{question.urgency}→{question.priorityScore}
-                          </span>
-                        )}
-                        {question.isSelectedForPromotion && (
-                          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">
-                            ★ Selected
-                          </span>
-                        )}
-                      </span>
-                      <span
+                    <div key={question.id} dir="auto" className="relative min-h-44">
+                      <button
+                        type="button"
                         dir="auto"
-                        className={`order-3 mt-2 line-clamp-4 whitespace-pre-wrap break-words text-sm ${
-                          question.description ? "text-gray-400" : "text-gray-600"
-                        }`}
+                        onClick={() => {
+                          setActionError(null);
+                          setSelectedQuestionId(question.id);
+                        }}
+                        className="flex min-h-44 w-full flex-col rounded-2xl border border-[#2d3038] bg-[#191b20] p-5 text-start transition hover:border-purple-500/40 hover:bg-[#1d1f26]"
                       >
-                        {question.description || "No details added yet"}
-                      </span>
-                    </button>
+                        <span className="order-2 mt-4 line-clamp-2 break-words text-base font-semibold text-white">
+                          {question.title}
+                        </span>
+                        <span className="order-1 flex flex-wrap items-center gap-2 pe-10 text-xs font-semibold uppercase tracking-wide">
+                          <span className={`rounded-full border px-2.5 py-1 ${
+                            question.status === "parked"
+                              ? "border-gray-700 bg-gray-800/50 text-gray-400"
+                              : question.status === "triaged"
+                                ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
+                                : "border-gray-800 bg-gray-900/70 text-gray-500"
+                          }`}>
+                            {question.status === "parked"
+                              ? "Parked"
+                              : question.status === "triaged"
+                                ? "Triaged"
+                                : question.status === "archived"
+                                  ? "Archived"
+                                  : "Promoted"}
+                          </span>
+                          {question.status === "triaged" && (
+                            <span className="rounded-full border border-blue-500/20 bg-blue-500/5 px-2.5 py-1 text-blue-200">
+                              I{question.impact}·F{question.feasibility}·U{question.urgency}→{question.priorityScore}
+                            </span>
+                          )}
+                          {question.isSelectedForPromotion && (
+                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">
+                              ★ Selected
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          dir="auto"
+                          className={`order-3 mt-2 line-clamp-4 whitespace-pre-wrap break-words text-sm ${
+                            question.description ? "text-gray-400" : "text-gray-600"
+                          }`}
+                        >
+                          {question.description || "No details added yet"}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Archive ${question.title}`}
+                        title="Archive inquiry"
+                        disabled={isUpdatingInquiry}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void runInquiryAction(() => archiveQuestion(question.id));
+                        }}
+                        className="absolute end-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-rose-950/40 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}

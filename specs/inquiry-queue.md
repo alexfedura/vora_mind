@@ -46,3 +46,7 @@ Rust unit tests cover fresh schema, existing databases and defaults, repeated in
 ## Rollback
 
 Dropping the added columns after users have written triage metadata would destroy that data; rollback is irreversible after metadata is written.
+
+## Inquiry card archive action
+
+The inquiry grid provides a separate archive button in each card's top corner. It calls the existing `archiveQuestion` store action, which moves the inquiry to the Archived filter and clears triage metadata. The archive button stops click propagation so it does not open the card's detail view; clicking the rest of the card retains the existing detail behavior.
