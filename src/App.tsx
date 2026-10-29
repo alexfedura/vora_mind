@@ -13,7 +13,7 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import {
-  LayoutGrid,
+  PanelLeft,
   PanelRight,
   PanelRightClose,
   History,
@@ -2360,7 +2360,7 @@ function AppContent() {
             title="Open or close menu"
             aria-label={activeOpenPanel === "none" ? "Open menu" : "Close menu"}
           >
-            <LayoutGrid size={16} />
+            <PanelLeft size={16} />
           </button>
       </div>
       {!isWorkspacePageOpen && <div className="absolute top-[67.5px] z-40 flex w-[57px] justify-center" style={{ left: floatingControlsLeft }}>

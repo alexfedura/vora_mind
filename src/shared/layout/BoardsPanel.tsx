@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Check, Folder, FolderPlus, GitBranch, History, PanelLeft, Pencil, Trash2, X } from "lucide-react";
+import { Check, Folder, FolderPlus, GitBranch, History, LayoutGrid, Pencil, Trash2, X } from "lucide-react";
 import type { BoardItem } from "@/mind/types";
 import type { BoardVersionIncrement, BoardVersionSummary } from "@/mind/services/dbService";
 import { WorkspaceMenuFooter } from "@/shared/layout/WorkspaceMenuFooter";
@@ -181,7 +181,7 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
               onClick={onGoToVoraMenu}
               className="rounded-md p-1.5 text-zinc-400 transition hover:bg-[#202430] hover:text-white"
             >
-              <PanelLeft size={16} />
+              <LayoutGrid size={16} />
             </button>
           </div>
         </header>
