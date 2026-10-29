@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
-use super::canvas_db::AppState;
+use super::canvas_db::{AppState, NodeInput};
+use super::library_groups::{
+    self, LibraryItemGroupSnapshot,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -23,11 +26,13 @@ pub struct Hypothesis {
     pub evidence_notes: Option<String>,
     pub verdict: Option<String>,
     pub evaluated_at: Option<i64>,
+    pub promoted_to_library_id: Option<String>,
+    pub parent_hypothesis_id: Option<String>,
 }
 
 const HYPOTHESIS_COLUMNS: &str = "id, inquiry_id, statement_h1, statement_h0, \
     independent_var, dependent_var, metric, success_threshold, status, created_at, updated_at, \
-    evidence_notes, verdict, evaluated_at";
+    evidence_notes, verdict, evaluated_at, promoted_to_library_id, parent_hypothesis_id";
 
 pub fn init_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -59,6 +64,8 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         ("evidence_notes", "TEXT NULL"),
         ("verdict", "TEXT NULL"),
         ("evaluated_at", "INTEGER NULL"),
+        ("promoted_to_library_id", "TEXT NULL"),
+        ("parent_hypothesis_id", "TEXT NULL"),
     ] {
         if !columns.iter().any(|column| column == name) {
             conn.execute_batch(&format!(
@@ -67,6 +74,222 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn create_child_hypothesis_in_db(
+    conn: &mut Connection,
+    parent_id: &str,
+    id: &str,
+    statement_h1: &str,
+    statement_h0: &str,
+    independent_var: &str,
+    dependent_var: &str,
+    metric: &str,
+    success_threshold: &str,
+    now: i64,
+) -> std::result::Result<Hypothesis, String> {
+    let transaction = conn.transaction().map_err(|error| error.to_string())?;
+    let inquiry_id = transaction
+        .query_row(
+            "SELECT inquiry_id FROM hypotheses WHERE id = ?1",
+            [parent_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("Parent hypothesis not found: {parent_id}"))?;
+
+    transaction
+        .execute(
+            "INSERT INTO hypotheses (
+                id, inquiry_id, statement_h1, statement_h0, independent_var,
+                dependent_var, metric, success_threshold, status, created_at,
+                updated_at, parent_hypothesis_id
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'draft', ?9, ?9, ?10)",
+            params![
+                id,
+                inquiry_id,
+                statement_h1,
+                statement_h0,
+                independent_var,
+                dependent_var,
+                metric,
+                success_threshold,
+                now,
+                parent_id
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    let hypothesis = query_hypothesis(&transaction, id).map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(hypothesis)
+}
+
+#[tauri::command]
+pub fn create_child_hypothesis(
+    state: State<AppState>,
+    parent_id: String,
+    statement_h1: String,
+    statement_h0: String,
+    independent_var: String,
+    dependent_var: String,
+    metric: String,
+    success_threshold: String,
+) -> Result<Hypothesis, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let now = i64::try_from(now).map_err(|error| error.to_string())?;
+    let id = format!("hypothesis_{}", uuid::Uuid::now_v7());
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    create_child_hypothesis_in_db(
+        &mut conn,
+        &parent_id,
+        &id,
+        &statement_h1,
+        &statement_h0,
+        &independent_var,
+        &dependent_var,
+        &metric,
+        &success_threshold,
+        now,
+    )
+}
+
+fn hypothesis_library_node(hypothesis: &Hypothesis) -> NodeInput {
+    let content = format!(
+        "H1: {}\n\nH0: {}\n\nIndependent variable: {}\nDependent variable: {}\nMetric: {}\nSuccess threshold: {}\n\nEvidence notes: {}",
+        hypothesis.statement_h1,
+        hypothesis.statement_h0,
+        hypothesis.independent_var,
+        hypothesis.dependent_var,
+        hypothesis.metric,
+        hypothesis.success_threshold,
+        hypothesis.evidence_notes.as_deref().unwrap_or("None recorded")
+    );
+    NodeInput {
+        id: format!("hypothesis_{}", hypothesis.id),
+        node_type: "voraText".to_string(),
+        title: hypothesis.statement_h1.clone(),
+        content: content.clone(),
+        version: "v0.1.0".to_string(),
+        data: serde_json::json!({
+            "text": content,
+            "hypothesisId": hypothesis.id,
+            "statementH1": hypothesis.statement_h1,
+            "statementH0": hypothesis.statement_h0,
+            "independentVar": hypothesis.independent_var,
+            "dependentVar": hypothesis.dependent_var,
+            "metric": hypothesis.metric,
+            "successThreshold": hypothesis.success_threshold,
+            "evidenceNotes": hypothesis.evidence_notes,
+        }),
+        x: 0.0,
+        y: 0.0,
+        width: Some(360.0),
+        height: Some(240.0),
+        style: None,
+    }
+}
+
+fn graduate_to_library_in_db(
+    conn: &mut Connection,
+    hypothesis_id: &str,
+    library_group_id: Option<&str>,
+    now: i64,
+) -> std::result::Result<Hypothesis, String> {
+    let transaction = conn.transaction().map_err(|error| error.to_string())?;
+    let hypothesis =
+        query_hypothesis(&transaction, hypothesis_id).map_err(|error| error.to_string())?;
+    if hypothesis.verdict.as_deref() != Some("supported") {
+        return Err("Only supported hypotheses can be graduated to the Library".to_string());
+    }
+    if hypothesis.promoted_to_library_id.is_some() {
+        return Err("Hypothesis is already graduated to the Library".to_string());
+    }
+
+    let node = hypothesis_library_node(&hypothesis);
+    let group_id = if let Some(group_id) = library_group_id {
+        let (version, snapshot_json, deleted_at): (String, String, Option<i64>) = transaction
+            .query_row(
+                "SELECT version, snapshot_json, deleted_at
+                 FROM library_item_groups WHERE id = ?1",
+                [group_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .map_err(|error| error.to_string())?;
+        if deleted_at.is_some() {
+            return Err(format!("Library item group is deleted: {group_id}"));
+        }
+        let mut snapshot: LibraryItemGroupSnapshot =
+            serde_json::from_str(&snapshot_json).map_err(|error| error.to_string())?;
+        snapshot.nodes.push(node);
+        let (major, minor, patch) = super::canvas_db::parse_board_version(&version)
+            .ok_or_else(|| format!("Invalid Library item group version: {version}"))?;
+        let next_patch = patch
+            .checked_add(1)
+            .ok_or_else(|| "Library item group version is exhausted".to_string())?;
+        let next_version = format!("{major}.{minor}.{next_patch}");
+        library_groups::commit_item_group_version_in_transaction(
+            &transaction,
+            group_id,
+            &next_version,
+            snapshot,
+            now,
+        )
+        .map_err(|error| error.to_string())?;
+        group_id.to_string()
+    } else {
+        let name = if hypothesis.statement_h1.trim().is_empty() {
+            "Supported hypothesis".to_string()
+        } else {
+            hypothesis.statement_h1.chars().take(80).collect()
+        };
+        library_groups::create_item_group_in_transaction(
+            &transaction,
+            &name,
+            "0.1.0",
+            LibraryItemGroupSnapshot {
+                nodes: vec![node],
+                edges: Vec::new(),
+                cards: Vec::new(),
+            },
+            now,
+        )
+        .map_err(|error| error.to_string())?
+        .id
+    };
+
+    let changed = transaction
+        .execute(
+            "UPDATE hypotheses
+             SET promoted_to_library_id = ?1, updated_at = ?2
+             WHERE id = ?3 AND verdict = 'supported' AND promoted_to_library_id IS NULL",
+            params![group_id, now, hypothesis_id],
+        )
+        .map_err(|error| error.to_string())?;
+    if changed != 1 {
+        return Err(format!("Could not graduate hypothesis: {hypothesis_id}"));
+    }
+    let updated = query_hypothesis(&transaction, hypothesis_id).map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(updated)
+}
+
+#[tauri::command]
+pub fn graduate_to_library(
+    state: State<AppState>,
+    hypothesis_id: String,
+    library_group_id: Option<String>,
+) -> Result<Hypothesis, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let now = i64::try_from(now).map_err(|error| error.to_string())?;
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    graduate_to_library_in_db(&mut conn, &hypothesis_id, library_group_id.as_deref(), now)
 }
 
 pub fn promote_inquiry(
@@ -237,6 +460,8 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
         evidence_notes: row.get(11)?,
         verdict: row.get(12)?,
         evaluated_at: row.get(13)?,
+        promoted_to_library_id: row.get(14)?,
+        parent_hypothesis_id: row.get(15)?,
     })
 }
 
