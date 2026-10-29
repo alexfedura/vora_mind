@@ -19,6 +19,7 @@ pub struct Hypothesis {
     pub status: String,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub evidence_notes: Option<String>,
     pub verdict: Option<String>,
     pub evaluated_at: Option<i64>,

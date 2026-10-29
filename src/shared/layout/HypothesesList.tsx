@@ -36,6 +36,19 @@ export const HypothesesList: React.FC = () => {
     setSelectedHypothesis(updated);
   };
 
+  const retryLoad = async (): Promise<void> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await loadHypotheses();
+    } catch (cause) {
+      console.error("Could not reload hypotheses:", cause);
+      setError(getErrorMessage(cause));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (selectedHypothesis) {
     return (
       <div className="mx-auto w-full max-w-4xl">
@@ -68,10 +81,7 @@ export const HypothesesList: React.FC = () => {
           {error}
           <button
             type="button"
-            onClick={() => void loadHypotheses().catch((cause: unknown) => {
-              console.error("Could not reload hypotheses:", cause);
-              setError(getErrorMessage(cause));
-            })}
+            onClick={() => void retryLoad()}
             className="ms-3 underline underline-offset-2"
           >
             Retry
