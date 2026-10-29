@@ -1,5 +1,5 @@
 use super::resolver::SnapshotResolver;
-use rusqlite::{params, Connection, OptionalExtension, Result};
+use rusqlite::{params, Connection, OptionalExtension, Result, Transaction};
 use serde::{Deserialize, Serialize};
 
 use super::canvas_db::{
@@ -172,6 +172,20 @@ pub fn create_item_group(
     version: &str,
     snapshot: LibraryItemGroupSnapshot,
 ) -> Result<LibraryItemGroup> {
+    let now = now_millis()?;
+    let transaction = conn.transaction()?;
+    let group = create_item_group_in_transaction(&transaction, name, version, snapshot, now)?;
+    transaction.commit()?;
+    Ok(group)
+}
+
+pub(crate) fn create_item_group_in_transaction(
+    transaction: &Transaction<'_>,
+    name: &str,
+    version: &str,
+    snapshot: LibraryItemGroupSnapshot,
+    now: i64,
+) -> Result<LibraryItemGroup> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 80 {
         return Err(rusqlite::Error::InvalidParameterName(
@@ -189,11 +203,9 @@ pub fn create_item_group(
         ));
     }
 
-    let now = now_millis()?;
     let id = format!("item_group_{}", uuid::Uuid::now_v7());
     let snapshot_json = serde_json::to_string(&snapshot)
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
-    let transaction = conn.transaction()?;
     transaction.execute(
         "INSERT INTO library_item_groups
             (id, name, version, snapshot_json, created_at, updated_at, deleted_at)
@@ -243,7 +255,6 @@ pub fn create_item_group(
         ],
     )?;
     let group = get_item_group(&transaction, &id)?.ok_or(rusqlite::Error::InvalidQuery)?;
-    transaction.commit()?;
     Ok(group)
 }
 
@@ -252,6 +263,21 @@ pub fn commit_item_group_version(
     group_id: &str,
     version: &str,
     snapshot: LibraryItemGroupSnapshot,
+) -> Result<LibraryItemGroup> {
+    let now = now_millis()?;
+    let transaction = conn.transaction()?;
+    let group =
+        commit_item_group_version_in_transaction(&transaction, group_id, version, snapshot, now)?;
+    transaction.commit()?;
+    Ok(group)
+}
+
+pub(crate) fn commit_item_group_version_in_transaction(
+    transaction: &Transaction<'_>,
+    group_id: &str,
+    version: &str,
+    snapshot: LibraryItemGroupSnapshot,
+    now: i64,
 ) -> Result<LibraryItemGroup> {
     if !is_semantic_version(version) {
         return Err(rusqlite::Error::InvalidParameterName(
@@ -263,10 +289,8 @@ pub fn commit_item_group_version(
             "An item group version must contain at least one canvas item".to_string(),
         ));
     }
-    let now = now_millis()?;
     let snapshot_json = serde_json::to_string(&snapshot)
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
-    let transaction = conn.transaction()?;
     let (board_id, active_board_version_id, name): (String, String, String) = transaction
         .query_row(
             "SELECT boards.id, boards.active_version_id, groups.name
@@ -340,7 +364,6 @@ pub fn commit_item_group_version(
         params![name, board_version_id, now, board_id],
     )?;
     let group = get_item_group(&transaction, group_id)?.ok_or(rusqlite::Error::InvalidQuery)?;
-    transaction.commit()?;
     Ok(group)
 }
 
