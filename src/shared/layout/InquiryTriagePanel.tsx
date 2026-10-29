@@ -264,16 +264,20 @@ export const InquiryTriagePanel: React.FC = () => {
                     dir="auto"
                     className="rounded-xl border border-[#292c34] bg-[#17191f] p-3"
                   >
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-start gap-3">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 text-xs font-semibold text-blue-300">
                         {index + 1}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="break-words text-sm font-medium text-gray-200">{question.title}</p>
+                        <p dir="auto" className="whitespace-normal break-words text-sm font-medium text-gray-200">
+                          {question.title}
+                        </p>
                         <span className="mt-1 inline-flex rounded-full border border-blue-500/20 bg-blue-500/5 px-2.5 py-1 text-xs text-blue-200">
                           I{question.impact}·F{question.feasibility}·U{question.urgency}→{question.priorityScore}
                         </span>
                       </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#292c34] pt-3">
                       {question.isSelectedForPromotion ? (
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300">
@@ -286,7 +290,7 @@ export const InquiryTriagePanel: React.FC = () => {
                               question.id,
                               unselectQuestionForPromotion,
                             )}
-                            className="rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
+                            className="whitespace-nowrap rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
                           >
                             Unselect
                           </button>
@@ -299,7 +303,7 @@ export const InquiryTriagePanel: React.FC = () => {
                             question.id,
                             selectQuestionForPromotion,
                           )}
-                          className="rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/25 disabled:opacity-50"
+                          className="whitespace-nowrap rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/25 disabled:opacity-50"
                         >
                           Select for Promotion
                         </button>
@@ -317,7 +321,7 @@ export const InquiryTriagePanel: React.FC = () => {
                             notes: question.triageNotes ?? "",
                           });
                         }}
-                        className="rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
+                          className="whitespace-nowrap rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
                       >
                         Edit Scores
                       </button>
@@ -325,7 +329,7 @@ export const InquiryTriagePanel: React.FC = () => {
                         type="button"
                         disabled={busyId === question.id}
                         onClick={() => void runQuestionAction(question.id, untriageQuestion)}
-                        className="rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
+                        className="whitespace-nowrap rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
                       >
                         Untriage
                       </button>
