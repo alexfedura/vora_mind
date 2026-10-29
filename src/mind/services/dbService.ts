@@ -13,6 +13,7 @@ import type {
 } from "@/mind/types";
 import type {
   Hypothesis,
+  ChildHypothesisInput,
   HypothesisPromotionInput,
   HypothesisVerdict,
   JournalEntry,
@@ -195,6 +196,28 @@ export const dbService = {
     verdict: HypothesisVerdict,
   ): Promise<Hypothesis> {
     return await invoke<Hypothesis>("record_verdict", { id, evidenceNotes, verdict });
+  },
+
+  async graduateToLibrary(
+    hypothesisId: string,
+    libraryGroupId?: string | null,
+  ): Promise<Hypothesis> {
+    return await invoke<Hypothesis>("graduate_to_library", {
+      hypothesisId,
+      libraryGroupId: libraryGroupId ?? null,
+    });
+  },
+
+  async createChildHypothesis(input: ChildHypothesisInput): Promise<Hypothesis> {
+    return await invoke<Hypothesis>("create_child_hypothesis", {
+      parentId: input.parentId,
+      statementH1: input.statementH1,
+      statementH0: input.statementH0,
+      independentVar: input.independentVar,
+      dependentVar: input.dependentVar,
+      metric: input.metric,
+      successThreshold: input.successThreshold,
+    });
   },
 
   async createQuestion(title: string, description: string): Promise<QuestionItem> {

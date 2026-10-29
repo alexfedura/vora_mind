@@ -113,10 +113,22 @@ export interface Hypothesis {
   evidenceNotes?: string;
   verdict?: HypothesisVerdict | null;
   evaluatedAt?: number | null;
+  promotedToLibraryId?: string | null;
+  parentHypothesisId?: string | null;
 }
 
 export interface HypothesisPromotionInput {
   inquiryId: string;
+  statementH1: string;
+  statementH0: string;
+  independentVar: string;
+  dependentVar: string;
+  metric: string;
+  successThreshold: string;
+}
+
+export interface ChildHypothesisInput {
+  parentId: string;
   statementH1: string;
   statementH0: string;
   independentVar: string;
