@@ -125,7 +125,7 @@ export const PromoteHypothesisModal: React.FC<PromoteHypothesisModalProps> = ({
             <button
               type="submit"
               disabled={isSaving}
-              className="rounded-lg bg-[#e8ad55] px-4 py-2 text-sm font-semibold text-[#17130d] transition hover:bg-[#f0bd6c] disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg border border-amber-300/50 bg-amber-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-lg shadow-amber-950/30 transition hover:bg-amber-400 hover:shadow-amber-950/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isSaving ? "Promoting..." : "Create Hypothesis"}
             </button>
