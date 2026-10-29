@@ -9,7 +9,7 @@ Allow users to tune fonts and text sizes independently for the application UI, c
 - Store font names, sizes, and imported font data in the existing database-backed application settings.
 - Apply preferences consistently across the app and after restart without adding a dependency or changing durable domain data.
 - Keep canvas text-node size controls proportional to the configured freeform text size.
-- Provide separate font-family and font-size settings for Inquiry Queue titles and details, applying changes immediately and persisting them in the existing application settings.
+- Provide separate font-family and font-size settings for Inquiry Queue titles and details, applying changes immediately to both the title display and editor and to the markdown details editor, and persisting them in the existing application settings.
 - Do not show routine journal saving/saved status; keep save errors and retry controls visible.
 
 ## Acceptance criteria
