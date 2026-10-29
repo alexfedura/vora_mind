@@ -467,7 +467,10 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
 
 #[cfg(test)]
 mod tests {
-    use super::{init_schema, list_hypotheses, promote_inquiry, record_verdict_in_db};
+    use super::{
+        create_child_hypothesis_in_db, graduate_to_library_in_db, init_schema, list_hypotheses,
+        promote_inquiry, record_verdict_in_db,
+    };
     use crate::mind::questions::{
         create_question, init_schema as init_questions_schema, select_for_promotion,
         triage_question,
@@ -476,6 +479,7 @@ mod tests {
 
     fn setup() -> Connection {
         let connection = Connection::open_in_memory().expect("open in-memory database");
+        crate::mind::canvas_db::init_db(&connection).expect("initialize Library schema");
         init_questions_schema(&connection).expect("initialize questions schema");
         init_schema(&connection).expect("initialize hypotheses schema");
         init_schema(&connection).expect("reinitialize hypotheses schema");
@@ -506,6 +510,13 @@ mod tests {
         create_question(conn, inquiry_id, "A question", "", 1).expect("create inquiry");
         triage_question(conn, inquiry_id, 3, 3, 3, None, 2).expect("triage inquiry");
         select_for_promotion(conn, inquiry_id, 3).expect("select inquiry");
+    }
+
+    fn create_supported_hypothesis(conn: &mut Connection, inquiry_id: &str, id: &str) {
+        select_inquiry(conn, inquiry_id);
+        promote(conn, inquiry_id, id, 10).expect("promote inquiry");
+        record_verdict_in_db(conn, id, "Evidence supports H1", "supported", 20)
+            .expect("record supported verdict");
     }
 
     #[test]
@@ -632,5 +643,115 @@ mod tests {
             30,
         )
         .is_err());
+    }
+
+    #[test]
+    fn graduation_creates_a_library_group_and_links_the_hypothesis_atomically() {
+        let mut connection = setup();
+        create_supported_hypothesis(&mut connection, "inquiry-1", "hypothesis-1");
+
+        let hypothesis =
+            graduate_to_library_in_db(&mut connection, "hypothesis-1", None, 30)
+                .expect("graduate hypothesis");
+        let group_id = hypothesis
+            .promoted_to_library_id
+            .as_deref()
+            .expect("linked Library group");
+        let (group_count, version_count, name, snapshot_json): (i64, i64, String, String) =
+            connection
+                .query_row(
+                    "SELECT
+                        (SELECT COUNT(*) FROM library_item_groups WHERE id = ?1),
+                        (SELECT COUNT(*) FROM library_item_group_versions WHERE group_id = ?1),
+                        (SELECT name FROM library_item_groups WHERE id = ?1),
+                        (SELECT snapshot_json FROM library_item_groups WHERE id = ?1)",
+                    [group_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )
+                .expect("read Library group");
+        assert_eq!(group_count, 1);
+        assert_eq!(version_count, 1);
+        assert_eq!(name, "If X then Y");
+        let snapshot: serde_json::Value =
+            serde_json::from_str(&snapshot_json).expect("parse Library snapshot");
+        let content = snapshot["nodes"][0]["content"]
+            .as_str()
+            .expect("hypothesis content");
+        assert!(content.contains("Evidence notes: Evidence supports H1"));
+        assert!(content.contains("Independent variable: X"));
+
+        assert!(graduate_to_library_in_db(&mut connection, "hypothesis-1", None, 40).is_err());
+    }
+
+    #[test]
+    fn graduation_appends_to_an_existing_library_group_version() {
+        let mut connection = setup();
+        create_supported_hypothesis(&mut connection, "inquiry-1", "hypothesis-1");
+        let first = graduate_to_library_in_db(&mut connection, "hypothesis-1", None, 30)
+            .expect("graduate first hypothesis");
+        let group_id = first.promoted_to_library_id.expect("first Library group");
+
+        create_supported_hypothesis(&mut connection, "inquiry-2", "hypothesis-2");
+        let second = graduate_to_library_in_db(
+            &mut connection,
+            "hypothesis-2",
+            Some(&group_id),
+            40,
+        )
+        .expect("append second hypothesis");
+
+        assert_eq!(second.promoted_to_library_id.as_deref(), Some(group_id.as_str()));
+        let (version, versions, nodes): (String, i64, i64) = connection
+            .query_row(
+                "SELECT groups.version,
+                        (SELECT COUNT(*) FROM library_item_group_versions WHERE group_id = groups.id),
+                        json_array_length(groups.snapshot_json, '$.nodes')
+                 FROM library_item_groups groups WHERE groups.id = ?1",
+                [&group_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read appended Library group");
+        assert_eq!(version, "0.1.1");
+        assert_eq!(versions, 2);
+        assert_eq!(nodes, 2);
+    }
+
+    #[test]
+    fn graduation_requires_a_supported_verdict() {
+        let mut connection = setup();
+        select_inquiry(&mut connection, "inquiry-1");
+        promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+
+        assert!(graduate_to_library_in_db(&mut connection, "hypothesis-1", None, 20).is_err());
+        let groups: i64 = connection
+            .query_row("SELECT COUNT(*) FROM library_item_groups", [], |row| row.get(0))
+            .expect("count Library groups");
+        assert_eq!(groups, 0);
+    }
+
+    #[test]
+    fn child_hypothesis_inherits_inquiry_and_records_parent() {
+        let mut connection = setup();
+        select_inquiry(&mut connection, "inquiry-1");
+        promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+
+        let child = create_child_hypothesis_in_db(
+            &mut connection,
+            "hypothesis-1",
+            "hypothesis-child",
+            "If X over a longer timeframe then Y",
+            "X does not affect Y",
+            "X over a longer timeframe",
+            "Y",
+            "Y per day",
+            "Y increases by 10%",
+            20,
+        )
+        .expect("create child hypothesis");
+
+        assert_eq!(child.status, "draft");
+        assert_eq!(child.inquiry_id, "inquiry-1");
+        assert_eq!(child.parent_hypothesis_id.as_deref(), Some("hypothesis-1"));
+        assert_eq!(child.created_at, 20);
     }
 }
