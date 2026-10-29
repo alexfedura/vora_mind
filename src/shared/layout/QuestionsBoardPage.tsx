@@ -311,6 +311,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                 onBlur={() => void flushQuestion(selectedQuestion.id).catch(() => undefined)}
                 placeholder="Write your question, idea, or insight here... (Markdown supported)"
                 direction="auto"
+                autoLineDirection
                 ariaLabel={`Inquiry details: ${selectedQuestion.title}`}
                 className="vm-inquiry-details-editor min-h-[55vh] w-full bg-transparent text-gray-200"
               />

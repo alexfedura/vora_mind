@@ -10,6 +10,7 @@ export interface MarkdownTextEditorProps {
   className?: string;
   placeholder?: string;
   direction?: "auto" | "ltr" | "rtl";
+  autoLineDirection?: boolean;
   ariaLabel: string;
   onBlur?: () => void;
 }
@@ -20,6 +21,7 @@ export function MarkdownTextEditor({
   className = "",
   placeholder = "Start writing...",
   direction = "auto",
+  autoLineDirection = false,
   ariaLabel,
   onBlur,
 }: MarkdownTextEditorProps): ReactElement {
@@ -58,11 +60,28 @@ export function MarkdownTextEditor({
     });
     viewRef.current = view;
 
+    const applyLineDirection = (): void => {
+      for (const line of view.contentDOM.querySelectorAll<HTMLElement>(".cm-line")) {
+        if (line.getAttribute("dir") !== "auto") line.setAttribute("dir", "auto");
+      }
+    };
+    let lineObserver: MutationObserver | undefined;
+    if (autoLineDirection) {
+      applyLineDirection();
+      lineObserver = new MutationObserver(applyLineDirection);
+      lineObserver.observe(view.contentDOM, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
+    }
+
     return () => {
+      lineObserver?.disconnect();
       view.destroy();
       viewRef.current = null;
     };
-  }, [ariaLabel, direction, placeholder]);
+  }, [ariaLabel, autoLineDirection, direction, placeholder]);
 
   useEffect(() => {
     const view = viewRef.current;
