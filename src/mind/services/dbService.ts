@@ -178,7 +178,15 @@ export const dbService = {
   },
 
   async promoteToHypothesis(input: HypothesisPromotionInput): Promise<Hypothesis> {
-    return await invoke<Hypothesis>("promote_to_hypothesis", input);
+    return await invoke<Hypothesis>("promote_to_hypothesis", {
+      inquiryId: input.inquiryId,
+      statementH1: input.statementH1,
+      statementH0: input.statementH0,
+      independentVar: input.independentVar,
+      dependentVar: input.dependentVar,
+      metric: input.metric,
+      successThreshold: input.successThreshold,
+    });
   },
 
   async recordVerdict(
