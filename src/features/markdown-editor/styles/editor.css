@@ -429,6 +429,56 @@
   padding: 0;
 }
 
+.vm-editor-wrapper.vm-inquiry-details-editor {
+  --vm-bg: transparent;
+  --vm-bg-panel: #14161b;
+  --vm-fg: #e5e7eb;
+  --vm-fg-muted: #9ca3af;
+  --vm-fg-faint: #4b5563;
+  --vm-border: #343741;
+  --vm-active-line: transparent;
+
+  box-sizing: border-box;
+  height: auto;
+  min-height: 55vh;
+  background: transparent;
+  color: var(--vm-fg);
+  font-family: var(--vora-inquiry-details-font-family, var(--vora-ui-font-family));
+  font-size: var(--vora-inquiry-details-font-size, 15px);
+  line-height: 2;
+}
+
+.vm-inquiry-details-editor .cm-editor {
+  height: auto;
+  min-height: 55vh;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.vm-inquiry-details-editor .cm-scroller,
+.vm-inquiry-details-editor .cm-content {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.vm-inquiry-details-editor .cm-content {
+  min-height: calc(55vh - 2rem);
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vm-inquiry-details-editor .cm-gutters {
+  display: none;
+}
+
+.vm-inquiry-details-editor .cm-line {
+  padding: 0;
+}
+
 .vm-markdown.vm-card-markdown-preview {
   --vm-bg: transparent;
   --vm-bg-panel: #25272c;

@@ -59,6 +59,14 @@ export const FontSettingsController: React.FC = () => {
     root.style.setProperty("--vora-journal-font-family", journalFamily);
     root.style.setProperty("--vora-journal-font-size", `${getFontSize(settings[fontSizeSettingKey("journal")], 15)}px`);
 
+    const inquiryTitleFamily = selectedFamily("inquiryTitle", settings, fontsById) ?? "var(--vora-ui-font-family)";
+    root.style.setProperty("--vora-inquiry-title-font-family", inquiryTitleFamily);
+    root.style.setProperty("--vora-inquiry-title-font-size", `${getFontSize(settings[fontSizeSettingKey("inquiryTitle")], 20)}px`);
+
+    const inquiryDetailsFamily = selectedFamily("inquiryDetails", settings, fontsById) ?? "var(--vora-ui-font-family)";
+    root.style.setProperty("--vora-inquiry-details-font-family", inquiryDetailsFamily);
+    root.style.setProperty("--vora-inquiry-details-font-size", `${getFontSize(settings[fontSizeSettingKey("inquiryDetails")], 15)}px`);
+
     const loadFonts = async (): Promise<void> => {
       for (const font of customFonts) {
         try {
@@ -86,10 +94,14 @@ export const FontSettingsController: React.FC = () => {
     settings[fontSizeSettingKey("cards")],
     settings[fontSizeSettingKey("text")],
     settings[fontSizeSettingKey("journal")],
+    settings[fontSizeSettingKey("inquiryTitle")],
+    settings[fontSizeSettingKey("inquiryDetails")],
     settings[fontFamilySettingKey("app")],
     settings[fontFamilySettingKey("cards")],
     settings[fontFamilySettingKey("text")],
     settings[fontFamilySettingKey("journal")],
+    settings[fontFamilySettingKey("inquiryTitle")],
+    settings[fontFamilySettingKey("inquiryDetails")],
   ]);
 
   return null;

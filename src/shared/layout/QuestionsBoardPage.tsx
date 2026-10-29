@@ -217,7 +217,14 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
               <CircleHelp size={25} className="flex-shrink-0 text-purple-300" />
             )}
             <div className="min-w-0">
-              <h1 dir="auto" className="truncate text-2xl font-semibold tracking-tight text-white">
+              <h1
+                dir="auto"
+                style={{
+                  fontFamily: "var(--vora-inquiry-title-font-family, var(--vora-ui-font-family))",
+                  fontSize: "calc(var(--vora-inquiry-title-font-size, 20px) * 1.2)",
+                }}
+                className="truncate text-2xl font-semibold tracking-tight text-white"
+              >
                 {selectedQuestion?.title || "Inquiry Queue"}
               </h1>
               <p className="mt-1 text-sm text-purple-300">
@@ -280,6 +287,10 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                 type="text"
                 maxLength={200}
                 dir="auto"
+                style={{
+                  fontFamily: "var(--vora-inquiry-title-font-family, var(--vora-ui-font-family))",
+                  fontSize: "var(--vora-inquiry-title-font-size, 20px)",
+                }}
                 value={selectedQuestion.title}
                 onChange={(event) =>
                   updateQuestion(selectedQuestion.id, event.target.value, selectedQuestion.description)
@@ -301,7 +312,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                 placeholder="Write your question, idea, or insight here... (Markdown supported)"
                 direction="auto"
                 ariaLabel={`Inquiry details: ${selectedQuestion.title}`}
-                className="vm-journal-markdown-editor min-h-[55vh] w-full bg-transparent text-gray-200"
+                className="vm-inquiry-details-editor min-h-[55vh] w-full bg-transparent text-gray-200"
               />
               <p className="mt-3 text-right text-xs text-gray-500" aria-live="polite">
                 {selectedSaveStatus === "saving"

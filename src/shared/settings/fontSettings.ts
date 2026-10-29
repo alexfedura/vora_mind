@@ -7,6 +7,8 @@ export const FONT_SETTING_TARGETS = [
   { id: "cards", label: "Canvas cards", defaultSize: 14 },
   { id: "text", label: "Canvas text", defaultSize: 16 },
   { id: "journal", label: "Journal writing", defaultSize: 15 },
+  { id: "inquiryTitle", label: "Inquiry title", defaultSize: 20 },
+  { id: "inquiryDetails", label: "Inquiry details", defaultSize: 15 },
 ] as const;
 
 export type FontSettingTarget = (typeof FONT_SETTING_TARGETS)[number]["id"];
