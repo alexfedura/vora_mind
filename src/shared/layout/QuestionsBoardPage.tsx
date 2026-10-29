@@ -409,7 +409,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                     value={newTitle}
                     onChange={(event) => setNewTitle(event.target.value)}
                     autoFocus
-                    placeholder="A short title for your inquiry"
+                    placeholder="A short title for your question"
                     className="mb-4 w-full rounded-xl border border-[#343741] bg-[#101114] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-purple-500/60"
                   />
                   <label htmlFor="new-question-description" className="mb-2 block text-sm font-semibold text-gray-200">
