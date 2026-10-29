@@ -3,7 +3,14 @@ import { persist } from "zustand/middleware";
 import { setSetting } from "@/shared/store/useSettingsStore";
 import { VoraCard } from "@/mind/types";
 import { createTextChangeSet, dbService } from "@/mind/services/dbService";
-import type { JournalEntry, QuestionItem, TaskFlowItem, TaskFlowType } from "@/types";
+import type {
+  Hypothesis,
+  HypothesisVerdict,
+  JournalEntry,
+  QuestionItem,
+  TaskFlowItem,
+  TaskFlowType,
+} from "@/types";
 import {
   CanonicalSymbolRecord,
   LineageHistoryEntry,
@@ -110,6 +117,14 @@ interface AppState {
   archiveQuestion: (id: string) => Promise<QuestionItem>;
   selectQuestionForPromotion: (id: string) => Promise<QuestionItem>;
   unselectQuestionForPromotion: (id: string) => Promise<QuestionItem>;
+
+  hypotheses: Hypothesis[];
+  loadHypotheses: () => Promise<void>;
+  recordVerdict: (
+    id: string,
+    evidenceNotes: string,
+    verdict: HypothesisVerdict,
+  ) => Promise<Hypothesis>;
 
   fetchCanonicalEntities: () => Promise<void>;
   selectCanonicalEntity: (entity: CanonicalSymbolRecord | null) => Promise<void>;
@@ -690,6 +705,21 @@ export const useAppStore = create<AppState>()(
           }));
           throw error;
         }
+      },
+
+      hypotheses: [],
+      loadHypotheses: async () => {
+        const hypotheses = await dbService.getHypotheses();
+        set({ hypotheses });
+      },
+      recordVerdict: async (id, evidenceNotes, verdict) => {
+        const hypothesis = await dbService.recordVerdict(id, evidenceNotes, verdict);
+        set((state) => ({
+          hypotheses: state.hypotheses.map((item) =>
+            item.id === hypothesis.id ? hypothesis : item
+          ),
+        }));
+        return hypothesis;
       },
 
       setIsIndexingWorkspace: (isIndexingWorkspace) => set({ isIndexingWorkspace }),

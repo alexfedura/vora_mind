@@ -96,6 +96,25 @@ export interface QuestionItem {
   updatedAt: number;
 }
 
+export type HypothesisVerdict = "supported" | "rejected" | "inconclusive";
+
+export interface Hypothesis {
+  id: string;
+  inquiryId: string;
+  statementH1: string;
+  statementH0: string;
+  independentVar: string;
+  dependentVar: string;
+  metric: string;
+  successThreshold: string;
+  status: string;
+  createdAt: number;
+  updatedAt: number;
+  evidenceNotes?: string;
+  verdict?: HypothesisVerdict | null;
+  evaluatedAt?: number | null;
+}
+
 export interface CustomFontSetting {
   id: string;
   name: string;

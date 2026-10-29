@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Check, CheckCircle2, GripVertical, ListTodo, Plus, Sparkles, Trash2 } from "lucide-react";
 import { InquiryTriagePanel } from "@/shared/layout/InquiryTriagePanel";
+import { HypothesesList } from "@/shared/layout/HypothesesList";
 import { QuestionsBoardPage } from "@/shared/layout/QuestionsBoardPage";
 import { useAppStore } from "@/shared/store/useAppStore";
 import type { TaskFlowItem, TaskFlowType } from "@/types";
@@ -14,7 +15,7 @@ interface TaskFlowPageProps {
 }
 
 export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
-  const [activeTab, setActiveTab] = useState<"tasks" | "queue" | "triage">("queue");
+  const [activeTab, setActiveTab] = useState<"tasks" | "queue" | "triage" | "lab">("queue");
   const tasks = useAppStore((state) => state.taskFlowItems);
   const loadTasks = useAppStore((state) => state.loadTaskFlowItems);
   const createTask = useAppStore((state) => state.createTaskFlowItem);
@@ -169,7 +170,9 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
                   ? "Keep track of inquiries worth exploring and revisit them in context."
                   : activeTab === "triage"
                     ? "Prioritize your inquiries and select the next one to pursue."
-                    : "Keep your priorities in order. Drag any task to move it through your timeline."}
+                      : activeTab === "lab"
+                        ? "Run tests, record evidence, and decide what your hypotheses show."
+                      : "Keep your priorities in order. Drag any task to move it through your timeline."}
             </p>
           </div>
           <div className="shrink-0 rounded-xl border border-[#30333c] bg-[#1a1c22] px-3 py-2 text-center">
@@ -185,6 +188,7 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
             ["queue", "Queue"],
             ["triage", "Triage"],
             ["tasks", "Tasks"],
+            ...(taskType === "task" ? [["lab", "Lab"] as const] : []),
           ] as const).map(([tab, label]) => (
             <button
               key={tab}
@@ -205,6 +209,8 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
           <QuestionsBoardPage />
         ) : activeTab === "triage" ? (
           <InquiryTriagePanel />
+        ) : activeTab === "lab" ? (
+          <HypothesesList />
         ) : (
         <div className="mx-auto w-full max-w-4xl">
           <form onSubmit={(event) => void handleCreate(event)} className="flex gap-2">

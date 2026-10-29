@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension, Result};
 use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
 use super::canvas_db::AppState;
@@ -18,10 +19,14 @@ pub struct Hypothesis {
     pub status: String,
     pub created_at: i64,
     pub updated_at: i64,
+    pub evidence_notes: Option<String>,
+    pub verdict: Option<String>,
+    pub evaluated_at: Option<i64>,
 }
 
 const HYPOTHESIS_COLUMNS: &str = "id, inquiry_id, statement_h1, statement_h0, \
-    independent_var, dependent_var, metric, success_threshold, status, created_at, updated_at";
+    independent_var, dependent_var, metric, success_threshold, status, created_at, updated_at, \
+    evidence_notes, verdict, evaluated_at";
 
 pub fn init_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -42,7 +47,25 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_hypotheses_inquiry ON hypotheses(inquiry_id);
         CREATE INDEX IF NOT EXISTS idx_hypotheses_status
             ON hypotheses(status, updated_at DESC);",
-    )
+    )?;
+
+    let columns = {
+        let mut statement = conn.prepare("PRAGMA table_info(hypotheses)")?;
+        let rows = statement.query_map([], |row| row.get::<_, String>(1))?;
+        rows.collect::<Result<Vec<_>>>()?
+    };
+    for (name, definition) in [
+        ("evidence_notes", "TEXT NULL"),
+        ("verdict", "TEXT NULL"),
+        ("evaluated_at", "INTEGER NULL"),
+    ] {
+        if !columns.iter().any(|column| column == name) {
+            conn.execute_batch(&format!(
+                "ALTER TABLE hypotheses ADD COLUMN {name} {definition}"
+            ))?;
+        }
+    }
+    Ok(())
 }
 
 pub fn promote_inquiry(
@@ -149,6 +172,49 @@ pub fn get_hypotheses(state: State<AppState>) -> Result<Vec<Hypothesis>, String>
     list_hypotheses(&conn).map_err(|error| error.to_string())
 }
 
+fn record_verdict_in_db(
+    conn: &Connection,
+    id: &str,
+    evidence_notes: &str,
+    verdict: &str,
+    now: i64,
+) -> std::result::Result<Hypothesis, String> {
+    if !matches!(verdict, "supported" | "rejected" | "inconclusive") {
+        return Err(format!("Invalid hypothesis verdict: {verdict}"));
+    }
+    let changed = conn
+        .execute(
+            "UPDATE hypotheses
+             SET evidence_notes = ?1, verdict = ?2, evaluated_at = ?3, updated_at = ?3
+             WHERE id = ?4",
+            params![evidence_notes, verdict, now, id],
+        )
+        .map_err(|error| error.to_string())?;
+    if changed != 1 {
+        return Err(format!("Hypothesis not found: {id}"));
+    }
+    query_hypothesis(conn, id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn record_verdict(
+    state: State<AppState>,
+    id: String,
+    evidence_notes: String,
+    verdict: String,
+) -> std::result::Result<Hypothesis, String> {
+    if !matches!(verdict.as_str(), "supported" | "rejected" | "inconclusive") {
+        return Err(format!("Invalid hypothesis verdict: {verdict}"));
+    }
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let now = i64::try_from(now).map_err(|error| error.to_string())?;
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    record_verdict_in_db(&conn, &id, &evidence_notes, &verdict, now)
+}
+
 fn query_hypothesis(conn: &Connection, id: &str) -> Result<Hypothesis> {
     let sql = format!("SELECT {HYPOTHESIS_COLUMNS} FROM hypotheses WHERE id = ?1");
     conn.query_row(&sql, [id], map_hypothesis)
@@ -167,14 +233,15 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
         status: row.get(8)?,
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
+        evidence_notes: row.get(11)?,
+        verdict: row.get(12)?,
+        evaluated_at: row.get(13)?,
     })
 }
 
-use std::time::{SystemTime, UNIX_EPOCH};
-
 #[cfg(test)]
 mod tests {
-    use super::{init_schema, list_hypotheses, promote_inquiry};
+    use super::{init_schema, list_hypotheses, promote_inquiry, record_verdict_in_db};
     use crate::mind::questions::{
         create_question, init_schema as init_questions_schema, select_for_promotion,
         triage_question,
@@ -185,6 +252,7 @@ mod tests {
         let connection = Connection::open_in_memory().expect("open in-memory database");
         init_questions_schema(&connection).expect("initialize questions schema");
         init_schema(&connection).expect("initialize hypotheses schema");
+        init_schema(&connection).expect("reinitialize hypotheses schema");
         connection
     }
 
@@ -306,5 +374,37 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["hypothesis-2", "hypothesis-3", "hypothesis-1"]
         );
+    }
+
+    #[test]
+    fn record_verdict_saves_evidence_and_rejects_invalid_verdicts() {
+        let mut connection = setup();
+        select_inquiry(&mut connection, "inquiry-1");
+        promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+
+        let hypothesis = record_verdict_in_db(
+            &connection,
+            "hypothesis-1",
+            "Observed results matched H1",
+            "supported",
+            20,
+        )
+        .expect("record verdict");
+        assert_eq!(
+            hypothesis.evidence_notes.as_deref(),
+            Some("Observed results matched H1")
+        );
+        assert_eq!(hypothesis.verdict.as_deref(), Some("supported"));
+        assert_eq!(hypothesis.evaluated_at, Some(20));
+        assert_eq!(hypothesis.updated_at, 20);
+
+        assert!(record_verdict_in_db(
+            &connection,
+            "hypothesis-1",
+            "Invalid verdict attempt",
+            "maybe",
+            30,
+        )
+        .is_err());
     }
 }

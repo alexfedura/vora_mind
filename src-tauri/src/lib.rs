@@ -1405,6 +1405,7 @@ pub fn run() {
             unselect_for_promotion,
             mind::hypothesis::promote_to_hypothesis,
             mind::hypothesis::get_hypotheses,
+            mind::hypothesis::record_verdict,
             get_board_versions,
             create_board_version,
             checkout_board_version,

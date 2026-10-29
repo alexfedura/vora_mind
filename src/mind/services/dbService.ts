@@ -11,7 +11,14 @@ import type {
   TextLinkInput,
   TextLinkField,
 } from "@/mind/types";
-import type { JournalEntry, QuestionItem, TaskFlowItem, TaskFlowType } from "@/types";
+import type {
+  Hypothesis,
+  HypothesisVerdict,
+  JournalEntry,
+  QuestionItem,
+  TaskFlowItem,
+  TaskFlowType,
+} from "@/types";
 
 export interface CardDto {
   id: string;
@@ -163,6 +170,18 @@ export const dbService = {
 
   async getQuestions(): Promise<QuestionItem[]> {
     return await invoke<QuestionItem[]>("get_questions");
+  },
+
+  async getHypotheses(): Promise<Hypothesis[]> {
+    return await invoke<Hypothesis[]>("get_hypotheses");
+  },
+
+  async recordVerdict(
+    id: string,
+    evidenceNotes: string,
+    verdict: HypothesisVerdict,
+  ): Promise<Hypothesis> {
+    return await invoke<Hypothesis>("record_verdict", { id, evidenceNotes, verdict });
   },
 
   async createQuestion(title: string, description: string): Promise<QuestionItem> {
