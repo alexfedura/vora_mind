@@ -202,8 +202,8 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
   return (
     <section className="flex w-full min-h-0 flex-col overflow-hidden text-gray-200">
       <header className="border-b border-[#292c34] bg-[#14161b] px-6 py-5 sm:px-10">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3 pl-12 sm:pl-14">
+        <div dir="auto" className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
+          <div dir="auto" className="flex min-w-0 items-center gap-3 ps-12 sm:ps-14">
             {selectedQuestion ? (
               <button
                 type="button"
@@ -216,7 +216,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
             ) : (
               <CircleHelp size={25} className="flex-shrink-0 text-purple-300" />
             )}
-            <div className="min-w-0">
+            <div dir="auto" className="min-w-0 text-start">
               <h1
                 dir="auto"
                 style={{
