@@ -221,7 +221,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                 {selectedQuestion?.title || "Inquiry Queue"}
               </h1>
               <p className="mt-1 text-sm text-purple-300">
-                {selectedQuestion ? "Question details" : "Keep track of inquiries worth exploring"}
+                {selectedQuestion ? "Inquiry details" : "Keep track of inquiries worth exploring"}
               </p>
             </div>
           </div>
@@ -285,10 +285,10 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                 }
                 onBlur={() => void flushQuestion(selectedQuestion.id).catch(() => undefined)}
                 className="mb-6 w-full border-b border-[#292c34] bg-transparent pb-3 text-xl font-semibold text-white outline-none placeholder:text-gray-600 focus:border-purple-500/60"
-                placeholder="Summarize your question"
+                placeholder="Summarize your inquiry"
               />
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Full question
+                INQUIRY DETAILS
               </p>
               <MarkdownTextEditor
                 key={selectedQuestion.id}
@@ -297,9 +297,9 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                   updateQuestion(selectedQuestion.id, selectedQuestion.title, description)
                 }
                 onBlur={() => void flushQuestion(selectedQuestion.id).catch(() => undefined)}
-                placeholder="Write the full question here... (Markdown supported)"
+                placeholder="Write your question, idea, or insight here... (Markdown supported)"
                 direction="auto"
-                ariaLabel={`Full question: ${selectedQuestion.title}`}
+                ariaLabel={`Inquiry details: ${selectedQuestion.title}`}
                 className="vm-journal-markdown-editor min-h-[55vh] w-full bg-transparent text-gray-200"
               />
               <p className="mt-3 text-right text-xs text-gray-500" aria-live="polite">
@@ -398,7 +398,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                   className="mb-6 rounded-2xl border border-purple-500/30 bg-[#171920] p-5"
                 >
                   <label htmlFor="new-question-title" className="mb-2 block text-sm font-semibold text-gray-200">
-                    Question summary
+                    INQUIRY SUMMARY
                   </label>
                   <input
                     id="new-question-title"
@@ -409,7 +409,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                     value={newTitle}
                     onChange={(event) => setNewTitle(event.target.value)}
                     autoFocus
-                    placeholder="A short title for your question"
+                    placeholder="A short title for your inquiry"
                     className="mb-4 w-full rounded-xl border border-[#343741] bg-[#101114] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-purple-500/60"
                   />
                   <label htmlFor="new-question-description" className="mb-2 block text-sm font-semibold text-gray-200">
@@ -437,7 +437,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                       disabled={isSavingNew || !newTitle.trim()}
                       className="rounded-xl bg-purple-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {isSavingNew ? "Creating..." : "Create question"}
+                      {isSavingNew ? "Creating..." : "Create inquiry"}
                     </button>
                   </div>
                 </form>
@@ -468,7 +468,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
               </div>
 
               {isLoading ? (
-                <p className="py-12 text-center text-sm text-gray-500">Loading questions...</p>
+                <p className="py-12 text-center text-sm text-gray-500">Loading inquiries...</p>
               ) : filteredQuestions.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-[#343741] px-6 py-14 text-center">
                   <CircleHelp size={32} className="mx-auto text-gray-600" />
