@@ -248,7 +248,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                 className="flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-500/15 px-3 py-2 text-xs font-semibold text-purple-100 transition hover:bg-purple-500/25"
               >
                 <Plus size={15} />
-                New question
+                New Inquiry
               </button>
             )}
             {onGoHome && (
@@ -273,7 +273,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
           {selectedQuestion ? (
             <div className="mx-auto w-full md:w-[70%]">
               <label htmlFor="question-title" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Question summary
+                INQUIRY SUMMARY
               </label>
               <input
                 id="question-title"
@@ -409,11 +409,11 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                     value={newTitle}
                     onChange={(event) => setNewTitle(event.target.value)}
                     autoFocus
-                    placeholder="A short title for your question"
+                    placeholder="A short title for your inquiry"
                     className="mb-4 w-full rounded-xl border border-[#343741] bg-[#101114] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-purple-500/60"
                   />
                   <label htmlFor="new-question-description" className="mb-2 block text-sm font-semibold text-gray-200">
-                    Full question
+                    INQUIRY DETAILS
                   </label>
                   <textarea
                     id="new-question-description"
@@ -421,7 +421,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                     onChange={(event) => setNewDescription(event.target.value)}
                     rows={5}
                     dir="auto"
-                    placeholder="Add the complete question or context (optional)"
+                    placeholder="Write your question, idea, or insight here... (Markdown supported)"
                     className="w-full resize-y rounded-xl border border-[#343741] bg-[#101114] px-4 py-3 text-sm text-gray-200 outline-none placeholder:text-gray-600 focus:border-purple-500/60"
                   />
                   <div className="mt-4 flex justify-end gap-2">
@@ -482,7 +482,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                       onClick={() => setIsCreating(true)}
                       className="mt-5 rounded-xl bg-purple-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-purple-500"
                     >
-                      Add your first question
+                      Add your first inquiry
                     </button>
                   )}
                 </div>
