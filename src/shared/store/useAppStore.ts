@@ -5,6 +5,7 @@ import { VoraCard } from "@/mind/types";
 import { createTextChangeSet, dbService } from "@/mind/services/dbService";
 import type {
   Hypothesis,
+  HypothesisPromotionInput,
   HypothesisVerdict,
   JournalEntry,
   QuestionItem,
@@ -120,6 +121,7 @@ interface AppState {
 
   hypotheses: Hypothesis[];
   loadHypotheses: () => Promise<void>;
+  promoteToHypothesis: (input: HypothesisPromotionInput) => Promise<Hypothesis>;
   recordVerdict: (
     id: string,
     evidenceNotes: string,
@@ -711,6 +713,26 @@ export const useAppStore = create<AppState>()(
       loadHypotheses: async () => {
         const hypotheses = await dbService.getHypotheses();
         set({ hypotheses });
+      },
+      promoteToHypothesis: async (input) => {
+        const hypothesis = await dbService.promoteToHypothesis(input);
+        set((state) => ({
+          hypotheses: [hypothesis, ...state.hypotheses.filter(
+            (item) => item.id !== hypothesis.id
+          )],
+          questions: sortQuestions(state.questions.map((question) =>
+            question.id === input.inquiryId
+              ? {
+                  ...question,
+                  status: "promoted",
+                  isSelectedForPromotion: false,
+                  promotedToHypothesisId: hypothesis.id,
+                  updatedAt: hypothesis.updatedAt,
+                }
+              : question
+          )),
+        }));
+        return hypothesis;
       },
       recordVerdict: async (id, evidenceNotes, verdict) => {
         const hypothesis = await dbService.recordVerdict(id, evidenceNotes, verdict);

@@ -115,6 +115,16 @@ export interface Hypothesis {
   evaluatedAt?: number | null;
 }
 
+export interface HypothesisPromotionInput {
+  inquiryId: string;
+  statementH1: string;
+  statementH0: string;
+  independentVar: string;
+  dependentVar: string;
+  metric: string;
+  successThreshold: string;
+}
+
 export interface CustomFontSetting {
   id: string;
   name: string;

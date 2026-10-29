@@ -1,4 +1,5 @@
 import React, { FormEvent, useEffect, useMemo, useState } from "react";
+import { PromoteHypothesisModal } from "@/shared/layout/PromoteHypothesisModal";
 import { useAppStore } from "@/shared/store/useAppStore";
 import type { QuestionItem } from "@/types";
 
@@ -64,6 +65,8 @@ export const InquiryTriagePanel: React.FC = () => {
     () => questions.filter((question) => question.status === "triaged").sort(sortByPriority),
     [questions],
   );
+  const selectedInquiry = rankedInquiries.find((question) => question.isSelectedForPromotion);
+  const [isPromotionModalOpen, setIsPromotionModalOpen] = useState(false);
 
   const handleTriage = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -332,11 +335,28 @@ export const InquiryTriagePanel: React.FC = () => {
                 ))}
               </ol>
             )}
-            <p className="mt-5 text-xs text-gray-600">
-              Promotion to hypothesis is available in the next release.
-            </p>
+            <div className="mt-5 border-t border-[#292c34] pt-4">
+              {selectedInquiry ? (
+                <button
+                  type="button"
+                  onClick={() => setIsPromotionModalOpen(true)}
+                  className="rounded-xl bg-[#e8ad55] px-4 py-3 text-sm font-semibold text-[#17130d] shadow-lg shadow-amber-950/20 transition hover:bg-[#f0bd6c]"
+                >
+                  🧪 Promote to Hypothesis
+                </button>
+              ) : (
+                <p className="text-sm text-gray-500">Select an inquiry to promote.</p>
+              )}
+            </div>
           </section>
         </div>
+      )}
+      {isPromotionModalOpen && selectedInquiry && (
+        <PromoteHypothesisModal
+          inquiry={selectedInquiry}
+          onClose={() => setIsPromotionModalOpen(false)}
+          onPromoted={() => setIsPromotionModalOpen(false)}
+        />
       )}
     </div>
   );

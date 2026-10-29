@@ -13,6 +13,7 @@ import type {
 } from "@/mind/types";
 import type {
   Hypothesis,
+  HypothesisPromotionInput,
   HypothesisVerdict,
   JournalEntry,
   QuestionItem,
@@ -174,6 +175,10 @@ export const dbService = {
 
   async getHypotheses(): Promise<Hypothesis[]> {
     return await invoke<Hypothesis[]>("get_hypotheses");
+  },
+
+  async promoteToHypothesis(input: HypothesisPromotionInput): Promise<Hypothesis> {
+    return await invoke<Hypothesis>("promote_to_hypothesis", input);
   },
 
   async recordVerdict(
