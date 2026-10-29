@@ -162,7 +162,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
         </section>
       )}
 
-      {hypothesis.verdict ? (
+      {hypothesis.verdict && (
         <section className="mt-7 border-t border-[#292c34] pt-5">
           <h3 className="text-sm font-semibold text-white">Test Verdict</h3>
           <span
