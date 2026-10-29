@@ -116,7 +116,7 @@ export const InquiryTriagePanel: React.FC = () => {
       <form onSubmit={(event) => void handleTriage(event)} className="mt-4 space-y-4">
         <div>
           <label className="mb-1 block text-xs text-gray-500">Inquiry</label>
-          <p className="text-sm text-gray-300">{question.title}</p>
+          <p dir="auto" className="text-sm text-gray-300">{question.title}</p>
         </div>
         {([
           ["impact", "Impact"],
@@ -226,6 +226,7 @@ export const InquiryTriagePanel: React.FC = () => {
                   >
                     <button
                       type="button"
+                      dir="auto"
                       aria-expanded={form?.id === question.id}
                       onClick={() => {
                         setActionError(null);

@@ -217,7 +217,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
               <CircleHelp size={25} className="flex-shrink-0 text-purple-300" />
             )}
             <div className="min-w-0">
-              <h1 className="truncate text-2xl font-semibold tracking-tight text-white">
+              <h1 dir="auto" className="truncate text-2xl font-semibold tracking-tight text-white">
                 {selectedQuestion?.title || "Inquiry Queue"}
               </h1>
               <p className="mt-1 text-sm text-purple-300">
@@ -279,6 +279,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                 id="question-title"
                 type="text"
                 maxLength={200}
+                dir="auto"
                 value={selectedQuestion.title}
                 onChange={(event) =>
                   updateQuestion(selectedQuestion.id, event.target.value, selectedQuestion.description)
