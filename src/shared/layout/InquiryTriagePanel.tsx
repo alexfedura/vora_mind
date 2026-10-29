@@ -344,7 +344,7 @@ export const InquiryTriagePanel: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsPromotionModalOpen(true)}
-                  className="rounded-xl bg-[#e8ad55] px-4 py-3 text-sm font-semibold text-[#17130d] shadow-lg shadow-amber-950/20 transition hover:bg-[#f0bd6c]"
+                  className="rounded-xl border border-amber-300/50 bg-amber-500 px-4 py-3 text-sm font-semibold text-gray-950 shadow-lg shadow-amber-950/30 transition hover:-translate-y-0.5 hover:bg-amber-400 hover:shadow-amber-950/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
                 >
                   🧪 Promote to Hypothesis
                 </button>
