@@ -12,8 +12,8 @@ import type {
   TextLinkField,
 } from "@/mind/types";
 import type {
-  Hypothesis,
   ChildHypothesisInput,
+  Hypothesis,
   HypothesisPromotionInput,
   HypothesisVerdict,
   JournalEntry,

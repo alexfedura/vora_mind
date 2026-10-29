@@ -4,9 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
 use super::canvas_db::{AppState, NodeInput};
-use super::library_groups::{
-    self, LibraryItemGroupSnapshot,
-};
+use super::library_groups::{self, LibraryItemGroupSnapshot};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -272,7 +270,8 @@ fn graduate_to_library_in_db(
     if changed != 1 {
         return Err(format!("Could not graduate hypothesis: {hypothesis_id}"));
     }
-    let updated = query_hypothesis(&transaction, hypothesis_id).map_err(|error| error.to_string())?;
+    let updated =
+        query_hypothesis(&transaction, hypothesis_id).map_err(|error| error.to_string())?;
     transaction.commit().map_err(|error| error.to_string())?;
     Ok(updated)
 }
