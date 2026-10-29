@@ -165,7 +165,7 @@ export const InquiryTriagePanel: React.FC = () => {
           <button
             type="submit"
             disabled={busyId === question.id}
-            className="rounded-lg bg-[#e8ad55] px-3 py-2 text-xs font-semibold text-[#17130d] transition hover:bg-[#f0bd6c] disabled:opacity-50"
+            className="rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-gray-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-amber-500/60 disabled:text-gray-900"
           >
             {busyId === question.id ? "Triaging..." : "Triage"}
           </button>
