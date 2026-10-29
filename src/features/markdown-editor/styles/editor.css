@@ -464,6 +464,15 @@
 }
 
 .vm-inquiry-details-editor .cm-content {
+  text-align: start;
+}
+
+.vm-inquiry-details-editor .cm-line {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+.vm-inquiry-details-editor .cm-content {
   min-height: calc(55vh - 2rem);
   width: 100%;
   max-width: none;
