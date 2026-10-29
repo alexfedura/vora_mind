@@ -552,7 +552,7 @@ export const QuestionsBoardPage: React.FC<QuestionsBoardPageProps> = ({ onGoHome
                             <Trash2 size={15} />
                           </button>
                         </div>
-                        <span className="line-clamp-2 break-words text-base font-semibold text-white">
+                        <span dir="auto" className="line-clamp-2 break-words text-base font-semibold text-white">
                           {question.title}
                         </span>
                         <span
