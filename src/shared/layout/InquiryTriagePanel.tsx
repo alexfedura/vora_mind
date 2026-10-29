@@ -290,7 +290,7 @@ export const InquiryTriagePanel: React.FC = () => {
                               question.id,
                               unselectQuestionForPromotion,
                             )}
-                            className="whitespace-nowrap rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
+                        className="whitespace-nowrap rounded-lg border border-[#343741] px-3 py-2 text-xs font-semibold text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
                           >
                             Unselect
                           </button>
