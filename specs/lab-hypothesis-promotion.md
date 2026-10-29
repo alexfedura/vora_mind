@@ -16,6 +16,8 @@ threshold, status, and creation/update timestamps. Status is constrained to
 existing databases. `verdict` is null until recorded, then must be one of
 `supported`, `rejected`, or `inconclusive`. Index hypotheses by inquiry and by
 status/update time.
+Add nullable `promoted_to_library_id` and `parent_hypothesis_id` columns
+idempotently to track Library graduation and hypothesis iterations.
 
 Initialize this schema immediately after the existing questions schema when
 initializing a workspace database.
@@ -40,6 +42,19 @@ verdict accepts evidence notes and one of three verdicts: supported, rejected,
 or inconclusive. The `record_verdict` IPC command validates the verdict,
 persists the notes and verdict, and records the evaluation timestamp. A
 recorded verdict and its evidence are shown in the detail view.
+
+## Post-verdict actions
+
+A supported hypothesis can be graduated to the Library once. Graduation saves
+its H1/H0 statements, variables, metric, success threshold, and evidence notes
+as a Library item-group version and records that group's ID on the hypothesis
+in the same transaction. An optional existing Library group receives an
+appended version; otherwise graduation creates a new group.
+
+A rejected hypothesis can create a draft child hypothesis. The child inherits
+the source inquiry, stores the parent hypothesis ID, and starts with its
+parent's H1/H0, variables, metric, and success threshold so those values can be
+iterated.
 
 ## Verification
 
