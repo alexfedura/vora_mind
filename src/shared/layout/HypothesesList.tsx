@@ -63,6 +63,7 @@ export const HypothesesList: React.FC = () => {
         <HypothesisDetail
           hypothesis={selectedHypothesis}
           onUpdated={updatedHypothesis}
+          onChildCreated={() => setSelectedHypothesis(null)}
         />
       </div>
     );

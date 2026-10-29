@@ -1406,6 +1406,8 @@ pub fn run() {
             mind::hypothesis::promote_to_hypothesis,
             mind::hypothesis::get_hypotheses,
             mind::hypothesis::record_verdict,
+            mind::hypothesis::graduate_to_library,
+            mind::hypothesis::create_child_hypothesis,
             get_board_versions,
             create_board_version,
             checkout_board_version,
