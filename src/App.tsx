@@ -2408,7 +2408,7 @@ function AppContent() {
     <div className="vora-mind-theme flex h-screen w-screen bg-background text-gray-200 overflow-hidden select-none font-sans relative">
     {/* تولبار ابزارها */}
     {!isWorkspacePageOpen && canvasBoardId && <div
-      className="absolute top-[117.5px] z-40 flex flex-col gap-1 p-1 bg-[#181818]/90 border border-[#2a2a2a] rounded-xl shadow-lg backdrop-blur transition-all duration-200"
+      className="absolute top-[117.5px] z-40 flex flex-col gap-1 p-1 bg-[#181818]/90 border border-[#2a2a2a] rounded-xl shadow-lg backdrop-blur transition-all duration-200 relative"
       style={{ left: floatingControlsLeft }}
     >
       <button
