@@ -689,10 +689,19 @@ pub fn link_snapshot_to_hypothesis(
         .as_millis();
     let now = i64::try_from(now).map_err(|error| error.to_string())?;
     let conn = state.db.lock().map_err(|error| error.to_string())?;
+    link_snapshot_to_hypothesis_in_db(&conn, &hypothesis_id, &snapshot_id, now)
+}
+
+fn link_snapshot_to_hypothesis_in_db(
+    conn: &Connection,
+    hypothesis_id: &str,
+    snapshot_id: &str,
+    now: i64,
+) -> Result<(), String> {
     let exists: bool = conn
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM hypotheses WHERE id = ?1)",
-            [&hypothesis_id],
+            [hypothesis_id],
             |row| row.get(0),
         )
         .map_err(|error| error.to_string())?;
@@ -715,6 +724,14 @@ pub fn unlink_snapshot_from_hypothesis(
     snapshot_id: String,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;
+    unlink_snapshot_from_hypothesis_in_db(&conn, &hypothesis_id, &snapshot_id)
+}
+
+fn unlink_snapshot_from_hypothesis_in_db(
+    conn: &Connection,
+    hypothesis_id: &str,
+    snapshot_id: &str,
+) -> Result<(), String> {
     conn.execute(
         "DELETE FROM hypothesis_snapshots WHERE hypothesis_id = ?1 AND snapshot_id = ?2",
         params![hypothesis_id, snapshot_id],
@@ -979,8 +996,10 @@ mod tests {
     use super::{
         add_hypothesis_insight_in_db, create_child_hypothesis_in_db,
         delete_hypothesis_insight_in_db, graduate_to_library_in_db, init_schema,
+        link_snapshot_to_hypothesis_in_db, list_hypothesis_snapshots,
         list_hypothesis_insights, list_hypotheses, promote_inquiry,
         record_hypothesis_execution_in_db, record_verdict_in_db,
+        unlink_snapshot_from_hypothesis_in_db,
         save_hypothesis_protocol_in_db, LinkedDefinition,
     };
     use crate::mind::questions::{
@@ -1574,6 +1593,41 @@ mod tests {
 
         assert_eq!(child.parent_hypothesis_id.as_deref(), Some("hypothesis-1"));
         assert_eq!(child.refined_from_id.as_deref(), Some("hypothesis-1"));
+    }
+
+    #[test]
+    fn hypothesis_snapshot_links_are_idempotent_and_included_in_reads() {
+        let mut connection = setup();
+        select_inquiry(&mut connection, "inquiry-1");
+        promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+
+        link_snapshot_to_hypothesis_in_db(&connection, "hypothesis-1", "snapshot-1", 20)
+            .expect("link snapshot");
+        link_snapshot_to_hypothesis_in_db(&connection, "hypothesis-1", "snapshot-1", 30)
+            .expect("duplicate link is ignored");
+        link_snapshot_to_hypothesis_in_db(&connection, "hypothesis-1", "snapshot-2", 40)
+            .expect("link second snapshot");
+
+        let hypothesis = list_hypotheses(&connection)
+            .expect("list hypotheses")
+            .into_iter()
+            .next()
+            .expect("hypothesis");
+        assert_eq!(
+            hypothesis.linked_snapshots,
+            vec!["snapshot-1".to_string(), "snapshot-2".to_string()]
+        );
+        assert_eq!(
+            list_hypothesis_snapshots(&connection, "hypothesis-1").expect("list snapshots"),
+            hypothesis.linked_snapshots
+        );
+
+        unlink_snapshot_from_hypothesis_in_db(&connection, "hypothesis-1", "snapshot-1")
+            .expect("unlink snapshot");
+        assert_eq!(
+            list_hypothesis_snapshots(&connection, "hypothesis-1").expect("list after unlink"),
+            vec!["snapshot-2".to_string()]
+        );
     }
 
     #[test]
