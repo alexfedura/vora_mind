@@ -6,6 +6,7 @@ import { createTextChangeSet, dbService } from "@/mind/services/dbService";
 import type {
   ChildHypothesisInput,
   Hypothesis,
+  HypothesisInsight,
   HypothesisPromotionInput,
   HypothesisVerdict,
   LibraryDefinitionSelection,
@@ -122,6 +123,13 @@ interface AppState {
   unselectQuestionForPromotion: (id: string) => Promise<QuestionItem>;
 
   hypotheses: Hypothesis[];
+  hypothesisInsights: Record<string, HypothesisInsight[]>;
+  loadHypothesisInsights: (hypothesisId: string) => Promise<void>;
+  addHypothesisInsight: (
+    hypothesisId: string,
+    content: string,
+  ) => Promise<HypothesisInsight>;
+  deleteHypothesisInsight: (id: string) => Promise<void>;
   libraryDefinitionsForSelection: LibraryDefinitionSelection[];
   loadLibraryDefinitionsForSelection: () => Promise<LibraryDefinitionSelection[]>;
   loadHypotheses: () => Promise<void>;
@@ -720,6 +728,44 @@ export const useAppStore = create<AppState>()(
       },
 
       hypotheses: [],
+      hypothesisInsights: {},
+      loadHypothesisInsights: async (hypothesisId) => {
+        const insights = await dbService.getHypothesisInsights(hypothesisId);
+        set((state) => ({
+          hypothesisInsights: {
+            ...state.hypothesisInsights,
+            [hypothesisId]: insights,
+          },
+        }));
+      },
+      addHypothesisInsight: async (hypothesisId, content) => {
+        const insight = await dbService.addHypothesisInsight(hypothesisId, content);
+        set((state) => ({
+          hypothesisInsights: {
+            ...state.hypothesisInsights,
+            [hypothesisId]: [
+              insight,
+              ...(state.hypothesisInsights[hypothesisId] ?? []).filter(
+                (item) => item.id !== insight.id,
+              ),
+            ].sort((left, right) =>
+              right.createdAt - left.createdAt || right.id.localeCompare(left.id)
+            ),
+          },
+        }));
+        return insight;
+      },
+      deleteHypothesisInsight: async (id) => {
+        await dbService.deleteHypothesisInsight(id);
+        set((state) => ({
+          hypothesisInsights: Object.fromEntries(
+            Object.entries(state.hypothesisInsights).map(([hypothesisId, insights]) => [
+              hypothesisId,
+              insights.filter((insight) => insight.id !== id),
+            ]),
+          ),
+        }));
+      },
       libraryDefinitionsForSelection: [],
       loadLibraryDefinitionsForSelection: async () => {
         const definitions = await dbService.getLibraryDefinitionsForSelection();

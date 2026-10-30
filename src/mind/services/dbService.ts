@@ -14,6 +14,7 @@ import type {
 import type {
   ChildHypothesisInput,
   Hypothesis,
+  HypothesisInsight,
   HypothesisPromotionInput,
   HypothesisVerdict,
   LibraryDefinitionSelection,
@@ -177,6 +178,26 @@ export const dbService = {
 
   async getHypotheses(): Promise<Hypothesis[]> {
     return await invoke<Hypothesis[]>("get_hypotheses");
+  },
+
+  async addHypothesisInsight(
+    hypothesisId: string,
+    content: string,
+  ): Promise<HypothesisInsight> {
+    return await invoke<HypothesisInsight>("add_hypothesis_insight", {
+      hypothesisId,
+      content,
+    });
+  },
+
+  async getHypothesisInsights(hypothesisId: string): Promise<HypothesisInsight[]> {
+    return await invoke<HypothesisInsight[]>("get_hypothesis_insights", {
+      hypothesisId,
+    });
+  },
+
+  async deleteHypothesisInsight(id: string): Promise<void> {
+    await invoke("delete_hypothesis_insight", { id });
   },
 
   async saveHypothesisProtocol(id: string, protocolSteps: string): Promise<Hypothesis> {

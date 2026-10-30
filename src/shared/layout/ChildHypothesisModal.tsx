@@ -5,6 +5,7 @@ import type { ChildHypothesisInput, Hypothesis } from "@/types";
 
 interface ChildHypothesisModalProps {
   hypothesis: Hypothesis;
+  initialStatementH1?: string;
   onClose: () => void;
   onCreated: () => void;
 }
@@ -22,12 +23,13 @@ const childFieldLabels: Record<keyof ChildHypothesisFields, string> = {
 
 export const ChildHypothesisModal: React.FC<ChildHypothesisModalProps> = ({
   hypothesis,
+  initialStatementH1,
   onClose,
   onCreated,
 }) => {
   const createChildHypothesis = useAppStore((state) => state.createChildHypothesis);
   const [fields, setFields] = useState<ChildHypothesisFields>(() => ({
-    statementH1: hypothesis.statementH1,
+    statementH1: initialStatementH1 ?? hypothesis.statementH1,
     statementH0: hypothesis.statementH0,
     independentVar: hypothesis.independentVar,
     dependentVar: hypothesis.dependentVar,

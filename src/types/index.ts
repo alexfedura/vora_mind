@@ -137,6 +137,13 @@ export interface Hypothesis {
   executedAt?: number | null;
 }
 
+export interface HypothesisInsight {
+  id: string;
+  hypothesisId: string;
+  content: string;
+  createdAt: number;
+}
+
 export interface HypothesisPromotionInput {
   inquiryId: string;
   statementH1: string;
