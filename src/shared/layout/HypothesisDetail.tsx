@@ -1271,6 +1271,140 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
         />
       )}
 
+      {isChecklistBuilderOpen && (
+        <div
+          dir="auto"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isSavingChecklistSchema) {
+              setIsChecklistBuilderOpen(false);
+            }
+          }}
+        >
+          <section
+            dir="auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="hypothesis-checklist-builder-title"
+            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[#343741] bg-[#17191f] p-5 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="hypothesis-checklist-builder-title" className="text-lg font-semibold text-white">
+                  Define Checklist
+                </h3>
+                <p className="mt-1 text-sm text-gray-400">
+                  Choose the fields to record for each test observation.
+                </p>
+              </div>
+              <button
+                type="button"
+                dir="auto"
+                disabled={isSavingChecklistSchema}
+                onClick={() => setIsChecklistBuilderOpen(false)}
+                className="rounded-lg border border-[#343741] px-3 py-1.5 text-sm text-gray-300 hover:bg-[#24262d] disabled:opacity-50"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {checklistDraftFields.map((draft, index) => (
+                <div key={draft.id} dir="auto" className="rounded-xl border border-[#343741] bg-[#101114] p-3">
+                  <div className="grid gap-3 sm:grid-cols-[1fr_12rem_auto]">
+                    <label dir="auto" className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-gray-400">Field label</span>
+                      <input
+                        dir="auto"
+                        type="text"
+                        value={draft.label}
+                        onChange={(event) => setChecklistDraftFields((current) => current.map((field) =>
+                          field.id === draft.id ? { ...field, label: event.currentTarget.value } : field
+                        ))}
+                        placeholder="e.g. Trend Direction"
+                        disabled={isSavingChecklistSchema}
+                        className="w-full rounded-lg border border-[#343741] bg-[#17191f] px-3 py-2 text-sm text-gray-200 outline-none focus:border-amber-400/70 disabled:opacity-60"
+                      />
+                    </label>
+                    <label dir="auto" className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-gray-400">Field type</span>
+                      <select
+                        dir="auto"
+                        value={draft.type}
+                        onChange={(event) => setChecklistDraftFields((current) => current.map((field) =>
+                          field.id === draft.id
+                            ? { ...field, type: event.currentTarget.value as ChecklistFieldType }
+                            : field
+                        ))}
+                        disabled={isSavingChecklistSchema}
+                        className="w-full rounded-lg border border-[#343741] bg-[#17191f] px-3 py-2 text-sm text-gray-200 outline-none focus:border-amber-400/70 disabled:opacity-60"
+                      >
+                        <option value="select">Select</option>
+                        <option value="number">Number</option>
+                        <option value="text">Text</option>
+                        <option value="boolean">Boolean</option>
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      dir="auto"
+                      aria-label={`Remove checklist field ${index + 1}`}
+                      title="Remove field"
+                      disabled={isSavingChecklistSchema || checklistDraftFields.length === 1}
+                      onClick={() => setChecklistDraftFields((current) =>
+                        current.filter((field) => field.id !== draft.id)
+                      )}
+                      className="mt-5 self-end rounded-lg border border-[#343741] p-2 text-gray-400 transition hover:border-rose-500/40 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                  {draft.type === "select" && (
+                    <label dir="auto" className="mt-3 block">
+                      <span className="mb-1.5 block text-xs font-medium text-gray-400">Options (comma-separated)</span>
+                      <input
+                        dir="auto"
+                        type="text"
+                        value={draft.optionsText}
+                        onChange={(event) => setChecklistDraftFields((current) => current.map((field) =>
+                          field.id === draft.id ? { ...field, optionsText: event.currentTarget.value } : field
+                        ))}
+                        placeholder="Bullish, Bearish, Neutral"
+                        disabled={isSavingChecklistSchema}
+                        className="w-full rounded-lg border border-[#343741] bg-[#17191f] px-3 py-2 text-sm text-gray-200 outline-none focus:border-amber-400/70 disabled:opacity-60"
+                      />
+                    </label>
+                  )}
+                </div>
+              ))}
+            </div>
+            {dataCollectionError && (
+              <p role="alert" className="mt-3 text-sm text-rose-300">{dataCollectionError}</p>
+            )}
+            <div className="mt-4 flex flex-wrap justify-between gap-2">
+              <button
+                type="button"
+                dir="auto"
+                disabled={isSavingChecklistSchema}
+                onClick={() => setChecklistDraftFields((current) => [...current, createChecklistFieldDraft()])}
+                className="rounded-lg border border-[#343741] px-3 py-2 text-sm font-medium text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
+              >
+                + Add Field
+              </button>
+              <button
+                type="button"
+                dir="auto"
+                disabled={isSavingChecklistSchema}
+                onClick={() => void handleSaveChecklistSchema()}
+                className="rounded-lg border border-amber-300/50 bg-amber-500 px-4 py-2 text-sm font-semibold text-gray-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSavingChecklistSchema ? "Saving..." : "Save Checklist"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {isSnapshotPickerOpen && (
         <div
           dir="auto"
