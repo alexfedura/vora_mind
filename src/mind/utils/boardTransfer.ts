@@ -187,7 +187,7 @@ export function createBoardTransfer(
   };
 }
 
-export function remapBoardTransfer(transfer: VoraBoardTransfer): {
+export function remapBoardTransfer(transfer: VoraBoardTransfer, boardId: string): {
   nodes: Node[];
   edges: Edge[];
   cards: Record<string, VoraCard>;
@@ -206,7 +206,15 @@ export function remapBoardTransfer(transfer: VoraBoardTransfer): {
   for (const card of transfer.cards) {
     const id = cardIds.get(card.id);
     if (!id) throw new Error("Could not assign a new ID to an imported card.");
-    cards[id] = { id, title: card.title, content: card.content, version: card.version };
+    cards[id] = {
+      id,
+      title: card.title,
+      content: card.content,
+      version: card.version,
+      boardId,
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    };
   }
 
   const nodes: Node[] = transfer.nodes.map((item) => {
