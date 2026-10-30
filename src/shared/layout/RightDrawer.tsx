@@ -26,6 +26,7 @@ import type {
   LibraryItemGroupVersion,
   VoraCard,
 } from "@/mind/types";
+import { getVoraShapePath, isVoraDiagramShape } from "@/mind/utils/shapeGeometry";
 
 const resolveTextDirection = (text: string, defaultMajorRtl: boolean): { isRtl: boolean; cleanText: string } => {
   const trimmed = text.trim();
@@ -144,7 +145,7 @@ const GroupSchematicPreview: React.FC<{
         const cardId = typeof node.data.cardId === "string" ? node.data.cardId : node.id;
         const card = snapshot.cards.find((item) => item.id === cardId);
         const title = card?.title || node.title || (typeof node.data.label === "string" ? node.data.label : "");
-        if (node.node_type === "voraShape" && (shape === "rectangle" || shape === "path")) {
+        if (node.node_type === "voraShape" && isVoraDiagramShape(shape)) {
           const points = Array.isArray(node.data.points)
             ? node.data.points.filter((point): point is { x: number; y: number } =>
                 isRecord(point) &&
@@ -152,19 +153,20 @@ const GroupSchematicPreview: React.FC<{
                 typeof point.y === "number" && Number.isFinite(point.y)
               )
             : [];
-          return shape === "rectangle" ? (
-            <rect
-              key={node.id}
-              x={node.x}
-              y={node.y}
-              width={nodeWidth}
-              height={nodeHeight}
-              fill={fillColor}
-              fillOpacity={typeof node.data.fillOpacity === "number" ? node.data.fillOpacity : 0.12}
-              stroke={color}
-              strokeWidth={Math.max(1.5, width / 160)}
-            />
-          ) : (
+          if (shape !== "path") {
+            return (
+              <path
+                key={node.id}
+                d={getVoraShapePath(shape, nodeWidth, nodeHeight, 0)}
+                transform={`translate(${node.x} ${node.y})`}
+                fill={fillColor}
+                fillOpacity={typeof node.data.fillOpacity === "number" ? node.data.fillOpacity : 0.12}
+                stroke={color}
+                strokeWidth={Math.max(1.5, width / 160)}
+              />
+            );
+          }
+          return (
             <g key={node.id}>
               {points.slice(0, -1).map((point, index) => {
                 const next = points[index + 1];
