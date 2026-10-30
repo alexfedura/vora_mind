@@ -52,12 +52,15 @@ pub struct Hypothesis {
     pub raw_data: Option<String>,
     pub data_analysis: Option<String>,
     pub executed_at: Option<i64>,
+    pub boundary_conditions: Option<String>,
+    pub refined_from_id: Option<String>,
 }
 
 const HYPOTHESIS_COLUMNS: &str = "id, inquiry_id, statement_h1, statement_h0, \
     independent_var, dependent_var, metric, success_threshold, status, created_at, updated_at, \
     evidence_notes, verdict, evaluated_at, promoted_to_library_id, parent_hypothesis_id, \
-    protocol_steps, protocol_locked_at, raw_data, data_analysis, executed_at";
+    protocol_steps, protocol_locked_at, raw_data, data_analysis, executed_at, \
+    boundary_conditions, refined_from_id";
 
 pub fn init_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -96,6 +99,8 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         ("raw_data", "TEXT NULL"),
         ("data_analysis", "TEXT NULL"),
         ("executed_at", "INTEGER NULL"),
+        ("boundary_conditions", "TEXT NULL"),
+        ("refined_from_id", "TEXT NULL"),
     ] {
         if !columns.iter().any(|column| column == name) {
             conn.execute_batch(&format!(
@@ -313,23 +318,33 @@ fn create_child_hypothesis_in_db(
     now: i64,
 ) -> std::result::Result<Hypothesis, String> {
     let transaction = conn.transaction().map_err(|error| error.to_string())?;
-    let inquiry_id = transaction
+    let (inquiry_id, parent_verdict): (String, Option<String>) = transaction
         .query_row(
-            "SELECT inquiry_id FROM hypotheses WHERE id = ?1",
+            "SELECT inquiry_id, verdict FROM hypotheses WHERE id = ?1",
             [parent_id],
-            |row| row.get::<_, String>(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("Parent hypothesis not found: {parent_id}"))?;
+    if parent_verdict.as_deref().is_some_and(|verdict| {
+        !matches!(verdict, "rejected" | "supported" | "partially_supported")
+    }) {
+        return Err("A child hypothesis can only be created from a rejected, supported, or partially supported hypothesis.".to_string());
+    }
+    let refined_from_id = matches!(
+        parent_verdict.as_deref(),
+        Some("supported" | "partially_supported")
+    )
+    .then_some(parent_id);
 
     transaction
         .execute(
             "INSERT INTO hypotheses (
                 id, inquiry_id, statement_h1, statement_h0, independent_var,
                 dependent_var, metric, success_threshold, status, created_at,
-                updated_at, parent_hypothesis_id
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'draft', ?9, ?9, ?10)",
+                updated_at, parent_hypothesis_id, refined_from_id
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'draft', ?9, ?9, ?10, ?11)",
             params![
                 id,
                 inquiry_id,
@@ -340,7 +355,8 @@ fn create_child_hypothesis_in_db(
                 metric,
                 success_threshold,
                 now,
-                parent_id
+                parent_id,
+                refined_from_id
             ],
         )
         .map_err(|error| error.to_string())?;
@@ -386,20 +402,31 @@ pub fn create_child_hypothesis(
 }
 
 fn hypothesis_library_node(hypothesis: &Hypothesis) -> NodeInput {
+    let boundary_conditions = hypothesis.boundary_conditions.as_deref();
+    let title = if hypothesis.verdict.as_deref() == Some("partially_supported") {
+        format!(
+            "{} (Valid only in {})",
+            hypothesis.statement_h1,
+            boundary_conditions.unwrap_or("specified conditions")
+        )
+    } else {
+        hypothesis.statement_h1.clone()
+    };
     let content = format!(
-        "H1: {}\n\nH0: {}\n\nIndependent variable: {}\nDependent variable: {}\nMetric: {}\nSuccess threshold: {}\n\nEvidence notes: {}",
+        "H1: {}\n\nH0: {}\n\nIndependent variable: {}\nDependent variable: {}\nMetric: {}\nSuccess threshold: {}\n\nBoundary conditions: {}\n\nEvidence notes: {}",
         hypothesis.statement_h1,
         hypothesis.statement_h0,
         hypothesis.independent_var,
         hypothesis.dependent_var,
         hypothesis.metric,
         hypothesis.success_threshold,
+        boundary_conditions.unwrap_or("None recorded"),
         hypothesis.evidence_notes.as_deref().unwrap_or("None recorded")
     );
     NodeInput {
         id: format!("hypothesis_{}", hypothesis.id),
         node_type: "voraText".to_string(),
-        title: hypothesis.statement_h1.clone(),
+        title: title.clone(),
         content: content.clone(),
         version: "v0.1.0".to_string(),
         data: serde_json::json!({
@@ -412,6 +439,8 @@ fn hypothesis_library_node(hypothesis: &Hypothesis) -> NodeInput {
             "metric": hypothesis.metric,
             "successThreshold": hypothesis.success_threshold,
             "evidenceNotes": hypothesis.evidence_notes,
+            "boundaryConditions": hypothesis.boundary_conditions,
+            "refinedFromId": hypothesis.refined_from_id,
         }),
         x: 0.0,
         y: 0.0,
@@ -430,8 +459,11 @@ fn graduate_to_library_in_db(
     let transaction = conn.transaction().map_err(|error| error.to_string())?;
     let hypothesis =
         query_hypothesis(&transaction, hypothesis_id).map_err(|error| error.to_string())?;
-    if hypothesis.verdict.as_deref() != Some("supported") {
-        return Err("Only supported hypotheses can be graduated to the Library".to_string());
+    if !matches!(
+        hypothesis.verdict.as_deref(),
+        Some("supported" | "partially_supported")
+    ) {
+        return Err("Only supported or partially supported hypotheses can be graduated to the Library".to_string());
     }
     if hypothesis.promoted_to_library_id.is_some() {
         return Err("Hypothesis is already graduated to the Library".to_string());
@@ -472,7 +504,7 @@ fn graduate_to_library_in_db(
         let name = if hypothesis.statement_h1.trim().is_empty() {
             "Supported hypothesis".to_string()
         } else {
-            hypothesis.statement_h1.chars().take(80).collect()
+            title.chars().take(80).collect()
         };
         library_groups::create_item_group_in_transaction(
             &transaction,
@@ -493,7 +525,8 @@ fn graduate_to_library_in_db(
         .execute(
             "UPDATE hypotheses
              SET promoted_to_library_id = ?1, updated_at = ?2
-             WHERE id = ?3 AND verdict = 'supported' AND promoted_to_library_id IS NULL",
+             WHERE id = ?3 AND verdict IN ('supported', 'partially_supported')
+               AND promoted_to_library_id IS NULL",
             params![group_id, now, hypothesis_id],
         )
         .map_err(|error| error.to_string())?;
@@ -754,10 +787,19 @@ fn record_verdict_in_db(
     verdict: &str,
     raw_data: Option<&str>,
     data_analysis: Option<&str>,
+    boundary_conditions: Option<&str>,
     now: i64,
 ) -> std::result::Result<Hypothesis, String> {
-    if !matches!(verdict, "supported" | "rejected" | "inconclusive") {
+    if !matches!(
+        verdict,
+        "supported" | "partially_supported" | "rejected" | "inconclusive"
+    ) {
         return Err(format!("Invalid hypothesis verdict: {verdict}"));
+    }
+    if verdict == "partially_supported"
+        && boundary_conditions.is_none_or(|conditions| conditions.trim().is_empty())
+    {
+        return Err("Boundary conditions are required for a partially supported verdict.".to_string());
     }
     let stored_raw_data: Option<String> = conn
         .query_row("SELECT raw_data FROM hypotheses WHERE id = ?1", [id], |row| {
@@ -773,9 +815,9 @@ fn record_verdict_in_db(
         .execute(
             "UPDATE hypotheses
              SET evidence_notes = ?1, verdict = ?2, data_analysis = COALESCE(?3, data_analysis),
-                 evaluated_at = ?4, updated_at = ?4
-             WHERE id = ?5 AND executed_at IS NOT NULL",
-            params![evidence_notes, verdict, data_analysis, now, id],
+                 boundary_conditions = ?4, evaluated_at = ?5, updated_at = ?5
+             WHERE id = ?6 AND executed_at IS NOT NULL",
+            params![evidence_notes, verdict, data_analysis, boundary_conditions, now, id],
         )
         .map_err(|error| error.to_string())?;
     if changed != 1 {
@@ -792,8 +834,12 @@ pub fn record_verdict(
     verdict: String,
     raw_data: Option<String>,
     data_analysis: Option<String>,
+    boundary_conditions: Option<String>,
 ) -> std::result::Result<Hypothesis, String> {
-    if !matches!(verdict.as_str(), "supported" | "rejected" | "inconclusive") {
+    if !matches!(
+        verdict.as_str(),
+        "supported" | "partially_supported" | "rejected" | "inconclusive"
+    ) {
         return Err(format!("Invalid hypothesis verdict: {verdict}"));
     }
     let now = SystemTime::now()
@@ -809,6 +855,7 @@ pub fn record_verdict(
         &verdict,
         raw_data.as_deref(),
         data_analysis.as_deref(),
+        boundary_conditions.as_deref(),
         now,
     )
 }
@@ -844,6 +891,8 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
         raw_data: row.get(18)?,
         data_analysis: row.get(19)?,
         executed_at: row.get(20)?,
+        boundary_conditions: row.get(21)?,
+        refined_from_id: row.get(22)?,
     })
 }
 
