@@ -394,7 +394,11 @@ body, #root {
   width: calc(12px * var(--vora-shape-handle-scale-x));
   height: calc(12px * var(--vora-shape-handle-scale-y));
   box-sizing: border-box;
-  border: calc(2px * var(--vora-shape-handle-scale-y)) solid #2962ff;
+  border-style: solid;
+  border-color: #2962ff;
+  border-width:
+    calc(2px * var(--vora-shape-handle-scale-y))
+    calc(2px * var(--vora-shape-handle-scale-x));
   border-radius: 50%;
   background: #0a0c10;
   content: "";
@@ -413,7 +417,9 @@ body, #root {
 .react-flow__node-voraShape .vora-shape-resize-handle:hover::after {
   width: calc(14px * var(--vora-shape-handle-scale-x));
   height: calc(14px * var(--vora-shape-handle-scale-y));
-  border-width: calc(2.5px * var(--vora-shape-handle-scale-y));
+  border-width:
+    calc(2.5px * var(--vora-shape-handle-scale-y))
+    calc(2.5px * var(--vora-shape-handle-scale-x));
 }
 
 .vora-shape-toolbar {
