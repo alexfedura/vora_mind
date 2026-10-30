@@ -505,6 +505,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
           source: link.source_object_id,
           target: link.target_object_id,
           type: "default",
+          markerEnd: link.link_type === "directed" ? { type: MarkerType.ArrowClosed } : undefined,
           style: { stroke: "#7c3aed", strokeWidth: 2 },
         }));
 

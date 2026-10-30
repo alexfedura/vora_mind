@@ -31,8 +31,8 @@ or require a Miro account.
   Board snapshots without a new SQLite table.
 - Shapes expose connection handles so diagrams can connect shape-to-shape as
   well as to existing cards and text nodes. Connections retain their endpoints
-  through snapshots and Board changes, using the existing canvas connector
-  styling.
+  through snapshots and Board changes. New diagram connections use arrowheads;
+  existing undirected connections retain their appearance.
 - New and existing shapes share the current style controls and saved style
   templates. Defaults and custom styles remain local to the current
   installation.
