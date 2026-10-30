@@ -721,7 +721,8 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
 mod tests {
     use super::{
         create_child_hypothesis_in_db, graduate_to_library_in_db, init_schema, list_hypotheses,
-        promote_inquiry, record_verdict_in_db, LinkedDefinition,
+        promote_inquiry, record_hypothesis_execution_in_db, record_verdict_in_db,
+        save_hypothesis_protocol_in_db, LinkedDefinition,
     };
     use crate::mind::questions::{
         create_question, init_schema as init_questions_schema, select_for_promotion,
@@ -801,7 +802,19 @@ mod tests {
     fn create_supported_hypothesis(conn: &mut Connection, inquiry_id: &str, id: &str) {
         select_inquiry(conn, inquiry_id);
         promote(conn, inquiry_id, id, 10).expect("promote inquiry");
-        record_verdict_in_db(conn, id, "Evidence supports H1", "supported", 20)
+        save_hypothesis_protocol_in_db(conn, id, "Run the controlled test.", 15)
+            .expect("save test protocol");
+        record_hypothesis_execution_in_db(conn, id, "Raw observations", 18)
+            .expect("record test execution");
+        record_verdict_in_db(
+            conn,
+            id,
+            "Evidence supports H1",
+            "supported",
+            Some("Raw observations"),
+            Some("Results support H1."),
+            20,
+        )
             .expect("record supported verdict");
     }
 
@@ -926,12 +939,18 @@ mod tests {
         let mut connection = setup();
         select_inquiry(&mut connection, "inquiry-1");
         promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+        save_hypothesis_protocol_in_db(&mut connection, "hypothesis-1", "Run the test.", 15)
+            .expect("save test protocol");
+        record_hypothesis_execution_in_db(&mut connection, "hypothesis-1", "Raw observations", 18)
+            .expect("record test execution");
 
         let hypothesis = record_verdict_in_db(
             &connection,
             "hypothesis-1",
             "Observed results matched H1",
             "supported",
+            Some("Raw observations"),
+            Some("Analysis supports H1."),
             20,
         )
         .expect("record verdict");
@@ -942,12 +961,19 @@ mod tests {
         assert_eq!(hypothesis.verdict.as_deref(), Some("supported"));
         assert_eq!(hypothesis.evaluated_at, Some(20));
         assert_eq!(hypothesis.updated_at, 20);
+        assert_eq!(
+            hypothesis.data_analysis.as_deref(),
+            Some("Analysis supports H1.")
+        );
+        assert_eq!(hypothesis.executed_at, Some(18));
 
         let updated_hypothesis = record_verdict_in_db(
             &connection,
             "hypothesis-1",
             "New evidence contradicts H1",
             "rejected",
+            Some("Raw observations"),
+            Some("Reanalysis contradicts H1."),
             30,
         )
         .expect("update verdict");
@@ -958,12 +984,98 @@ mod tests {
         assert_eq!(updated_hypothesis.verdict.as_deref(), Some("rejected"));
         assert_eq!(updated_hypothesis.evaluated_at, Some(30));
         assert_eq!(updated_hypothesis.updated_at, 30);
+        assert_eq!(
+            updated_hypothesis.data_analysis.as_deref(),
+            Some("Reanalysis contradicts H1.")
+        );
 
         assert!(record_verdict_in_db(
             &connection,
             "hypothesis-1",
             "Invalid verdict attempt",
             "maybe",
+            None,
+            None,
+            40,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn protocol_must_be_locked_before_execution_and_cannot_change_afterwards() {
+        let mut connection = setup();
+        select_inquiry(&mut connection, "inquiry-1");
+        promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+
+        assert!(record_hypothesis_execution_in_db(
+            &mut connection,
+            "hypothesis-1",
+            "Raw observations",
+            15,
+        )
+        .is_err());
+
+        let saved = save_hypothesis_protocol_in_db(
+            &mut connection,
+            "hypothesis-1",
+            "Record ten observations.",
+            20,
+        )
+        .expect("save protocol");
+        assert_eq!(
+            saved.protocol_steps.as_deref(),
+            Some("Record ten observations.")
+        );
+        assert_eq!(saved.protocol_locked_at, Some(20));
+
+        let executed = record_hypothesis_execution_in_db(
+            &mut connection,
+            "hypothesis-1",
+            "Ten observations",
+            30,
+        )
+        .expect("record execution");
+        assert_eq!(executed.raw_data.as_deref(), Some("Ten observations"));
+        assert_eq!(executed.executed_at, Some(30));
+
+        assert!(
+            save_hypothesis_protocol_in_db(
+                &mut connection,
+                "hypothesis-1",
+                "Changed protocol",
+                40,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn verdict_requires_execution_and_raw_data_cannot_be_changed_after_execution() {
+        let mut connection = setup();
+        select_inquiry(&mut connection, "inquiry-1");
+        promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+        assert!(record_verdict_in_db(
+            &connection,
+            "hypothesis-1",
+            "Premature verdict",
+            "supported",
+            None,
+            None,
+            15,
+        )
+        .is_err());
+
+        save_hypothesis_protocol_in_db(&mut connection, "hypothesis-1", "Run the test.", 20)
+            .expect("save protocol");
+        record_hypothesis_execution_in_db(&mut connection, "hypothesis-1", "Original data", 30)
+            .expect("record execution");
+        assert!(record_verdict_in_db(
+            &connection,
+            "hypothesis-1",
+            "Evidence",
+            "supported",
+            Some("Altered data"),
+            None,
             40,
         )
         .is_err());
