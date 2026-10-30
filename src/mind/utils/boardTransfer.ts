@@ -206,14 +206,15 @@ export function remapBoardTransfer(transfer: VoraBoardTransfer, boardId: string)
   for (const card of transfer.cards) {
     const id = cardIds.get(card.id);
     if (!id) throw new Error("Could not assign a new ID to an imported card.");
+    const timestamp = Date.now();
     cards[id] = {
       id,
       title: card.title,
       content: card.content,
       version: card.version,
       boardId,
-      created_at: Date.now(),
-      updated_at: Date.now(),
+      created_at: timestamp,
+      updated_at: timestamp,
     };
   }
 
