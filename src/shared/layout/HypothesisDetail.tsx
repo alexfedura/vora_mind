@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import type { Hypothesis, HypothesisVerdict } from "@/types";
+import type { Hypothesis, HypothesisInsight, HypothesisVerdict } from "@/types";
 import { ChildHypothesisModal } from "@/shared/layout/ChildHypothesisModal";
 import { useAppStore } from "@/shared/store/useAppStore";
 
@@ -33,6 +33,8 @@ function formatTraceTimestamp(timestamp: number | null | undefined): string {
   return Number.isNaN(date.getTime()) ? "Invalid timestamp" : date.toLocaleString();
 }
 
+const EMPTY_INSIGHTS: HypothesisInsight[] = [];
+
 export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   hypothesis,
   onUpdated,
@@ -42,6 +44,12 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   const saveHypothesisProtocol = useAppStore((state) => state.saveHypothesisProtocol);
   const recordHypothesisExecution = useAppStore((state) => state.recordHypothesisExecution);
   const graduateToLibrary = useAppStore((state) => state.graduateToLibrary);
+  const loadHypothesisInsights = useAppStore((state) => state.loadHypothesisInsights);
+  const addHypothesisInsight = useAppStore((state) => state.addHypothesisInsight);
+  const createQuestion = useAppStore((state) => state.createQuestion);
+  const insights = useAppStore(
+    (state) => state.hypothesisInsights[hypothesis.id] ?? EMPTY_INSIGHTS,
+  );
   const [evidenceNotes, setEvidenceNotes] = useState(hypothesis.evidenceNotes ?? "");
   const [protocolSteps, setProtocolSteps] = useState(hypothesis.protocolSteps ?? "");
   const [rawData, setRawData] = useState(hypothesis.rawData ?? "");
@@ -50,6 +58,12 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCreatingChild, setIsCreatingChild] = useState(false);
+  const [childInsight, setChildInsight] = useState<HypothesisInsight | null>(null);
+  const [insightContent, setInsightContent] = useState("");
+  const [isCapturingInsight, setIsCapturingInsight] = useState(false);
+  const [sendingInsightId, setSendingInsightId] = useState<string | null>(null);
+  const [queuedInsightIds, setQueuedInsightIds] = useState<string[]>([]);
+  const [scratchpadError, setScratchpadError] = useState<string | null>(null);
   const isProtocolLocked = hypothesis.protocolLockedAt != null;
   const isExecuted = hypothesis.executedAt != null;
 
@@ -65,6 +79,51 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
     hypothesis.rawData,
     hypothesis.dataAnalysis,
   ]);
+
+  useEffect(() => {
+    setScratchpadError(null);
+    void loadHypothesisInsights(hypothesis.id).catch((cause: unknown) => {
+      console.error("Could not load hypothesis scratchpad insights:", cause);
+      setScratchpadError(cause instanceof Error ? cause.message : String(cause));
+    });
+  }, [hypothesis.id, loadHypothesisInsights]);
+
+  const handleCaptureInsight = async (): Promise<void> => {
+    if (!insightContent.trim()) return;
+    setIsCapturingInsight(true);
+    setScratchpadError(null);
+    try {
+      await addHypothesisInsight(hypothesis.id, insightContent);
+      setInsightContent("");
+    } catch (cause) {
+      console.error("Could not capture hypothesis insight:", cause);
+      setScratchpadError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setIsCapturingInsight(false);
+    }
+  };
+
+  const handleSendInsightToInquiry = async (
+    insight: HypothesisInsight,
+  ): Promise<void> => {
+    const content = insight.content.trim();
+    if (!content) return;
+    const firstLine = content.split(/\r?\n/, 1)[0].trim();
+    const title = Array.from(firstLine || content).slice(0, 200).join("");
+    setSendingInsightId(insight.id);
+    setScratchpadError(null);
+    try {
+      await createQuestion(title, content);
+      setQueuedInsightIds((current) =>
+        current.includes(insight.id) ? current : [...current, insight.id]
+      );
+    } catch (cause) {
+      console.error("Could not send hypothesis insight to Inquiry Queue:", cause);
+      setScratchpadError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSendingInsightId(null);
+    }
+  };
 
   const handleSaveProtocol = async (): Promise<void> => {
     setIsSaving(true);
@@ -459,11 +518,105 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
         </section>
       )}
 
-      {isCreatingChild && (
+      <section dir="auto" className="mt-7 border-t border-[#292c34] pt-5">
+        <h3 className="text-base font-semibold text-white">
+          Lab Scratchpad (Mid-Test Insights)
+        </h3>
+        <p className="mt-1 text-sm text-gray-400">
+          Capture new ideas without changing the locked protocol or test data.
+        </p>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <textarea
+            dir="auto"
+            value={insightContent}
+            onChange={(event) => setInsightContent(event.target.value)}
+            rows={2}
+            disabled={isCapturingInsight}
+            placeholder="Got a new idea mid-test? Record it here..."
+            className="min-h-11 flex-1 resize-y rounded-xl border border-[#343741] bg-[#101114] px-4 py-3 text-sm text-gray-200 outline-none transition focus:border-[#e8ad55]/70 disabled:opacity-60"
+          />
+          <button
+            type="button"
+            disabled={isCapturingInsight || !insightContent.trim()}
+            onClick={() => void handleCaptureInsight()}
+            className="self-start rounded-lg border border-amber-300/50 bg-amber-500 px-4 py-2.5 text-sm font-semibold text-gray-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50 sm:self-stretch"
+          >
+            {isCapturingInsight ? "Capturing..." : "+ Capture"}
+          </button>
+        </div>
+        {scratchpadError && (
+          <p role="alert" className="mt-3 text-sm text-rose-300">
+            {scratchpadError}
+          </p>
+        )}
+        {insights.length > 0 ? (
+          <ul className="mt-4 space-y-3">
+            {insights.map((insight) => (
+              <li
+                key={insight.id}
+                dir="auto"
+                className="rounded-xl border border-[#292c34] bg-[#101114] p-4"
+              >
+                <p className="whitespace-pre-wrap text-sm text-gray-200">
+                  {insight.content}
+                </p>
+                <time
+                  className="mt-2 block text-xs text-gray-500"
+                  dateTime={new Date(insight.createdAt).toISOString()}
+                >
+                  {formatTraceTimestamp(insight.createdAt)}
+                </time>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => {
+                      setError(null);
+                      setChildInsight(insight);
+                    }}
+                    className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-50"
+                  >
+                    🌱 Create Child Hypothesis
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      sendingInsightId === insight.id ||
+                      queuedInsightIds.includes(insight.id)
+                    }
+                    onClick={() => void handleSendInsightToInquiry(insight)}
+                    className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-200 transition hover:bg-sky-500/20 disabled:opacity-50"
+                  >
+                    {queuedInsightIds.includes(insight.id)
+                      ? "✓ Sent to Inquiry Queue"
+                      : sendingInsightId === insight.id
+                        ? "Sending..."
+                        : "📥 Send to Inquiry Queue"}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 text-sm text-gray-500">
+            No insights captured yet.
+          </p>
+        )}
+      </section>
+
+      {(isCreatingChild || childInsight) && (
         <ChildHypothesisModal
           hypothesis={hypothesis}
-          onClose={() => setIsCreatingChild(false)}
-          onCreated={onChildCreated}
+          initialStatementH1={childInsight?.content}
+          onClose={() => {
+            setIsCreatingChild(false);
+            setChildInsight(null);
+          }}
+          onCreated={() => {
+            setIsCreatingChild(false);
+            setChildInsight(null);
+            onChildCreated();
+          }}
         />
       )}
     </article>
