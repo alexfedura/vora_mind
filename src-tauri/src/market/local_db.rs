@@ -141,6 +141,13 @@ pub fn fetch_local_candles(
     let mut candles = rows
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("Could not read local candle rows: {error}"))?;
+    if candles.is_empty() {
+        return Err(format!(
+            "No data found for the requested date range ({start_ts}..{end_ts}). Check for normalized Parquet files under {} (for example, data/ticks/{}/2020/2020_normalized.parquet).",
+            symbol_dir.display(),
+            symbol.to_ascii_uppercase(),
+        ));
+    }
     candles.reverse();
     Ok(candles)
 }
@@ -239,6 +246,41 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn empty_date_range_returns_a_path_hint() {
+        let temporary = TestDirectory::new();
+        let symbol_dir = temporary.0.join("ticks").join("XAUUSD").join("2020");
+        std::fs::create_dir_all(&symbol_dir).expect("partition directory should be created");
+        let parquet_path = symbol_dir.join("2020_normalized.parquet");
+        let sql_path = parquet_path
+            .to_string_lossy()
+            .replace('\\', "/")
+            .replace('\'', "''");
+        let writer = Connection::open_in_memory().expect("writer connection should open");
+        writer
+            .execute_batch(
+                "CREATE TABLE ticks (ts BIGINT, price DOUBLE, volume DOUBLE);
+                 INSERT INTO ticks VALUES (1577836800, 10, 1);",
+            )
+            .expect("test tick should be inserted");
+        writer
+            .execute_batch(&format!("COPY ticks TO '{sql_path}' (FORMAT PARQUET);"))
+            .expect("test Parquet file should be written");
+
+        let error = fetch_local_candles(
+            temporary.0.join("ticks"),
+            "XAUUSD".to_string(),
+            1,
+            0,
+            60,
+            10,
+        )
+        .expect_err("an out-of-range request should fail clearly");
+
+        assert!(error.contains("No data found for the requested date range"));
+        assert!(error.contains("data/ticks/XAUUSD/2020/2020_normalized.parquet"));
     }
 
     #[test]
