@@ -11,7 +11,9 @@ import type {
 } from "@/types";
 import type { VoraSnapshot } from "@/lib/snapshot/types";
 import { listSnapshots } from "@/lib/snapshot/storage";
+import { renderMarkdown } from "@/features/markdown-editor/markdown/renderer";
 import { ChildHypothesisModal } from "@/shared/layout/ChildHypothesisModal";
+import { ProtocolFlowchartBuilder } from "@/shared/layout/ProtocolFlowchartBuilder";
 import { useAppStore } from "@/shared/store/useAppStore";
 
 interface HypothesisDetailProps {
@@ -166,6 +168,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   const navigate = useNavigate();
   const recordVerdict = useAppStore((state) => state.recordVerdict);
   const saveHypothesisProtocol = useAppStore((state) => state.saveHypothesisProtocol);
+  const analyzeWithAi = useAppStore((state) => state.analyzeWithAi);
   const recordHypothesisExecution = useAppStore((state) => state.recordHypothesisExecution);
   const saveChecklistSchema = useAppStore((state) => state.saveChecklistSchema);
   const loadDataEntries = useAppStore((state) => state.loadDataEntries);
@@ -216,8 +219,15 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   );
   const [evidenceNotes, setEvidenceNotes] = useState(hypothesis.evidenceNotes ?? "");
   const [protocolSteps, setProtocolSteps] = useState(hypothesis.protocolSteps ?? "");
+  const [protocolMode, setProtocolMode] = useState<"text" | "flowchart">(
+    hypothesis.protocolType ?? "text",
+  );
   const [rawData, setRawData] = useState(hypothesis.rawData ?? "");
   const [dataAnalysis, setDataAnalysis] = useState(hypothesis.dataAnalysis ?? "");
+  const [aiAnalysisPrompt, setAiAnalysisPrompt] = useState<string | null>(null);
+  const [isAnalyzingWithAi, setIsAnalyzingWithAi] = useState(false);
+  const [aiAnalysisError, setAiAnalysisError] = useState<string | null>(null);
+  const [aiPromptCopied, setAiPromptCopied] = useState(false);
   const [boundaryConditions, setBoundaryConditions] = useState(
     hypothesis.boundaryConditions ?? "",
   );
@@ -250,6 +260,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   useEffect(() => {
     setEvidenceNotes(hypothesis.evidenceNotes ?? "");
     setProtocolSteps(hypothesis.protocolSteps ?? "");
+    setProtocolMode(hypothesis.protocolType ?? "text");
     setRawData(hypothesis.rawData ?? "");
     setDataAnalysis(hypothesis.dataAnalysis ?? "");
     setBoundaryConditions(hypothesis.boundaryConditions ?? "");
@@ -257,6 +268,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
     hypothesis.id,
     hypothesis.evidenceNotes,
     hypothesis.protocolSteps,
+    hypothesis.protocolType,
     hypothesis.rawData,
     hypothesis.dataAnalysis,
     hypothesis.boundaryConditions,
@@ -380,6 +392,33 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleAnalyzeWithAi = async (): Promise<void> => {
+    setIsAnalyzingWithAi(true);
+    setAiAnalysisError(null);
+    setAiPromptCopied(false);
+    try {
+      const prompt = await analyzeWithAi(hypothesis.id);
+      setAiAnalysisPrompt(prompt);
+    } catch (cause) {
+      console.error("Could not prepare hypothesis analysis prompt:", cause);
+      setAiAnalysisError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setIsAnalyzingWithAi(false);
+    }
+  };
+
+  const handleCopyAiPrompt = async (): Promise<void> => {
+    if (!aiAnalysisPrompt) return;
+    setAiAnalysisError(null);
+    try {
+      await navigator.clipboard.writeText(aiAnalysisPrompt);
+      setAiPromptCopied(true);
+    } catch (cause) {
+      console.error("Could not copy hypothesis analysis prompt:", cause);
+      setAiAnalysisError(cause instanceof Error ? cause.message : String(cause));
     }
   };
 
