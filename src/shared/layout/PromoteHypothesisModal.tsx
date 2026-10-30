@@ -1,7 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
-import type { HypothesisPromotionInput, QuestionItem } from "@/types";
+import type {
+  HypothesisPromotionInput,
+  LinkedDefinition,
+  QuestionItem,
+} from "@/types";
 
 interface PromoteHypothesisModalProps {
   inquiry: QuestionItem;
@@ -35,16 +39,45 @@ export const PromoteHypothesisModal: React.FC<PromoteHypothesisModalProps> = ({
   onPromoted,
 }) => {
   const promoteToHypothesis = useAppStore((state) => state.promoteToHypothesis);
+  const definitions = useAppStore((state) => state.libraryDefinitionsForSelection);
+  const loadDefinitions = useAppStore((state) => state.loadLibraryDefinitionsForSelection);
   const [fields, setFields] = useState<PromotionFields>(initialFields);
+  const [selectedDefinitions, setSelectedDefinitions] = useState<LinkedDefinition[]>([]);
+  const [isLoadingDefinitions, setIsLoadingDefinitions] = useState(true);
+  const [definitionsError, setDefinitionsError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    void loadDefinitions()
+      .then(() => {
+        if (isMounted) setDefinitionsError(null);
+      })
+      .catch((cause: unknown) => {
+        console.error("Could not load Library definitions:", cause);
+        if (isMounted) {
+          setDefinitionsError(cause instanceof Error ? cause.message : String(cause));
+        }
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingDefinitions(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [loadDefinitions]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     setIsSaving(true);
     setError(null);
     try {
-      await promoteToHypothesis({ inquiryId: inquiry.id, ...fields });
+      await promoteToHypothesis({
+        inquiryId: inquiry.id,
+        ...fields,
+        linkedDefinitions: selectedDefinitions,
+      });
       onPromoted();
     } catch (cause) {
       console.error("Could not promote inquiry to hypothesis:", cause);
@@ -108,6 +141,58 @@ export const PromoteHypothesisModal: React.FC<PromoteHypothesisModalProps> = ({
               />
             </label>
           ))}
+          <section dir="auto" className="border-t border-[#292c34] pt-4">
+            <h3 className="text-sm font-semibold text-white">
+              Linked Definitions (Optional)
+            </h3>
+            <label dir="auto" className="mt-3 block">
+              <span className="mb-1.5 block text-xs font-medium text-gray-400">
+                Select Library definitions and versions
+              </span>
+              <select
+                dir="auto"
+                multiple
+                size={Math.min(Math.max(definitions.length, 3), 6)}
+                value={selectedDefinitions.map((definition) => definition.libraryVersionId)}
+                onChange={(event) => {
+                  const selectedVersionIds = new Set(
+                    Array.from(event.currentTarget.selectedOptions, (option) => option.value),
+                  );
+                  setSelectedDefinitions(
+                    definitions
+                      .filter((definition) => selectedVersionIds.has(definition.versionId))
+                      .map((definition) => ({
+                        libraryGroupId: definition.groupId,
+                        libraryVersionId: definition.versionId,
+                        definitionName: definition.name,
+                        versionString: definition.versionString,
+                      })),
+                  );
+                }}
+                disabled={isSaving || isLoadingDefinitions || definitions.length === 0}
+                className="w-full rounded-xl border border-[#343741] bg-[#101114] px-3 py-2.5 text-sm text-gray-200 outline-none transition focus:border-[#e8ad55]/70 disabled:opacity-60"
+              >
+                {definitions.map((definition) => (
+                  <option key={definition.versionId} value={definition.versionId} dir="auto">
+                    {definition.name} (v{definition.versionString})
+                  </option>
+                ))}
+              </select>
+            </label>
+            {isLoadingDefinitions && (
+              <p className="mt-2 text-xs text-gray-500">Loading Library definitions...</p>
+            )}
+            {!isLoadingDefinitions && !definitionsError && definitions.length === 0 && (
+              <p dir="auto" className="mt-2 text-xs text-gray-500">
+                No Library definitions are available.
+              </p>
+            )}
+            {definitionsError && (
+              <p role="alert" className="mt-2 text-sm text-rose-300">
+                Could not load Library definitions: {definitionsError}
+              </p>
+            )}
+          </section>
           {error && (
             <p role="alert" className="text-sm text-rose-300">
               {error}
