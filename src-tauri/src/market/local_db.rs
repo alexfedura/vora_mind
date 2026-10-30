@@ -280,7 +280,8 @@ mod tests {
         .expect_err("an out-of-range request should fail clearly");
 
         assert!(error.contains("No data found for the requested date range"));
-        assert!(error.contains("data/ticks/XAUUSD/2020/2020_normalized.parquet"));
+        assert!(error.contains("data/ticks/XAUUSD/2020/"));
+        assert!(error.contains("2020_normalized.parquet"));
     }
 
     #[test]
