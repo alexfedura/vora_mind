@@ -714,12 +714,17 @@ fn validate_checklist_schema(schema_json: &str) -> std::result::Result<serde_jso
 
     let mut labels = HashSet::new();
     for field in fields {
-        let label = field
+        let raw_label = field
             .get("label")
             .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|label| !label.is_empty())
+            .filter(|label| !label.trim().is_empty())
             .ok_or_else(|| "Each checklist field needs a non-empty label.".to_string())?;
+        let label = raw_label.trim();
+        if raw_label != label {
+            return Err(format!(
+                "Checklist field labels cannot start or end with whitespace: {label}"
+            ));
+        }
         if !labels.insert(label.to_string()) {
             return Err(format!("Checklist field labels must be unique: {label}"));
         }
@@ -741,14 +746,19 @@ fn validate_checklist_schema(schema_json: &str) -> std::result::Result<serde_jso
                     format!("Select checklist field '{label}' needs at least one option.")
                 })?;
             let mut unique_options = HashSet::new();
-            for option in options {
-                let option = option
+            for raw_option in options {
+                let raw_option = raw_option
                     .as_str()
-                    .map(str::trim)
-                    .filter(|option| !option.is_empty())
+                    .filter(|option| !option.trim().is_empty())
                     .ok_or_else(|| {
                         format!("Select checklist field '{label}' has an empty option.")
                     })?;
+                let option = raw_option.trim();
+                if raw_option != option {
+                    return Err(format!(
+                        "Options for checklist field '{label}' cannot start or end with whitespace."
+                    ));
+                }
                 if !unique_options.insert(option.to_string()) {
                     return Err(format!(
                         "Select checklist field '{label}' has a duplicate option: {option}"
@@ -816,15 +826,22 @@ fn save_checklist_schema_in_db(
     now: i64,
 ) -> std::result::Result<Hypothesis, String> {
     validate_checklist_schema(schema_json)?;
-    let exists: bool = conn
+    let protocol_state: Option<(Option<i64>, Option<i64>)> = conn
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM hypotheses WHERE id = ?1)",
+            "SELECT protocol_locked_at, executed_at FROM hypotheses WHERE id = ?1",
             [hypothesis_id],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
+        .optional()
         .map_err(|error| error.to_string())?;
-    if !exists {
+    let Some((protocol_locked_at, executed_at)) = protocol_state else {
         return Err(format!("Hypothesis not found: {hypothesis_id}"));
+    };
+    if protocol_locked_at.is_none() {
+        return Err("Lock the test protocol before defining a checklist.".to_string());
+    }
+    if executed_at.is_some() {
+        return Err("Checklist schema cannot be changed after test execution.".to_string());
     }
     let entry_count: i64 = conn
         .query_row(
