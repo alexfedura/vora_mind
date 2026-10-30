@@ -398,6 +398,112 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
     }
   };
 
+  const handleSaveChecklistSchema = async (): Promise<void> => {
+    const labels = new Set<string>();
+    const fields: ChecklistField[] = [];
+    for (const draft of checklistDraftFields) {
+      const label = draft.label.trim();
+      if (!label) {
+        setDataCollectionError("Give every checklist field a label.");
+        return;
+      }
+      if (labels.has(label)) {
+        setDataCollectionError(`Checklist field labels must be unique: ${label}`);
+        return;
+      }
+      labels.add(label);
+      const options = draft.type === "select"
+        ? draft.optionsText.split(",").map((option) => option.trim()).filter(Boolean)
+        : [];
+      if (draft.type === "select" && options.length === 0) {
+        setDataCollectionError(`Add at least one option for "${label}".`);
+        return;
+      }
+      fields.push({ label, type: draft.type, options });
+    }
+    if (fields.length === 0) {
+      setDataCollectionError("Add at least one checklist field.");
+      return;
+    }
+
+    setIsSavingChecklistSchema(true);
+    setDataCollectionError(null);
+    try {
+      const updated = await saveChecklistSchema(hypothesis.id, fields);
+      onUpdated(updated);
+      setChecklistValues({});
+      setShowChecklistAnalysis(false);
+      setIsChecklistBuilderOpen(false);
+    } catch (cause) {
+      console.error("Could not save hypothesis checklist schema:", cause);
+      setDataCollectionError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setIsSavingChecklistSchema(false);
+    }
+  };
+
+  const handleAddDataEntry = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    const fields = checklistSchema.fields;
+    if (!fields) return;
+    const values: Record<string, string | number | boolean> = {};
+    for (const field of fields) {
+      const value = checklistValues[field.label];
+      if (field.type === "boolean") {
+        if (typeof value !== "boolean") {
+          setDataCollectionError(`Choose a value for "${field.label}".`);
+          return;
+        }
+        values[field.label] = value;
+      } else if (field.type === "number") {
+        if (typeof value !== "string" || value.trim() === "" || !Number.isFinite(Number(value))) {
+          setDataCollectionError(`Enter a valid number for "${field.label}".`);
+          return;
+        }
+        values[field.label] = Number(value);
+      } else {
+        if (typeof value !== "string") {
+          setDataCollectionError(`Enter a value for "${field.label}".`);
+          return;
+        }
+        if (field.type === "select" && !field.options?.includes(value)) {
+          setDataCollectionError(`Choose an option for "${field.label}".`);
+          return;
+        }
+        values[field.label] = value;
+      }
+    }
+
+    setIsSavingDataEntry(true);
+    setDataCollectionError(null);
+    try {
+      await addDataEntry(hypothesis.id, JSON.stringify(values));
+      setChecklistValues({});
+      setShowChecklistAnalysis(false);
+      window.requestAnimationFrame(() => {
+        dataEntryFormRef.current?.querySelector<HTMLElement>("input, select, textarea")?.focus();
+      });
+    } catch (cause) {
+      console.error("Could not save hypothesis checklist entry:", cause);
+      setDataCollectionError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setIsSavingDataEntry(false);
+    }
+  };
+
+  const handleDeleteDataEntry = async (id: string): Promise<void> => {
+    setDeletingDataEntryId(id);
+    setDataCollectionError(null);
+    try {
+      await deleteDataEntry(hypothesis.id, id);
+    } catch (cause) {
+      console.error("Could not delete hypothesis data entry:", cause);
+      setDataCollectionError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setDeletingDataEntryId(null);
+    }
+  };
+
   const handleGraduate = async (): Promise<void> => {
     setIsSaving(true);
     setError(null);
