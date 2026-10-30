@@ -18,6 +18,11 @@ existing databases. `verdict` is null until recorded, then must be one of
 status/update time.
 Add nullable `promoted_to_library_id` and `parent_hypothesis_id` columns
 idempotently to track Library graduation and hypothesis iterations.
+Create a `hypothesis_definitions` junction table that records each linked
+Library group and exact version ID, definition name, and version string for a
+hypothesis. Fetch these links with each hypothesis and store them in the same
+transaction as hypothesis promotion or child creation. Older callers may omit
+the list, which is treated as empty.
 
 Initialize this schema immediately after the existing questions schema when
 initializing a workspace database.
@@ -28,7 +33,9 @@ The `promote_to_hypothesis` IPC command runs a single SQLite transaction. It
 requires the inquiry to exist, have `triaged` status, and be selected for
 promotion. It inserts a draft hypothesis, marks the inquiry `promoted`, stores
 the hypothesis ID on the inquiry, clears its promotion selection, and updates
-its timestamp. Any failed validation or write rolls back all changes.
+its timestamp. Optional linked Library definitions preserve the exact selected
+group and version; any failed validation or write rolls back all changes.
+Available selections include Library definitions and their available versions.
 
 `get_hypotheses` returns all hypotheses in descending creation-time order.
 Both commands use the existing workspace database state and expose
@@ -56,7 +63,9 @@ appended version; otherwise graduation creates a new group.
 A rejected hypothesis can create a draft child hypothesis. The child inherits
 the source inquiry, stores the parent hypothesis ID, and starts with its
 parent's H1/H0, variables, metric, and success threshold so those values can be
-iterated.
+iterated. It also inherits the parent's exact linked definition versions so
+the changed hypothesis variable is not confounded by a changed definition.
+Hypothesis detail shows linked definitions with their recorded version.
 
 ## Verification
 
