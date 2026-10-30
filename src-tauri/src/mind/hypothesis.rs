@@ -1626,7 +1626,9 @@ mod tests {
         init_schema, link_snapshot_to_hypothesis_in_db, list_data_entries, list_hypotheses,
         list_hypothesis_insights, list_hypothesis_snapshots, promote_inquiry,
         record_hypothesis_execution_in_db, record_verdict_in_db, save_checklist_schema_in_db,
-        save_hypothesis_protocol_in_db, unlink_snapshot_from_hypothesis_in_db, LinkedDefinition,
+        save_hypothesis_protocol_in_db, save_protocol_flowchart_in_db,
+        update_protocol_completion_in_db, build_hypothesis_analysis_prompt,
+        unlink_snapshot_from_hypothesis_in_db, LinkedDefinition,
     };
     use crate::mind::questions::{
         create_question, init_schema as init_questions_schema, select_for_promotion,
@@ -2102,6 +2104,122 @@ mod tests {
             "hypothesis-1",
             "Changed protocol",
             40,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn flowchart_protocol_completion_and_analysis_prompt_are_managed() {
+        let mut connection = setup();
+        select_inquiry(&mut connection, "inquiry-1");
+        promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+        let graph_json = serde_json::json!({
+            "nodes": [
+                {
+                    "id": "start",
+                    "type": "protocol",
+                    "position": { "x": 0, "y": 0 },
+                    "data": { "label": "Start test", "kind": "start-end" }
+                },
+                {
+                    "id": "observe",
+                    "type": "protocol",
+                    "position": { "x": 0, "y": 100 },
+                    "data": { "label": "Record observation", "kind": "step" }
+                }
+            ],
+            "edges": [{ "id": "edge-1", "source": "start", "target": "observe" }]
+        })
+        .to_string();
+
+        assert!(save_protocol_flowchart_in_db(
+            &mut connection,
+            "hypothesis-1",
+            r#"{"nodes":[],"edges":[]}"#,
+            15
+        )
+        .is_err());
+        assert!(save_protocol_flowchart_in_db(
+            &mut connection,
+            "hypothesis-1",
+            r#"{"nodes":[{"id":"one","data":{"label":"Start","kind":"start-end"}}],"edges":[{"id":"bad","source":"one","target":"missing"}]}"#,
+            15
+        )
+        .is_err());
+
+        let saved = save_protocol_flowchart_in_db(
+            &mut connection,
+            "hypothesis-1",
+            &graph_json,
+            20,
+        )
+        .expect("save flowchart protocol");
+        assert_eq!(saved.protocol_type, "flowchart");
+        assert_eq!(saved.protocol_flowchart_json.as_deref(), Some(graph_json.as_str()));
+        assert_eq!(saved.protocol_completed_steps.as_deref(), Some("[]"));
+        assert_eq!(saved.protocol_locked_at, Some(20));
+
+        let completed = update_protocol_completion_in_db(
+            &connection,
+            "hypothesis-1",
+            r#"["start"]"#,
+            25,
+        )
+        .expect("update protocol progress");
+        assert_eq!(completed.protocol_completed_steps.as_deref(), Some(r#"["start"]"#));
+        assert!(update_protocol_completion_in_db(
+            &connection,
+            "hypothesis-1",
+            r#"["not-a-node"]"#,
+            26
+        )
+        .is_err());
+        assert!(update_protocol_completion_in_db(
+            &connection,
+            "hypothesis-1",
+            r#"["start","start"]"#,
+            27
+        )
+        .is_err());
+
+        let checklist_schema = r#"[{"label":"Trend","type":"select","options":["Bullish","Bearish"]}]"#;
+        save_checklist_schema_in_db(&connection, "hypothesis-1", checklist_schema, 28)
+            .expect("save checklist schema");
+        add_data_entry_in_db(
+            &connection,
+            "entry-1",
+            "hypothesis-1",
+            r#"{"Trend":"Bullish"}"#,
+            29,
+        )
+        .expect("add data entry");
+        let prompt = build_hypothesis_analysis_prompt(&connection, "hypothesis-1")
+            .expect("build analysis prompt");
+        assert!(prompt.contains("If X then Y"));
+        assert!(prompt.contains("X does not affect Y"));
+        assert!(prompt.contains("Record observation"));
+        assert!(prompt.contains("Bullish"));
+        assert!(prompt.contains("1 total"));
+
+        record_hypothesis_execution_in_db(
+            &mut connection,
+            "hypothesis-1",
+            "Raw test data",
+            30,
+        )
+        .expect("record flowchart protocol execution");
+        assert!(save_protocol_flowchart_in_db(
+            &mut connection,
+            "hypothesis-1",
+            &graph_json,
+            31
+        )
+        .is_ok());
+        assert!(save_protocol_flowchart_in_db(
+            &mut connection,
+            "hypothesis-1",
+            r#"{"nodes":[{"id":"changed","data":{"label":"Changed","kind":"step"}}],"edges":[]}"#,
+            32
         )
         .is_err());
     }
