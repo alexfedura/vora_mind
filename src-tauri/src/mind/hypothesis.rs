@@ -1316,7 +1316,9 @@ fn update_protocol_completion_in_db(
             .filter(|step_id| !step_id.trim().is_empty())
             .ok_or_else(|| "Completed step IDs must be non-empty strings.".to_string())?;
         if !node_ids.contains(step_id) {
-            return Err(format!("Completed step '{step_id}' is not in the saved protocol."));
+            return Err(format!(
+                "Completed step '{step_id}' is not in the saved protocol."
+            ));
         }
         if !unique_steps.insert(step_id) {
             return Err(format!("Completed steps contain duplicate ID: {step_id}"));
@@ -1621,14 +1623,13 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
 #[cfg(test)]
 mod tests {
     use super::{
-        add_data_entry_in_db, add_hypothesis_insight_in_db, create_child_hypothesis_in_db,
-        delete_data_entry_in_db, delete_hypothesis_insight_in_db, graduate_to_library_in_db,
-        init_schema, link_snapshot_to_hypothesis_in_db, list_data_entries, list_hypotheses,
-        list_hypothesis_insights, list_hypothesis_snapshots, promote_inquiry,
-        record_hypothesis_execution_in_db, record_verdict_in_db, save_checklist_schema_in_db,
-        save_hypothesis_protocol_in_db, save_protocol_flowchart_in_db,
-        update_protocol_completion_in_db, build_hypothesis_analysis_prompt,
-        unlink_snapshot_from_hypothesis_in_db, LinkedDefinition,
+        add_data_entry_in_db, add_hypothesis_insight_in_db, build_hypothesis_analysis_prompt,
+        create_child_hypothesis_in_db, delete_data_entry_in_db, delete_hypothesis_insight_in_db,
+        graduate_to_library_in_db, init_schema, link_snapshot_to_hypothesis_in_db,
+        list_data_entries, list_hypotheses, list_hypothesis_insights, list_hypothesis_snapshots,
+        promote_inquiry, record_hypothesis_execution_in_db, record_verdict_in_db,
+        save_checklist_schema_in_db, save_hypothesis_protocol_in_db, save_protocol_flowchart_in_db,
+        unlink_snapshot_from_hypothesis_in_db, update_protocol_completion_in_db, LinkedDefinition,
     };
     use crate::mind::questions::{
         create_question, init_schema as init_questions_schema, select_for_promotion,
@@ -2147,26 +2148,23 @@ mod tests {
         )
         .is_err());
 
-        let saved = save_protocol_flowchart_in_db(
-            &mut connection,
-            "hypothesis-1",
-            &graph_json,
-            20,
-        )
-        .expect("save flowchart protocol");
+        let saved = save_protocol_flowchart_in_db(&mut connection, "hypothesis-1", &graph_json, 20)
+            .expect("save flowchart protocol");
         assert_eq!(saved.protocol_type, "flowchart");
-        assert_eq!(saved.protocol_flowchart_json.as_deref(), Some(graph_json.as_str()));
+        assert_eq!(
+            saved.protocol_flowchart_json.as_deref(),
+            Some(graph_json.as_str())
+        );
         assert_eq!(saved.protocol_completed_steps.as_deref(), Some("[]"));
         assert_eq!(saved.protocol_locked_at, Some(20));
 
-        let completed = update_protocol_completion_in_db(
-            &connection,
-            "hypothesis-1",
-            r#"["start"]"#,
-            25,
-        )
-        .expect("update protocol progress");
-        assert_eq!(completed.protocol_completed_steps.as_deref(), Some(r#"["start"]"#));
+        let completed =
+            update_protocol_completion_in_db(&connection, "hypothesis-1", r#"["start"]"#, 25)
+                .expect("update protocol progress");
+        assert_eq!(
+            completed.protocol_completed_steps.as_deref(),
+            Some(r#"["start"]"#)
+        );
         assert!(update_protocol_completion_in_db(
             &connection,
             "hypothesis-1",
@@ -2182,7 +2180,8 @@ mod tests {
         )
         .is_err());
 
-        let checklist_schema = r#"[{"label":"Trend","type":"select","options":["Bullish","Bearish"]}]"#;
+        let checklist_schema =
+            r#"[{"label":"Trend","type":"select","options":["Bullish","Bearish"]}]"#;
         save_checklist_schema_in_db(&connection, "hypothesis-1", checklist_schema, 28)
             .expect("save checklist schema");
         add_data_entry_in_db(
@@ -2201,20 +2200,11 @@ mod tests {
         assert!(prompt.contains("Bullish"));
         assert!(prompt.contains("1 total"));
 
-        record_hypothesis_execution_in_db(
-            &mut connection,
-            "hypothesis-1",
-            "Raw test data",
-            30,
-        )
-        .expect("record flowchart protocol execution");
-        assert!(save_protocol_flowchart_in_db(
-            &mut connection,
-            "hypothesis-1",
-            &graph_json,
-            31
-        )
-        .is_ok());
+        record_hypothesis_execution_in_db(&mut connection, "hypothesis-1", "Raw test data", 30)
+            .expect("record flowchart protocol execution");
+        assert!(
+            save_protocol_flowchart_in_db(&mut connection, "hypothesis-1", &graph_json, 31).is_ok()
+        );
         assert!(save_protocol_flowchart_in_db(
             &mut connection,
             "hypothesis-1",

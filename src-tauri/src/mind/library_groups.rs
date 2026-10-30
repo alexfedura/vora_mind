@@ -486,8 +486,8 @@ fn now_millis() -> Result<i64> {
 #[cfg(test)]
 mod tests {
     use super::{
-        commit_item_group_version, create_item_group, list_item_group_usages,
-        list_definitions_for_selection, list_item_group_versions, list_item_groups,
+        commit_item_group_version, create_item_group, list_definitions_for_selection,
+        list_item_group_usages, list_item_group_versions, list_item_groups,
         move_item_group_to_trash, restore_item_group,
     };
     use crate::mind::canvas_db::{
