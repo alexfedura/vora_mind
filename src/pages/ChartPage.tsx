@@ -58,6 +58,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Camera,
+  CalendarClock,
   House,
   Menu,
   BookOpen,
@@ -122,6 +123,10 @@ export const ENABLE_SCALE_RECALC = false;
 const TF_SECONDS_TS = [1, 5, 25, 125, 625, 3125, 15625, 78125, 390625, 1953125, 9765625];
 const OFFLINE_REFERENCE_PRICE_PREFIX = "vora.chart.offline-reference.";
 const LOCAL_PROXY_DEFAULT_MIGRATION_KEY = "vora.policy.local_proxy_default_v1";
+const QUICK_JUMP_2020_RANGE = {
+  startTs: Date.UTC(2020, 0, 1) / 1000,
+  endTs: Date.UTC(2021, 0, 1) / 1000,
+};
 
 function readOfflineReferencePrice(symbol: string): number | undefined {
   try {
@@ -431,6 +436,7 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
   const debouncedM = useDebounced(currentM, 300);
   const debouncedInterval = useDebounced(activeInterval, 300);
   const [candles, setCandles] = useState<CandleDto[]>([]);
+  const [requestedDateRange, setRequestedDateRange] = useState<{ startTs: number; endTs: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [isFetchingOlder, setIsFetchingOlder] = useState(false);
   const isFetchingOlderRef = useRef(false);
@@ -1952,7 +1958,12 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
   // v0.83.5: capture the viewport BEFORE setCandles and apply it AFTER so
   // the timeframe switch preserves X+Y zoom (no per-timeframe default zoom,
   // no jump to the last candle).
-  const fetchCandles = useCallback(async (interval: string, myId: number, anchorTsSec?: number) => {
+  const fetchCandles = useCallback(async (
+    interval: string,
+    myId: number,
+    anchorTsSec?: number,
+    dateRange?: { startTs: number; endTs: number } | null,
+  ) => {
     // v0.83.7 Part E — manual-gesture unsubscriber (outer scope so both
     // the success and error paths can clean up).
     let unsubManual: (() => void) | null = null;
@@ -1987,7 +1998,7 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
       if (myId === reqIdRef.current) setLoading(false);
     }, 20_000);
     try {
-      // Fetch the latest local candles, or end just after the restore anchor.
+      // Fetch the requested date range, latest candles, or a window around the restore anchor.
       const LIMIT = 5000;
       const intervalMinutes = chartIntervalMinutes(interval);
       if (intervalMinutes === null) {
@@ -2001,8 +2012,8 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
       const res = await mktFetchLocalCandles({
         symbol,
         intervalMinutes,
-        startTs: endTimestamp - LIMIT * intervalSeconds,
-        endTs: endTimestamp,
+        startTs: dateRange?.startTs ?? endTimestamp - LIMIT * intervalSeconds,
+        endTs: dateRange?.endTs ?? endTimestamp,
         limit: LIMIT,
       });
       const lastCandle = res[res.length - 1];
@@ -2139,10 +2150,11 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
     }
   }, [symbol]);
 
+  const requestInterval = requestedDateRange ? activeInterval : debouncedInterval;
   useEffect(() => {
     const pendingSnapshotFetch = snapshotFetchSuppressionRef.current;
     if (pendingSnapshotFetch && pendingSnapshotFetch.symbol === symbol) {
-      if (pendingSnapshotFetch.interval === debouncedInterval) {
+      if (pendingSnapshotFetch.interval === requestInterval) {
         snapshotFetchSuppressionRef.current = null;
       }
       return;
@@ -2162,12 +2174,12 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
         : undefined;
     void (async () => {
       if (cancelled) return;
-      await fetchCandles(debouncedInterval, myId, anchorTsSec);
+      await fetchCandles(requestInterval, myId, anchorTsSec, requestedDateRange);
     })();
     return () => {
       cancelled = true;
     };
-  }, [debouncedInterval, fetchCandles]);
+  }, [fetchCandles, requestInterval, requestedDateRange]);
 
   // v0.83.2 — restore on mount when ?snapshot=<id>.
   useEffect(() => {
@@ -3703,6 +3715,23 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
           <SymbolSelector />
 
           <ChartIntervalSelector value={activeInterval} onChange={selectInterval} />
+          <button
+            type="button"
+            onClick={() => {
+              if (requestedDateRange) {
+                setRequestedDateRange(null);
+                return;
+              }
+              selectInterval("1d", false);
+              setSymbol("XAUUSD");
+              setRequestedDateRange(QUICK_JUMP_2020_RANGE);
+            }}
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-[#383838] bg-[#1a1a1a] px-2.5 text-[11px] font-medium text-[#d1d4dc] transition-colors hover:border-[#ff9800] hover:text-[#ffb74d]"
+            title={requestedDateRange ? "Return to the latest local data" : "Load XAUUSD candles from January through December 2020"}
+          >
+            <CalendarClock size={13} />
+            {requestedDateRange ? "Return to Latest" : "Quick Jump to 2020"}
+          </button>
 
           {/* v7.4.0: Rect + Measure moved to floating toolbar */}
           {/* v7.4.3: single display-mode toggle (icon-only, 2s tooltip) */}
