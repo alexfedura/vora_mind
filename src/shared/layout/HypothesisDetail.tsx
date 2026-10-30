@@ -695,33 +695,71 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
           )}
         </div>
 
-        <label dir="auto" className="mt-5 block">
-          <span className="mb-2 block text-xs font-medium text-gray-400">Protocol Steps</span>
-          <textarea
-            dir="auto"
-            value={protocolSteps}
-            onChange={(event) => setProtocolSteps(event.target.value)}
-            rows={5}
-            readOnly={isProtocolLocked}
-            disabled={isSaving}
-            placeholder="Write the exact procedure before collecting data..."
-            className="w-full resize-y rounded-xl border border-[#343741] bg-[#101114] px-4 py-3 text-sm text-gray-200 outline-none transition focus:border-[#e8ad55]/70 read-only:text-gray-400 disabled:opacity-60"
-          />
-        </label>
-        {isProtocolLocked ? (
-          <p className="mt-2 text-xs text-emerald-300">
-            🔒 Protocol locked on {formatTraceTimestamp(hypothesis.protocolLockedAt)}.
-            It cannot be changed.
-          </p>
+        {!isProtocolLocked && (
+          <div dir="auto" className="mt-5 flex flex-wrap items-center gap-2">
+            <span className="mr-2 text-xs font-medium text-gray-400">Protocol format</span>
+            <button
+              type="button"
+              dir="auto"
+              aria-pressed={protocolMode === "text"}
+              onClick={() => setProtocolMode("text")}
+              className={`rounded-lg border px-3 py-2 text-sm transition ${
+                protocolMode === "text"
+                  ? "border-amber-400/50 bg-amber-500/10 text-amber-200"
+                  : "border-[#343741] text-gray-400 hover:bg-[#24262d]"
+              }`}
+            >
+              Markdown
+            </button>
+            <button
+              type="button"
+              dir="auto"
+              aria-pressed={protocolMode === "flowchart"}
+              onClick={() => setProtocolMode("flowchart")}
+              className={`rounded-lg border px-3 py-2 text-sm transition ${
+                protocolMode === "flowchart"
+                  ? "border-amber-400/50 bg-amber-500/10 text-amber-200"
+                  : "border-[#343741] text-gray-400 hover:bg-[#24262d]"
+              }`}
+            >
+              Flowchart
+            </button>
+          </div>
+        )}
+        {protocolMode === "flowchart" ? (
+          <ProtocolFlowchartBuilder hypothesis={hypothesis} onUpdated={onUpdated} />
         ) : (
-          <button
-            type="button"
-            disabled={isSaving || protocolSteps.trim().length === 0}
-            onClick={() => void handleSaveProtocol()}
-            className="mt-3 rounded-lg border border-amber-300/50 bg-amber-500 px-4 py-2.5 text-sm font-semibold text-gray-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSaving ? "Saving..." : "💾 Save & Lock Protocol"}
-          </button>
+          <>
+            <label dir="auto" className="mt-5 block">
+              <span className="mb-2 block text-xs font-medium text-gray-400">Protocol Steps</span>
+              <textarea
+                dir="auto"
+                value={protocolSteps}
+                onChange={(event) => setProtocolSteps(event.target.value)}
+                rows={5}
+                readOnly={isProtocolLocked}
+                disabled={isSaving}
+                placeholder="Write the exact procedure before collecting data..."
+                className="w-full resize-y rounded-xl border border-[#343741] bg-[#101114] px-4 py-3 text-sm text-gray-200 outline-none transition focus:border-[#e8ad55]/70 read-only:text-gray-400 disabled:opacity-60"
+              />
+            </label>
+            {isProtocolLocked ? (
+              <p dir="auto" className="mt-2 text-xs text-emerald-300">
+                🔒 Protocol locked on {formatTraceTimestamp(hypothesis.protocolLockedAt)}.
+                It cannot be changed.
+              </p>
+            ) : (
+              <button
+                type="button"
+                dir="auto"
+                disabled={isSaving || protocolSteps.trim().length === 0}
+                onClick={() => void handleSaveProtocol()}
+                className="mt-3 rounded-lg border border-amber-300/50 bg-amber-500 px-4 py-2.5 text-sm font-semibold text-gray-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSaving ? "Saving..." : "💾 Save & Lock Protocol"}
+              </button>
+            )}
+          </>
         )}
         {hypothesis.verdict && !isExecuted && (
           <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
