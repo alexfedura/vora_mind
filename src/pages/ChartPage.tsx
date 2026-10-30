@@ -123,7 +123,11 @@ export const ENABLE_SCALE_RECALC = false;
 const TF_SECONDS_TS = [1, 5, 25, 125, 625, 3125, 15625, 78125, 390625, 1953125, 9765625];
 const OFFLINE_REFERENCE_PRICE_PREFIX = "vora.chart.offline-reference.";
 const LOCAL_PROXY_DEFAULT_MIGRATION_KEY = "vora.policy.local_proxy_default_v1";
+type ChartDateRequest =
+  | { kind: "range"; startTs: number; endTs: number }
+  | { kind: "latest" };
 const QUICK_JUMP_2020_RANGE = {
+  kind: "range" as const,
   startTs: Date.UTC(2020, 0, 1) / 1000,
   endTs: Date.UTC(2021, 0, 1) / 1000,
 };
@@ -436,7 +440,7 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
   const debouncedM = useDebounced(currentM, 300);
   const debouncedInterval = useDebounced(activeInterval, 300);
   const [candles, setCandles] = useState<CandleDto[]>([]);
-  const [requestedDateRange, setRequestedDateRange] = useState<{ startTs: number; endTs: number } | null>(null);
+  const [requestedDateRange, setRequestedDateRange] = useState<ChartDateRequest | null>(null);
   const [loading, setLoading] = useState(false);
   const [isFetchingOlder, setIsFetchingOlder] = useState(false);
   const isFetchingOlderRef = useRef(false);
@@ -1962,7 +1966,7 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
     interval: string,
     myId: number,
     anchorTsSec?: number,
-    dateRange?: { startTs: number; endTs: number } | null,
+    dateRequest?: ChartDateRequest | null,
   ) => {
     // v0.83.7 Part E — manual-gesture unsubscriber (outer scope so both
     // the success and error paths can clean up).
@@ -1985,12 +1989,16 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
     const replayAnchorXRatio = replayAnchorCoordinate !== null && plotWidth > 0
       ? Math.max(0, Math.min(1, replayAnchorCoordinate / plotWidth))
       : undefined;
-    const captured = chartBeforeFetch
+    const captured = chartBeforeFetch && !dateRequest
       ? captureTfViewport(chartBeforeFetch, replayAnchorXRatio)
       : null;
     if (captured && replayAnchorTimestamp != null) captured.anchorTs = replayAnchorTimestamp;
-    if (captured) viewportToRestoreRef.current = captured;
-    setPreserveViewport(true);
+    if (dateRequest) {
+      viewportToRestoreRef.current = null;
+    } else if (captured) {
+      viewportToRestoreRef.current = captured;
+    }
+    setPreserveViewport(!dateRequest);
     setLoading(true);
     setError(null);
     // Safety unlock — if fetch stalls > 20s, re-enable arrows
@@ -1998,7 +2006,7 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
       if (myId === reqIdRef.current) setLoading(false);
     }, 20_000);
     try {
-      // Fetch the requested date range, latest candles, or a window around the restore anchor.
+      // Fetch an explicit date range, the latest candles, or a window around the restore anchor.
       const LIMIT = 5000;
       const intervalMinutes = chartIntervalMinutes(interval);
       if (intervalMinutes === null) {
@@ -2006,14 +2014,16 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
       }
       const intervalSeconds = intervalMinutes * 60;
       const halfWindowSec = Math.floor((LIMIT / 2) * intervalSeconds);
-      const endTimestamp = typeof anchorTsSec === "number" && anchorTsSec > 0
+      const endTimestamp = !dateRequest && typeof anchorTsSec === "number" && anchorTsSec > 0
         ? anchorTsSec + halfWindowSec
         : Math.floor(Date.now() / 1000);
       const res = await mktFetchLocalCandles({
         symbol,
         intervalMinutes,
-        startTs: dateRange?.startTs ?? endTimestamp - LIMIT * intervalSeconds,
-        endTs: dateRange?.endTs ?? endTimestamp,
+        startTs: dateRequest?.kind === "range"
+          ? dateRequest.startTs
+          : endTimestamp - LIMIT * intervalSeconds,
+        endTs: dateRequest?.kind === "range" ? dateRequest.endTs : endTimestamp,
         limit: LIMIT,
       });
       const lastCandle = res[res.length - 1];
@@ -2028,7 +2038,7 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
         }
       }
       // v0.83.9 Part C — DEV-only anchor-in-window assertion.
-      if (import.meta.env.DEV && typeof anchorTsSec === "number") {
+      if (import.meta.env.DEV && !dateRequest && typeof anchorTsSec === "number") {
         const firstTs = res[0]?.ts;
         const lastTs = res[res.length - 1]?.ts;
         if (
@@ -2174,7 +2184,12 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
         : undefined;
     void (async () => {
       if (cancelled) return;
-      await fetchCandles(requestInterval, myId, anchorTsSec, requestedDateRange);
+      await fetchCandles(
+        requestInterval,
+        myId,
+        requestedDateRange ? undefined : anchorTsSec,
+        requestedDateRange,
+      );
     })();
     return () => {
       cancelled = true;
@@ -3718,8 +3733,8 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
           <button
             type="button"
             onClick={() => {
-              if (requestedDateRange) {
-                setRequestedDateRange(null);
+              if (requestedDateRange?.kind === "range") {
+                setRequestedDateRange({ kind: "latest" });
                 return;
               }
               selectInterval("1d", false);
@@ -3727,10 +3742,10 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
               setRequestedDateRange(QUICK_JUMP_2020_RANGE);
             }}
             className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-[#383838] bg-[#1a1a1a] px-2.5 text-[11px] font-medium text-[#d1d4dc] transition-colors hover:border-[#ff9800] hover:text-[#ffb74d]"
-            title={requestedDateRange ? "Return to the latest local data" : "Load XAUUSD candles from January through December 2020"}
+            title={requestedDateRange?.kind === "range" ? "Return to the latest local data" : "Load XAUUSD candles from January through December 2020"}
           >
             <CalendarClock size={13} />
-            {requestedDateRange ? "Return to Latest" : "Quick Jump to 2020"}
+            {requestedDateRange?.kind === "range" ? "Return to Latest" : "Quick Jump to 2020"}
           </button>
 
           {/* v7.4.0: Rect + Measure moved to floating toolbar */}
