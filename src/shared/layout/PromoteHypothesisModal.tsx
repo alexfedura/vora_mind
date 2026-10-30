@@ -13,7 +13,7 @@ interface PromoteHypothesisModalProps {
   onPromoted: () => void;
 }
 
-type PromotionFields = Omit<HypothesisPromotionInput, "inquiryId">;
+type PromotionFields = Omit<HypothesisPromotionInput, "inquiryId" | "linkedDefinitions">;
 
 const initialFields: PromotionFields = {
   statementH1: "",
