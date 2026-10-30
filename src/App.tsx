@@ -19,6 +19,12 @@ import {
   History,
   Type,
   PlusSquare,
+  Shapes,
+  Diamond,
+  Circle,
+  Database,
+  FileText,
+  Waypoints,
   Minus,
   Plus,
   Sparkles,
@@ -48,6 +54,8 @@ import {
   type LibraryItemGroup,
   type TextLinkSelection,
   type VoraPathSegment,
+  type VoraDiagramShape,
+  VORA_DIAGRAM_SHAPE_LABELS,
 } from "./mind/types";
 import { VoraCardNode } from "./mind/components/canvas/VoraCardNode";
 import { VoraTextNode } from "./mind/components/canvas/VoraTextNode";
@@ -75,8 +83,8 @@ import { CommitModal } from "./shared/modals/CommitModal";
 import { FullscreenDocModal } from "./shared/modals/FullscreenDocModal";
 import { OpenPanel } from "./mind/types";
 
-type ShapeTool = "rectangle" | "path" | null;
-type ShapePreview = { shape: "rectangle" | "path"; points: { x: number; y: number }[] };
+type ShapeTool = VoraDiagramShape | null;
+type ShapePreview = { shape: VoraDiagramShape; points: { x: number; y: number }[] };
 
 interface CanvasShapePoint {
   flow: VoraShapePoint;
@@ -327,6 +335,12 @@ function loadShapeDefaults(): VoraShapeDefaults {
   const defaults: VoraShapeDefaults = {
     rectangle: { ...DEFAULT_SHAPE_SETTINGS },
     path: { ...DEFAULT_SHAPE_SETTINGS, fillOpacity: 0 },
+    process: { ...DEFAULT_SHAPE_SETTINGS },
+    decision: { ...DEFAULT_SHAPE_SETTINGS },
+    terminator: { ...DEFAULT_SHAPE_SETTINGS },
+    inputOutput: { ...DEFAULT_SHAPE_SETTINGS },
+    document: { ...DEFAULT_SHAPE_SETTINGS },
+    database: { ...DEFAULT_SHAPE_SETTINGS },
   };
   try {
     const stored = getSetting(SHAPE_DEFAULTS_KEY);
@@ -336,6 +350,12 @@ function loadShapeDefaults(): VoraShapeDefaults {
     return {
       rectangle: readShapeSettings(parsed.rectangle, defaults.rectangle),
       path: readShapeSettings(parsed.path, defaults.path),
+      process: readShapeSettings(parsed.process, defaults.process),
+      decision: readShapeSettings(parsed.decision, defaults.decision),
+      terminator: readShapeSettings(parsed.terminator, defaults.terminator),
+      inputOutput: readShapeSettings(parsed.inputOutput, defaults.inputOutput),
+      document: readShapeSettings(parsed.document, defaults.document),
+      database: readShapeSettings(parsed.database, defaults.database),
     };
   } catch (error) {
     console.error("Could not load canvas shape defaults", error);
