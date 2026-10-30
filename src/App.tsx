@@ -1933,6 +1933,71 @@ function AppContent() {
     flow.setNodes((nodes) => [...nodes.map((item) => ({ ...item, selected: false })), node]);
   };
 
+  const handleInsertFlowchartTemplate = (templateId: FlowchartTemplateId): void => {
+    if (!canvasBoardId) return;
+    const center = toCanvasFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    const template = createFlowchartTemplate(templateId, canvasBoardId, center, shapeDefaults);
+    flow.saveHistorySnapshot();
+    flow.setNodes((nodes) => [
+      ...nodes.map((node) => ({ ...node, selected: false })),
+      ...template.nodes,
+    ]);
+    flow.setEdges((edges) => [
+      ...edges.map((edge) => ({ ...edge, selected: false })),
+      ...template.edges,
+    ]);
+    setActiveShapeTool(null);
+    setIsTemplateGalleryOpen(false);
+  };
+
+  const handleExportBoard = (): void => {
+    if (!canvasBoardId) return;
+    try {
+      const boardName = boards.find((board) => board.id === canvasBoardId)?.title ?? "Vora Mind Board";
+      const transfer = createBoardTransfer(boardName, flow.nodes, flow.edges, cards);
+      const blob = new Blob([JSON.stringify(transfer, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `vora-mind-${canvasBoardId}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setBoardTransferError(null);
+    } catch (error) {
+      console.error("Could not export the active Vora Mind Board:", error);
+      setBoardTransferError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const handleImportBoardFile = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file || !canvasBoardId) return;
+    try {
+      const json: unknown = JSON.parse(await file.text());
+      const transfer = parseBoardTransfer(json);
+      const imported = remapBoardTransfer(transfer, canvasBoardId);
+      flow.saveHistorySnapshot(true);
+      flow.setNodes((nodes) => [
+        ...nodes.map((node) => ({ ...node, selected: false })),
+        ...imported.nodes,
+      ]);
+      flow.setEdges((edges) => [
+        ...edges.map((edge) => ({ ...edge, selected: false })),
+        ...imported.edges,
+      ]);
+      setCards({ ...cards, ...imported.cards });
+      setBoardTransferError(null);
+    } catch (error) {
+      console.error("Could not import Vora Mind Board file:", error);
+      setBoardTransferError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const isPanePointer = (event: React.PointerEvent<HTMLDivElement>): boolean => {
     if (!(event.target instanceof Element)) return false;
     return event.target.closest(".react-flow__pane") !== null
