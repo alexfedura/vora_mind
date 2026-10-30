@@ -13,6 +13,7 @@ import type {
 } from "@/mind/types";
 import type {
   ChildHypothesisInput,
+  DataEntry,
   Hypothesis,
   HypothesisInsight,
   HypothesisPromotionInput,
@@ -178,6 +179,22 @@ export const dbService = {
 
   async getHypotheses(): Promise<Hypothesis[]> {
     return await invoke<Hypothesis[]>("get_hypotheses");
+  },
+
+  async saveChecklistSchema(hypothesisId: string, schemaJson: string): Promise<Hypothesis> {
+    return await invoke<Hypothesis>("save_checklist_schema", { hypothesisId, schemaJson });
+  },
+
+  async addDataEntry(hypothesisId: string, dataJson: string): Promise<DataEntry> {
+    return await invoke<DataEntry>("add_data_entry", { hypothesisId, dataJson });
+  },
+
+  async getDataEntries(hypothesisId: string): Promise<DataEntry[]> {
+    return await invoke<DataEntry[]>("get_data_entries", { hypothesisId });
+  },
+
+  async deleteDataEntry(id: string): Promise<void> {
+    await invoke("delete_data_entry", { id });
   },
 
   async linkSnapshotToHypothesis(hypothesisId: string, snapshotId: string): Promise<void> {

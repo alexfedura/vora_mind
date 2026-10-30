@@ -27,6 +27,15 @@ pub struct HypothesisInsight {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct DataEntry {
+    pub id: String,
+    pub hypothesis_id: String,
+    pub data_json: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Hypothesis {
     pub id: String,
     pub inquiry_id: String,
@@ -56,13 +65,14 @@ pub struct Hypothesis {
     pub executed_at: Option<i64>,
     pub boundary_conditions: Option<String>,
     pub refined_from_id: Option<String>,
+    pub checklist_schema: Option<String>,
 }
 
 const HYPOTHESIS_COLUMNS: &str = "id, inquiry_id, statement_h1, statement_h0, \
     independent_var, dependent_var, metric, success_threshold, status, created_at, updated_at, \
     evidence_notes, verdict, evaluated_at, promoted_to_library_id, parent_hypothesis_id, \
     protocol_steps, protocol_locked_at, raw_data, data_analysis, executed_at, \
-    boundary_conditions, refined_from_id";
+    boundary_conditions, refined_from_id, checklist_schema";
 
 pub fn init_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -103,6 +113,7 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         ("executed_at", "INTEGER NULL"),
         ("boundary_conditions", "TEXT NULL"),
         ("refined_from_id", "TEXT NULL"),
+        ("checklist_schema", "TEXT NULL"),
     ] {
         if !columns.iter().any(|column| column == name) {
             conn.execute_batch(&format!(
@@ -129,6 +140,15 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             created_at INTEGER NOT NULL,
             FOREIGN KEY(hypothesis_id) REFERENCES hypotheses(id) ON DELETE CASCADE
         );
+        CREATE TABLE IF NOT EXISTS hypothesis_data_entries (
+            id TEXT PRIMARY KEY,
+            hypothesis_id TEXT NOT NULL,
+            data_json TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY(hypothesis_id) REFERENCES hypotheses(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_hypothesis_data_entries_hypothesis
+            ON hypothesis_data_entries(hypothesis_id, created_at, id);
         CREATE TABLE IF NOT EXISTS hypothesis_snapshots (
             hypothesis_id TEXT NOT NULL,
             snapshot_id TEXT NOT NULL,
@@ -677,6 +697,274 @@ pub fn get_hypotheses(state: State<AppState>) -> Result<Vec<Hypothesis>, String>
     list_hypotheses(&conn).map_err(|error| error.to_string())
 }
 
+fn validate_checklist_schema(schema_json: &str) -> std::result::Result<serde_json::Value, String> {
+    let schema: serde_json::Value = serde_json::from_str(schema_json)
+        .map_err(|error| format!("Checklist schema must be valid JSON: {error}"))?;
+    let fields = schema
+        .as_array()
+        .ok_or_else(|| "Checklist schema must be a JSON array.".to_string())?;
+    if fields.is_empty() {
+        return Err("Checklist schema must contain at least one field.".to_string());
+    }
+
+    let mut labels = HashSet::new();
+    for field in fields {
+        let label = field
+            .get("label")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|label| !label.is_empty())
+            .ok_or_else(|| "Each checklist field needs a non-empty label.".to_string())?;
+        if !labels.insert(label.to_string()) {
+            return Err(format!("Checklist field labels must be unique: {label}"));
+        }
+        let field_type = field
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| format!("Checklist field '{label}' needs a type."))?;
+        if !matches!(field_type, "select" | "number" | "text" | "boolean") {
+            return Err(format!(
+                "Unsupported checklist field type '{field_type}' for '{label}'."
+            ));
+        }
+        if field_type == "select" {
+            let options = field
+                .get("options")
+                .and_then(serde_json::Value::as_array)
+                .filter(|options| !options.is_empty())
+                .ok_or_else(|| {
+                    format!("Select checklist field '{label}' needs at least one option.")
+                })?;
+            let mut unique_options = HashSet::new();
+            for option in options {
+                let option = option
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|option| !option.is_empty())
+                    .ok_or_else(|| {
+                        format!("Select checklist field '{label}' has an empty option.")
+                    })?;
+                if !unique_options.insert(option.to_string()) {
+                    return Err(format!(
+                        "Select checklist field '{label}' has a duplicate option: {option}"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(schema)
+}
+
+fn validate_checklist_entry(
+    schema_json: &str,
+    data_json: &str,
+) -> std::result::Result<(), String> {
+    let schema = validate_checklist_schema(schema_json)?;
+    let data: serde_json::Value = serde_json::from_str(data_json)
+        .map_err(|error| format!("Checklist entry must be valid JSON: {error}"))?;
+    let values = data
+        .as_object()
+        .ok_or_else(|| "Checklist entry must be a JSON object.".to_string())?;
+    let fields = schema
+        .as_array()
+        .ok_or_else(|| "Checklist schema must be a JSON array.".to_string())?;
+    if values.len() != fields.len() {
+        return Err("Checklist entry must provide exactly one value for each field.".to_string());
+    }
+
+    for field in fields {
+        let label = field
+            .get("label")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "Checklist schema contains a field without a label.".to_string())?;
+        let value = values
+            .get(label)
+            .ok_or_else(|| format!("Checklist entry is missing the '{label}' field."))?;
+        let field_type = field
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| format!("Checklist schema field '{label}' has no type."))?;
+        let valid = match field_type {
+            "select" => value.as_str().is_some_and(|value| {
+                field
+                    .get("options")
+                    .and_then(serde_json::Value::as_array)
+                    .is_some_and(|options| options.iter().any(|option| option.as_str() == Some(value)))
+            }),
+            "number" => value.as_number().is_some(),
+            "text" => value.is_string(),
+            "boolean" => value.is_boolean(),
+            _ => false,
+        };
+        if !valid {
+            return Err(format!(
+                "Checklist entry value for '{label}' does not match type '{field_type}'."
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn save_checklist_schema_in_db(
+    conn: &Connection,
+    hypothesis_id: &str,
+    schema_json: &str,
+    now: i64,
+) -> std::result::Result<Hypothesis, String> {
+    validate_checklist_schema(schema_json)?;
+    let exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM hypotheses WHERE id = ?1)",
+            [hypothesis_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !exists {
+        return Err(format!("Hypothesis not found: {hypothesis_id}"));
+    }
+    let entry_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM hypothesis_data_entries WHERE hypothesis_id = ?1",
+            [hypothesis_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if entry_count > 0 {
+        return Err("Checklist schema cannot be changed after data entries have been collected.".to_string());
+    }
+    conn.execute(
+        "UPDATE hypotheses SET checklist_schema = ?1, updated_at = ?2 WHERE id = ?3",
+        params![schema_json, now, hypothesis_id],
+    )
+    .map_err(|error| error.to_string())?;
+    query_hypothesis(conn, hypothesis_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_checklist_schema(
+    state: State<AppState>,
+    hypothesis_id: String,
+    schema_json: String,
+) -> std::result::Result<Hypothesis, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let now = i64::try_from(now).map_err(|error| error.to_string())?;
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    save_checklist_schema_in_db(&conn, &hypothesis_id, &schema_json, now)
+}
+
+fn add_data_entry_in_db(
+    conn: &Connection,
+    id: &str,
+    hypothesis_id: &str,
+    data_json: &str,
+    created_at: i64,
+) -> std::result::Result<DataEntry, String> {
+    let schema_json: Option<String> = conn
+        .query_row(
+            "SELECT checklist_schema FROM hypotheses WHERE id = ?1",
+            [hypothesis_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?
+        .flatten();
+    let schema_json = schema_json.ok_or_else(|| {
+        format!("Hypothesis '{hypothesis_id}' does not have a checklist schema.")
+    })?;
+    validate_checklist_entry(&schema_json, data_json)?;
+    conn.execute(
+        "INSERT INTO hypothesis_data_entries (id, hypothesis_id, data_json, created_at)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![id, hypothesis_id, data_json, created_at],
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(DataEntry {
+        id: id.to_string(),
+        hypothesis_id: hypothesis_id.to_string(),
+        data_json: data_json.to_string(),
+        created_at,
+    })
+}
+
+#[tauri::command]
+pub fn add_data_entry(
+    state: State<AppState>,
+    hypothesis_id: String,
+    data_json: String,
+) -> std::result::Result<DataEntry, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let now = i64::try_from(now).map_err(|error| error.to_string())?;
+    let id = format!("hypothesis_data_{}", uuid::Uuid::now_v7());
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    add_data_entry_in_db(&conn, &id, &hypothesis_id, &data_json, now)
+}
+
+fn list_data_entries(
+    conn: &Connection,
+    hypothesis_id: &str,
+) -> std::result::Result<Vec<DataEntry>, String> {
+    let exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM hypotheses WHERE id = ?1)",
+            [hypothesis_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !exists {
+        return Err(format!("Hypothesis not found: {hypothesis_id}"));
+    }
+    let mut statement = conn
+        .prepare(
+            "SELECT id, hypothesis_id, data_json, created_at
+             FROM hypothesis_data_entries
+             WHERE hypothesis_id = ?1 ORDER BY created_at, id",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([hypothesis_id], |row| {
+            Ok(DataEntry {
+                id: row.get(0)?,
+                hypothesis_id: row.get(1)?,
+                data_json: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>>>()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn get_data_entries(
+    state: State<AppState>,
+    hypothesis_id: String,
+) -> std::result::Result<Vec<DataEntry>, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    list_data_entries(&conn, &hypothesis_id)
+}
+
+fn delete_data_entry_in_db(conn: &Connection, id: &str) -> std::result::Result<(), String> {
+    let changed = conn
+        .execute("DELETE FROM hypothesis_data_entries WHERE id = ?1", [id])
+        .map_err(|error| error.to_string())?;
+    if changed == 0 {
+        return Err(format!("Hypothesis data entry not found: {id}"));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_data_entry(state: State<AppState>, id: String) -> std::result::Result<(), String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    delete_data_entry_in_db(&conn, &id)
+}
+
 #[tauri::command]
 pub fn link_snapshot_to_hypothesis(
     state: State<AppState>,
@@ -988,19 +1276,21 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
         executed_at: row.get(20)?,
         boundary_conditions: row.get(21)?,
         refined_from_id: row.get(22)?,
+        checklist_schema: row.get(23)?,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        add_hypothesis_insight_in_db, create_child_hypothesis_in_db,
+        add_data_entry_in_db, add_hypothesis_insight_in_db, create_child_hypothesis_in_db,
+        delete_data_entry_in_db,
         delete_hypothesis_insight_in_db, graduate_to_library_in_db, init_schema,
-        link_snapshot_to_hypothesis_in_db, list_hypothesis_snapshots,
+        link_snapshot_to_hypothesis_in_db, list_data_entries, list_hypothesis_snapshots,
         list_hypothesis_insights, list_hypotheses, promote_inquiry,
         record_hypothesis_execution_in_db, record_verdict_in_db,
-        unlink_snapshot_from_hypothesis_in_db,
-        save_hypothesis_protocol_in_db, LinkedDefinition,
+        save_checklist_schema_in_db, save_hypothesis_protocol_in_db,
+        unlink_snapshot_from_hypothesis_in_db, LinkedDefinition,
     };
     use crate::mind::questions::{
         create_question, init_schema as init_questions_schema, select_for_promotion,
@@ -1015,6 +1305,98 @@ mod tests {
         init_schema(&connection).expect("initialize hypotheses schema");
         init_schema(&connection).expect("reinitialize hypotheses schema");
         connection
+    }
+
+    #[test]
+    fn checklist_schema_and_data_entries_are_validated_and_managed() {
+        let mut connection = setup();
+        select_inquiry(&mut connection, "inquiry-1");
+        promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+        let schema_json = serde_json::json!([
+            { "label": "Trend", "type": "select", "options": ["Bullish", "Bearish"] },
+            { "label": "Score", "type": "number", "options": [] },
+            { "label": "Confirmed", "type": "boolean", "options": [] },
+            { "label": "Notes", "type": "text", "options": [] }
+        ])
+        .to_string();
+
+        assert!(save_checklist_schema_in_db(&connection, "missing", &schema_json, 15).is_err());
+        assert!(save_checklist_schema_in_db(&connection, "hypothesis-1", "{}", 15).is_err());
+        assert!(save_checklist_schema_in_db(
+            &connection,
+            "hypothesis-1",
+            r#"[{"label":"Trend","type":"select","options":[]}]"#,
+            15
+        )
+        .is_err());
+
+        let hypothesis = save_checklist_schema_in_db(
+            &connection,
+            "hypothesis-1",
+            &schema_json,
+            15,
+        )
+        .expect("save checklist schema");
+        assert_eq!(hypothesis.checklist_schema.as_deref(), Some(schema_json.as_str()));
+        assert_eq!(hypothesis.updated_at, 15);
+
+        let row_json = serde_json::json!({
+            "Trend": "Bullish",
+            "Score": 4.5,
+            "Confirmed": true,
+            "Notes": "Breakout held"
+        })
+        .to_string();
+        assert!(add_data_entry_in_db(
+            &connection,
+            "invalid-entry",
+            "hypothesis-1",
+            r#"{"Trend":"Sideways","Score":"high","Confirmed":true,"Notes":""}"#,
+            20,
+        )
+        .is_err());
+        let first = add_data_entry_in_db(
+            &connection,
+            "entry-1",
+            "hypothesis-1",
+            &row_json,
+            20,
+        )
+        .expect("add valid checklist entry");
+        let second = add_data_entry_in_db(
+            &connection,
+            "entry-2",
+            "hypothesis-1",
+            &row_json,
+            21,
+        )
+        .expect("add second checklist entry");
+        assert_eq!(first.hypothesis_id, "hypothesis-1");
+        assert_eq!(first.data_json, row_json);
+        assert_eq!(
+            list_data_entries(&connection, "hypothesis-1")
+                .expect("list checklist entries"),
+            vec![first, second]
+        );
+        assert!(save_checklist_schema_in_db(
+            &connection,
+            "hypothesis-1",
+            &schema_json,
+            22
+        )
+        .is_err());
+
+        delete_data_entry_in_db(&connection, "entry-1").expect("delete checklist entry");
+        assert_eq!(
+            list_data_entries(&connection, "hypothesis-1")
+                .expect("list remaining entries")
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["entry-2"]
+        );
+        assert!(delete_data_entry_in_db(&connection, "missing").is_err());
+        assert!(list_data_entries(&connection, "missing").is_err());
     }
 
     #[test]

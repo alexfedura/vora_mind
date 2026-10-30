@@ -5,6 +5,8 @@ import { VoraCard } from "@/mind/types";
 import { createTextChangeSet, dbService } from "@/mind/services/dbService";
 import type {
   ChildHypothesisInput,
+  ChecklistField,
+  DataEntry,
   Hypothesis,
   HypothesisInsight,
   HypothesisPromotionInput,
@@ -134,7 +136,12 @@ interface AppState {
   linkSnapshotToHypothesis: (hypothesisId: string, snapshotId: string) => Promise<void>;
   unlinkSnapshotFromHypothesis: (hypothesisId: string, snapshotId: string) => Promise<void>;
   hypothesisInsights: Record<string, HypothesisInsight[]>;
+  hypothesisDataEntries: Record<string, DataEntry[]>;
   loadHypothesisInsights: (hypothesisId: string) => Promise<void>;
+  saveChecklistSchema: (hypothesisId: string, schema: ChecklistField[]) => Promise<Hypothesis>;
+  loadDataEntries: (hypothesisId: string) => Promise<void>;
+  addDataEntry: (hypothesisId: string, dataJson: string) => Promise<DataEntry>;
+  deleteDataEntry: (hypothesisId: string, id: string) => Promise<void>;
   addHypothesisInsight: (
     hypothesisId: string,
     content: string,
@@ -771,12 +778,57 @@ export const useAppStore = create<AppState>()(
         }));
       },
       hypothesisInsights: {},
+      hypothesisDataEntries: {},
       loadHypothesisInsights: async (hypothesisId) => {
         const insights = await dbService.getHypothesisInsights(hypothesisId);
         set((state) => ({
           hypothesisInsights: {
             ...state.hypothesisInsights,
             [hypothesisId]: insights,
+          },
+        }));
+      },
+      saveChecklistSchema: async (hypothesisId, schema) => {
+        const hypothesis = await dbService.saveChecklistSchema(
+          hypothesisId,
+          JSON.stringify(schema),
+        );
+        set((state) => ({
+          hypotheses: state.hypotheses.map((item) =>
+            item.id === hypothesis.id ? hypothesis : item
+          ),
+        }));
+        return hypothesis;
+      },
+      loadDataEntries: async (hypothesisId) => {
+        const entries = await dbService.getDataEntries(hypothesisId);
+        set((state) => ({
+          hypothesisDataEntries: {
+            ...state.hypothesisDataEntries,
+            [hypothesisId]: entries,
+          },
+        }));
+      },
+      addDataEntry: async (hypothesisId, dataJson) => {
+        const entry = await dbService.addDataEntry(hypothesisId, dataJson);
+        set((state) => ({
+          hypothesisDataEntries: {
+            ...state.hypothesisDataEntries,
+            [hypothesisId]: [
+              ...(state.hypothesisDataEntries[hypothesisId] ?? []),
+              entry,
+            ],
+          },
+        }));
+        return entry;
+      },
+      deleteDataEntry: async (hypothesisId, id) => {
+        await dbService.deleteDataEntry(id);
+        set((state) => ({
+          hypothesisDataEntries: {
+            ...state.hypothesisDataEntries,
+            [hypothesisId]: (state.hypothesisDataEntries[hypothesisId] ?? [])
+              .filter((entry) => entry.id !== id),
           },
         }));
       },

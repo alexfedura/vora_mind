@@ -142,6 +142,22 @@ export interface Hypothesis {
   executedAt?: number | null;
   boundaryConditions?: string | null;
   refinedFromId?: string | null;
+  checklistSchema?: string | null;
+}
+
+export type ChecklistFieldType = "select" | "number" | "text" | "boolean";
+
+export interface ChecklistField {
+  label: string;
+  type: ChecklistFieldType;
+  options?: string[];
+}
+
+export interface DataEntry {
+  id: string;
+  hypothesisId: string;
+  dataJson: string;
+  createdAt: number;
 }
 
 export interface HypothesisInsight {
