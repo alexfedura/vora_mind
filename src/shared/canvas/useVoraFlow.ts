@@ -17,6 +17,7 @@ const DEFAULT_CARD_WIDTH = 352;
 interface FlowHistoryState {
   nodes: Node[];
   edges: Edge[];
+  cards?: Record<string, VoraCard>;
 }
 
 interface FlowClipboard {
@@ -131,12 +132,16 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
   currentBoardId.current = boardId;
   autosaveEnabledRef.current = autosaveEnabled;
 
-  const saveHistorySnapshot = useCallback(() => {
+  const saveHistorySnapshot = useCallback((includeCards = false) => {
     if (isPerformingUndoRedo.current) return;
-    undoStack.current.push({
+    const snapshot: FlowHistoryState = {
       nodes: JSON.parse(JSON.stringify(nodes)),
       edges: JSON.parse(JSON.stringify(edges)),
-    });
+    };
+    if (includeCards) {
+      snapshot.cards = JSON.parse(JSON.stringify(latestCards.current));
+    }
+    undoStack.current.push(snapshot);
     if (undoStack.current.length > 50) {
       undoStack.current.shift();
     }
@@ -148,36 +153,52 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
     const previousState = undoStack.current.pop();
     if (!previousState) return;
 
-    redoStack.current.push({
+    const nextState: FlowHistoryState = {
       nodes: JSON.parse(JSON.stringify(nodes)),
       edges: JSON.parse(JSON.stringify(edges)),
-    });
+    };
+    if (previousState.cards) {
+      nextState.cards = JSON.parse(JSON.stringify(latestCards.current));
+    }
+    redoStack.current.push(nextState);
 
     isPerformingUndoRedo.current = true;
     setNodes(previousState.nodes);
     setEdges(previousState.edges);
+    if (previousState.cards) {
+      latestCards.current = previousState.cards;
+      setCards(previousState.cards);
+    }
     setTimeout(() => {
       isPerformingUndoRedo.current = false;
     }, 50);
-  }, [nodes, edges, setNodes, setEdges]);
+  }, [nodes, edges, setCards, setEdges, setNodes]);
 
   const redo = useCallback(() => {
     if (redoStack.current.length === 0) return;
     const nextState = redoStack.current.pop();
     if (!nextState) return;
 
-    undoStack.current.push({
+    const previousState: FlowHistoryState = {
       nodes: JSON.parse(JSON.stringify(nodes)),
       edges: JSON.parse(JSON.stringify(edges)),
-    });
+    };
+    if (nextState.cards) {
+      previousState.cards = JSON.parse(JSON.stringify(latestCards.current));
+    }
+    undoStack.current.push(previousState);
 
     isPerformingUndoRedo.current = true;
     setNodes(nextState.nodes);
     setEdges(nextState.edges);
+    if (nextState.cards) {
+      latestCards.current = nextState.cards;
+      setCards(nextState.cards);
+    }
     setTimeout(() => {
       isPerformingUndoRedo.current = false;
     }, 50);
-  }, [nodes, edges, setNodes, setEdges]);
+  }, [nodes, edges, setCards, setEdges, setNodes]);
 
   const copyNodesToClipboard = useCallback((sourceNodes: Node[]) => {
     if (sourceNodes.length === 0) return false;
