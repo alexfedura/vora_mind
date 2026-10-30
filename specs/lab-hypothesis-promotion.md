@@ -44,6 +44,17 @@ Entries are independently listable and deletable before execution, and
 collection remains available while a locked-protocol test is running. The Lab detail view supports defining fields, rapid entry with
 save-and-focus-next, entry counts, and per-field summaries before verdict
 analysis.
+Protocols support a locked `text` or `flowchart` representation. Flowchart
+protocols store React Flow nodes and edges as JSON, plus a JSON array of
+completed node IDs. The flowchart can be saved only once, like a text
+protocol. While executing a locked flowchart, users can mark its nodes
+complete; completion IDs must refer to nodes in the saved graph. Execution
+progress is shown alongside the read-only flowchart.
+The Lab can compile a copyable Markdown analysis prompt from H1/H0, the
+selected protocol, checklist schema, and every collected data entry. No LLM
+provider is configured for this feature, so the IPC command returns that
+prompt for the user to copy into an LLM; the Lab renders the result as
+Markdown.
 Create a `hypothesis_insights` table for immutable mid-test scratchpad entries,
 with a cascading foreign key to the owning hypothesis and a creation timestamp.
 Insights are listed newest-first and can be deleted independently of the
@@ -125,6 +136,7 @@ unselected and missing inquiries, and descending hypothesis retrieval order.
 They also cover verdict recording, overwriting an existing verdict and its
 evidence, validation, schema migration idempotency, and snapshot link/unlink
 behavior, checklist schema validation, and data-entry creation, listing, and
-deletion. The focused command is:
+deletion, flowchart protocol validation and completion, and structured AI
+prompt assembly. The focused command is:
 
 `cargo test --manifest-path src-tauri/Cargo.toml --lib mind::hypothesis -- --nocapture`
