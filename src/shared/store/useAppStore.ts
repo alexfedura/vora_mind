@@ -8,6 +8,7 @@ import type {
   Hypothesis,
   HypothesisPromotionInput,
   HypothesisVerdict,
+  LibraryDefinitionSelection,
   JournalEntry,
   QuestionItem,
   TaskFlowItem,
@@ -121,6 +122,8 @@ interface AppState {
   unselectQuestionForPromotion: (id: string) => Promise<QuestionItem>;
 
   hypotheses: Hypothesis[];
+  libraryDefinitionsForSelection: LibraryDefinitionSelection[];
+  loadLibraryDefinitionsForSelection: () => Promise<LibraryDefinitionSelection[]>;
   loadHypotheses: () => Promise<void>;
   promoteToHypothesis: (input: HypothesisPromotionInput) => Promise<Hypothesis>;
   graduateToLibrary: (hypothesisId: string, libraryGroupId?: string | null) => Promise<Hypothesis>;
@@ -713,6 +716,12 @@ export const useAppStore = create<AppState>()(
       },
 
       hypotheses: [],
+      libraryDefinitionsForSelection: [],
+      loadLibraryDefinitionsForSelection: async () => {
+        const definitions = await dbService.getLibraryDefinitionsForSelection();
+        set({ libraryDefinitionsForSelection: definitions });
+        return definitions;
+      },
       loadHypotheses: async () => {
         const hypotheses = await dbService.getHypotheses();
         set({ hypotheses });

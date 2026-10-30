@@ -18,7 +18,6 @@ import type {
   HypothesisVerdict,
   LibraryDefinitionSelection,
   JournalEntry,
-  LinkedDefinition,
   QuestionItem,
   TaskFlowItem,
   TaskFlowType,
