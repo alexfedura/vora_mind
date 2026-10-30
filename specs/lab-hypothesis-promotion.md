@@ -38,9 +38,10 @@ field labels, types (`select`, `number`, `text`, or `boolean`), and select
 options. A `hypothesis_data_entries` table stores individually timestamped
 JSON data rows with a cascading foreign key to the hypothesis. Checklist
 schemas are validated before saving; entries require a schema and values
-matching its field types and options. Entries are independently listable and
-deletable, and collection remains available while a locked-protocol test is
-running. The Lab detail view supports defining fields, rapid entry with
+matching its field types and options. Schema definition and entry collection require a locked protocol;
+once execution is recorded, the schema and collected entries are immutable.
+Entries are independently listable and deletable before execution, and
+collection remains available while a locked-protocol test is running. The Lab detail view supports defining fields, rapid entry with
 save-and-focus-next, entry counts, and per-field summaries before verdict
 analysis.
 Create a `hypothesis_insights` table for immutable mid-test scratchpad entries,
