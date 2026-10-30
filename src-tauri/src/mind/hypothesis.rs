@@ -327,9 +327,10 @@ fn create_child_hypothesis_in_db(
         .optional()
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("Parent hypothesis not found: {parent_id}"))?;
-    if parent_verdict.as_deref().is_some_and(|verdict| {
-        !matches!(verdict, "rejected" | "supported" | "partially_supported")
-    }) {
+    if !matches!(
+        parent_verdict.as_deref(),
+        Some("rejected" | "supported" | "partially_supported")
+    ) {
         return Err("A child hypothesis can only be created from a rejected, supported, or partially supported hypothesis.".to_string());
     }
     let refined_from_id = matches!(
@@ -404,11 +405,14 @@ pub fn create_child_hypothesis(
 fn hypothesis_library_node(hypothesis: &Hypothesis) -> NodeInput {
     let boundary_conditions = hypothesis.boundary_conditions.as_deref();
     let title = if hypothesis.verdict.as_deref() == Some("partially_supported") {
-        format!(
-            "{} (Valid only in {})",
-            hypothesis.statement_h1,
+        let suffix = format!(
+            " (Valid only in {})",
             boundary_conditions.unwrap_or("specified conditions")
-        )
+        );
+        let suffix: String = suffix.chars().take(80).collect();
+        let prefix_limit = 80_usize.saturating_sub(suffix.chars().count());
+        let prefix: String = hypothesis.statement_h1.chars().take(prefix_limit).collect();
+        format!("{prefix}{suffix}")
     } else {
         hypothesis.statement_h1.clone()
     };
@@ -797,10 +801,10 @@ fn record_verdict_in_db(
     ) {
         return Err(format!("Invalid hypothesis verdict: {verdict}"));
     }
-    if verdict == "partially_supported"
+    if matches!(verdict, "supported" | "partially_supported" | "rejected")
         && boundary_conditions.map_or(true, |conditions| conditions.trim().is_empty())
     {
-        return Err("Boundary conditions are required for a partially supported verdict.".to_string());
+        return Err("Boundary conditions are required for supported, partially supported, and rejected verdicts.".to_string());
     }
     let stored_raw_data: Option<String> = conn
         .query_row("SELECT raw_data FROM hypotheses WHERE id = ?1", [id], |row| {
