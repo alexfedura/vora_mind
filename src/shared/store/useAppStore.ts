@@ -151,6 +151,9 @@ interface AppState {
   loadLibraryDefinitionsForSelection: () => Promise<LibraryDefinitionSelection[]>;
   loadHypotheses: () => Promise<void>;
   saveHypothesisProtocol: (id: string, protocolSteps: string) => Promise<Hypothesis>;
+  saveProtocolFlowchart: (id: string, flowchartJson: string) => Promise<Hypothesis>;
+  updateProtocolCompletion: (id: string, completedStepsJson: string) => Promise<Hypothesis>;
+  analyzeWithAi: (hypothesisId: string) => Promise<string>;
   recordHypothesisExecution: (id: string, rawData: string) => Promise<Hypothesis>;
   promoteToHypothesis: (input: HypothesisPromotionInput) => Promise<Hypothesis>;
   graduateToLibrary: (hypothesisId: string, libraryGroupId?: string | null) => Promise<Hypothesis>;
@@ -881,6 +884,26 @@ export const useAppStore = create<AppState>()(
         }));
         return hypothesis;
       },
+      saveProtocolFlowchart: async (id, flowchartJson) => {
+        const hypothesis = await dbService.saveProtocolFlowchart(id, flowchartJson);
+        set((state) => ({
+          hypotheses: state.hypotheses.map((item) =>
+            item.id === hypothesis.id ? hypothesis : item
+          ),
+        }));
+        return hypothesis;
+      },
+      updateProtocolCompletion: async (id, completedStepsJson) => {
+        const hypothesis = await dbService.updateProtocolCompletion(id, completedStepsJson);
+        set((state) => ({
+          hypotheses: state.hypotheses.map((item) =>
+            item.id === hypothesis.id ? hypothesis : item
+          ),
+        }));
+        return hypothesis;
+      },
+      analyzeWithAi: async (hypothesisId) =>
+        await dbService.analyzeWithAi(hypothesisId),
       recordHypothesisExecution: async (id, rawData) => {
         const hypothesis = await dbService.recordHypothesisExecution(id, rawData);
         set((state) => ({

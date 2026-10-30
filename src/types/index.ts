@@ -143,9 +143,14 @@ export interface Hypothesis {
   boundaryConditions?: string | null;
   refinedFromId?: string | null;
   checklistSchema?: string | null;
+  protocolType: "text" | "flowchart";
+  protocolFlowchartJson?: string | null;
+  protocolCompletedSteps?: string | null;
 }
 
 export type ChecklistFieldType = "select" | "number" | "text" | "boolean";
+
+export type ProtocolNodeKind = "step" | "decision" | "start-end";
 
 export interface ChecklistField {
   label: string;

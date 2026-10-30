@@ -233,6 +233,24 @@ export const dbService = {
     return await invoke<Hypothesis>("save_hypothesis_protocol", { id, protocolSteps });
   },
 
+  async saveProtocolFlowchart(id: string, flowchartJson: string): Promise<Hypothesis> {
+    return await invoke<Hypothesis>("save_protocol_flowchart", { id, flowchartJson });
+  },
+
+  async updateProtocolCompletion(
+    id: string,
+    completedStepsJson: string,
+  ): Promise<Hypothesis> {
+    return await invoke<Hypothesis>("update_protocol_completion", {
+      id,
+      completedStepsJson,
+    });
+  },
+
+  async analyzeWithAi(hypothesisId: string): Promise<string> {
+    return await invoke<string>("analyze_with_ai", { hypothesisId });
+  },
+
   async recordHypothesisExecution(id: string, rawData: string): Promise<Hypothesis> {
     return await invoke<Hypothesis>("record_hypothesis_execution", { id, rawData });
   },
