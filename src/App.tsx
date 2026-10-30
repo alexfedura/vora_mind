@@ -25,6 +25,8 @@ import {
   Database,
   FileText,
   Waypoints,
+  Download,
+  Upload,
   Minus,
   Plus,
   Sparkles,
@@ -47,6 +49,8 @@ import {
   type BoardVersionIncrement,
   type BoardVersionSnapshot,
 } from "./mind/services/dbService";
+import { createBoardTransfer, parseBoardTransfer, remapBoardTransfer } from "./mind/utils/boardTransfer";
+import { createFlowchartTemplate, FLOWCHART_TEMPLATES, type FlowchartTemplateId } from "./mind/utils/diagramTemplates";
 import { getSetting, setSetting } from "./shared/store/useSettingsStore";
 import {
   type BoardItem,
@@ -373,6 +377,7 @@ function AppContent() {
     addCard,
     updateCardVersion,
     cards,
+    setCards,
     activeBoardId,
     setActiveBoardId,
     setLibraryBoardEditing,
@@ -420,6 +425,9 @@ function AppContent() {
   const [libraryVersionInput, setLibraryVersionInput] = useState("");
   const [libraryBoardError, setLibraryBoardError] = useState<string | null>(null);
   const [isCreateItemGroupOpen, setIsCreateItemGroupOpen] = useState(false);
+  const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
+  const [boardTransferError, setBoardTransferError] = useState<string | null>(null);
+  const boardImportInputRef = React.useRef<HTMLInputElement>(null);
   const [canvasNodeContextMenu, setCanvasNodeContextMenu] = useState<CanvasNodeContextMenu | null>(null);
   const [connectionCreateMenu, setConnectionCreateMenu] = useState<ConnectionCreateMenu | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
