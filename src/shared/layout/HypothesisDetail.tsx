@@ -768,6 +768,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
                   <div className="grid gap-3 sm:grid-cols-2">
                     {checklistSchema.fields.map((field, index) => {
                       const inputId = `hypothesis-entry-${hypothesis.id}-${index}`;
+                      const inputValue = checklistValues[field.label];
                       return (
                         <label key={field.label} htmlFor={inputId} dir="auto" className="block">
                           <span className="mb-1.5 block text-xs font-medium text-gray-400">{field.label}</span>
@@ -776,7 +777,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
                               id={inputId}
                               dir="auto"
                               required
-                              value={typeof checklistValues[field.label] === "string" ? checklistValues[field.label] : ""}
+                              value={typeof inputValue === "string" ? inputValue : ""}
                               onChange={(event) => setChecklistValues((current) => ({
                                 ...current,
                                 [field.label]: event.currentTarget.value,
@@ -812,7 +813,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
                               type={field.type === "number" ? "number" : "text"}
                               step={field.type === "number" ? "any" : undefined}
                               required={field.type === "number"}
-                              value={typeof checklistValues[field.label] === "string" ? checklistValues[field.label] : ""}
+                              value={typeof inputValue === "string" ? inputValue : ""}
                               onChange={(event) => setChecklistValues((current) => ({
                                 ...current,
                                 [field.label]: event.currentTarget.value,
