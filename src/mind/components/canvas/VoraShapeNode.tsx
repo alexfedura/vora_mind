@@ -656,13 +656,13 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
                   </div>
                 )}
               </div>
-              <div className={`drawing-toolbar__item vora-shape-toolbar__palette-item${!allSelectedShapesAreRectangles ? " is-disabled" : ""}`}>
+              <div className={`drawing-toolbar__item vora-shape-toolbar__palette-item${!allSelectedShapesHaveFill ? " is-disabled" : ""}`}>
                 <button
                   type="button"
                   className={`floating-toolbar-react-widgets__button vora-shape-toolbar__icon${openControlMenu === "fill" ? " is-active" : ""}`}
                   data-name="background-color"
                   aria-label="Shape fill color"
-                  title={allSelectedShapesAreRectangles ? "Fill color" : "Fill is available only when all selected shapes are rectangles"}
+                  title={allSelectedShapesHaveFill ? "Fill color" : "Fill is available only when every selected shape has a fill"}
                   aria-expanded={openControlMenu === "fill"}
                   disabled={!allSelectedShapesHaveFill}
                   onClick={() => setOpenControlMenu((open) => open === "fill" ? null : "fill")}
@@ -670,7 +670,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" fill="none" aria-hidden="true"><path stroke="currentColor" d="M13.5 6.5l-3-3-7 7 7.59 7.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82L13.5 6.5zm0 0v-4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v6" /><path fill="currentColor" d="M0 16.5C0 15 2.5 12 2.5 12S5 15 5 16.5 4 19 2.5 19 0 18 0 16.5z" /><circle fill="currentColor" cx="9.5" cy="9.5" r="1.5" /></svg>
                   <span className="color-bg"><span className="color-swatch" style={{ backgroundColor: fillColor, opacity: fillOpacity }} /></span>
                 </button>
-                {openControlMenu === "fill" && allSelectedShapesAreRectangles && (
+                {openControlMenu === "fill" && allSelectedShapesHaveFill && (
                   <div className="drawing-toolbar__popover drawing-toolbar__palette vora-shape-toolbar__color-palette" role="group" aria-label="Shape fill color">
                     <DrawingColorPicker
                       color={fillColor}
@@ -981,12 +981,12 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
       <Handle
         type="target"
         position={Position.Left}
-        className={`!left-0 !top-1/2 !h-3 !w-3 !-translate-y-1/2 !rounded-full !border-2 !border-[#13151b] !bg-[#e8ad55] transition-opacity ${selected ? "!opacity-100" : "!opacity-0"} !pointer-events-auto`}
+        className={`!left-0 !top-1/2 !h-3 !w-3 !-translate-y-1/2 !rounded-full !border-2 !border-[#13151b] !bg-[#e8ad55] transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`}
       />
       <Handle
         type="source"
         position={Position.Right}
-        className={`!right-0 !top-1/2 !h-3 !w-3 !-translate-y-1/2 !rounded-full !border-2 !border-[#13151b] !bg-[#e8ad55] transition-opacity ${selected ? "!opacity-100" : "!opacity-0"} !pointer-events-auto`}
+        className={`!right-0 !top-1/2 !h-3 !w-3 !-translate-y-1/2 !rounded-full !border-2 !border-[#13151b] !bg-[#e8ad55] transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`}
       />
       <svg
         ref={svgRef}
