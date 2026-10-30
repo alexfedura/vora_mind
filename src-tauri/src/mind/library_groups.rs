@@ -544,11 +544,12 @@ mod tests {
             let mut conn = Connection::open_in_memory().unwrap();
             init_db(&conn).unwrap();
             let created = create_item_group(&mut conn, "Flag", "0.1.0", sample_snapshot()).unwrap();
+            let versions = list_item_group_versions(&conn, &created.id).unwrap();
 
             let definitions = list_definitions_for_selection(&conn).unwrap();
             assert_eq!(definitions.len(), 1);
             assert_eq!(definitions[0].group_id, created.id);
-            assert_eq!(definitions[0].version_id, created.active_version_id);
+            assert_eq!(definitions[0].version_id, versions[0].id);
             assert_eq!(definitions[0].name, "Flag");
             assert_eq!(definitions[0].version_string, "0.1.0");
 
