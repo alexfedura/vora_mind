@@ -886,15 +886,24 @@ fn add_data_entry_in_db(
     data_json: &str,
     created_at: i64,
 ) -> std::result::Result<DataEntry, String> {
-    let schema_json: Option<String> = conn
+    let hypothesis_state: Option<(Option<String>, Option<i64>, Option<i64>)> = conn
         .query_row(
-            "SELECT checklist_schema FROM hypotheses WHERE id = ?1",
+            "SELECT checklist_schema, protocol_locked_at, executed_at
+             FROM hypotheses WHERE id = ?1",
             [hypothesis_id],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()
-        .map_err(|error| error.to_string())?
-        .flatten();
+        .map_err(|error| error.to_string())?;
+    let Some((schema_json, protocol_locked_at, executed_at)) = hypothesis_state else {
+        return Err(format!("Hypothesis not found: {hypothesis_id}"));
+    };
+    if protocol_locked_at.is_none() {
+        return Err("Lock the test protocol before collecting checklist data.".to_string());
+    }
+    if executed_at.is_some() {
+        return Err("Checklist data cannot be changed after test execution.".to_string());
+    }
     let schema_json = schema_json
         .ok_or_else(|| format!("Hypothesis '{hypothesis_id}' does not have a checklist schema."))?;
     validate_checklist_entry(&schema_json, data_json)?;
@@ -973,6 +982,21 @@ pub fn get_data_entries(
 }
 
 fn delete_data_entry_in_db(conn: &Connection, id: &str) -> std::result::Result<(), String> {
+    let executed_at: Option<i64> = conn
+        .query_row(
+            "SELECT hypotheses.executed_at
+             FROM hypothesis_data_entries
+             JOIN hypotheses ON hypotheses.id = hypothesis_data_entries.hypothesis_id
+             WHERE hypothesis_data_entries.id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?
+        .flatten();
+    if executed_at.is_some() {
+        return Err("Checklist data cannot be changed after test execution.".to_string());
+    }
     let changed = conn
         .execute("DELETE FROM hypothesis_data_entries WHERE id = ?1", [id])
         .map_err(|error| error.to_string())?;
