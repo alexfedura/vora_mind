@@ -143,9 +143,9 @@ pub fn fetch_local_candles(
         .map_err(|error| format!("Could not read local candle rows: {error}"))?;
     if candles.is_empty() {
         return Err(format!(
-            "No data found for the requested date range ({start_ts}..{end_ts}). Check for normalized Parquet files under {} (for example, data/ticks/{}/2020/2020_normalized.parquet).",
-            symbol_dir.display(),
+            "No data found for the requested date range. Check if 2020_normalized.parquet exists in data/ticks/{}/2020/ (resolved symbol directory: {}). Requested Unix seconds: {start_ts}..{end_ts}.",
             symbol.to_ascii_uppercase(),
+            symbol_dir.display(),
         ));
     }
     candles.reverse();
@@ -187,9 +187,9 @@ mod tests {
     #[test]
     fn reads_and_aggregates_parquet_ticks() {
         let temporary = TestDirectory::new();
-        let symbol_dir = temporary.0.join("ticks").join("XAUUSD").join("2024");
+        let symbol_dir = temporary.0.join("ticks").join("XAUUSD").join("2020");
         std::fs::create_dir_all(&symbol_dir).expect("partition directory should be created");
-        let parquet_path = symbol_dir.join("ticks.parquet");
+        let parquet_path = symbol_dir.join("2020_normalized.parquet");
         let sql_path = parquet_path
             .to_string_lossy()
             .replace('\\', "/")
@@ -200,11 +200,11 @@ mod tests {
             .execute_batch(
                 "CREATE TABLE ticks (ts BIGINT, price DOUBLE, volume DOUBLE);
                  INSERT INTO ticks VALUES
-                    (60, 10, 1),
-                    (70, 13, 2),
-                    (80, 8, 3),
-                    (120, 9, 2),
-                    (130, 9, 4);",
+                    (1577836800, 10, 1),
+                    (1577836810, 13, 2),
+                    (1577836820, 8, 3),
+                    (1577836860, 9, 2),
+                    (1577836870, 9, 4);",
             )
             .expect("test ticks should be inserted");
         writer
@@ -215,8 +215,8 @@ mod tests {
             temporary.0.join("ticks"),
             "XAUUSD".to_string(),
             1,
-            60,
-            180,
+            1577836800,
+            1577836920,
             10,
         )
         .expect("test Parquet file should aggregate");
@@ -225,7 +225,7 @@ mod tests {
             candles,
             vec![
                 CandleDto {
-                    ts: 60,
+                    ts: 1577836800,
                     open: 10.0,
                     high: 13.0,
                     low: 8.0,
@@ -235,7 +235,7 @@ mod tests {
                     first_extreme: "high_first".to_string(),
                 },
                 CandleDto {
-                    ts: 120,
+                    ts: 1577836860,
                     open: 9.0,
                     high: 9.0,
                     low: 9.0,
