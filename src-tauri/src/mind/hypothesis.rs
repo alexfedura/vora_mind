@@ -38,11 +38,17 @@ pub struct Hypothesis {
     pub parent_hypothesis_id: Option<String>,
     #[serde(default)]
     pub linked_definitions: Vec<LinkedDefinition>,
+    pub protocol_steps: Option<String>,
+    pub protocol_locked_at: Option<i64>,
+    pub raw_data: Option<String>,
+    pub data_analysis: Option<String>,
+    pub executed_at: Option<i64>,
 }
 
 const HYPOTHESIS_COLUMNS: &str = "id, inquiry_id, statement_h1, statement_h0, \
     independent_var, dependent_var, metric, success_threshold, status, created_at, updated_at, \
-    evidence_notes, verdict, evaluated_at, promoted_to_library_id, parent_hypothesis_id";
+    evidence_notes, verdict, evaluated_at, promoted_to_library_id, parent_hypothesis_id, \
+    protocol_steps, protocol_locked_at, raw_data, data_analysis, executed_at";
 
 pub fn init_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -76,6 +82,11 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         ("evaluated_at", "INTEGER NULL"),
         ("promoted_to_library_id", "TEXT NULL"),
         ("parent_hypothesis_id", "TEXT NULL"),
+        ("protocol_steps", "TEXT NULL"),
+        ("protocol_locked_at", "INTEGER NULL"),
+        ("raw_data", "TEXT NULL"),
+        ("data_analysis", "TEXT NULL"),
+        ("executed_at", "INTEGER NULL"),
     ] {
         if !columns.iter().any(|column| column == name) {
             conn.execute_batch(&format!(
