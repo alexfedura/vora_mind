@@ -1377,15 +1377,16 @@ mod tests {
         .to_string();
 
         assert!(save_checklist_schema_in_db(&connection, "missing", &schema_json, 15).is_err());
-        assert!(save_checklist_schema_in_db(
-            &connection,
+        assert!(
+            save_checklist_schema_in_db(&connection, "hypothesis-1", &schema_json, 15).is_err()
+        );
+        save_hypothesis_protocol_in_db(
+            &mut connection,
             "hypothesis-1",
-            &schema_json,
-            15
+            "Collect observations.",
+            14,
         )
-        .is_err());
-        save_hypothesis_protocol_in_db(&mut connection, "hypothesis-1", "Collect observations.", 14)
-            .expect("lock test protocol");
+        .expect("lock test protocol");
         assert!(save_checklist_schema_in_db(&connection, "hypothesis-1", "{}", 15).is_err());
         assert!(save_checklist_schema_in_db(
             &connection,
@@ -1454,7 +1455,9 @@ mod tests {
         )
         .is_err());
         assert!(delete_data_entry_in_db(&connection, "entry-2").is_err());
-        assert!(save_checklist_schema_in_db(&connection, "hypothesis-1", &schema_json, 32).is_err());
+        assert!(
+            save_checklist_schema_in_db(&connection, "hypothesis-1", &schema_json, 32).is_err()
+        );
     }
 
     #[test]

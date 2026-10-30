@@ -817,7 +817,9 @@ export const useAppStore = create<AppState>()(
             [hypothesisId]: [
               ...(state.hypothesisDataEntries[hypothesisId] ?? []),
               entry,
-            ],
+            ].sort((left, right) =>
+              left.createdAt - right.createdAt || left.id.localeCompare(right.id)
+            ),
           },
         }));
         return entry;
