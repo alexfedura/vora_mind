@@ -1500,6 +1500,24 @@ mod tests {
             hypothesis.boundary_conditions.as_deref(),
             Some("Trending markets")
         );
+        let child = create_child_hypothesis_in_db(
+            &mut connection,
+            "hypothesis-1",
+            "hypothesis-child",
+            "If X in a trending market then Y",
+            "X does not affect Y",
+            "X in a trending market",
+            "Y",
+            "Y per day",
+            "Y increases by 10%",
+            &[],
+            25,
+        )
+        .expect("create refinement from partial hypothesis");
+        assert_eq!(
+            child.refined_from_id.as_deref(),
+            Some("hypothesis-1")
+        );
 
         let graduated = graduate_to_library_in_db(&mut connection, "hypothesis-1", None, 30)
             .expect("graduate partial hypothesis");
