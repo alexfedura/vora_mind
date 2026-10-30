@@ -500,7 +500,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
           return restoredNode;
         });
 
-        const updatedEdges: Edge[] = Object.entries(resolved.links).map(([edgeId, link]: [string, any]) => ({
+        const updatedEdges: Edge[] = Object.entries(resolved.links).map(([edgeId, link]) => ({
           id: edgeId,
           source: link.source_object_id,
           target: link.target_object_id,
