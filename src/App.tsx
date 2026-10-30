@@ -2389,7 +2389,19 @@ function AppContent() {
           <PathToolIcon size={16} />
         </button>
         <button
+          type="button"
+          aria-label="Flowchart shapes"
+          aria-expanded={isDiagramPaletteOpen}
+          aria-pressed={Boolean(activeShapeTool && activeShapeTool !== "rectangle" && activeShapeTool !== "path")}
+          onClick={() => setIsDiagramPaletteOpen((open) => !open)}
+          className={`${CANVAS_TOOL_BUTTON_CLASS} ${isDiagramPaletteOpen ? CANVAS_TOOL_BUTTON_ACTIVE_CLASS : CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
+          title="Flowchart shapes"
+        >
+          <Shapes size={16} />
+        </button>
+        <button
           onClick={() => {
+            setIsDiagramPaletteOpen(false);
             setIsAddCardToolActive(false);
             setActiveShapeTool(null);
             rectangleStartRef.current = null;
@@ -2402,6 +2414,40 @@ function AppContent() {
         >
           <Type size={16} />
         </button>
+        {isDiagramPaletteOpen && (
+          <div
+            role="menu"
+            aria-label="Flowchart shapes"
+            className="absolute left-full top-0 ml-2 flex min-w-40 flex-col gap-1 rounded-xl border border-[#303543] bg-[#171a22] p-1.5 text-zinc-200 shadow-xl"
+          >
+            {(["process", "decision", "terminator", "inputOutput", "document", "database"] as const).map((shape) => (
+              <button
+                key={shape}
+                type="button"
+                role="menuitemradio"
+                aria-checked={activeShapeTool === shape}
+                className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[#282d3a] ${activeShapeTool === shape ? "bg-[#282d3a] text-white" : "text-zinc-300"}`}
+                onClick={() => {
+                  setIsAddCardToolActive(false);
+                  setIsTextToolActive(false);
+                  rectangleStartRef.current = null;
+                  pathPointsRef.current = [];
+                  setShapePreview(null);
+                  setActiveShapeTool(shape);
+                }}
+              >
+                {shape === "decision" ? <Diamond size={15} /> :
+                  shape === "terminator" ? <Circle size={15} /> :
+                    shape === "database" ? <Database size={15} /> :
+                      shape === "document" ? <FileText size={15} /> :
+                        shape === "inputOutput" ? <Waypoints size={15} /> :
+                          <Shapes size={15} />}
+                {VORA_DIAGRAM_SHAPE_LABELS[shape]}
+              </button>
+            ))}
+            <p className="px-2 pt-1 text-[10px] leading-4 text-zinc-500">Click empty canvas to place; resize and label after selection.</p>
+          </div>
+        )}
       </div>}
 
       <div className="absolute top-3.5 z-40 flex w-[57px] justify-center" style={{ left: floatingControlsLeft }}>
