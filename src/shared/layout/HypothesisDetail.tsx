@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Trash2 } from "lucide-react";
 import type { Hypothesis, HypothesisInsight, HypothesisVerdict } from "@/types";
+import type { VoraSnapshot } from "@/lib/snapshot/types";
+import { listSnapshots } from "@/lib/snapshot/storage";
 import { ChildHypothesisModal } from "@/shared/layout/ChildHypothesisModal";
 import { useAppStore } from "@/shared/store/useAppStore";
 
@@ -44,6 +48,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   onUpdated,
   onChildCreated,
 }) => {
+  const navigate = useNavigate();
   const recordVerdict = useAppStore((state) => state.recordVerdict);
   const saveHypothesisProtocol = useAppStore((state) => state.saveHypothesisProtocol);
   const recordHypothesisExecution = useAppStore((state) => state.recordHypothesisExecution);
@@ -51,6 +56,9 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   const loadHypothesisInsights = useAppStore((state) => state.loadHypothesisInsights);
   const addHypothesisInsight = useAppStore((state) => state.addHypothesisInsight);
   const createQuestion = useAppStore((state) => state.createQuestion);
+  const linkSnapshotToHypothesis = useAppStore((state) => state.linkSnapshotToHypothesis);
+  const unlinkSnapshotFromHypothesis = useAppStore((state) => state.unlinkSnapshotFromHypothesis);
+  const setLabReturnState = useAppStore((state) => state.setLabReturnState);
   const refinedFromHypothesis = useAppStore((state) =>
     hypothesis.refinedFromId
       ? state.hypotheses.find((item) => item.id === hypothesis.refinedFromId) ?? null
@@ -76,6 +84,10 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   const [sendingInsightId, setSendingInsightId] = useState<string | null>(null);
   const [queuedInsightIds, setQueuedInsightIds] = useState<string[]>([]);
   const [scratchpadError, setScratchpadError] = useState<string | null>(null);
+  const [snapshots, setSnapshots] = useState<VoraSnapshot[]>([]);
+  const [isSnapshotPickerOpen, setIsSnapshotPickerOpen] = useState(false);
+  const [isLoadingSnapshots, setIsLoadingSnapshots] = useState(true);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const isProtocolLocked = hypothesis.protocolLockedAt != null;
   const isExecuted = hypothesis.executedAt != null;
 
@@ -101,6 +113,58 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
       setScratchpadError(cause instanceof Error ? cause.message : String(cause));
     });
   }, [hypothesis.id, loadHypothesisInsights]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listSnapshots()
+      .then((items) => {
+        if (!cancelled) setSnapshots(items);
+      })
+      .catch((cause: unknown) => {
+        console.error("Could not load chart snapshots:", cause);
+        if (!cancelled) setSnapshotError(cause instanceof Error ? cause.message : String(cause));
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingSnapshots(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleLinkSnapshot = async (snapshotId: string): Promise<void> => {
+    setSnapshotError(null);
+    try {
+      await linkSnapshotToHypothesis(hypothesis.id, snapshotId);
+      const linkedSnapshots = hypothesis.linkedSnapshots.includes(snapshotId)
+        ? hypothesis.linkedSnapshots
+        : [...hypothesis.linkedSnapshots, snapshotId];
+      onUpdated({ ...hypothesis, linkedSnapshots });
+      setIsSnapshotPickerOpen(false);
+    } catch (cause) {
+      console.error("Could not link chart snapshot:", cause);
+      setSnapshotError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const handleUnlinkSnapshot = async (snapshotId: string): Promise<void> => {
+    setSnapshotError(null);
+    try {
+      await unlinkSnapshotFromHypothesis(hypothesis.id, snapshotId);
+      onUpdated({
+        ...hypothesis,
+        linkedSnapshots: hypothesis.linkedSnapshots.filter((id) => id !== snapshotId),
+      });
+    } catch (cause) {
+      console.error("Could not unlink chart snapshot:", cause);
+      setSnapshotError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const handleOpenSnapshot = (snapshotId: string): void => {
+    setLabReturnState({ hypothesisId: hypothesis.id, tab: "lab" });
+    navigate(`/chart?snapshot=${encodeURIComponent(snapshotId)}`, {
+      state: { snapshotId },
+    });
+  };
 
   const handleCaptureInsight = async (): Promise<void> => {
     if (!insightContent.trim()) return;
@@ -391,6 +455,60 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
               {isSaving ? "Recording..." : "📊 Record Test Execution"}
             </button>
           )}
+
+          <div dir="auto" className="mt-5 border-t border-[#292c34] pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h4 className="text-sm font-semibold text-white">
+                Linked Chart Snapshots (Visual Evidence)
+              </h4>
+              <button
+                type="button"
+                onClick={() => setIsSnapshotPickerOpen(true)}
+                className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/20"
+              >
+                + Link Snapshot
+              </button>
+            </div>
+            {snapshotError && (
+              <p role="alert" className="mt-3 text-sm text-rose-300">{snapshotError}</p>
+            )}
+            {hypothesis.linkedSnapshots.length > 0 ? (
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {hypothesis.linkedSnapshots.map((snapshotId) => {
+                  const snapshot = snapshots.find((item) => item.id === snapshotId);
+                  return (
+                    <li
+                      key={snapshotId}
+                      dir="auto"
+                      className="inline-flex max-w-full items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 pl-1.5 pr-1 text-sm text-sky-100"
+                    >
+                      <button
+                        type="button"
+                        dir="auto"
+                        onClick={() => handleOpenSnapshot(snapshotId)}
+                        className="max-w-[min(60vw,28rem)] truncate px-2 py-1.5 text-start hover:text-white"
+                        title={snapshot?.name ?? snapshotId}
+                      >
+                        ðŸ“Š {snapshot?.name ?? snapshotId}
+                      </button>
+                      <button
+                        type="button"
+                        dir="auto"
+                        onClick={() => void handleUnlinkSnapshot(snapshotId)}
+                        className="rounded-full p-1.5 text-sky-200 transition hover:bg-rose-500/20 hover:text-rose-200"
+                        aria-label={`Remove ${snapshot?.name ?? snapshotId}`}
+                        title="Remove snapshot link"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-gray-500">No chart snapshots linked.</p>
+            )}
+          </div>
         </section>
       )}
 
@@ -678,6 +796,69 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
             onChildCreated();
           }}
         />
+      )}
+
+      {isSnapshotPickerOpen && (
+        <div
+          dir="auto"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsSnapshotPickerOpen(false);
+          }}
+        >
+          <section
+            dir="auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="hypothesis-snapshot-picker-title"
+            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[#343741] bg-[#17191f] p-5 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="hypothesis-snapshot-picker-title" className="text-lg font-semibold text-white">
+                  Link Chart Snapshot
+                </h3>
+                <p className="mt-1 text-sm text-gray-400">Choose visual evidence for this hypothesis.</p>
+              </div>
+              <button
+                type="button"
+                dir="auto"
+                onClick={() => setIsSnapshotPickerOpen(false)}
+                className="rounded-lg border border-[#343741] px-3 py-1.5 text-sm text-gray-300 hover:bg-[#24262d]"
+              >
+                Close
+              </button>
+            </div>
+            {isLoadingSnapshots ? (
+              <p className="py-8 text-center text-sm text-gray-400">Loading snapshots...</p>
+            ) : snapshots.filter((snapshot) => !hypothesis.linkedSnapshots.includes(snapshot.id)).length > 0 ? (
+              <ul className="mt-4 max-h-[60vh] space-y-2 overflow-y-auto">
+                {snapshots
+                  .filter((snapshot) => !hypothesis.linkedSnapshots.includes(snapshot.id))
+                  .map((snapshot) => (
+                    <li key={snapshot.id}>
+                      <button
+                        type="button"
+                        dir="auto"
+                        onClick={() => void handleLinkSnapshot(snapshot.id)}
+                        className="w-full rounded-lg border border-[#343741] bg-[#101114] p-3 text-start transition hover:border-sky-500/50 hover:bg-sky-500/5"
+                      >
+                        <span className="block truncate text-sm font-semibold text-gray-100">{snapshot.name}</span>
+                        <span className="mt-1 block text-xs text-gray-500">
+                          {snapshot.chart.symbol} Â· {snapshot.chart.interval} Â· {new Date(snapshot.createdAt).toLocaleString()}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            ) : (
+              <p className="py-8 text-center text-sm text-gray-400">
+                {snapshots.length === 0 ? "No saved snapshots found." : "All snapshots are already linked."}
+              </p>
+            )}
+          </section>
+        </div>
       )}
     </article>
   );
