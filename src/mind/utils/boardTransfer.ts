@@ -63,6 +63,13 @@ function isTransferNode(value: unknown): value is VoraBoardTransferNode {
   return true;
 }
 
+function isTransferNodeType(value: string): value is VoraBoardTransferNode["type"] {
+  return value === "voraCard" ||
+    value === "voraText" ||
+    value === "voraShape" ||
+    value === "forgeAst";
+}
+
 function isTransferEdge(value: unknown): value is VoraBoardTransferEdge {
   return isRecord(value) &&
     typeof value.id === "string" &&
@@ -78,7 +85,7 @@ function isTransferCard(value: unknown): value is VoraBoardTransfer["cards"][num
     typeof value.version === "string";
 }
 
-export function parseBoardTransfer(value: unknown): VoraBoardTransfer {
+function isBoardTransfer(value: unknown): value is VoraBoardTransfer {
   if (!isRecord(value) ||
     value.format !== "vora-mind-board" ||
     value.version !== 1 ||
@@ -91,6 +98,13 @@ export function parseBoardTransfer(value: unknown): VoraBoardTransfer {
     !Array.isArray(value.cards) ||
     !value.cards.every(isTransferCard)
   ) {
+    return false;
+  }
+  return true;
+}
+
+export function parseBoardTransfer(value: unknown): VoraBoardTransfer {
+  if (!isBoardTransfer(value)) {
     throw new Error("This file is not a valid Vora Mind Board export.");
   }
 
@@ -113,7 +127,7 @@ export function parseBoardTransfer(value: unknown): VoraBoardTransfer {
     }
   }
 
-  return value as VoraBoardTransfer;
+  return value;
 }
 
 export function createBoardTransfer(
@@ -123,14 +137,14 @@ export function createBoardTransfer(
   cards: Record<string, VoraCard>,
 ): VoraBoardTransfer {
   const transferNodes = nodes.map((node): VoraBoardTransferNode => {
-    if (!node.type || !SUPPORTED_NODE_TYPES.has(node.type) || !isRecord(node.data)) {
+    if (!node.type || !isTransferNodeType(node.type) || !isRecord(node.data)) {
       throw new Error(`Cannot export unsupported canvas node type "${node.type ?? "unknown"}".`);
     }
     const type = node.type;
     const position = { x: node.position.x, y: node.position.y };
     const transferNode: VoraBoardTransferNode = {
       id: node.id,
-      type: type as VoraBoardTransferNode["type"],
+      type,
       position,
       data: structuredClone(node.data),
     };
