@@ -385,6 +385,7 @@ pub fn promote_inquiry(
     dependent_var: &str,
     metric: &str,
     success_threshold: &str,
+    linked_definitions: &[LinkedDefinition],
     now: i64,
 ) -> Result<Hypothesis> {
     let transaction = conn.transaction()?;
@@ -426,6 +427,7 @@ pub fn promote_inquiry(
     if changed != 1 {
         return Err(rusqlite::Error::InvalidQuery);
     }
+    insert_linked_definitions(&transaction, id, linked_definitions)?;
 
     let hypothesis = query_hypothesis(&transaction, id)?;
     transaction.commit()?;
@@ -437,7 +439,11 @@ pub fn list_hypotheses(conn: &Connection) -> Result<Vec<Hypothesis>> {
         "SELECT {HYPOTHESIS_COLUMNS} FROM hypotheses ORDER BY created_at DESC"
     ))?;
     let rows = statement.query_map([], map_hypothesis)?;
-    rows.collect()
+    let mut hypotheses = rows.collect::<Result<Vec<_>>>()?;
+    for hypothesis in &mut hypotheses {
+        hypothesis.linked_definitions = list_linked_definitions(conn, &hypothesis.id)?;
+    }
+    Ok(hypotheses)
 }
 
 #[tauri::command]
@@ -450,6 +456,7 @@ pub fn promote_to_hypothesis(
     dependent_var: String,
     metric: String,
     success_threshold: String,
+    linked_definitions: Option<Vec<LinkedDefinition>>,
 ) -> Result<Hypothesis, String> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -468,6 +475,7 @@ pub fn promote_to_hypothesis(
         &dependent_var,
         &metric,
         &success_threshold,
+        linked_definitions.as_deref().unwrap_or_default(),
         now,
     )
     .map_err(|error| error.to_string())
@@ -524,7 +532,9 @@ pub fn record_verdict(
 
 fn query_hypothesis(conn: &Connection, id: &str) -> Result<Hypothesis> {
     let sql = format!("SELECT {HYPOTHESIS_COLUMNS} FROM hypotheses WHERE id = ?1");
-    conn.query_row(&sql, [id], map_hypothesis)
+    let mut hypothesis = conn.query_row(&sql, [id], map_hypothesis)?;
+    hypothesis.linked_definitions = list_linked_definitions(conn, id)?;
+    Ok(hypothesis)
 }
 
 fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
@@ -545,6 +555,7 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
         evaluated_at: row.get(13)?,
         promoted_to_library_id: row.get(14)?,
         parent_hypothesis_id: row.get(15)?,
+        linked_definitions: Vec::new(),
     })
 }
 
