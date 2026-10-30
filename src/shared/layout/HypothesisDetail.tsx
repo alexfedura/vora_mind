@@ -124,6 +124,27 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
         </div>
       </dl>
 
+      <section dir="auto" className="mt-5">
+        <h3 className="text-sm font-semibold text-white">Linked Definitions</h3>
+        {hypothesis.linkedDefinitions.length > 0 ? (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {hypothesis.linkedDefinitions.map((definition) => (
+              <li
+                key={definition.libraryGroupId}
+                dir="auto"
+                className="rounded-full border border-[#343741] bg-[#101114] px-3 py-1.5 text-sm text-gray-300"
+              >
+                📚 {definition.definitionName} (v{definition.versionString})
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p dir="auto" className="mt-2 text-sm text-gray-500">
+            No definitions linked to this hypothesis.
+          </p>
+        )}
+      </section>
+
       {hypothesis.verdict === "supported" && (
         <section className="mt-6 border-t border-[#292c34] pt-5">
           {hypothesis.promotedToLibraryId ? (

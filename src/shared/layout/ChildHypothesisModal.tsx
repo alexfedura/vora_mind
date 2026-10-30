@@ -9,7 +9,7 @@ interface ChildHypothesisModalProps {
   onCreated: () => void;
 }
 
-type ChildHypothesisFields = Omit<ChildHypothesisInput, "parentId">;
+type ChildHypothesisFields = Omit<ChildHypothesisInput, "parentId" | "linkedDefinitions">;
 
 const childFieldLabels: Record<keyof ChildHypothesisFields, string> = {
   statementH1: "H1 — Alternative hypothesis",
@@ -42,7 +42,11 @@ export const ChildHypothesisModal: React.FC<ChildHypothesisModalProps> = ({
     setIsSaving(true);
     setError(null);
     try {
-      await createChildHypothesis({ parentId: hypothesis.id, ...fields });
+      await createChildHypothesis({
+        parentId: hypothesis.id,
+        ...fields,
+        linkedDefinitions: hypothesis.linkedDefinitions,
+      });
       onCreated();
     } catch (cause) {
       console.error("Could not create child hypothesis:", cause);
