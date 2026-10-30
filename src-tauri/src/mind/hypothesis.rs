@@ -1424,6 +1424,21 @@ mod tests {
             10,
         )
         .expect("promote inquiry");
+        save_hypothesis_protocol_in_db(&mut connection, "hypothesis-1", "Run the test.", 15)
+            .expect("save protocol");
+        record_hypothesis_execution_in_db(&mut connection, "hypothesis-1", "Raw observations", 18)
+            .expect("record execution");
+        let parent = record_verdict_in_db(
+            &connection,
+            "hypothesis-1",
+            "The result held under measured conditions.",
+            "supported",
+            Some("Raw observations"),
+            Some("Evidence supports H1."),
+            Some("The measured cohort."),
+            20,
+        )
+        .expect("record supported verdict");
 
         let child = create_child_hypothesis_in_db(
             &mut connection,
@@ -1443,7 +1458,71 @@ mod tests {
         assert_eq!(child.status, "draft");
         assert_eq!(child.inquiry_id, "inquiry-1");
         assert_eq!(child.parent_hypothesis_id.as_deref(), Some("hypothesis-1"));
+        assert_eq!(child.refined_from_id.as_deref(), Some(parent.id.as_str()));
         assert_eq!(child.created_at, 20);
         assert_eq!(child.linked_definitions, vec![definition]);
+    }
+
+    #[test]
+    fn partially_supported_verdict_records_boundaries_and_graduates_with_them() {
+        let mut connection = setup();
+        select_inquiry(&mut connection, "inquiry-1");
+        promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+        save_hypothesis_protocol_in_db(&mut connection, "hypothesis-1", "Run the test.", 15)
+            .expect("save protocol");
+        record_hypothesis_execution_in_db(&mut connection, "hypothesis-1", "Raw observations", 18)
+            .expect("record execution");
+
+        assert!(record_verdict_in_db(
+            &connection,
+            "hypothesis-1",
+            "The result was mixed.",
+            "partially_supported",
+            Some("Raw observations"),
+            Some("The result held in trending markets."),
+            None,
+            19,
+        )
+        .is_err());
+        let hypothesis = record_verdict_in_db(
+            &connection,
+            "hypothesis-1",
+            "The result was mixed.",
+            "partially_supported",
+            Some("Raw observations"),
+            Some("The result held in trending markets."),
+            Some("Trending markets"),
+            20,
+        )
+        .expect("record partial verdict with boundary conditions");
+        assert_eq!(hypothesis.verdict.as_deref(), Some("partially_supported"));
+        assert_eq!(
+            hypothesis.boundary_conditions.as_deref(),
+            Some("Trending markets")
+        );
+
+        let graduated = graduate_to_library_in_db(&mut connection, "hypothesis-1", None, 30)
+            .expect("graduate partial hypothesis");
+        let group_id = graduated
+            .promoted_to_library_id
+            .expect("Library group ID");
+        let (name, snapshot_json): (String, String) = connection
+            .query_row(
+                "SELECT name, snapshot_json FROM library_item_groups WHERE id = ?1",
+                [&group_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read Library group");
+        assert_eq!(name, "If X then Y (Valid only in Trending markets)");
+        let snapshot: serde_json::Value =
+            serde_json::from_str(&snapshot_json).expect("parse Library snapshot");
+        assert!(snapshot["nodes"][0]["title"]
+            .as_str()
+            .expect("Library node title")
+            .contains("Valid only in Trending markets"));
+        assert!(snapshot["nodes"][0]["content"]
+            .as_str()
+            .expect("Library node content")
+            .contains("Boundary conditions: Trending markets"));
     }
 }
