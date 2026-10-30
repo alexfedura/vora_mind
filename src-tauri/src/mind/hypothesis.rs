@@ -327,17 +327,10 @@ fn create_child_hypothesis_in_db(
         .optional()
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("Parent hypothesis not found: {parent_id}"))?;
-    if !matches!(
-        parent_verdict.as_deref(),
-        Some("rejected" | "supported" | "partially_supported")
-    ) {
-        return Err("A child hypothesis can only be created from a rejected, supported, or partially supported hypothesis.".to_string());
+    if parent_verdict.is_none() {
+        return Err("A child hypothesis can only be created from an evaluated hypothesis.".to_string());
     }
-    let refined_from_id = matches!(
-        parent_verdict.as_deref(),
-        Some("supported" | "partially_supported")
-    )
-    .then_some(parent_id);
+    let refined_from_id = Some(parent_id);
 
     transaction
         .execute(
@@ -404,18 +397,17 @@ pub fn create_child_hypothesis(
 
 fn hypothesis_library_node(hypothesis: &Hypothesis) -> NodeInput {
     let boundary_conditions = hypothesis.boundary_conditions.as_deref();
-    let title = if hypothesis.verdict.as_deref() == Some("partially_supported") {
-        let suffix = format!(
-            " (Valid only in {})",
-            boundary_conditions.unwrap_or("specified conditions")
-        );
-        let suffix: String = suffix.chars().take(80).collect();
-        let prefix_limit = 80_usize.saturating_sub(suffix.chars().count());
-        let prefix: String = hypothesis.statement_h1.chars().take(prefix_limit).collect();
-        format!("{prefix}{suffix}")
+    let statement_title = if hypothesis.statement_h1.trim().is_empty() {
+        "Supported hypothesis"
     } else {
-        hypothesis.statement_h1.clone()
+        hypothesis.statement_h1.as_str()
     };
+    let title = boundary_conditions
+        .filter(|conditions| !conditions.trim().is_empty())
+        .map_or_else(
+            || statement_title.to_string(),
+            |conditions| format!("{statement_title} (Valid only when: {conditions})"),
+        );
     let content = format!(
         "H1: {}\n\nH0: {}\n\nIndependent variable: {}\nDependent variable: {}\nMetric: {}\nSuccess threshold: {}\n\nBoundary conditions: {}\n\nEvidence notes: {}",
         hypothesis.statement_h1,
@@ -506,11 +498,7 @@ fn graduate_to_library_in_db(
         .map_err(|error| error.to_string())?;
         group_id.to_string()
     } else {
-        let name = if hypothesis.statement_h1.trim().is_empty() {
-            "Supported hypothesis".to_string()
-        } else {
-            library_title.chars().take(80).collect()
-        };
+        let name = library_title;
         library_groups::create_item_group_in_transaction(
             &transaction,
             &name,
@@ -1464,6 +1452,46 @@ mod tests {
     }
 
     #[test]
+    fn child_hypothesis_can_refine_an_inconclusive_verdict() {
+        let mut connection = setup();
+        select_inquiry(&mut connection, "inquiry-1");
+        promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+        save_hypothesis_protocol_in_db(&mut connection, "hypothesis-1", "Run the test.", 15)
+            .expect("save protocol");
+        record_hypothesis_execution_in_db(&mut connection, "hypothesis-1", "Raw observations", 18)
+            .expect("record execution");
+        record_verdict_in_db(
+            &connection,
+            "hypothesis-1",
+            "The result was inconclusive.",
+            "inconclusive",
+            Some("Raw observations"),
+            Some("The sample was too small."),
+            None,
+            20,
+        )
+        .expect("record inconclusive verdict");
+
+        let child = create_child_hypothesis_in_db(
+            &mut connection,
+            "hypothesis-1",
+            "hypothesis-child",
+            "If X in a larger sample then Y",
+            "X does not affect Y",
+            "X in a larger sample",
+            "Y",
+            "Y per day",
+            "Y increases by 10%",
+            &[],
+            25,
+        )
+        .expect("create child from inconclusive hypothesis");
+
+        assert_eq!(child.parent_hypothesis_id.as_deref(), Some("hypothesis-1"));
+        assert_eq!(child.refined_from_id.as_deref(), Some("hypothesis-1"));
+    }
+
+    #[test]
     fn partially_supported_verdict_records_boundaries_and_graduates_with_them() {
         let mut connection = setup();
         select_inquiry(&mut connection, "inquiry-1");
@@ -1531,13 +1559,13 @@ mod tests {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .expect("read Library group");
-        assert_eq!(name, "If X then Y (Valid only in Trending markets)");
+        assert_eq!(name, "If X then Y (Valid only when: Trending markets)");
         let snapshot: serde_json::Value =
             serde_json::from_str(&snapshot_json).expect("parse Library snapshot");
         assert!(snapshot["nodes"][0]["title"]
             .as_str()
             .expect("Library node title")
-            .contains("Valid only in Trending markets"));
+            .contains("Valid only when: Trending markets"));
         assert!(snapshot["nodes"][0]["content"]
             .as_str()
             .expect("Library node content")

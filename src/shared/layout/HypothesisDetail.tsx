@@ -469,7 +469,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
               </label>
               <label dir="auto" className="mt-4 block">
                 <span className="mb-2 block text-xs font-medium text-gray-400">
-                  Boundary Conditions (Where does this hold true?)
+                  Boundary Conditions (e.g., Only in Trending Markets, RSI &gt; 50)
                 </span>
                 <textarea
                   dir="auto"
@@ -559,9 +559,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
             </div>
           )}
 
-          {(hypothesis.verdict === "rejected" ||
-            hypothesis.verdict === "partially_supported" ||
-            hypothesis.verdict === "supported") &&
+          {hypothesis.verdict &&
             !isEditingVerdict && (
             <div className="mt-5 border-t border-[#292c34] pt-4">
               <button

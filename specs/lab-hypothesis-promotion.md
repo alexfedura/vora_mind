@@ -76,19 +76,18 @@ A supported or partially supported hypothesis can be graduated to the Library
 once. Graduation saves its H1/H0 statements, variables, metric, success
 threshold, evidence notes, and boundary conditions as a Library item-group
 version and records that group's ID on the hypothesis in the same transaction.
-For partially supported hypotheses, the new Library item title includes the
-boundary conditions. An optional existing Library group receives an appended
-version; otherwise graduation creates a new group.
+When boundary conditions are present, the new Library item title includes
+them. An optional existing Library group receives an appended version;
+otherwise graduation creates a new group.
 
-A rejected, supported, or partially supported hypothesis can create a draft
-child hypothesis. The child inherits the source inquiry, stores the parent
-hypothesis ID, and starts with its parent's H1/H0, variables, metric, and
-success threshold so those values can be iterated. Children of supported or
-partially supported hypotheses also set `refined_from_id` to preserve the
-proven-concept lineage. They inherit the parent's exact linked definition
-versions so the changed hypothesis variable is not confounded by a changed
-definition. Hypothesis detail shows linked definitions with their recorded
-version and displays the refined-from hypothesis lineage.
+Any evaluated hypothesis can create a draft child hypothesis. The child
+inherits the source inquiry, stores the parent hypothesis ID, and starts with
+its parent's H1/H0, variables, metric, and success threshold so those values
+can be iterated. Every child sets `refined_from_id` to preserve lineage. They
+inherit the parent's exact linked definition versions so the changed
+hypothesis variable is not confounded by a changed definition. Hypothesis
+detail shows linked definitions with their recorded version and displays the
+refined-from hypothesis lineage.
 
 ## Mid-test Scratchpad
 
