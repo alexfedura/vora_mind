@@ -853,8 +853,10 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
 #[cfg(test)]
 mod tests {
     use super::{
-        create_child_hypothesis_in_db, graduate_to_library_in_db, init_schema, list_hypotheses,
-        promote_inquiry, record_hypothesis_execution_in_db, record_verdict_in_db,
+        add_hypothesis_insight_in_db, create_child_hypothesis_in_db,
+        delete_hypothesis_insight_in_db, graduate_to_library_in_db, init_schema,
+        list_hypothesis_insights, list_hypotheses, promote_inquiry,
+        record_hypothesis_execution_in_db, record_verdict_in_db,
         save_hypothesis_protocol_in_db, LinkedDefinition,
     };
     use crate::mind::questions::{
@@ -870,6 +872,60 @@ mod tests {
         init_schema(&connection).expect("initialize hypotheses schema");
         init_schema(&connection).expect("reinitialize hypotheses schema");
         connection
+    }
+
+    #[test]
+    fn insights_are_hypothesis_scoped_newest_first_and_deletable() {
+        let mut connection = setup();
+        select_inquiry(&mut connection, "inquiry-1");
+        promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+
+        add_hypothesis_insight_in_db(
+            &connection,
+            "insight-old",
+            "hypothesis-1",
+            "First observation",
+            20,
+        )
+        .expect("add first insight");
+        let newest = add_hypothesis_insight_in_db(
+            &connection,
+            "insight-new",
+            "hypothesis-1",
+            "Follow-up idea",
+            30,
+        )
+        .expect("add second insight");
+
+        assert_eq!(newest.content, "Follow-up idea");
+        assert_eq!(
+            list_hypothesis_insights(&connection, "hypothesis-1")
+                .expect("list hypothesis insights")
+                .iter()
+                .map(|insight| insight.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["insight-new", "insight-old"]
+        );
+        assert!(add_hypothesis_insight_in_db(
+            &connection,
+            "insight-empty",
+            "hypothesis-1",
+            "  ",
+            40,
+        )
+        .is_err());
+        assert!(list_hypothesis_insights(&connection, "missing").is_err());
+
+        delete_hypothesis_insight_in_db(&connection, "insight-new").expect("delete insight");
+        assert_eq!(
+            list_hypothesis_insights(&connection, "hypothesis-1")
+                .expect("list remaining insights")
+                .iter()
+                .map(|insight| insight.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["insight-old"]
+        );
+        assert!(delete_hypothesis_insight_in_db(&connection, "missing").is_err());
     }
 
     fn promote(
