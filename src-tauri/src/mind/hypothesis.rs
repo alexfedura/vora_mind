@@ -47,6 +47,8 @@ pub struct Hypothesis {
     pub parent_hypothesis_id: Option<String>,
     #[serde(default)]
     pub linked_definitions: Vec<LinkedDefinition>,
+    #[serde(default)]
+    pub linked_snapshots: Vec<String>,
     pub protocol_steps: Option<String>,
     pub protocol_locked_at: Option<i64>,
     pub raw_data: Option<String>,
@@ -126,6 +128,12 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             content TEXT NOT NULL,
             created_at INTEGER NOT NULL,
             FOREIGN KEY(hypothesis_id) REFERENCES hypotheses(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS hypothesis_snapshots (
+            hypothesis_id TEXT NOT NULL,
+            snapshot_id TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (hypothesis_id, snapshot_id)
         );",
     )?;
     Ok(())
@@ -614,8 +622,18 @@ pub fn list_hypotheses(conn: &Connection) -> Result<Vec<Hypothesis>> {
     let mut hypotheses = rows.collect::<Result<Vec<_>>>()?;
     for hypothesis in &mut hypotheses {
         hypothesis.linked_definitions = list_linked_definitions(conn, &hypothesis.id)?;
+        hypothesis.linked_snapshots = list_hypothesis_snapshots(conn, &hypothesis.id)?;
     }
     Ok(hypotheses)
+}
+
+fn list_hypothesis_snapshots(conn: &Connection, hypothesis_id: &str) -> Result<Vec<String>> {
+    let mut statement = conn.prepare(
+        "SELECT snapshot_id FROM hypothesis_snapshots
+         WHERE hypothesis_id = ?1 ORDER BY created_at, snapshot_id",
+    )?;
+    let rows = statement.query_map([hypothesis_id], |row| row.get(0))?;
+    rows.collect()
 }
 
 #[tauri::command]
@@ -657,6 +675,71 @@ pub fn promote_to_hypothesis(
 pub fn get_hypotheses(state: State<AppState>) -> Result<Vec<Hypothesis>, String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;
     list_hypotheses(&conn).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn link_snapshot_to_hypothesis(
+    state: State<AppState>,
+    hypothesis_id: String,
+    snapshot_id: String,
+) -> Result<(), String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let now = i64::try_from(now).map_err(|error| error.to_string())?;
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    let exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM hypotheses WHERE id = ?1)",
+            [&hypothesis_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !exists {
+        return Err(format!("Hypothesis not found: {hypothesis_id}"));
+    }
+    conn.execute(
+        "INSERT OR IGNORE INTO hypothesis_snapshots (hypothesis_id, snapshot_id, created_at)
+         VALUES (?1, ?2, ?3)",
+        params![hypothesis_id, snapshot_id, now],
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn unlink_snapshot_from_hypothesis(
+    state: State<AppState>,
+    hypothesis_id: String,
+    snapshot_id: String,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    conn.execute(
+        "DELETE FROM hypothesis_snapshots WHERE hypothesis_id = ?1 AND snapshot_id = ?2",
+        params![hypothesis_id, snapshot_id],
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_hypothesis_snapshots(
+    state: State<AppState>,
+    hypothesis_id: String,
+) -> Result<Vec<String>, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    let exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM hypotheses WHERE id = ?1)",
+            [&hypothesis_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !exists {
+        return Err(format!("Hypothesis not found: {hypothesis_id}"));
+    }
+    list_hypothesis_snapshots(&conn, &hypothesis_id).map_err(|error| error.to_string())
 }
 
 fn save_hypothesis_protocol_in_db(
@@ -857,6 +940,7 @@ fn query_hypothesis(conn: &Connection, id: &str) -> Result<Hypothesis> {
     let sql = format!("SELECT {HYPOTHESIS_COLUMNS} FROM hypotheses WHERE id = ?1");
     let mut hypothesis = conn.query_row(&sql, [id], map_hypothesis)?;
     hypothesis.linked_definitions = list_linked_definitions(conn, id)?;
+    hypothesis.linked_snapshots = list_hypothesis_snapshots(conn, id)?;
     Ok(hypothesis)
 }
 
@@ -879,6 +963,7 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
         promoted_to_library_id: row.get(14)?,
         parent_hypothesis_id: row.get(15)?,
         linked_definitions: Vec::new(),
+        linked_snapshots: Vec::new(),
         protocol_steps: row.get(16)?,
         protocol_locked_at: row.get(17)?,
         raw_data: row.get(18)?,
