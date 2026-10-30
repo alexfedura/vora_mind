@@ -470,6 +470,7 @@ fn graduate_to_library_in_db(
     }
 
     let node = hypothesis_library_node(&hypothesis);
+    let library_title = node.title.clone();
     let group_id = if let Some(group_id) = library_group_id {
         let (version, snapshot_json, deleted_at): (String, String, Option<i64>) = transaction
             .query_row(
@@ -504,7 +505,7 @@ fn graduate_to_library_in_db(
         let name = if hypothesis.statement_h1.trim().is_empty() {
             "Supported hypothesis".to_string()
         } else {
-            title.chars().take(80).collect()
+            library_title.chars().take(80).collect()
         };
         library_groups::create_item_group_in_transaction(
             &transaction,
@@ -797,7 +798,7 @@ fn record_verdict_in_db(
         return Err(format!("Invalid hypothesis verdict: {verdict}"));
     }
     if verdict == "partially_supported"
-        && boundary_conditions.is_none_or(|conditions| conditions.trim().is_empty())
+        && boundary_conditions.map_or(true, |conditions| conditions.trim().is_empty())
     {
         return Err("Boundary conditions are required for a partially supported verdict.".to_string());
     }
