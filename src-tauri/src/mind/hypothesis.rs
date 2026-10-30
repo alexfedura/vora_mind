@@ -1188,6 +1188,7 @@ mod tests {
             "supported",
             Some("Raw observations"),
             Some("Analysis supports H1."),
+            None,
             20,
         )
         .expect("record verdict");
