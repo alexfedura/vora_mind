@@ -33,6 +33,16 @@ supported, partially supported, rejected, and inconclusive. A verdict may
 record nullable boundary conditions describing where the result applies.
 Hypotheses also store an optional `refined_from_id` lineage to a prior
 supported or partially supported hypothesis.
+Hypotheses also store a nullable `checklist_schema` JSON array containing
+field labels, types (`select`, `number`, `text`, or `boolean`), and select
+options. A `hypothesis_data_entries` table stores individually timestamped
+JSON data rows with a cascading foreign key to the hypothesis. Checklist
+schemas are validated before saving; entries require a schema and values
+matching its field types and options. Entries are independently listable and
+deletable, and collection remains available while a locked-protocol test is
+running. The Lab detail view supports defining fields, rapid entry with
+save-and-focus-next, entry counts, and per-field summaries before verdict
+analysis.
 Create a `hypothesis_insights` table for immutable mid-test scratchpad entries,
 with a cascading foreign key to the owning hypothesis and a creation timestamp.
 Insights are listed newest-first and can be deleted independently of the
@@ -113,6 +123,7 @@ Unit tests cover successful promotion and inquiry state changes, rejection of
 unselected and missing inquiries, and descending hypothesis retrieval order.
 They also cover verdict recording, overwriting an existing verdict and its
 evidence, validation, schema migration idempotency, and snapshot link/unlink
-behavior. The focused command is:
+behavior, checklist schema validation, and data-entry creation, listing, and
+deletion. The focused command is:
 
 `cargo test --manifest-path src-tauri/Cargo.toml --lib mind::hypothesis -- --nocapture`
