@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { IChartApi, MouseEventParams, UTCTimestamp, Time } from "lightweight-charts";
 import {
   mktFetchLocalCandles,
@@ -56,6 +56,7 @@ import {
 } from "@/lib/market/chartTemplate";
 import {
   AlertCircle,
+  ArrowLeft,
   Camera,
   House,
   Menu,
@@ -94,6 +95,7 @@ import { getDefaultRoute, setDefaultRoute, type DefaultRoute } from "@/lib/setti
 import { acquireInteractionLock, useInteractionLocked } from "@/lib/ui/interactionLock";
 import { ScrollToLatestButton } from "@/components/market/ScrollToLatestButton";
 import { useMarketSymbol } from "@/lib/market/useMarketSymbol";
+import { useAppStore } from "@/shared/store/useAppStore";
 import { ChartRightDock, type ChartRightPanelId } from "@/components/market/ChartRightDock";
 import { ChartDrawingToolbar } from "@/components/market/ChartDrawingToolbar";
 import { ChartIntervalSelector } from "@/components/market/ChartIntervalSelector";
@@ -331,8 +333,20 @@ function RestoreOverlay({ visible, name }: { visible: boolean; name: string }): 
 }
 
 export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const snapshotIdFromUrl = searchParams.get("snapshot");
+  const routeState: unknown = location.state;
+  const snapshotIdFromState =
+    typeof routeState === "object" &&
+    routeState !== null &&
+    !Array.isArray(routeState) &&
+    "snapshotId" in routeState &&
+    typeof routeState.snapshotId === "string"
+      ? routeState.snapshotId
+      : null;
+  const snapshotIdFromLocation = snapshotIdFromState ?? searchParams.get("snapshot");
+  const labReturnState = useAppStore((state) => state.labReturnState);
   const playNarrativeFromUrl = searchParams.get("playNarrative") === "1";
   const [currentM, setCurrentM] = useState<number>(() => {
     try {
