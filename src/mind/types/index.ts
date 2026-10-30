@@ -167,6 +167,19 @@ export interface VoraShapePoint {
   y: number;
 }
 
+export const VORA_DIAGRAM_SHAPE_LABELS = {
+  rectangle: "Rectangle",
+  path: "Path",
+  process: "Process",
+  decision: "Decision",
+  terminator: "Start / End",
+  inputOutput: "Input / Output",
+  document: "Document",
+  database: "Database",
+} as const;
+
+export type VoraDiagramShape = keyof typeof VORA_DIAGRAM_SHAPE_LABELS;
+
 export interface VoraPathSegment {
   id: string;
   name: string;
@@ -176,7 +189,7 @@ export interface VoraPathSegment {
 }
 
 export interface VoraShapeData extends Record<string, unknown> {
-  shape: "rectangle" | "path";
+  shape: VoraDiagramShape;
   label: string;
   color: string;
   lineOpacity: number;
