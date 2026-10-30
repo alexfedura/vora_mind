@@ -487,7 +487,8 @@ fn now_millis() -> Result<i64> {
 mod tests {
     use super::{
         commit_item_group_version, create_item_group, list_item_group_usages,
-        list_item_group_versions, list_item_groups, move_item_group_to_trash, restore_item_group,
+        list_definitions_for_selection, list_item_group_versions, list_item_groups,
+        move_item_group_to_trash, restore_item_group,
     };
     use crate::mind::canvas_db::{
         create_board, get_all_boards, init_db, save_semantic_snapshot, BoardVersionCard,
@@ -536,7 +537,24 @@ mod tests {
 
         let groups = list_item_groups(&conn).unwrap();
         assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].board_id, format!("library_board_{}", created.id));
+        assert_eq!(groups[0].board_id, format!("library_board_{        }
+
+        #[test]
+        fn definition_selection_lists_each_available_version_and_skips_trashed_groups() {
+            let mut conn = Connection::open_in_memory().unwrap();
+            init_db(&conn).unwrap();
+            let created = create_item_group(&mut conn, "Flag", "0.1.0", sample_snapshot()).unwrap();
+
+            let definitions = list_definitions_for_selection(&conn).unwrap();
+            assert_eq!(definitions.len(), 1);
+            assert_eq!(definitions[0].group_id, created.id);
+            assert_eq!(definitions[0].version_id, created.active_version_id);
+            assert_eq!(definitions[0].name, "Flag");
+            assert_eq!(definitions[0].version_string, "0.1.0");
+
+            move_item_group_to_trash(&conn, &created.id).unwrap();
+            assert!(list_definitions_for_selection(&conn).unwrap().is_empty());
+        }", created.id));
         assert_eq!(groups[0].snapshot.cards[0].content, "Saved content");
         assert_eq!(groups[0].snapshot.edges[0].source, "node-a");
         assert_eq!(
