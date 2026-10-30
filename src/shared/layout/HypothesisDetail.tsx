@@ -742,23 +742,25 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
               )}
             </div>
 
-            {hypothesis.checklistSchema == null ? isExecuted ? (
-              <p className="mt-4 text-sm text-gray-400">
-                No checklist was defined before test execution.
-              </p>
-            ) : (
-              <button
-                type="button"
-                dir="auto"
-                onClick={() => {
-                  setChecklistDraftFields([createChecklistFieldDraft()]);
-                  setDataCollectionError(null);
-                  setIsChecklistBuilderOpen(true);
-                }}
-                className="mt-4 rounded-lg border border-amber-300/50 bg-amber-500 px-4 py-2.5 text-sm font-semibold text-gray-950 transition hover:bg-amber-400"
-              >
-                ⚙️ Define Checklist
-              </button>
+            {hypothesis.checklistSchema == null ? (
+              isExecuted ? (
+                <p className="mt-4 text-sm text-gray-400">
+                  No checklist was defined before test execution.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  dir="auto"
+                  onClick={() => {
+                    setChecklistDraftFields([createChecklistFieldDraft()]);
+                    setDataCollectionError(null);
+                    setIsChecklistBuilderOpen(true);
+                  }}
+                  className="mt-4 rounded-lg border border-amber-300/50 bg-amber-500 px-4 py-2.5 text-sm font-semibold text-gray-950 transition hover:bg-amber-400"
+                >
+                  ⚙️ Define Checklist
+                </button>
+              )
             ) : checklistSchema.error ? (
               <p role="alert" className="mt-4 text-sm text-rose-300">{checklistSchema.error}</p>
             ) : checklistSchema.fields ? (
