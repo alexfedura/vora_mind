@@ -6,6 +6,7 @@ import {
   Connection,
   Edge,
   Node,
+  MarkerType,
   useReactFlow,
 } from "@xyflow/react";
 import { useAppStore } from "@/shared/store/useAppStore";
@@ -411,7 +412,12 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
       saveHistorySnapshot();
       setEdges((eds) =>
         addEdge(
-          { ...params, type: "default", style: { stroke: "#4b5563", strokeWidth: 2 } },
+          {
+            ...params,
+            type: "default",
+            markerEnd: { type: MarkerType.ArrowClosed },
+            style: { stroke: "#4b5563", strokeWidth: 2 },
+          },
           eds
         )
       );
@@ -705,6 +711,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
       source: edge.source,
       target: edge.target,
       type: "default",
+      markerEnd: edge.link_type === "directed" ? { type: MarkerType.ArrowClosed } : undefined,
       style: { stroke: "#7c3aed", strokeWidth: 2 },
     }));
     const restoredCards: Record<string, VoraCard> = {};

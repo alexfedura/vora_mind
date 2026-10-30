@@ -1,4 +1,4 @@
-import type { Edge, Node } from "@xyflow/react";
+import { MarkerType, type Edge, type Node } from "@xyflow/react";
 import type { VoraShapeData, VoraShapeDefaults } from "@/mind/types";
 
 export type FlowchartTemplateId = "basic-process" | "decision-branch";
@@ -89,6 +89,7 @@ export function createFlowchartTemplate(
         source: source.id,
         target: target.id,
         type: "default",
+        markerEnd: { type: MarkerType.ArrowClosed },
         selected: true,
       }]
       : [];
