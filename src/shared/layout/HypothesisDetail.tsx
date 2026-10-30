@@ -1,7 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Trash2 } from "lucide-react";
-import type { Hypothesis, HypothesisInsight, HypothesisVerdict } from "@/types";
+import type {
+  ChecklistField,
+  ChecklistFieldType,
+  DataEntry,
+  Hypothesis,
+  HypothesisInsight,
+  HypothesisVerdict,
+} from "@/types";
 import type { VoraSnapshot } from "@/lib/snapshot/types";
 import { listSnapshots } from "@/lib/snapshot/storage";
 import { ChildHypothesisModal } from "@/shared/layout/ChildHypothesisModal";
@@ -42,6 +49,108 @@ function formatTraceTimestamp(timestamp: number | null | undefined): string {
 }
 
 const EMPTY_INSIGHTS: HypothesisInsight[] = [];
+const EMPTY_DATA_ENTRIES: DataEntry[] = [];
+
+interface ChecklistFieldDraft {
+  id: string;
+  label: string;
+  type: ChecklistFieldType;
+  optionsText: string;
+}
+
+interface ParsedDataEntry {
+  entry: DataEntry;
+  values: Record<string, unknown>;
+}
+
+interface ChecklistFieldAnalysis {
+  label: string;
+  counts: Array<{ value: string; count: number }>;
+  numeric?: { count: number; min: number; average: number; max: number };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseChecklistSchema(
+  schemaJson: string | null | undefined,
+): { fields: ChecklistField[] | null; error: string | null } {
+  if (schemaJson == null) return { fields: null, error: null };
+  try {
+    const parsed: unknown = JSON.parse(schemaJson);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return { fields: null, error: "The saved checklist schema is not a non-empty field list." };
+    }
+    const fields: ChecklistField[] = [];
+    const labels = new Set<string>();
+    for (const item of parsed) {
+      if (!isRecord(item) || typeof item.label !== "string" || !item.label.trim()) {
+        return { fields: null, error: "The saved checklist schema contains a field without a label." };
+      }
+      if (labels.has(item.label)) {
+        return { fields: null, error: `The saved checklist contains duplicate field "${item.label}".` };
+      }
+      labels.add(item.label);
+      if (item.type !== "select" && item.type !== "number" && item.type !== "text" && item.type !== "boolean") {
+        return { fields: null, error: `The saved checklist field "${item.label}" has an unsupported type.` };
+      }
+      let options: string[] = [];
+      if (item.type === "select") {
+        if (!Array.isArray(item.options) || item.options.length === 0
+          || !item.options.every((option): option is string => typeof option === "string" && option.trim().length > 0)) {
+          return { fields: null, error: `The saved select field "${item.label}" has invalid options.` };
+        }
+        options = item.options;
+      }
+      fields.push({ label: item.label, type: item.type, options });
+    }
+    return { fields, error: null };
+  } catch (cause) {
+    return {
+      fields: null,
+      error: `Could not parse the saved checklist schema: ${cause instanceof Error ? cause.message : String(cause)}`,
+    };
+  }
+}
+
+function formatChecklistValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  return JSON.stringify(value) ?? "—";
+}
+
+function analyzeChecklistEntries(
+  fields: ChecklistField[],
+  entries: ParsedDataEntry[],
+): ChecklistFieldAnalysis[] {
+  return fields.map((field) => {
+    const counts = new Map<string, number>();
+    const numericValues: number[] = [];
+    for (const { values } of entries) {
+      const value = values[field.label];
+      const key = formatChecklistValue(value);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+      if (typeof value === "number" && Number.isFinite(value)) numericValues.push(value);
+    }
+    const result: ChecklistFieldAnalysis = {
+      label: field.label,
+      counts: [...counts.entries()]
+        .map(([value, count]) => ({ value, count }))
+        .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value)),
+    };
+    if (field.type === "number" && numericValues.length > 0) {
+      result.numeric = {
+        count: numericValues.length,
+        min: Math.min(...numericValues),
+        average: numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length,
+        max: Math.max(...numericValues),
+      };
+    }
+    return result;
+  });
+}
 
 export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   hypothesis,
