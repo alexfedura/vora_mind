@@ -173,7 +173,16 @@ export const PromoteHypothesisModal: React.FC<PromoteHypothesisModalProps> = ({
                 className="w-full rounded-xl border border-[#343741] bg-[#101114] px-3 py-2.5 text-sm text-gray-200 outline-none transition focus:border-[#e8ad55]/70 disabled:opacity-60"
               >
                 {definitions.map((definition) => (
-                  <option key={definition.versionId} value={definition.versionId} dir="auto">
+                  <option
+                    key={definition.versionId}
+                    value={definition.versionId}
+                    dir="auto"
+                    disabled={selectedDefinitions.some(
+                      (selected) =>
+                        selected.libraryGroupId === definition.groupId &&
+                        selected.libraryVersionId !== definition.versionId,
+                    )}
+                  >
                     {definition.name} (v{definition.versionString})
                   </option>
                 ))}

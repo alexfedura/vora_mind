@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
@@ -103,19 +104,23 @@ fn insert_linked_definitions(
     hypothesis_id: &str,
     linked_definitions: &[LinkedDefinition],
 ) -> Result<()> {
+    let mut linked_groups = HashSet::new();
     for definition in linked_definitions {
-        let version_exists: bool = transaction.query_row(
-            "SELECT EXISTS(
-                SELECT 1 FROM library_item_group_versions
-                WHERE id = ?1 AND group_id = ?2
-            )",
-            params![
-                definition.library_version_id,
-                definition.library_group_id
-            ],
-            |row| row.get(0),
-        )?;
-        if !version_exists {
+        if !linked_groups.insert(definition.library_group_id.as_str()) {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        let stored_version: Option<String> = transaction
+            .query_row(
+                "SELECT version FROM library_item_group_versions
+                 WHERE id = ?1 AND group_id = ?2",
+                params![
+                    definition.library_version_id,
+                    definition.library_group_id
+                ],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if stored_version.as_deref() != Some(definition.version_string.as_str()) {
             return Err(rusqlite::Error::InvalidQuery);
         }
         transaction.execute(
