@@ -13,6 +13,7 @@ import { DrawingColorPicker } from "@/shared/canvas/DrawingColorPicker";
 import { getSetting, setSetting } from "@/shared/store/useSettingsStore";
 import { VORA_DIAGRAM_SHAPE_LABELS, type VoraPathSegment, type VoraShapeData, type VoraShapeStyleSettings } from "@/mind/types";
 import { canJoinPathNodes, getPathSegments } from "@/mind/utils/pathSegments";
+import { getVoraShapePath } from "@/mind/utils/shapeGeometry";
 import { useCanvasZoomScales } from "./CanvasZoomContext";
 
 export type VoraShapeNodeModel = Node<VoraShapeData, "voraShape">;
@@ -117,44 +118,6 @@ function loadShapeTemplates(shape: VoraShapeData["shape"]): ShapeStyleTemplate[]
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function getDiagramPath(shape: VoraShapeData["shape"], width: number, height: number, inset: number): string {
-  const left = inset;
-  const top = inset;
-  const right = Math.max(left, width - inset);
-  const bottom = Math.max(top, height - inset);
-  const centerX = width / 2;
-  const centerY = height / 2;
-
-  switch (shape) {
-    case "rectangle":
-      return `M ${left} ${top} H ${right} V ${bottom} H ${left} Z`;
-    case "process":
-      return `M ${left + 6} ${top} H ${right - 6} Q ${right} ${top} ${right} ${top + 6} V ${bottom - 6} Q ${right} ${bottom} ${right - 6} ${bottom} H ${left + 6} Q ${left} ${bottom} ${left} ${bottom - 6} V ${top + 6} Q ${left} ${top} ${left + 6} ${top} Z`;
-    case "decision":
-      return `M ${centerX} ${top} L ${right} ${centerY} L ${centerX} ${bottom} L ${left} ${centerY} Z`;
-    case "terminator": {
-      const radiusX = (right - left) / 2;
-      const radiusY = (bottom - top) / 2;
-      return `M ${centerX - radiusX} ${centerY} A ${radiusX} ${radiusY} 0 1 0 ${centerX + radiusX} ${centerY} A ${radiusX} ${radiusY} 0 1 0 ${centerX - radiusX} ${centerY} Z`;
-    }
-    case "inputOutput": {
-      const slant = Math.min(24, (right - left) / 5);
-      return `M ${left + slant} ${top} H ${right} L ${right - slant} ${bottom} H ${left} Z`;
-    }
-    case "document": {
-      const wave = Math.min(14, (bottom - top) / 6);
-      return `M ${left} ${top} H ${right} V ${bottom - wave} C ${right - 12} ${bottom - wave * 2} ${left + 12} ${bottom} ${left} ${bottom - wave} Z`;
-    }
-    case "database": {
-      const radius = Math.max(8, Math.min(20, (bottom - top) / 6));
-      const ellipseCenterY = top + radius;
-      return `M ${left} ${ellipseCenterY} A ${(right - left) / 2} ${radius} 0 0 1 ${right} ${ellipseCenterY} V ${bottom - radius} A ${(right - left) / 2} ${radius} 0 0 1 ${left} ${bottom - radius} Z M ${left} ${centerY} A ${(right - left) / 2} ${radius} 0 0 0 ${right} ${centerY}`;
-    }
-    case "path":
-      return "";
-  }
 }
 
 export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodeProps<VoraShapeNodeModel>) => {
@@ -1002,7 +965,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
           <>
             <path
               className="vora-shape-visual"
-              d={getDiagramPath(data.shape, shapeWidth, shapeHeight, lineWidth / 2)}
+              d={getVoraShapePath(data.shape, shapeWidth, shapeHeight, lineWidth / 2)}
               fill={fillColor}
               fillOpacity={fillOpacity}
               stroke={color}
@@ -1013,7 +976,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
             />
             <path
               className="vora-shape-border-hit-target"
-              d={getDiagramPath(data.shape, shapeWidth, shapeHeight, lineWidth / 2)}
+              d={getVoraShapePath(data.shape, shapeWidth, shapeHeight, lineWidth / 2)}
               fill="none"
               stroke="transparent"
               strokeWidth={selectionHitStrokeWidth}
