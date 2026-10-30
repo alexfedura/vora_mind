@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { Hypothesis, HypothesisVerdict } from "@/types";
 import { ChildHypothesisModal } from "@/shared/layout/ChildHypothesisModal";
 import { useAppStore } from "@/shared/store/useAppStore";
