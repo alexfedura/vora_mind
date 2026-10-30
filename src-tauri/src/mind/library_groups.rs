@@ -537,25 +537,7 @@ mod tests {
 
         let groups = list_item_groups(&conn).unwrap();
         assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].board_id, format!("library_board_{        }
-
-        #[test]
-        fn definition_selection_lists_each_available_version_and_skips_trashed_groups() {
-            let mut conn = Connection::open_in_memory().unwrap();
-            init_db(&conn).unwrap();
-            let created = create_item_group(&mut conn, "Flag", "0.1.0", sample_snapshot()).unwrap();
-            let versions = list_item_group_versions(&conn, &created.id).unwrap();
-
-            let definitions = list_definitions_for_selection(&conn).unwrap();
-            assert_eq!(definitions.len(), 1);
-            assert_eq!(definitions[0].group_id, created.id);
-            assert_eq!(definitions[0].version_id, versions[0].id);
-            assert_eq!(definitions[0].name, "Flag");
-            assert_eq!(definitions[0].version_string, "0.1.0");
-
-            move_item_group_to_trash(&conn, &created.id).unwrap();
-            assert!(list_definitions_for_selection(&conn).unwrap().is_empty());
-        }", created.id));
+        assert_eq!(groups[0].board_id, format!("library_board_{}", created.id));
         assert_eq!(groups[0].snapshot.cards[0].content, "Saved content");
         assert_eq!(groups[0].snapshot.edges[0].source, "node-a");
         assert_eq!(
@@ -583,6 +565,24 @@ mod tests {
         assert!(list_item_groups(&conn).unwrap()[0].deleted_at.is_some());
         restore_item_group(&conn, &created.id).unwrap();
         assert_eq!(list_item_groups(&conn).unwrap()[0].deleted_at, None);
+    }
+
+    #[test]
+    fn definition_selection_lists_each_available_version_and_skips_trashed_groups() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        let created = create_item_group(&mut conn, "Flag", "0.1.0", sample_snapshot()).unwrap();
+        let versions = list_item_group_versions(&conn, &created.id).unwrap();
+
+        let definitions = list_definitions_for_selection(&conn).unwrap();
+        assert_eq!(definitions.len(), 1);
+        assert_eq!(definitions[0].group_id, created.id);
+        assert_eq!(definitions[0].version_id, versions[0].id);
+        assert_eq!(definitions[0].name, "Flag");
+        assert_eq!(definitions[0].version_string, "0.1.0");
+
+        move_item_group_to_trash(&conn, &created.id).unwrap();
+        assert!(list_definitions_for_selection(&conn).unwrap().is_empty());
     }
 
     #[test]
