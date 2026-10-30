@@ -6,6 +6,7 @@ import {
   useReactFlow,
   SelectionMode,
   Position,
+  MarkerType,
   type OnConnectEnd,
   type NodeChange,
   type Edge,
@@ -867,6 +868,7 @@ function AppContent() {
         source,
         target,
         type: "default",
+        markerEnd: savedEdge.link_type === "directed" ? { type: MarkerType.ArrowClosed } : undefined,
         style: { stroke: "#7c3aed", strokeWidth: 2 },
       }];
     });
@@ -1868,6 +1870,7 @@ function AppContent() {
         ? getHandleId("target", newNodeHandlePosition)
         : connection.sourceHandleId,
       type: "default",
+      markerEnd: { type: MarkerType.ArrowClosed },
       style: { stroke: "#4b5563", strokeWidth: 2 },
     };
     flow.setEdges((edges) => [...edges, edge]);
