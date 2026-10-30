@@ -151,7 +151,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
   const isPath = data.shape === "path";
   const defaultLabel = VORA_DIAGRAM_SHAPE_LABELS[data.shape];
   const label = data.label || defaultLabel;
-  const hasCustomLabel = label !== defaultLabel;
+  const hasCustomLabel = label !== defaultLabel || (data.shape !== "rectangle" && !isPath);
   const color = data.color || "#e8ad55";
   const lineWidth = Number.isFinite(data.lineWidth) ? data.lineWidth : 2;
   const selectionHitStrokeWidth = lineWidth + 10 / Math.max(zoom, 0.01);
