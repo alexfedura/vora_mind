@@ -8,6 +8,15 @@ use super::library_groups::{self, LibraryItemGroupSnapshot};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct LinkedDefinition {
+    pub library_group_id: String,
+    pub library_version_id: String,
+    pub definition_name: String,
+    pub version_string: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Hypothesis {
     pub id: String,
     pub inquiry_id: String,
@@ -26,6 +35,8 @@ pub struct Hypothesis {
     pub evaluated_at: Option<i64>,
     pub promoted_to_library_id: Option<String>,
     pub parent_hypothesis_id: Option<String>,
+    #[serde(default)]
+    pub linked_definitions: Vec<LinkedDefinition>,
 }
 
 const HYPOTHESIS_COLUMNS: &str = "id, inquiry_id, statement_h1, statement_h0, \
@@ -71,7 +82,75 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             ))?;
         }
     }
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS hypothesis_definitions (
+            hypothesis_id TEXT NOT NULL,
+            library_group_id TEXT NOT NULL,
+            library_version_id TEXT NOT NULL,
+            definition_name TEXT NOT NULL,
+            version_string TEXT NOT NULL,
+            PRIMARY KEY (hypothesis_id, library_group_id),
+            FOREIGN KEY(hypothesis_id) REFERENCES hypotheses(id) ON DELETE CASCADE,
+            FOREIGN KEY(library_group_id) REFERENCES library_item_groups(id),
+            FOREIGN KEY(library_version_id) REFERENCES library_item_group_versions(id)
+        );",
+    )?;
     Ok(())
+}
+
+fn insert_linked_definitions(
+    transaction: &rusqlite::Transaction<'_>,
+    hypothesis_id: &str,
+    linked_definitions: &[LinkedDefinition],
+) -> Result<()> {
+    for definition in linked_definitions {
+        let version_exists: bool = transaction.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM library_item_group_versions
+                WHERE id = ?1 AND group_id = ?2
+            )",
+            params![
+                definition.library_version_id,
+                definition.library_group_id
+            ],
+            |row| row.get(0),
+        )?;
+        if !version_exists {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        transaction.execute(
+            "INSERT INTO hypothesis_definitions (
+                hypothesis_id, library_group_id, library_version_id,
+                definition_name, version_string
+             ) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                hypothesis_id,
+                definition.library_group_id,
+                definition.library_version_id,
+                definition.definition_name,
+                definition.version_string
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+fn list_linked_definitions(conn: &Connection, hypothesis_id: &str) -> Result<Vec<LinkedDefinition>> {
+    let mut statement = conn.prepare(
+        "SELECT library_group_id, library_version_id, definition_name, version_string
+         FROM hypothesis_definitions
+         WHERE hypothesis_id = ?1
+         ORDER BY definition_name COLLATE NOCASE, library_group_id",
+    )?;
+    let rows = statement.query_map([hypothesis_id], |row| {
+        Ok(LinkedDefinition {
+            library_group_id: row.get(0)?,
+            library_version_id: row.get(1)?,
+            definition_name: row.get(2)?,
+            version_string: row.get(3)?,
+        })
+    })?;
+    rows.collect()
 }
 
 fn create_child_hypothesis_in_db(
@@ -84,6 +163,7 @@ fn create_child_hypothesis_in_db(
     dependent_var: &str,
     metric: &str,
     success_threshold: &str,
+    linked_definitions: &[LinkedDefinition],
     now: i64,
 ) -> std::result::Result<Hypothesis, String> {
     let transaction = conn.transaction().map_err(|error| error.to_string())?;
@@ -118,6 +198,8 @@ fn create_child_hypothesis_in_db(
             ],
         )
         .map_err(|error| error.to_string())?;
+    insert_linked_definitions(&transaction, id, linked_definitions)
+        .map_err(|error| error.to_string())?;
     let hypothesis = query_hypothesis(&transaction, id).map_err(|error| error.to_string())?;
     transaction.commit().map_err(|error| error.to_string())?;
     Ok(hypothesis)
@@ -133,6 +215,7 @@ pub fn create_child_hypothesis(
     dependent_var: String,
     metric: String,
     success_threshold: String,
+    linked_definitions: Option<Vec<LinkedDefinition>>,
 ) -> Result<Hypothesis, String> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -151,6 +234,7 @@ pub fn create_child_hypothesis(
         &dependent_var,
         &metric,
         &success_threshold,
+        linked_definitions.as_deref().unwrap_or_default(),
         now,
     )
 }
