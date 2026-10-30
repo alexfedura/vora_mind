@@ -256,7 +256,6 @@ export const dbService = {
   async createChildHypothesis(input: ChildHypothesisInput): Promise<Hypothesis> {
     return await invoke<Hypothesis>("create_child_hypothesis", {
       parentId: input.parentId,
-      refinedFromId: input.refinedFromId ?? null,
       statementH1: input.statementH1,
       statementH0: input.statementH0,
       independentVar: input.independentVar,

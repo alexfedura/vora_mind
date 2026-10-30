@@ -163,7 +163,6 @@ export interface HypothesisPromotionInput {
 
 export interface ChildHypothesisInput {
   parentId: string;
-  refinedFromId?: string;
   statementH1: string;
   statementH0: string;
   independentVar: string;

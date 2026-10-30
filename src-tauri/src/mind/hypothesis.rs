@@ -801,10 +801,10 @@ fn record_verdict_in_db(
     ) {
         return Err(format!("Invalid hypothesis verdict: {verdict}"));
     }
-    if matches!(verdict, "supported" | "partially_supported" | "rejected")
+    if verdict == "partially_supported"
         && boundary_conditions.map_or(true, |conditions| conditions.trim().is_empty())
     {
-        return Err("Boundary conditions are required for supported, partially supported, and rejected verdicts.".to_string());
+        return Err("Boundary conditions are required for a partially supported verdict.".to_string());
     }
     let stored_raw_data: Option<String> = conn
         .query_row("SELECT raw_data FROM hypotheses WHERE id = ?1", [id], |row| {
