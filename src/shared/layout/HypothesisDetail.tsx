@@ -742,7 +742,11 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
               )}
             </div>
 
-            {hypothesis.checklistSchema == null ? (
+            {hypothesis.checklistSchema == null ? isExecuted ? (
+              <p className="mt-4 text-sm text-gray-400">
+                No checklist was defined before test execution.
+              </p>
+            ) : (
               <button
                 type="button"
                 dir="auto"
@@ -759,12 +763,17 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
               <p role="alert" className="mt-4 text-sm text-rose-300">{checklistSchema.error}</p>
             ) : checklistSchema.fields ? (
               <>
-                <form
-                  ref={dataEntryFormRef}
-                  dir="auto"
-                  onSubmit={(event) => void handleAddDataEntry(event)}
-                  className="mt-4 rounded-xl border border-[#292c34] bg-[#101114] p-4"
-                >
+                {isExecuted ? (
+                  <p className="mt-4 text-sm text-emerald-300">
+                    Checklist data is locked because test execution has been recorded.
+                  </p>
+                ) : (
+                  <form
+                    ref={dataEntryFormRef}
+                    dir="auto"
+                    onSubmit={(event) => void handleAddDataEntry(event)}
+                    className="mt-4 rounded-xl border border-[#292c34] bg-[#101114] p-4"
+                  >
                   <div className="grid gap-3 sm:grid-cols-2">
                     {checklistSchema.fields.map((field, index) => {
                       const inputId = `hypothesis-entry-${hypothesis.id}-${index}`;
@@ -834,7 +843,8 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
                   >
                     {isSavingDataEntry ? "Saving…" : "💾 Save & Add Next"}
                   </button>
-                </form>
+                  </form>
+                )}
 
                 <div className="mt-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -889,7 +899,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
                               <th key={field.label} dir="auto" scope="col" className="px-3 py-2.5 font-semibold">{field.label}</th>
                             ))}
                             <th scope="col" className="px-3 py-2.5 font-semibold">Collected</th>
-                            <th scope="col" className="px-3 py-2.5"><span className="sr-only">Actions</span></th>
+                            {!isExecuted && <th scope="col" className="px-3 py-2.5"><span className="sr-only">Actions</span></th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#292c34]">
@@ -901,19 +911,21 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
                                 </td>
                               ))}
                               <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-500">{formatTraceTimestamp(entry.createdAt)}</td>
-                              <td className="px-3 py-2.5 text-right">
-                                <button
-                                  type="button"
-                                  dir="auto"
-                                  aria-label="Delete data entry"
-                                  title="Delete data entry"
-                                  disabled={deletingDataEntryId === entry.id}
-                                  onClick={() => void handleDeleteDataEntry(entry.id)}
-                                  className="rounded p-1.5 text-gray-500 transition hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </td>
+                              {!isExecuted && (
+                                <td className="px-3 py-2.5 text-right">
+                                  <button
+                                    type="button"
+                                    dir="auto"
+                                    aria-label="Delete data entry"
+                                    title="Delete data entry"
+                                    disabled={deletingDataEntryId === entry.id}
+                                    onClick={() => void handleDeleteDataEntry(entry.id)}
+                                    className="rounded p-1.5 text-gray-500 transition hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           ))}
                         </tbody>
