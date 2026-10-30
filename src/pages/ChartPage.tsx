@@ -2171,7 +2171,7 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
 
   // v0.83.2 — restore on mount when ?snapshot=<id>.
   useEffect(() => {
-    const sid = snapshotIdFromUrl;
+    const sid = snapshotIdFromLocation;
     if (!sid) {
       restoredRef.current = null;
       snapshotRestoreRequestRef.current += 1;
@@ -2310,7 +2310,7 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartReady, snapshotIdFromUrl, symbol, playNarrativeFromUrl, setSearchParams]);
+  }, [chartReady, snapshotIdFromLocation, symbol, playNarrativeFromUrl, setSearchParams]);
 
   // v6.4.18: pivot inspector — fetch engine pivots for current M.
   // DISABLED in v0.83.1: heavy per-timeframe scale scan.
@@ -3689,6 +3689,17 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
           onMouseEnter={() => setOverChrome(true)}
           onMouseLeave={() => setOverChrome(false)}
         >
+          {labReturnState && (
+            <button
+              type="button"
+              dir="auto"
+              onClick={() => navigate("/home", { state: { activeTab: "lab" } })}
+              className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border border-amber-400/60 bg-amber-400 px-3 text-xs font-bold text-[#17130d] shadow-lg transition hover:bg-amber-300"
+            >
+              <ArrowLeft size={15} />
+              Return to Hypothesis
+            </button>
+          )}
           <SymbolSelector />
 
           <ChartIntervalSelector value={activeInterval} onChange={selectInterval} />
