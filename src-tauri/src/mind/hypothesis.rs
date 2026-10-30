@@ -196,10 +196,7 @@ fn list_hypothesis_insights(
         .map_err(|error| error.to_string())
 }
 
-fn delete_hypothesis_insight_in_db(
-    conn: &Connection,
-    id: &str,
-) -> std::result::Result<(), String> {
+fn delete_hypothesis_insight_in_db(conn: &Connection, id: &str) -> std::result::Result<(), String> {
     let deleted = conn
         .execute("DELETE FROM hypothesis_insights WHERE id = ?1", [id])
         .map_err(|error| error.to_string())?;
