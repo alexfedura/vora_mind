@@ -38,6 +38,10 @@ with a cascading foreign key to the owning hypothesis and a creation timestamp.
 Insights are listed newest-first and can be deleted independently of the
 hypothesis protocol, raw data, and verdict. An insight can seed a child
 hypothesis H1 or be sent to the Inquiry Queue as a question.
+Create a `hypothesis_snapshots` junction table with hypothesis ID, snapshot ID,
+and link creation time. Snapshot payloads remain in the existing browser-local
+snapshot store; SQLite stores only their IDs. Hypothesis reads include their
+linked snapshot IDs, which can be independently linked, unlinked, or listed.
 
 Initialize this schema immediately after the existing questions schema when
 initializing a workspace database.
