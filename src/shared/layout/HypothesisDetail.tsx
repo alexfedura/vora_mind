@@ -1333,7 +1333,14 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
                         value={draft.type}
                         onChange={(event) => setChecklistDraftFields((current) => current.map((field) =>
                           field.id === draft.id
-                            ? { ...field, type: event.currentTarget.value as ChecklistFieldType }
+                            ? {
+                                ...field,
+                                type: event.currentTarget.value === "number"
+                                  || event.currentTarget.value === "text"
+                                  || event.currentTarget.value === "boolean"
+                                  ? event.currentTarget.value
+                                  : "select",
+                              }
                             : field
                         ))}
                         disabled={isSavingChecklistSchema}
