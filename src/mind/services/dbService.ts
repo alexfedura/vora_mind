@@ -231,6 +231,7 @@ export const dbService = {
     verdict: HypothesisVerdict,
     rawData?: string,
     dataAnalysis?: string,
+    boundaryConditions?: string | null,
   ): Promise<Hypothesis> {
     return await invoke<Hypothesis>("record_verdict", {
       id,
@@ -238,6 +239,7 @@ export const dbService = {
       verdict,
       rawData: rawData ?? null,
       dataAnalysis: dataAnalysis ?? null,
+      boundaryConditions: boundaryConditions ?? null,
     });
   },
 
@@ -254,6 +256,7 @@ export const dbService = {
   async createChildHypothesis(input: ChildHypothesisInput): Promise<Hypothesis> {
     return await invoke<Hypothesis>("create_child_hypothesis", {
       parentId: input.parentId,
+      refinedFromId: input.refinedFromId ?? null,
       statementH1: input.statementH1,
       statementH0: input.statementH0,
       independentVar: input.independentVar,

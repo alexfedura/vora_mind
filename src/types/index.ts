@@ -96,7 +96,11 @@ export interface QuestionItem {
   updatedAt: number;
 }
 
-export type HypothesisVerdict = "supported" | "rejected" | "inconclusive";
+export type HypothesisVerdict =
+  | "supported"
+  | "partially_supported"
+  | "rejected"
+  | "inconclusive";
 
 export interface LinkedDefinition {
   libraryGroupId: string;
@@ -135,6 +139,8 @@ export interface Hypothesis {
   rawData?: string | null;
   dataAnalysis?: string | null;
   executedAt?: number | null;
+  boundaryConditions?: string | null;
+  refinedFromId?: string | null;
 }
 
 export interface HypothesisInsight {
@@ -157,6 +163,7 @@ export interface HypothesisPromotionInput {
 
 export interface ChildHypothesisInput {
   parentId: string;
+  refinedFromId?: string;
   statementH1: string;
   statementH0: string;
   independentVar: string;
