@@ -1219,7 +1219,9 @@ fn validate_protocol_flowchart(flowchart_json: &str) -> std::result::Result<(), 
             .filter(|edge_id| !edge_id.trim().is_empty())
             .ok_or_else(|| "Every flowchart connection must have an ID.".to_string())?;
         if !edge_ids.insert(edge_id) {
-            return Err(format!("Flowchart contains duplicate connection ID: {edge_id}"));
+            return Err(format!(
+                "Flowchart contains duplicate connection ID: {edge_id}"
+            ));
         }
         let source = edge
             .get("source")
