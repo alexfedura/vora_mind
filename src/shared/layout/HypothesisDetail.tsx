@@ -450,11 +450,11 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
     for (const field of fields) {
       const value = checklistValues[field.label];
       if (field.type === "boolean") {
-        if (typeof value !== "boolean") {
+        if (value !== undefined && typeof value !== "boolean") {
           setDataCollectionError(`Choose a value for "${field.label}".`);
           return;
         }
-        values[field.label] = value;
+        values[field.label] = value === true;
       } else if (field.type === "number") {
         if (typeof value !== "string" || value.trim() === "" || !Number.isFinite(Number(value))) {
           setDataCollectionError(`Enter a valid number for "${field.label}".`);
