@@ -66,13 +66,17 @@ pub struct Hypothesis {
     pub boundary_conditions: Option<String>,
     pub refined_from_id: Option<String>,
     pub checklist_schema: Option<String>,
+    pub protocol_type: String,
+    pub protocol_flowchart_json: Option<String>,
+    pub protocol_completed_steps: Option<String>,
 }
 
 const HYPOTHESIS_COLUMNS: &str = "id, inquiry_id, statement_h1, statement_h0, \
     independent_var, dependent_var, metric, success_threshold, status, created_at, updated_at, \
     evidence_notes, verdict, evaluated_at, promoted_to_library_id, parent_hypothesis_id, \
     protocol_steps, protocol_locked_at, raw_data, data_analysis, executed_at, \
-    boundary_conditions, refined_from_id, checklist_schema";
+    boundary_conditions, refined_from_id, checklist_schema, protocol_type, \
+    protocol_flowchart_json, protocol_completed_steps";
 
 pub fn init_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -114,6 +118,9 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         ("boundary_conditions", "TEXT NULL"),
         ("refined_from_id", "TEXT NULL"),
         ("checklist_schema", "TEXT NULL"),
+        ("protocol_type", "TEXT NOT NULL DEFAULT 'text'"),
+        ("protocol_flowchart_json", "TEXT NULL"),
+        ("protocol_completed_steps", "TEXT NULL"),
     ] {
         if !columns.iter().any(|column| column == name) {
             conn.execute_batch(&format!(
@@ -1144,6 +1151,271 @@ fn save_hypothesis_protocol_in_db(
     Ok(hypothesis)
 }
 
+fn validate_protocol_flowchart(flowchart_json: &str) -> std::result::Result<(), String> {
+    let flowchart: serde_json::Value = serde_json::from_str(flowchart_json)
+        .map_err(|error| format!("Flowchart must be valid JSON: {error}"))?;
+    let nodes = flowchart
+        .get("nodes")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "Flowchart must contain a nodes array.".to_string())?;
+    let edges = flowchart
+        .get("edges")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "Flowchart must contain an edges array.".to_string())?;
+    if nodes.is_empty() {
+        return Err("Add at least one node to the flowchart.".to_string());
+    }
+
+    let mut node_ids = HashSet::new();
+    for node in nodes {
+        let id = node
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .filter(|id| !id.trim().is_empty())
+            .ok_or_else(|| "Every flowchart node must have an ID.".to_string())?;
+        if !node_ids.insert(id) {
+            return Err(format!("Flowchart contains duplicate node ID: {id}"));
+        }
+        let kind = node
+            .get("data")
+            .and_then(|data| data.get("kind"))
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| format!("Flowchart node '{id}' must have a kind."))?;
+        if !matches!(kind, "step" | "decision" | "start-end") {
+            return Err(format!("Flowchart node '{id}' has an unsupported kind."));
+        }
+        let label = node
+            .get("data")
+            .and_then(|data| data.get("label"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|label| !label.trim().is_empty())
+            .ok_or_else(|| format!("Flowchart node '{id}' must have a label."))?;
+        let _ = label;
+    }
+    for edge in edges {
+        let source = edge
+            .get("source")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "Every flowchart edge must have a source node.".to_string())?;
+        let target = edge
+            .get("target")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "Every flowchart edge must have a target node.".to_string())?;
+        if !node_ids.contains(source) || !node_ids.contains(target) {
+            return Err("Flowchart edges must connect existing nodes.".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn save_protocol_flowchart_in_db(
+    conn: &mut Connection,
+    id: &str,
+    flowchart_json: &str,
+    now: i64,
+) -> std::result::Result<Hypothesis, String> {
+    validate_protocol_flowchart(flowchart_json)?;
+    let transaction = conn.transaction().map_err(|error| error.to_string())?;
+    let existing: Option<(String, Option<String>, Option<i64>, Option<i64>)> = transaction
+        .query_row(
+            "SELECT protocol_type, protocol_flowchart_json, protocol_locked_at, executed_at
+             FROM hypotheses WHERE id = ?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let (protocol_type, existing_flowchart, locked_at, executed_at) =
+        existing.ok_or_else(|| format!("Hypothesis not found: {id}"))?;
+
+    if let Some(existing_flowchart) = existing_flowchart {
+        if protocol_type == "flowchart" && existing_flowchart == flowchart_json {
+            return query_hypothesis(&transaction, id).map_err(|error| error.to_string());
+        }
+        return Err(if executed_at.is_some() {
+            "Protocol cannot be changed after test execution.".to_string()
+        } else {
+            "Protocol is locked and cannot be changed.".to_string()
+        });
+    }
+    if locked_at.is_some() || executed_at.is_some() {
+        return Err("Protocol is locked and cannot be changed.".to_string());
+    }
+
+    transaction
+        .execute(
+            "UPDATE hypotheses
+             SET protocol_type = 'flowchart', protocol_flowchart_json = ?1,
+                 protocol_completed_steps = '[]', protocol_locked_at = ?2, updated_at = ?2
+             WHERE id = ?3 AND protocol_locked_at IS NULL AND executed_at IS NULL",
+            params![flowchart_json, now, id],
+        )
+        .map_err(|error| error.to_string())?;
+    let hypothesis = query_hypothesis(&transaction, id).map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(hypothesis)
+}
+
+#[tauri::command]
+pub fn save_protocol_flowchart(
+    state: State<AppState>,
+    id: String,
+    flowchart_json: String,
+) -> std::result::Result<Hypothesis, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let now = i64::try_from(now).map_err(|error| error.to_string())?;
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    save_protocol_flowchart_in_db(&mut conn, &id, &flowchart_json, now)
+}
+
+fn update_protocol_completion_in_db(
+    conn: &Connection,
+    id: &str,
+    completed_steps_json: &str,
+    now: i64,
+) -> std::result::Result<Hypothesis, String> {
+    let completed_steps: serde_json::Value = serde_json::from_str(completed_steps_json)
+        .map_err(|error| format!("Completed steps must be valid JSON: {error}"))?;
+    let completed_steps = completed_steps
+        .as_array()
+        .ok_or_else(|| "Completed steps must be a JSON array.".to_string())?;
+    let graph_json: Option<(String, Option<String>, Option<i64>)> = conn
+        .query_row(
+            "SELECT protocol_type, protocol_flowchart_json, protocol_locked_at
+             FROM hypotheses WHERE id = ?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let (protocol_type, flowchart_json, locked_at) =
+        graph_json.ok_or_else(|| format!("Hypothesis not found: {id}"))?;
+    if protocol_type != "flowchart" || locked_at.is_none() {
+        return Err("Lock a flowchart protocol before updating its progress.".to_string());
+    }
+    let flowchart_json = flowchart_json
+        .ok_or_else(|| "The locked flowchart protocol is missing its graph.".to_string())?;
+    validate_protocol_flowchart(&flowchart_json)?;
+    let flowchart: serde_json::Value =
+        serde_json::from_str(&flowchart_json).map_err(|error| error.to_string())?;
+    let nodes = flowchart
+        .get("nodes")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "The saved flowchart has no nodes.".to_string())?;
+    let node_ids: HashSet<&str> = nodes
+        .iter()
+        .filter_map(|node| node.get("id").and_then(serde_json::Value::as_str))
+        .collect();
+    let mut unique_steps = HashSet::new();
+    for step in completed_steps {
+        let step_id = step
+            .as_str()
+            .filter(|step_id| !step_id.trim().is_empty())
+            .ok_or_else(|| "Completed step IDs must be non-empty strings.".to_string())?;
+        if !node_ids.contains(step_id) {
+            return Err(format!("Completed step '{step_id}' is not in the saved protocol."));
+        }
+        if !unique_steps.insert(step_id) {
+            return Err(format!("Completed steps contain duplicate ID: {step_id}"));
+        }
+    }
+    conn.execute(
+        "UPDATE hypotheses SET protocol_completed_steps = ?1, updated_at = ?2
+         WHERE id = ?3 AND protocol_locked_at IS NOT NULL AND protocol_type = 'flowchart'",
+        params![completed_steps_json, now, id],
+    )
+    .map_err(|error| error.to_string())?;
+    query_hypothesis(conn, id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_protocol_completion(
+    state: State<AppState>,
+    id: String,
+    completed_steps_json: String,
+) -> std::result::Result<Hypothesis, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let now = i64::try_from(now).map_err(|error| error.to_string())?;
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    update_protocol_completion_in_db(&conn, &id, &completed_steps_json, now)
+}
+
+fn build_hypothesis_analysis_prompt(
+    conn: &Connection,
+    hypothesis_id: &str,
+) -> std::result::Result<String, String> {
+    let hypothesis = query_hypothesis(conn, hypothesis_id)
+        .map_err(|error| format!("Hypothesis not found: {error}"))?;
+    let entries = list_data_entries(conn, hypothesis_id)?;
+    let protocol = if hypothesis.protocol_type == "flowchart" {
+        hypothesis
+            .protocol_flowchart_json
+            .as_deref()
+            .unwrap_or("No flowchart protocol has been saved.")
+    } else {
+        hypothesis
+            .protocol_steps
+            .as_deref()
+            .unwrap_or("No text protocol has been saved.")
+    };
+    let entries_json = serde_json::to_string_pretty(&entries)
+        .map_err(|error| format!("Could not format checklist entries: {error}"))?;
+    let completed_steps = hypothesis
+        .protocol_completed_steps
+        .as_deref()
+        .unwrap_or("[]");
+    let checklist_schema = hypothesis
+        .checklist_schema
+        .as_deref()
+        .unwrap_or("No checklist schema defined.");
+
+    Ok(format!(
+        "# Hypothesis Lab Data Analysis\n\n\
+         Act as a senior data scientist. Analyze this structured research data. \
+         Find hidden patterns, calculate win rates, identify boundary conditions, \
+         and suggest the next steps. Be explicit about limitations and do not infer \
+         unsupported conclusions.\n\n\
+         ## Hypothesis (H1)\n{}\n\n\
+         ## Null hypothesis (H0)\n{}\n\n\
+         ## Research design\n\
+         - Independent variable: {}\n\
+         - Dependent variable: {}\n\
+         - Metric: {}\n\
+         - Success threshold: {}\n\n\
+         ## Protocol ({})\n{}\n\n\
+         ## Completed protocol node IDs\n{}\n\n\
+         ## Checklist schema\n{}\n\n\
+         ## All collected data entries ({} total)\n```json\n{}\n```\n",
+        hypothesis.statement_h1,
+        hypothesis.statement_h0,
+        hypothesis.independent_var,
+        hypothesis.dependent_var,
+        hypothesis.metric,
+        hypothesis.success_threshold,
+        hypothesis.protocol_type,
+        protocol,
+        completed_steps,
+        checklist_schema,
+        entries.len(),
+        entries_json
+    ))
+}
+
+#[tauri::command]
+pub fn analyze_with_ai(
+    state: State<AppState>,
+    hypothesis_id: String,
+) -> std::result::Result<String, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    build_hypothesis_analysis_prompt(&conn, &hypothesis_id)
+}
+
 #[tauri::command]
 pub fn save_hypothesis_protocol(
     state: State<AppState>,
@@ -1170,7 +1442,12 @@ fn record_hypothesis_execution_in_db(
             "UPDATE hypotheses
              SET raw_data = ?1, executed_at = ?2, updated_at = ?2
              WHERE id = ?3 AND protocol_locked_at IS NOT NULL
-               AND protocol_steps IS NOT NULL AND length(trim(protocol_steps)) > 0
+               AND (
+                 (protocol_type = 'text' AND protocol_steps IS NOT NULL
+                   AND length(trim(protocol_steps)) > 0)
+                 OR
+                 (protocol_type = 'flowchart' AND protocol_flowchart_json IS NOT NULL)
+               )
                AND executed_at IS NULL",
             params![raw_data, now, id],
         )
@@ -1335,6 +1612,9 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
         boundary_conditions: row.get(21)?,
         refined_from_id: row.get(22)?,
         checklist_schema: row.get(23)?,
+        protocol_type: row.get(24)?,
+        protocol_flowchart_json: row.get(25)?,
+        protocol_completed_steps: row.get(26)?,
     })
 }
 
