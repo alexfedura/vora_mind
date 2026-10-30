@@ -435,6 +435,7 @@ function AppContent() {
   const [isAddCardToolActive, setIsAddCardToolActive] = useState(false);
   const [isTextToolActive, setIsTextToolActive] = useState(false);
   const [activeShapeTool, setActiveShapeTool] = useState<ShapeTool>(null);
+  const [isDiagramPaletteOpen, setIsDiagramPaletteOpen] = useState(false);
   const [shapePreview, setShapePreview] = useState<ShapePreview | null>(null);
   const [shapeDefaults, setShapeDefaults] = useState<VoraShapeDefaults>(loadShapeDefaults);
   const rectangleStartRef = React.useRef<CanvasShapePoint | null>(null);
@@ -1076,7 +1077,7 @@ function AppContent() {
       }));
       setShapeDefaults((current) => {
         const next: VoraShapeDefaults = { ...current };
-        const shapes = new Set(targets.map((node) => node.data.shape).filter((shape): shape is "rectangle" | "path" => shape === "rectangle" || shape === "path"));
+        const shapes = new Set(targets.map((node) => node.data.shape));
         for (const shape of shapes) {
           const previous = current[shape];
           const updated: VoraShapeStyleSettings = {
@@ -1595,7 +1596,19 @@ function AppContent() {
       return;
     }
 
-    if (!canvasBoardId || !isTextToolActive) return;
+    if (!canvasBoardId) return;
+
+    if (
+      activeShapeTool &&
+      activeShapeTool !== "rectangle" &&
+      activeShapeTool !== "path"
+    ) {
+      const position = toCanvasFlowPosition({ x: event.clientX, y: event.clientY });
+      addShapeNode(activeShapeTool, [position, position]);
+      return;
+    }
+
+    if (!isTextToolActive) return;
 
     const position = toCanvasFlowPosition({
       x: event.clientX,
@@ -1861,7 +1874,7 @@ function AppContent() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [connectionCreateMenu]);
 
-  const addShapeNode = (shape: "rectangle" | "path", points: VoraShapePoint[]): void => {
+  const addShapeNode = (shape: VoraDiagramShape, points: VoraShapePoint[]): void => {
     if (!canvasBoardId) return;
     if (points.length < (shape === "path" ? 2 : 2)) return;
     const xs = points.map((point) => point.x);
@@ -1870,15 +1883,22 @@ function AppContent() {
     const minY = Math.min(...ys);
     const spanX = Math.max(1, Math.max(...xs) - minX);
     const spanY = Math.max(1, Math.max(...ys) - minY);
-    const width = Math.max(shape === "rectangle" ? 48 : 36, spanX);
-    const height = Math.max(shape === "rectangle" ? 36 : 36, spanY);
+    const isPositionedSymbol = shape !== "rectangle" && shape !== "path";
+    const width = isPositionedSymbol ? 180 : Math.max(48, spanX);
+    const height = isPositionedSymbol ? 100 : Math.max(36, spanY);
+    const position = isPositionedSymbol
+      ? {
+        x: (points[0]?.x ?? minX) - width / 2,
+        y: (points[0]?.y ?? minY) - height / 2,
+      }
+      : { x: minX, y: minY };
     const normalizedPoints = shape === "path"
       ? points.map((point) => ({ x: spanX === 1 ? 0.5 : (point.x - minX) / spanX, y: spanY === 1 ? 0.5 : (point.y - minY) / spanY }))
       : [];
     const settings = shapeDefaults[shape];
     const data: VoraShapeData = {
       shape,
-      label: shape === "rectangle" ? "Rectangle" : "Path",
+      label: VORA_DIAGRAM_SHAPE_LABELS[shape],
       ...settings,
       points: normalizedPoints,
       segments: shape === "path"
@@ -1895,7 +1915,7 @@ function AppContent() {
       id: `${shape}-${canvasBoardId}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       type: "voraShape",
       className: shape === "path" ? "vora-path-node vora-shape-border-hit" : "vora-shape-border-hit",
-      position: { x: minX, y: minY },
+      position,
       width,
       height,
       selected: true,
@@ -1948,6 +1968,7 @@ function AppContent() {
       return;
     }
     if (!activeShapeTool) return;
+    if (activeShapeTool !== "rectangle" && activeShapeTool !== "path") return;
     const point = canvasShapePoint(event);
     if (!point) return;
     event.preventDefault();
@@ -1958,6 +1979,7 @@ function AppContent() {
       event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
+    if (activeShapeTool !== "path") return;
     pathPointsRef.current = [...pathPointsRef.current, point];
     setShapePreview({ shape: "path", points: pathPointsRef.current.map((item) => item.screen) });
   };
@@ -1976,7 +1998,7 @@ function AppContent() {
       });
       return;
     }
-    if (!activeShapeTool) return;
+    if (!activeShapeTool || (activeShapeTool !== "rectangle" && activeShapeTool !== "path")) return;
     const point = canvasShapePoint(event);
     if (!point) return;
     if (activeShapeTool === "rectangle" && rectangleStartRef.current) {
