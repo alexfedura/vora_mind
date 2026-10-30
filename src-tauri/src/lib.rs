@@ -437,6 +437,14 @@ fn get_library_item_group_versions(
 }
 
 #[tauri::command]
+fn get_library_definitions_for_selection(
+    state: State<AppState>,
+) -> Result<Vec<mind::library_groups::LibraryDefinitionSelection>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    mind::library_groups::list_definitions_for_selection(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_library_item_group_usages(
     state: State<AppState>,
     group_id: String,
@@ -1413,6 +1421,7 @@ pub fn run() {
             checkout_board_version,
             get_library_item_groups,
             get_library_item_group_versions,
+            get_library_definitions_for_selection,
             get_library_item_group_usages,
             create_library_item_group,
             commit_library_item_group_version,

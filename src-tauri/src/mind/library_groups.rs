@@ -35,6 +35,15 @@ pub struct LibraryItemGroupVersion {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryDefinitionSelection {
+    pub group_id: String,
+    pub version_id: String,
+    pub name: String,
+    pub version_string: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LibraryItemGroupUsage {
     pub board_id: String,
     pub board_title: String,
@@ -163,6 +172,27 @@ pub fn list_item_group_versions(
          ORDER BY created_at DESC, rowid DESC",
     )?;
     let rows = statement.query_map([group_id], read_group_version)?;
+    rows.collect()
+}
+
+pub fn list_definitions_for_selection(
+    conn: &Connection,
+) -> Result<Vec<LibraryDefinitionSelection>> {
+    let mut statement = conn.prepare(
+        "SELECT groups.id, versions.id, groups.name, versions.version
+         FROM library_item_groups groups
+         JOIN library_item_group_versions versions ON versions.group_id = groups.id
+         WHERE groups.deleted_at IS NULL
+         ORDER BY groups.name COLLATE NOCASE, versions.created_at DESC, versions.rowid DESC",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(LibraryDefinitionSelection {
+            group_id: row.get(0)?,
+            version_id: row.get(1)?,
+            name: row.get(2)?,
+            version_string: row.get(3)?,
+        })
+    })?;
     rows.collect()
 }
 
