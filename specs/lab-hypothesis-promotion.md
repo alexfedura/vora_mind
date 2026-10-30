@@ -29,6 +29,11 @@ cannot be changed after they are locked or test execution begins. Execution
 requires a locked protocol and records the raw data and execution timestamp.
 Verdict recording requires an execution and stores analysis, evidence, and the
 verdict timestamp without allowing raw data to be changed.
+Create a `hypothesis_insights` table for immutable mid-test scratchpad entries,
+with a cascading foreign key to the owning hypothesis and a creation timestamp.
+Insights are listed newest-first and can be deleted independently of the
+hypothesis protocol, raw data, and verdict. An insight can seed a child
+hypothesis H1 or be sent to the Inquiry Queue as a question.
 
 Initialize this schema immediately after the existing questions schema when
 initializing a workspace database.
@@ -75,6 +80,14 @@ parent's H1/H0, variables, metric, and success threshold so those values can be
 iterated. It also inherits the parent's exact linked definition versions so
 the changed hypothesis variable is not confounded by a changed definition.
 Hypothesis detail shows linked definitions with their recorded version.
+
+## Mid-test Scratchpad
+
+Each hypothesis detail view provides a scratchpad for recording ideas without
+changing the locked protocol or execution data. Captured insights are
+hypothesis-scoped and shown newest-first with their creation time. An insight
+can prefill a new child hypothesis's H1 statement or create a parked Inquiry
+Queue question using the insight as its content.
 
 ## Verification
 
