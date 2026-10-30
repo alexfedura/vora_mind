@@ -11,6 +11,8 @@ function getErrorMessage(error: unknown): string {
 export const HypothesesList: React.FC = () => {
   const hypotheses = useAppStore((state) => state.hypotheses);
   const loadHypotheses = useAppStore((state) => state.loadHypotheses);
+  const labReturnState = useAppStore((state) => state.labReturnState);
+  const clearLabReturnState = useAppStore((state) => state.clearLabReturnState);
   const [selectedHypothesis, setSelectedHypothesis] = useState<Hypothesis | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +33,17 @@ export const HypothesesList: React.FC = () => {
       cancelled = true;
     };
   }, [loadHypotheses]);
+
+  useEffect(() => {
+    if (isLoading || labReturnState?.tab !== "lab") return;
+    const hypothesis = hypotheses.find((item) => item.id === labReturnState.hypothesisId);
+    clearLabReturnState();
+    if (hypothesis) {
+      setSelectedHypothesis(hypothesis);
+    } else {
+      setError("The hypothesis from this chart snapshot could not be found.");
+    }
+  }, [clearLabReturnState, hypotheses, isLoading, labReturnState]);
 
   const updatedHypothesis = (updated: Hypothesis): void => {
     setSelectedHypothesis(updated);

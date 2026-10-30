@@ -377,6 +377,16 @@ function AppContent() {
     navigate("/home", { replace: true, state: null });
   }, [location.state, navigate]);
 
+  useEffect(() => {
+    if (!isRecord(location.state) || location.state.activeTab !== "lab") return;
+    setIsAiTasksOpen(false);
+    setIsVoraTraceOpen(false);
+    setIsJournalOpen(false);
+    setIsTaskFlowOpen(true);
+    setLastActivePanel("sidebar");
+    setActiveOpenPanel("sidebar");
+  }, [location.state]);
+
   const [lastActivePanel, setLastActivePanel] = useState<"boards" | "sidebar">("boards");
   const [boards, setBoards] = useState<BoardItem[]>([]);
   const [boardsLoaded, setBoardsLoaded] = useState(false);

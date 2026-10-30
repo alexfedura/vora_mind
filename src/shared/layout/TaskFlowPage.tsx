@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Check, CheckCircle2, GripVertical, ListTodo, Plus, Sparkles, Trash2 } from "lucide-react";
 import { InquiryTriagePanel } from "@/shared/layout/InquiryTriagePanel";
 import { HypothesesList } from "@/shared/layout/HypothesesList";
@@ -10,12 +11,24 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isLabNavigationState(value: unknown): value is { activeTab: "lab" } {
+  return typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    "activeTab" in value &&
+    value.activeTab === "lab";
+}
+
 interface TaskFlowPageProps {
   taskType: TaskFlowType;
 }
 
 export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
-  const [activeTab, setActiveTab] = useState<"tasks" | "queue" | "triage" | "lab">("queue");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<"tasks" | "queue" | "triage" | "lab">(
+    () => isLabNavigationState(location.state) ? "lab" : "queue"
+  );
   const tasks = useAppStore((state) => state.taskFlowItems);
   const loadTasks = useAppStore((state) => state.loadTaskFlowItems);
   const createTask = useAppStore((state) => state.createTaskFlowItem);
@@ -38,6 +51,12 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
   const [isSavingInline, setIsSavingInline] = useState(false);
   const inlineInputRef = useRef<HTMLInputElement>(null);
   const skipInlineBlurRef = useRef(false);
+
+  useEffect(() => {
+    if (isLabNavigationState(location.state)) {
+      navigate("/home", { replace: true, state: null });
+    }
+  }, [location.state, navigate]);
 
   useEffect(() => {
     if (inlineEdit) {
