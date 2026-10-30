@@ -180,6 +180,18 @@ export const dbService = {
     return await invoke<Hypothesis[]>("get_hypotheses");
   },
 
+  async linkSnapshotToHypothesis(hypothesisId: string, snapshotId: string): Promise<void> {
+    await invoke("link_snapshot_to_hypothesis", { hypothesisId, snapshotId });
+  },
+
+  async unlinkSnapshotFromHypothesis(hypothesisId: string, snapshotId: string): Promise<void> {
+    await invoke("unlink_snapshot_from_hypothesis", { hypothesisId, snapshotId });
+  },
+
+  async getHypothesisSnapshots(hypothesisId: string): Promise<string[]> {
+    return await invoke<string[]>("get_hypothesis_snapshots", { hypothesisId });
+  },
+
   async addHypothesisInsight(
     hypothesisId: string,
     content: string,

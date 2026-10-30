@@ -134,6 +134,7 @@ export interface Hypothesis {
   promotedToLibraryId?: string | null;
   parentHypothesisId?: string | null;
   linkedDefinitions: LinkedDefinition[];
+  linkedSnapshots: string[];
   protocolSteps?: string | null;
   protocolLockedAt?: number | null;
   rawData?: string | null;

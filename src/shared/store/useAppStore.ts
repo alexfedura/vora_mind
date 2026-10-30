@@ -39,6 +39,11 @@ export interface ExecutedTaskRecord {
   healingAttempts?: number;
 }
 
+export interface LabReturnState {
+  hypothesisId: string;
+  tab: string;
+}
+
 const journalSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const journalSaveQueues = new Map<string, Promise<void>>();
 const questionSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -123,6 +128,11 @@ interface AppState {
   unselectQuestionForPromotion: (id: string) => Promise<QuestionItem>;
 
   hypotheses: Hypothesis[];
+  labReturnState: LabReturnState | null;
+  setLabReturnState: (state: LabReturnState) => void;
+  clearLabReturnState: () => void;
+  linkSnapshotToHypothesis: (hypothesisId: string, snapshotId: string) => Promise<void>;
+  unlinkSnapshotFromHypothesis: (hypothesisId: string, snapshotId: string) => Promise<void>;
   hypothesisInsights: Record<string, HypothesisInsight[]>;
   loadHypothesisInsights: (hypothesisId: string) => Promise<void>;
   addHypothesisInsight: (
@@ -729,6 +739,37 @@ export const useAppStore = create<AppState>()(
       },
 
       hypotheses: [],
+      labReturnState: null,
+      setLabReturnState: (labReturnState) => set({ labReturnState }),
+      clearLabReturnState: () => set({ labReturnState: null }),
+      linkSnapshotToHypothesis: async (hypothesisId, snapshotId) => {
+        await dbService.linkSnapshotToHypothesis(hypothesisId, snapshotId);
+        set((state) => ({
+          hypotheses: state.hypotheses.map((hypothesis) =>
+            hypothesis.id === hypothesisId
+              ? {
+                  ...hypothesis,
+                  linkedSnapshots: hypothesis.linkedSnapshots.includes(snapshotId)
+                    ? hypothesis.linkedSnapshots
+                    : [...hypothesis.linkedSnapshots, snapshotId],
+                }
+              : hypothesis
+          ),
+        }));
+      },
+      unlinkSnapshotFromHypothesis: async (hypothesisId, snapshotId) => {
+        await dbService.unlinkSnapshotFromHypothesis(hypothesisId, snapshotId);
+        set((state) => ({
+          hypotheses: state.hypotheses.map((hypothesis) =>
+            hypothesis.id === hypothesisId
+              ? {
+                  ...hypothesis,
+                  linkedSnapshots: hypothesis.linkedSnapshots.filter((id) => id !== snapshotId),
+                }
+              : hypothesis
+          ),
+        }));
+      },
       hypothesisInsights: {},
       loadHypothesisInsights: async (hypothesisId) => {
         const insights = await dbService.getHypothesisInsights(hypothesisId);
