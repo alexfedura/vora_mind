@@ -98,6 +98,20 @@ export interface QuestionItem {
 
 export type HypothesisVerdict = "supported" | "rejected" | "inconclusive";
 
+export interface LinkedDefinition {
+  libraryGroupId: string;
+  libraryVersionId: string;
+  definitionName: string;
+  versionString: string;
+}
+
+export interface LibraryDefinitionSelection {
+  groupId: string;
+  versionId: string;
+  name: string;
+  versionString: string;
+}
+
 export interface Hypothesis {
   id: string;
   inquiryId: string;
@@ -115,6 +129,7 @@ export interface Hypothesis {
   evaluatedAt?: number | null;
   promotedToLibraryId?: string | null;
   parentHypothesisId?: string | null;
+  linkedDefinitions: LinkedDefinition[];
 }
 
 export interface HypothesisPromotionInput {
@@ -125,6 +140,7 @@ export interface HypothesisPromotionInput {
   dependentVar: string;
   metric: string;
   successThreshold: string;
+  linkedDefinitions?: LinkedDefinition[];
 }
 
 export interface ChildHypothesisInput {
@@ -135,6 +151,7 @@ export interface ChildHypothesisInput {
   dependentVar: string;
   metric: string;
   successThreshold: string;
+  linkedDefinitions?: LinkedDefinition[];
 }
 
 export interface CustomFontSetting {

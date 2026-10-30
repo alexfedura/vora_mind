@@ -16,7 +16,9 @@ import type {
   Hypothesis,
   HypothesisPromotionInput,
   HypothesisVerdict,
+  LibraryDefinitionSelection,
   JournalEntry,
+  LinkedDefinition,
   QuestionItem,
   TaskFlowItem,
   TaskFlowType,
@@ -178,6 +180,10 @@ export const dbService = {
     return await invoke<Hypothesis[]>("get_hypotheses");
   },
 
+  async getLibraryDefinitionsForSelection(): Promise<LibraryDefinitionSelection[]> {
+    return await invoke<LibraryDefinitionSelection[]>("get_library_definitions_for_selection");
+  },
+
   async promoteToHypothesis(input: HypothesisPromotionInput): Promise<Hypothesis> {
     return await invoke<Hypothesis>("promote_to_hypothesis", {
       inquiryId: input.inquiryId,
@@ -187,6 +193,7 @@ export const dbService = {
       dependentVar: input.dependentVar,
       metric: input.metric,
       successThreshold: input.successThreshold,
+      linkedDefinitions: input.linkedDefinitions ?? [],
     });
   },
 
@@ -217,6 +224,7 @@ export const dbService = {
       dependentVar: input.dependentVar,
       metric: input.metric,
       successThreshold: input.successThreshold,
+      linkedDefinitions: input.linkedDefinitions ?? [],
     });
   },
 
