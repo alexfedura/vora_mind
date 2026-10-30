@@ -1080,6 +1080,51 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
       {isExecuted && (
         <section dir="auto" className="mt-6 border-t border-[#292c34] pt-5">
           <h3 className="text-base font-semibold text-white">3. Analysis &amp; Verdict</h3>
+          <div dir="auto" className="mt-4 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-semibold text-violet-100">AI Data Analysis</h4>
+                <p className="mt-1 text-xs text-gray-400">
+                  Prepare a prompt with the hypothesis, protocol, checklist, and all collected entries.
+                </p>
+              </div>
+              <button
+                type="button"
+                dir="auto"
+                disabled={isAnalyzingWithAi}
+                onClick={() => void handleAnalyzeWithAi()}
+                className="rounded-lg border border-violet-400/40 bg-violet-500/20 px-4 py-2.5 text-sm font-semibold text-violet-100 transition hover:bg-violet-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isAnalyzingWithAi ? "Preparing…" : "🧠 Analyze with AI"}
+              </button>
+            </div>
+            {aiAnalysisError && (
+              <p dir="auto" role="alert" className="mt-3 text-sm text-rose-300">
+                {aiAnalysisError}
+              </p>
+            )}
+            {aiAnalysisPrompt && (
+              <div dir="auto" className="mt-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-gray-400">
+                    No LLM provider is configured. Copy this prompt into your preferred LLM.
+                  </p>
+                  <button
+                    type="button"
+                    dir="auto"
+                    onClick={() => void handleCopyAiPrompt()}
+                    className="rounded-lg border border-[#343741] px-3 py-1.5 text-xs font-medium text-gray-200 transition hover:bg-[#24262d]"
+                  >
+                    {aiPromptCopied ? "Copied" : "Copy Prompt"}
+                  </button>
+                </div>
+                <div
+                  className="max-h-[32rem] overflow-auto rounded-lg border border-[#343741] bg-[#101114] p-4 text-sm text-gray-200 [&_a]:text-sky-300 [&_blockquote]:border-l-2 [&_blockquote]:border-[#343741] [&_blockquote]:pl-3 [&_code]:rounded [&_code]:bg-[#24262d] [&_code]:px-1 [&_h1]:mb-3 [&_h1]:text-lg [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-base [&_li]:ml-5 [&_ol]:list-decimal [&_p]:my-2 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-[#17191f] [&_pre]:p-3 [&_ul]:list-disc"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(aiAnalysisPrompt) }}
+                />
+              </div>
+            )}
+          </div>
           <label dir="auto" className="mt-4 block">
             <span className="mb-2 block text-xs font-medium text-gray-400">Data Analysis</span>
             {hypothesis.verdict && !isEditingVerdict ? (
