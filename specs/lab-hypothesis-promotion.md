@@ -23,6 +23,12 @@ Library group and exact version ID, definition name, and version string for a
 hypothesis. Fetch these links with each hypothesis and store them in the same
 transaction as hypothesis promotion or child creation. Older callers may omit
 the list, which is treated as empty.
+Add nullable `protocol_steps`, `protocol_locked_at`, `raw_data`, `data_analysis`,
+and `executed_at` fields idempotently. Protocol steps are locked when saved and
+cannot be changed after they are locked or test execution begins. Execution
+requires a locked protocol and records the raw data and execution timestamp.
+Verdict recording requires an execution and stores analysis, evidence, and the
+verdict timestamp without allowing raw data to be changed.
 
 Initialize this schema immediately after the existing questions schema when
 initializing a workspace database.
@@ -36,6 +42,9 @@ the hypothesis ID on the inquiry, clears its promotion selection, and updates
 its timestamp. Optional linked Library definitions preserve the exact selected
 group and version; any failed validation or write rolls back all changes.
 Available selections include Library definitions and their available versions.
+The detail view records the protocol before execution, captures raw data when
+execution is recorded, then allows analysis and a verdict. Its trace timeline
+shows creation, protocol lock, execution, and verdict timestamps.
 
 `get_hypotheses` returns all hypotheses in descending creation-time order.
 Both commands use the existing workspace database state and expose
