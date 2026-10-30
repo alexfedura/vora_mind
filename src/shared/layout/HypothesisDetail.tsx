@@ -727,6 +727,208 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
             </button>
           )}
 
+          <div dir="auto" className="mt-6 border-t border-[#292c34] pt-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 className="text-base font-semibold text-white">Data Collection (Checklist)</h4>
+                <p className="mt-1 text-sm text-gray-400">
+                  Log observations while the locked protocol is in progress.
+                </p>
+              </div>
+              {checklistSchema.fields && (
+                <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-sm font-semibold text-sky-200">
+                  {dataEntries.length} {dataEntries.length === 1 ? "entry" : "entries"} collected
+                </span>
+              )}
+            </div>
+
+            {hypothesis.checklistSchema == null ? (
+              <button
+                type="button"
+                dir="auto"
+                onClick={() => {
+                  setChecklistDraftFields([createChecklistFieldDraft()]);
+                  setDataCollectionError(null);
+                  setIsChecklistBuilderOpen(true);
+                }}
+                className="mt-4 rounded-lg border border-amber-300/50 bg-amber-500 px-4 py-2.5 text-sm font-semibold text-gray-950 transition hover:bg-amber-400"
+              >
+                ⚙️ Define Checklist
+              </button>
+            ) : checklistSchema.error ? (
+              <p role="alert" className="mt-4 text-sm text-rose-300">{checklistSchema.error}</p>
+            ) : checklistSchema.fields ? (
+              <>
+                <form
+                  ref={dataEntryFormRef}
+                  dir="auto"
+                  onSubmit={(event) => void handleAddDataEntry(event)}
+                  className="mt-4 rounded-xl border border-[#292c34] bg-[#101114] p-4"
+                >
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {checklistSchema.fields.map((field, index) => {
+                      const inputId = `hypothesis-entry-${hypothesis.id}-${index}`;
+                      return (
+                        <label key={field.label} htmlFor={inputId} dir="auto" className="block">
+                          <span className="mb-1.5 block text-xs font-medium text-gray-400">{field.label}</span>
+                          {field.type === "select" ? (
+                            <select
+                              id={inputId}
+                              dir="auto"
+                              required
+                              value={typeof checklistValues[field.label] === "string" ? checklistValues[field.label] : ""}
+                              onChange={(event) => setChecklistValues((current) => ({
+                                ...current,
+                                [field.label]: event.currentTarget.value,
+                              }))}
+                              disabled={isSavingDataEntry}
+                              className="w-full rounded-lg border border-[#343741] bg-[#17191f] px-3 py-2 text-sm text-gray-200 outline-none focus:border-amber-400/70 disabled:opacity-60"
+                            >
+                              <option value="">Select…</option>
+                              {(field.options ?? []).map((option) => (
+                                <option key={option} dir="auto" value={option}>{option}</option>
+                              ))}
+                            </select>
+                          ) : field.type === "boolean" ? (
+                            <span className="flex min-h-10 items-center gap-2 rounded-lg border border-[#343741] bg-[#17191f] px-3 py-2">
+                              <input
+                                id={inputId}
+                                dir="auto"
+                                type="checkbox"
+                                checked={checklistValues[field.label] === true}
+                                onChange={(event) => setChecklistValues((current) => ({
+                                  ...current,
+                                  [field.label]: event.currentTarget.checked,
+                                }))}
+                                disabled={isSavingDataEntry}
+                                className="accent-amber-400"
+                              />
+                              <span className="text-sm text-gray-300">Yes</span>
+                            </span>
+                          ) : (
+                            <input
+                              id={inputId}
+                              dir="auto"
+                              type={field.type === "number" ? "number" : "text"}
+                              step={field.type === "number" ? "any" : undefined}
+                              required={field.type === "number"}
+                              value={typeof checklistValues[field.label] === "string" ? checklistValues[field.label] : ""}
+                              onChange={(event) => setChecklistValues((current) => ({
+                                ...current,
+                                [field.label]: event.currentTarget.value,
+                              }))}
+                              disabled={isSavingDataEntry}
+                              className="w-full rounded-lg border border-[#343741] bg-[#17191f] px-3 py-2 text-sm text-gray-200 outline-none focus:border-amber-400/70 disabled:opacity-60"
+                            />
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="submit"
+                    dir="auto"
+                    disabled={isSavingDataEntry}
+                    className="mt-4 rounded-lg border border-emerald-400/50 bg-emerald-400 px-5 py-3 text-base font-bold text-gray-950 shadow-lg shadow-emerald-950/20 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSavingDataEntry ? "Saving…" : "💾 Save & Add Next"}
+                  </button>
+                </form>
+
+                <div className="mt-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h5 className="text-sm font-semibold text-white">Collected Data</h5>
+                    <button
+                      type="button"
+                      dir="auto"
+                      disabled={dataEntries.length === 0 || parsedDataEntries.error !== null}
+                      onClick={() => {
+                        setDataCollectionError(null);
+                        setShowChecklistAnalysis((visible) => !visible);
+                      }}
+                      className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {showChecklistAnalysis ? "Hide Analysis" : "📊 Analyze Data"}
+                    </button>
+                  </div>
+
+                  {showChecklistAnalysis && checklistAnalysis.length > 0 && (
+                    <div className="mt-3 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
+                      <h6 className="text-sm font-semibold text-sky-100">Data Summary</h6>
+                      <ul className="mt-3 space-y-3">
+                        {checklistAnalysis.map((summary) => (
+                          <li key={summary.label} dir="auto" className="text-sm text-gray-300">
+                            <span className="font-semibold text-gray-100">{summary.label}:</span>{" "}
+                            {summary.counts.length > 0
+                              ? summary.counts.map(({ value, count }) => `${value} (${count})`).join(" · ")
+                              : "No values"}
+                            {summary.numeric && (
+                              <span className="ml-2 text-xs text-gray-400">
+                                n={summary.numeric.count}, min={summary.numeric.min}, avg={summary.numeric.average.toFixed(2)}, max={summary.numeric.max}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {parsedDataEntries.error && (
+                    <p role="alert" className="mt-3 text-sm text-rose-300">
+                      Could not read collected entry data: {parsedDataEntries.error}
+                    </p>
+                  )}
+
+                  {parsedDataEntries.entries.length > 0 ? (
+                    <div className="mt-3 overflow-x-auto rounded-xl border border-[#292c34]">
+                      <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                        <thead className="bg-[#101114] text-xs uppercase text-gray-400">
+                          <tr>
+                            {checklistSchema.fields.map((field) => (
+                              <th key={field.label} dir="auto" scope="col" className="px-3 py-2.5 font-semibold">{field.label}</th>
+                            ))}
+                            <th scope="col" className="px-3 py-2.5 font-semibold">Collected</th>
+                            <th scope="col" className="px-3 py-2.5"><span className="sr-only">Actions</span></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#292c34]">
+                          {parsedDataEntries.entries.map(({ entry, values }) => (
+                            <tr key={entry.id} className="bg-[#14161b] text-gray-300">
+                              {checklistSchema.fields?.map((field) => (
+                                <td key={field.label} dir="auto" className="max-w-[18rem] truncate px-3 py-2.5" title={formatChecklistValue(values[field.label])}>
+                                  {formatChecklistValue(values[field.label])}
+                                </td>
+                              ))}
+                              <td className="whitespace-nowrap px-3 py-2.5 text-xs text-gray-500">{formatTraceTimestamp(entry.createdAt)}</td>
+                              <td className="px-3 py-2.5 text-right">
+                                <button
+                                  type="button"
+                                  dir="auto"
+                                  aria-label="Delete data entry"
+                                  title="Delete data entry"
+                                  disabled={deletingDataEntryId === entry.id}
+                                  onClick={() => void handleDeleteDataEntry(entry.id)}
+                                  className="rounded p-1.5 text-gray-500 transition hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-gray-500">No data entries collected yet.</p>
+                  )}
+                </div>
+              </>
+            ) : null}
+            {dataCollectionError && (
+              <p role="alert" className="mt-3 text-sm text-rose-300">{dataCollectionError}</p>
+            )}
+          </div>
+
           <div dir="auto" className="mt-5 border-t border-[#292c34] pt-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h4 className="text-sm font-semibold text-white">
