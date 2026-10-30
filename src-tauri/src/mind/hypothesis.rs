@@ -563,7 +563,7 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
 mod tests {
     use super::{
         create_child_hypothesis_in_db, graduate_to_library_in_db, init_schema, list_hypotheses,
-        promote_inquiry, record_verdict_in_db,
+        promote_inquiry, record_verdict_in_db, LinkedDefinition,
     };
     use crate::mind::questions::{
         create_question, init_schema as init_questions_schema, select_for_promotion,
@@ -586,6 +586,16 @@ mod tests {
         id: &str,
         now: i64,
     ) -> rusqlite::Result<super::Hypothesis> {
+        promote_with_definitions(conn, inquiry_id, id, &[], now)
+    }
+
+    fn promote_with_definitions(
+        conn: &mut Connection,
+        inquiry_id: &str,
+        id: &str,
+        linked_definitions: &[LinkedDefinition],
+        now: i64,
+    ) -> rusqlite::Result<super::Hypothesis> {
         promote_inquiry(
             conn,
             id,
@@ -596,8 +606,32 @@ mod tests {
             "Y",
             "Y per day",
             "Y increases by 10%",
+            linked_definitions,
             now,
         )
+    }
+
+    fn insert_test_definition(conn: &Connection) -> LinkedDefinition {
+        conn.execute(
+            "INSERT INTO library_item_groups
+                (id, name, version, snapshot_json, created_at, updated_at, deleted_at)
+             VALUES ('definition-1', 'Flag', '0.1.0', '{}', 1, 1, NULL)",
+            [],
+        )
+        .expect("insert Library definition");
+        conn.execute(
+            "INSERT INTO library_item_group_versions
+                (id, group_id, version, snapshot_json, created_at)
+             VALUES ('definition-version-1', 'definition-1', '0.1.0', '{}', 1)",
+            [],
+        )
+        .expect("insert Library definition version");
+        LinkedDefinition {
+            library_group_id: "definition-1".to_string(),
+            library_version_id: "definition-version-1".to_string(),
+            definition_name: "Flag".to_string(),
+            version_string: "0.1.0".to_string(),
+        }
     }
 
     fn select_inquiry(conn: &mut Connection, inquiry_id: &str) {
@@ -654,6 +688,28 @@ mod tests {
         assert_eq!(
             list_hypotheses(&connection).expect("list hypotheses").len(),
             1
+        );
+    }
+
+    #[test]
+    fn promotion_persists_and_returns_linked_definition_versions() {
+        let mut connection = setup();
+        select_inquiry(&mut connection, "inquiry-1");
+        let definition = insert_test_definition(&connection);
+
+        let hypothesis = promote_with_definitions(
+            &mut connection,
+            "inquiry-1",
+            "hypothesis-1",
+            std::slice::from_ref(&definition),
+            10,
+        )
+        .expect("promote hypothesis with linked definition");
+
+        assert_eq!(hypothesis.linked_definitions, vec![definition.clone()]);
+        assert_eq!(
+            list_hypotheses(&connection).expect("list hypotheses")[0].linked_definitions,
+            vec![definition]
         );
     }
 
@@ -843,7 +899,15 @@ mod tests {
     fn child_hypothesis_inherits_inquiry_and_records_parent() {
         let mut connection = setup();
         select_inquiry(&mut connection, "inquiry-1");
-        promote(&mut connection, "inquiry-1", "hypothesis-1", 10).expect("promote inquiry");
+        let definition = insert_test_definition(&connection);
+        let parent = promote_with_definitions(
+            &mut connection,
+            "inquiry-1",
+            "hypothesis-1",
+            std::slice::from_ref(&definition),
+            10,
+        )
+        .expect("promote inquiry");
 
         let child = create_child_hypothesis_in_db(
             &mut connection,
@@ -855,6 +919,7 @@ mod tests {
             "Y",
             "Y per day",
             "Y increases by 10%",
+            &parent.linked_definitions,
             20,
         )
         .expect("create child hypothesis");
@@ -863,5 +928,6 @@ mod tests {
         assert_eq!(child.inquiry_id, "inquiry-1");
         assert_eq!(child.parent_hypothesis_id.as_deref(), Some("hypothesis-1"));
         assert_eq!(child.created_at, 20);
+        assert_eq!(child.linked_definitions, vec![definition]);
     }
 }
