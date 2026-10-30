@@ -144,6 +144,7 @@ interface AppState {
     verdict: HypothesisVerdict,
     rawData?: string,
     dataAnalysis?: string,
+    boundaryConditions?: string | null,
   ) => Promise<Hypothesis>;
 
   fetchCanonicalEntities: () => Promise<void>;
@@ -832,13 +833,21 @@ export const useAppStore = create<AppState>()(
         }));
         return hypothesis;
       },
-      recordVerdict: async (id, evidenceNotes, verdict, rawData, dataAnalysis) => {
+      recordVerdict: async (
+        id,
+        evidenceNotes,
+        verdict,
+        rawData,
+        dataAnalysis,
+        boundaryConditions,
+      ) => {
         const hypothesis = await dbService.recordVerdict(
           id,
           evidenceNotes,
           verdict,
           rawData,
           dataAnalysis,
+          boundaryConditions,
         );
         set((state) => ({
           hypotheses: state.hypotheses.map((item) =>
