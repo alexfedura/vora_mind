@@ -33,13 +33,63 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   onChildCreated,
 }) => {
   const recordVerdict = useAppStore((state) => state.recordVerdict);
+  const saveHypothesisProtocol = useAppStore((state) => state.saveHypothesisProtocol);
+  const recordHypothesisExecution = useAppStore((state) => state.recordHypothesisExecution);
   const graduateToLibrary = useAppStore((state) => state.graduateToLibrary);
   const [evidenceNotes, setEvidenceNotes] = useState(hypothesis.evidenceNotes ?? "");
+  const [protocolSteps, setProtocolSteps] = useState(hypothesis.protocolSteps ?? "");
+  const [rawData, setRawData] = useState(hypothesis.rawData ?? "");
+  const [dataAnalysis, setDataAnalysis] = useState(hypothesis.dataAnalysis ?? "");
   const [isEditingVerdict, setIsEditingVerdict] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCreatingChild, setIsCreatingChild] = useState(false);
   const [isRetesting, setIsRetesting] = useState(false);
+  const isProtocolLocked = hypothesis.protocolLockedAt != null;
+  const isExecuted = hypothesis.executedAt != null;
+
+  useEffect(() => {
+    setEvidenceNotes(hypothesis.evidenceNotes ?? "");
+    setProtocolSteps(hypothesis.protocolSteps ?? "");
+    setRawData(hypothesis.rawData ?? "");
+    setDataAnalysis(hypothesis.dataAnalysis ?? "");
+  }, [
+    hypothesis.id,
+    hypothesis.evidenceNotes,
+    hypothesis.protocolSteps,
+    hypothesis.rawData,
+    hypothesis.dataAnalysis,
+  ]);
+
+  const handleSaveProtocol = async (): Promise<void> => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      const updated = await saveHypothesisProtocol(hypothesis.id, protocolSteps);
+      setProtocolSteps(updated.protocolSteps ?? "");
+      onUpdated(updated);
+    } catch (cause) {
+      console.error("Could not save hypothesis protocol:", cause);
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRecordExecution = async (): Promise<void> => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      const updated = await recordHypothesisExecution(hypothesis.id, rawData);
+      setRawData(updated.rawData ?? "");
+      onUpdated(updated);
+    } catch (cause) {
+      console.error("Could not record hypothesis test execution:", cause);
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleGraduate = async (): Promise<void> => {
     setIsSaving(true);
@@ -59,7 +109,13 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
     setIsSaving(true);
     setError(null);
     try {
-      const updated = await recordVerdict(hypothesis.id, evidenceNotes, verdict);
+      const updated = await recordVerdict(
+        hypothesis.id,
+        evidenceNotes,
+        verdict,
+        rawData,
+        dataAnalysis,
+      );
       onUpdated(updated);
       setIsRetesting(false);
       setIsEditingVerdict(false);
