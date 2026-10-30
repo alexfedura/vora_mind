@@ -93,6 +93,12 @@ hypothesis variable is not confounded by a changed definition. Hypothesis
 detail shows linked definitions with their recorded version and displays the
 refined-from hypothesis lineage.
 
+Hypothesis detail can link saved Chart snapshots as visual evidence. Opening a
+linked snapshot navigates to Chart with its snapshot ID, using the existing
+snapshot restore flow. Chart offers a return action when navigation originated
+from a hypothesis; returning opens Planning's Lab tab and restores that exact
+hypothesis detail selection.
+
 ## Mid-test Scratchpad
 
 Each hypothesis detail view provides a scratchpad for recording ideas without
@@ -106,6 +112,7 @@ Queue question using the insight as its content.
 Unit tests cover successful promotion and inquiry state changes, rejection of
 unselected and missing inquiries, and descending hypothesis retrieval order.
 They also cover verdict recording, overwriting an existing verdict and its
-evidence, validation, and schema migration idempotency. The focused command is:
+evidence, validation, schema migration idempotency, and snapshot link/unlink
+behavior. The focused command is:
 
 `cargo test --manifest-path src-tauri/Cargo.toml --lib mind::hypothesis -- --nocapture`
