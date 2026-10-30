@@ -195,6 +195,15 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
   const canvasZoom = useCanvasZoomScales();
   const pathHandleScaleX = Math.max(0.01, zoom * canvasZoom.x);
   const pathHandleScaleY = Math.max(0.01, zoom * canvasZoom.y);
+  const resizeHandleStyle: React.CSSProperties & {
+    "--vora-shape-handle-scale-x": number;
+    "--vora-shape-handle-scale-y": number;
+  } = {
+    width: 28 / pathHandleScaleX,
+    height: 28 / pathHandleScaleY,
+    "--vora-shape-handle-scale-x": 1 / pathHandleScaleX,
+    "--vora-shape-handle-scale-y": 1 / pathHandleScaleY,
+  };
   const markerId = `vora-path-arrow-${id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const pathData = draftPoints
     .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x * shapeWidth} ${point.y * shapeHeight}`)
@@ -518,9 +527,9 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
             onResizeEnd={finishResize}
             minWidth={48}
             minHeight={36}
-            color="#e8ad55"
+            autoScale={false}
             handleClassName="vora-shape-resize-handle"
-            handleStyle={{ width: 10, height: 10 }}
+            handleStyle={resizeHandleStyle}
           />
           {selected && !nodeLocked && (
             RECTANGLE_SIDE_RESIZE_POSITIONS.map((position) => (
@@ -531,9 +540,9 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
                 onResizeEnd={finishResize}
                 minWidth={48}
                 minHeight={36}
-                color="#e8ad55"
+                autoScale={false}
                 className="vora-shape-resize-handle"
-                style={{ width: 10, height: 10 }}
+                style={resizeHandleStyle}
               />
             ))
           )}

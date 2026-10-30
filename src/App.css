@@ -379,7 +379,41 @@ body, #root {
 }
 
 .react-flow__node-voraShape .vora-shape-resize-handle {
-  border-radius: 2px;
+  display: grid;
+  place-items: center;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  pointer-events: auto;
+}
+
+.react-flow__node-voraShape .vora-shape-resize-handle::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(12px * var(--vora-shape-handle-scale-x));
+  height: calc(12px * var(--vora-shape-handle-scale-y));
+  box-sizing: border-box;
+  border: calc(2px * var(--vora-shape-handle-scale-y)) solid #2962ff;
+  border-radius: 50%;
+  background: #0a0c10;
+  content: "";
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: width 100ms ease, height 100ms ease, border-width 100ms ease;
+}
+
+.react-flow__node-voraShape .vora-shape-resize-handle.top:not(.left):not(.right)::after,
+.react-flow__node-voraShape .vora-shape-resize-handle.bottom:not(.left):not(.right)::after,
+.react-flow__node-voraShape .vora-shape-resize-handle.left:not(.top):not(.bottom)::after,
+.react-flow__node-voraShape .vora-shape-resize-handle.right:not(.top):not(.bottom)::after {
+  border-radius: 1px;
+}
+
+.react-flow__node-voraShape .vora-shape-resize-handle:hover::after {
+  width: calc(14px * var(--vora-shape-handle-scale-x));
+  height: calc(14px * var(--vora-shape-handle-scale-y));
+  border-width: calc(2.5px * var(--vora-shape-handle-scale-y));
 }
 
 .vora-shape-toolbar {
