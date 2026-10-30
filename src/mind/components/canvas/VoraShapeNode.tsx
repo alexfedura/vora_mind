@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { NodeResizeControl, NodeResizer, useReactFlow, useStore, useViewport, type Node, type NodeProps } from "@xyflow/react";
+import { Handle, NodeResizeControl, NodeResizer, Position, useReactFlow, useStore, useViewport, type Node, type NodeProps } from "@xyflow/react";
 import {
   Copy,
   Group,
@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { DrawingColorPicker } from "@/shared/canvas/DrawingColorPicker";
 import { getSetting, setSetting } from "@/shared/store/useSettingsStore";
-import type { VoraPathSegment, VoraShapeData, VoraShapeStyleSettings } from "@/mind/types";
+import { VORA_DIAGRAM_SHAPE_LABELS, type VoraPathSegment, type VoraShapeData, type VoraShapeStyleSettings } from "@/mind/types";
 import { canJoinPathNodes, getPathSegments } from "@/mind/utils/pathSegments";
 import { useCanvasZoomScales } from "./CanvasZoomContext";
 
@@ -119,6 +119,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function getDiagramPath(shape: VoraShapeData["shape"], width: number, height: number, inset: number): string {
+  const left = inset;
+  const top = inset;
+  const right = Math.max(left, width - inset);
+  const bottom = Math.max(top, height - inset);
+  const centerX = width / 2;
+  const centerY = height / 2;
+
+  switch (shape) {
+    case "rectangle":
+      return `M ${left} ${top} H ${right} V ${bottom} H ${left} Z`;
+    case "process":
+      return `M ${left + 6} ${top} H ${right - 6} Q ${right} ${top} ${right} ${top + 6} V ${bottom - 6} Q ${right} ${bottom} ${right - 6} ${bottom} H ${left + 6} Q ${left} ${bottom} ${left} ${bottom - 6} V ${top + 6} Q ${left} ${top} ${left + 6} ${top} Z`;
+    case "decision":
+      return `M ${centerX} ${top} L ${right} ${centerY} L ${centerX} ${bottom} L ${left} ${centerY} Z`;
+    case "terminator": {
+      const radiusX = (right - left) / 2;
+      const radiusY = (bottom - top) / 2;
+      return `M ${centerX - radiusX} ${centerY} A ${radiusX} ${radiusY} 0 1 0 ${centerX + radiusX} ${centerY} A ${radiusX} ${radiusY} 0 1 0 ${centerX - radiusX} ${centerY} Z`;
+    }
+    case "inputOutput": {
+      const slant = Math.min(24, (right - left) / 5);
+      return `M ${left + slant} ${top} H ${right} L ${right - slant} ${bottom} H ${left} Z`;
+    }
+    case "document": {
+      const wave = Math.min(14, (bottom - top) / 6);
+      return `M ${left} ${top} H ${right} V ${bottom - wave} C ${right - 12} ${bottom - wave * 2} ${left + 12} ${bottom} ${left} ${bottom - wave} Z`;
+    }
+    case "database": {
+      const radius = Math.max(8, Math.min(20, (bottom - top) / 6));
+      const ellipseCenterY = top + radius;
+      return `M ${left} ${ellipseCenterY} A ${(right - left) / 2} ${radius} 0 0 1 ${right} ${ellipseCenterY} V ${bottom - radius} A ${(right - left) / 2} ${radius} 0 0 1 ${left} ${bottom - radius} Z M ${left} ${centerY} A ${(right - left) / 2} ${radius} 0 0 0 ${right} ${centerY}`;
+    }
+    case "path":
+      return "";
+  }
+}
+
 export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodeProps<VoraShapeNodeModel>) => {
   const { getNode, getZoom } = useReactFlow<VoraShapeNodeModel>();
   const selectedShapeNodes = useStore(
@@ -145,9 +183,10 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
     canJoinPathNodes(selectedPathNodes);
   const isToolbarOwner = selected && topmostSelectedShape?.id === id;
   const allSelectedShapesLocked = selectedShapeNodes.length > 0 && selectedShapeNodes.every((node) => node.draggable === false);
-  const allSelectedShapesAreRectangles = selectedShapeNodes.every((node) => node.data.shape === "rectangle");
+  const allSelectedShapesHaveFill = selectedShapeNodes.every((node) => node.data.shape !== "path");
   const nodeLocked = getNode(id)?.draggable === false;
-  const defaultLabel = data.shape === "rectangle" ? "Rectangle" : "Path";
+  const isPath = data.shape === "path";
+  const defaultLabel = VORA_DIAGRAM_SHAPE_LABELS[data.shape];
   const label = data.label || defaultLabel;
   const hasCustomLabel = label !== defaultLabel;
   const color = data.color || "#e8ad55";
@@ -158,7 +197,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
   const textColor = data.textColor || "#dbdbdb";
   const textOpacity = Number.isFinite(data.textOpacity) ? data.textOpacity : 1;
   const fillColor = data.fillColor || color;
-  const fillOpacity = Number.isFinite(data.fillOpacity) ? data.fillOpacity : data.shape === "rectangle" ? 0.12 : 0;
+  const fillOpacity = Number.isFinite(data.fillOpacity) ? data.fillOpacity : isPath ? 0 : 0.12;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [openControlMenu, setOpenControlMenu] = useState<"templates" | "line" | "fill" | "text" | "width" | "style" | null>(null);
   const [labelEditorOpen, setLabelEditorOpen] = useState(false);
@@ -519,7 +558,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
       onPointerUp={finishPointDrag}
       onPointerCancel={finishPointDrag}
     >
-      {data.shape === "rectangle" && (
+      {!isPath && (
         <>
           <NodeResizer
             isVisible={selected && !nodeLocked}
@@ -625,7 +664,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
                   aria-label="Shape fill color"
                   title={allSelectedShapesAreRectangles ? "Fill color" : "Fill is available only when all selected shapes are rectangles"}
                   aria-expanded={openControlMenu === "fill"}
-                  disabled={!allSelectedShapesAreRectangles}
+                  disabled={!allSelectedShapesHaveFill}
                   onClick={() => setOpenControlMenu((open) => open === "fill" ? null : "fill")}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" fill="none" aria-hidden="true"><path stroke="currentColor" d="M13.5 6.5l-3-3-7 7 7.59 7.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82L13.5 6.5zm0 0v-4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v6" /><path fill="currentColor" d="M0 16.5C0 15 2.5 12 2.5 12S5 15 5 16.5 4 19 2.5 19 0 18 0 16.5z" /><circle fill="currentColor" cx="9.5" cy="9.5" r="1.5" /></svg>
@@ -832,7 +871,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
               <option value="dotted">Dotted</option>
             </select>
           </label>
-          {data.shape === "rectangle" ? <>
+          {!isPath ? <>
             <label className="mb-2 flex items-center justify-between gap-2">Fill color
               <input aria-label="Rectangle fill color" type="color" value={fillColor} onChange={(event) => update({ fillColor: event.currentTarget.value })} className="h-7 w-10 rounded border border-[#383f4e] bg-transparent" />
             </label>
@@ -939,6 +978,16 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
           </>}
         </div>
       )}
+      <Handle
+        type="target"
+        position={Position.Left}
+        className={`!left-0 !top-1/2 !h-3 !w-3 !-translate-y-1/2 !rounded-full !border-2 !border-[#13151b] !bg-[#e8ad55] transition-opacity ${selected ? "!opacity-100" : "!opacity-0"} !pointer-events-auto`}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        className={`!right-0 !top-1/2 !h-3 !w-3 !-translate-y-1/2 !rounded-full !border-2 !border-[#13151b] !bg-[#e8ad55] transition-opacity ${selected ? "!opacity-100" : "!opacity-0"} !pointer-events-auto`}
+      />
       <svg
         ref={svgRef}
         width="100%"
@@ -949,14 +998,11 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
         pointerEvents="none"
         aria-label={label}
       >
-        {data.shape === "rectangle" ? (
+        {!isPath ? (
           <>
-            <rect
+            <path
               className="vora-shape-visual"
-              x={data.lineWidth / 2}
-              y={data.lineWidth / 2}
-              width={Math.max(0, shapeWidth - data.lineWidth)}
-              height={Math.max(0, shapeHeight - data.lineWidth)}
+              d={getDiagramPath(data.shape, shapeWidth, shapeHeight, lineWidth / 2)}
               fill={fillColor}
               fillOpacity={fillOpacity}
               stroke={color}
@@ -965,12 +1011,9 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
               strokeDasharray={dashArray}
               pointerEvents="none"
             />
-            <rect
+            <path
               className="vora-shape-border-hit-target"
-              x={data.lineWidth / 2}
-              y={data.lineWidth / 2}
-              width={Math.max(0, shapeWidth - data.lineWidth)}
-              height={Math.max(0, shapeHeight - data.lineWidth)}
+              d={getDiagramPath(data.shape, shapeWidth, shapeHeight, lineWidth / 2)}
               fill="none"
               stroke="transparent"
               strokeWidth={selectionHitStrokeWidth}
@@ -1078,7 +1121,20 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
           </>
         )}
         {hasCustomLabel && (
-          <text x="8" y="19" fill={textColor} fillOpacity={textOpacity} fontSize="12" fontFamily="sans-serif" pointerEvents="none" aria-hidden="true">{label}</text>
+          <text
+            x={isPath ? 8 : shapeWidth / 2}
+            y={isPath ? 19 : shapeHeight / 2}
+            textAnchor={isPath ? "start" : "middle"}
+            dominantBaseline={isPath ? "auto" : "middle"}
+            fill={textColor}
+            fillOpacity={textOpacity}
+            fontSize="12"
+            fontFamily="sans-serif"
+            pointerEvents="none"
+            aria-hidden="true"
+          >
+            {label}
+          </text>
         )}
       </svg>
     </div>
