@@ -342,6 +342,13 @@ body, #root {
   background: transparent !important;
 }
 
+.react-flow__node-voraShape.vora-shape-border-hit.selected:not(.vora-path-node) {
+  box-shadow: none !important;
+  outline: none !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
 .react-flow__pane:has(.react-flow__node-voraShape.vora-path-node.selected) .react-flow__nodesselection-rect {
   background: transparent !important;
   border: 0 !important;
@@ -405,13 +412,6 @@ body, #root {
   pointer-events: none;
   transform: translate(-50%, -50%);
   transition: width 100ms ease, height 100ms ease, border-width 100ms ease;
-}
-
-.react-flow__node-voraShape .vora-shape-resize-handle.top:not(.left):not(.right)::after,
-.react-flow__node-voraShape .vora-shape-resize-handle.bottom:not(.left):not(.right)::after,
-.react-flow__node-voraShape .vora-shape-resize-handle.left:not(.top):not(.bottom)::after,
-.react-flow__node-voraShape .vora-shape-resize-handle.right:not(.top):not(.bottom)::after {
-  border-radius: 1px;
 }
 
 .react-flow__node-voraShape .vora-shape-resize-handle:hover::after {
