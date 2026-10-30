@@ -1885,7 +1885,7 @@ function AppContent() {
 
   const addShapeNode = (shape: VoraDiagramShape, points: VoraShapePoint[]): void => {
     if (!canvasBoardId) return;
-    if (points.length < (shape === "path" ? 2 : 2)) return;
+    if (points.length < 2) return;
     const xs = points.map((point) => point.x);
     const ys = points.map((point) => point.y);
     const minX = Math.min(...xs);
@@ -1964,7 +1964,7 @@ function AppContent() {
       anchor.href = url;
       anchor.download = `vora-mind-${canvasBoardId}.json`;
       anchor.click();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       setBoardTransferError(null);
     } catch (error) {
       console.error("Could not export the active Vora Mind Board:", error);
@@ -2495,7 +2495,10 @@ function AppContent() {
           type="button"
           aria-label="Diagram templates"
           aria-expanded={isTemplateGalleryOpen}
-          onClick={() => setIsTemplateGalleryOpen((open) => !open)}
+          onClick={() => {
+            setIsDiagramPaletteOpen(false);
+            setIsTemplateGalleryOpen((open) => !open);
+          }}
           className={`${CANVAS_TOOL_BUTTON_CLASS} ${isTemplateGalleryOpen ? CANVAS_TOOL_BUTTON_ACTIVE_CLASS : CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
           title="Diagram templates"
         >
