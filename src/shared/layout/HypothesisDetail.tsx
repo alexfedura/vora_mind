@@ -446,6 +446,11 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
               <p dir="auto" className="w-full whitespace-pre-wrap text-sm text-gray-300">
                 {hypothesis.evidenceNotes || "No evidence notes recorded."}
               </p>
+              {hypothesis.boundaryConditions && (
+                <p dir="auto" className="w-full whitespace-pre-wrap text-sm text-amber-200">
+                  Boundary conditions: {hypothesis.boundaryConditions}
+                </p>
+              )}
             </div>
           )}
 
