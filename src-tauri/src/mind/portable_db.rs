@@ -768,11 +768,7 @@ pub fn import_database_backup(state: State<AppState>, backup_path: String) -> Re
     let active_settings_path = settings_path_for_database(&active_path)?;
     let current_settings = read_settings_file(&active_settings_path)?;
     let staged_connection = Connection::open(&staged_path).map_err(|error| error.to_string())?;
-    initialize_settings_file(
-        &staged_connection,
-        &staged_path,
-        current_settings.as_ref(),
-    )?;
+    initialize_settings_file(&staged_connection, &staged_path, current_settings.as_ref())?;
     drop(staged_connection);
 
     let previous_path = temporary_sibling(&active_path, "previous")?;
@@ -896,9 +892,9 @@ pub fn initialize_workspace_schema(conn: &Connection) -> Result<(), Box<dyn std:
 #[cfg(test)]
 mod tests {
     use super::{
-        create_database_backup, init_vora_schema, initialize_settings_file,
-        merge_missing_settings, migrate_legacy_database_selector_file,
-        replace_settings_for_database, settings_path_for_database, validate_imported_database,
+        create_database_backup, init_vora_schema, initialize_settings_file, merge_missing_settings,
+        migrate_legacy_database_selector_file, replace_settings_for_database,
+        settings_path_for_database, validate_imported_database,
     };
     use rusqlite::Connection;
     use std::collections::HashMap;
@@ -924,9 +920,11 @@ mod tests {
 
         let backup = Connection::open(&backup_path).expect("open database backup");
         let value: String = backup
-            .query_row("SELECT value FROM authored_data WHERE id = 'item-1'", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT value FROM authored_data WHERE id = 'item-1'",
+                [],
+                |row| row.get(0),
+            )
             .expect("read backed up row");
         assert_eq!(value, "saved");
         drop(backup);
@@ -948,7 +946,10 @@ mod tests {
 
         assert_eq!(summary.added, 1);
         assert_eq!(summary.already_present, 1);
-        assert_eq!(merged.get("shared").map(String::as_str), Some("local-value"));
+        assert_eq!(
+            merged.get("shared").map(String::as_str),
+            Some("local-value")
+        );
         assert_eq!(merged.get("imported-only").map(String::as_str), Some("add"));
         assert_eq!(merged.get("local-only").map(String::as_str), Some("keep"));
     }

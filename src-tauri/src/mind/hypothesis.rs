@@ -287,10 +287,7 @@ fn insert_linked_definitions(
             .query_row(
                 "SELECT version FROM library_item_group_versions
                  WHERE id = ?1 AND group_id = ?2",
-                params![
-                    definition.library_version_id,
-                    definition.library_group_id
-                ],
+                params![definition.library_version_id, definition.library_group_id],
                 |row| row.get(0),
             )
             .optional()?;
@@ -314,7 +311,10 @@ fn insert_linked_definitions(
     Ok(())
 }
 
-fn list_linked_definitions(conn: &Connection, hypothesis_id: &str) -> Result<Vec<LinkedDefinition>> {
+fn list_linked_definitions(
+    conn: &Connection,
+    hypothesis_id: &str,
+) -> Result<Vec<LinkedDefinition>> {
     let mut statement = conn.prepare(
         "SELECT library_group_id, library_version_id, definition_name, version_string
          FROM hypothesis_definitions
@@ -356,7 +356,9 @@ fn create_child_hypothesis_in_db(
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("Parent hypothesis not found: {parent_id}"))?;
     if parent_verdict.is_none() {
-        return Err("A child hypothesis can only be created from an evaluated hypothesis.".to_string());
+        return Err(
+            "A child hypothesis can only be created from an evaluated hypothesis.".to_string(),
+        );
     }
     let refined_from_id = Some(parent_id);
 
@@ -487,7 +489,10 @@ fn graduate_to_library_in_db(
         hypothesis.verdict.as_deref(),
         Some("supported" | "partially_supported")
     ) {
-        return Err("Only supported or partially supported hypotheses can be graduated to the Library".to_string());
+        return Err(
+            "Only supported or partially supported hypotheses can be graduated to the Library"
+                .to_string(),
+        );
     }
     if hypothesis.promoted_to_library_id.is_some() {
         return Err("Hypothesis is already graduated to the Library".to_string());
@@ -755,10 +760,7 @@ fn validate_checklist_schema(schema_json: &str) -> std::result::Result<serde_jso
     Ok(schema)
 }
 
-fn validate_checklist_entry(
-    schema_json: &str,
-    data_json: &str,
-) -> std::result::Result<(), String> {
+fn validate_checklist_entry(schema_json: &str, data_json: &str) -> std::result::Result<(), String> {
     let schema = validate_checklist_schema(schema_json)?;
     let data: serde_json::Value = serde_json::from_str(data_json)
         .map_err(|error| format!("Checklist entry must be valid JSON: {error}"))?;
@@ -789,7 +791,9 @@ fn validate_checklist_entry(
                 field
                     .get("options")
                     .and_then(serde_json::Value::as_array)
-                    .is_some_and(|options| options.iter().any(|option| option.as_str() == Some(value)))
+                    .is_some_and(|options| {
+                        options.iter().any(|option| option.as_str() == Some(value))
+                    })
             }),
             "number" => value.as_number().is_some(),
             "text" => value.is_string(),
@@ -830,7 +834,10 @@ fn save_checklist_schema_in_db(
         )
         .map_err(|error| error.to_string())?;
     if entry_count > 0 {
-        return Err("Checklist schema cannot be changed after data entries have been collected.".to_string());
+        return Err(
+            "Checklist schema cannot be changed after data entries have been collected."
+                .to_string(),
+        );
     }
     conn.execute(
         "UPDATE hypotheses SET checklist_schema = ?1, updated_at = ?2 WHERE id = ?3",
@@ -871,9 +878,8 @@ fn add_data_entry_in_db(
         .optional()
         .map_err(|error| error.to_string())?
         .flatten();
-    let schema_json = schema_json.ok_or_else(|| {
-        format!("Hypothesis '{hypothesis_id}' does not have a checklist schema.")
-    })?;
+    let schema_json = schema_json
+        .ok_or_else(|| format!("Hypothesis '{hypothesis_id}' does not have a checklist schema."))?;
     validate_checklist_entry(&schema_json, data_json)?;
     conn.execute(
         "INSERT INTO hypothesis_data_entries (id, hypothesis_id, data_json, created_at)
@@ -1180,12 +1186,16 @@ fn record_verdict_in_db(
     if verdict == "partially_supported"
         && boundary_conditions.map_or(true, |conditions| conditions.trim().is_empty())
     {
-        return Err("Boundary conditions are required for a partially supported verdict.".to_string());
+        return Err(
+            "Boundary conditions are required for a partially supported verdict.".to_string(),
+        );
     }
     let stored_raw_data: Option<String> = conn
-        .query_row("SELECT raw_data FROM hypotheses WHERE id = ?1", [id], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT raw_data FROM hypotheses WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )
         .optional()
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("Hypothesis not found: {id}"))?;
@@ -1198,7 +1208,14 @@ fn record_verdict_in_db(
              SET evidence_notes = ?1, verdict = ?2, data_analysis = COALESCE(?3, data_analysis),
                  boundary_conditions = ?4, evaluated_at = ?5, updated_at = ?5
              WHERE id = ?6 AND executed_at IS NOT NULL",
-            params![evidence_notes, verdict, data_analysis, boundary_conditions, now, id],
+            params![
+                evidence_notes,
+                verdict,
+                data_analysis,
+                boundary_conditions,
+                now,
+                id
+            ],
         )
         .map_err(|error| error.to_string())?;
     if changed != 1 {
@@ -1284,13 +1301,11 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
 mod tests {
     use super::{
         add_data_entry_in_db, add_hypothesis_insight_in_db, create_child_hypothesis_in_db,
-        delete_data_entry_in_db,
-        delete_hypothesis_insight_in_db, graduate_to_library_in_db, init_schema,
-        link_snapshot_to_hypothesis_in_db, list_data_entries, list_hypothesis_snapshots,
-        list_hypothesis_insights, list_hypotheses, promote_inquiry,
-        record_hypothesis_execution_in_db, record_verdict_in_db,
-        save_checklist_schema_in_db, save_hypothesis_protocol_in_db,
-        unlink_snapshot_from_hypothesis_in_db, LinkedDefinition,
+        delete_data_entry_in_db, delete_hypothesis_insight_in_db, graduate_to_library_in_db,
+        init_schema, link_snapshot_to_hypothesis_in_db, list_data_entries, list_hypotheses,
+        list_hypothesis_insights, list_hypothesis_snapshots, promote_inquiry,
+        record_hypothesis_execution_in_db, record_verdict_in_db, save_checklist_schema_in_db,
+        save_hypothesis_protocol_in_db, unlink_snapshot_from_hypothesis_in_db, LinkedDefinition,
     };
     use crate::mind::questions::{
         create_question, init_schema as init_questions_schema, select_for_promotion,
@@ -1330,14 +1345,12 @@ mod tests {
         )
         .is_err());
 
-        let hypothesis = save_checklist_schema_in_db(
-            &connection,
-            "hypothesis-1",
-            &schema_json,
-            15,
-        )
-        .expect("save checklist schema");
-        assert_eq!(hypothesis.checklist_schema.as_deref(), Some(schema_json.as_str()));
+        let hypothesis = save_checklist_schema_in_db(&connection, "hypothesis-1", &schema_json, 15)
+            .expect("save checklist schema");
+        assert_eq!(
+            hypothesis.checklist_schema.as_deref(),
+            Some(schema_json.as_str())
+        );
         assert_eq!(hypothesis.updated_at, 15);
 
         let row_json = serde_json::json!({
@@ -1355,36 +1368,19 @@ mod tests {
             20,
         )
         .is_err());
-        let first = add_data_entry_in_db(
-            &connection,
-            "entry-1",
-            "hypothesis-1",
-            &row_json,
-            20,
-        )
-        .expect("add valid checklist entry");
-        let second = add_data_entry_in_db(
-            &connection,
-            "entry-2",
-            "hypothesis-1",
-            &row_json,
-            21,
-        )
-        .expect("add second checklist entry");
+        let first = add_data_entry_in_db(&connection, "entry-1", "hypothesis-1", &row_json, 20)
+            .expect("add valid checklist entry");
+        let second = add_data_entry_in_db(&connection, "entry-2", "hypothesis-1", &row_json, 21)
+            .expect("add second checklist entry");
         assert_eq!(first.hypothesis_id, "hypothesis-1");
         assert_eq!(first.data_json, row_json);
         assert_eq!(
-            list_data_entries(&connection, "hypothesis-1")
-                .expect("list checklist entries"),
+            list_data_entries(&connection, "hypothesis-1").expect("list checklist entries"),
             vec![first, second]
         );
-        assert!(save_checklist_schema_in_db(
-            &connection,
-            "hypothesis-1",
-            &schema_json,
-            22
-        )
-        .is_err());
+        assert!(
+            save_checklist_schema_in_db(&connection, "hypothesis-1", &schema_json, 22).is_err()
+        );
 
         delete_data_entry_in_db(&connection, "entry-1").expect("delete checklist entry");
         assert_eq!(
@@ -1530,7 +1526,7 @@ mod tests {
             None,
             20,
         )
-            .expect("record supported verdict");
+        .expect("record supported verdict");
     }
 
     #[test]
@@ -1756,15 +1752,13 @@ mod tests {
         assert_eq!(executed.raw_data.as_deref(), Some("Ten observations"));
         assert_eq!(executed.executed_at, Some(30));
 
-        assert!(
-            save_hypothesis_protocol_in_db(
-                &mut connection,
-                "hypothesis-1",
-                "Changed protocol",
-                40,
-            )
-            .is_err()
-        );
+        assert!(save_hypothesis_protocol_in_db(
+            &mut connection,
+            "hypothesis-1",
+            "Changed protocol",
+            40,
+        )
+        .is_err());
     }
 
     #[test]
@@ -1806,9 +1800,8 @@ mod tests {
         let mut connection = setup();
         create_supported_hypothesis(&mut connection, "inquiry-1", "hypothesis-1");
 
-        let hypothesis =
-            graduate_to_library_in_db(&mut connection, "hypothesis-1", None, 30)
-                .expect("graduate hypothesis");
+        let hypothesis = graduate_to_library_in_db(&mut connection, "hypothesis-1", None, 30)
+            .expect("graduate hypothesis");
         let group_id = hypothesis
             .promoted_to_library_id
             .as_deref()
@@ -1848,15 +1841,14 @@ mod tests {
         let group_id = first.promoted_to_library_id.expect("first Library group");
 
         create_supported_hypothesis(&mut connection, "inquiry-2", "hypothesis-2");
-        let second = graduate_to_library_in_db(
-            &mut connection,
-            "hypothesis-2",
-            Some(&group_id),
-            40,
-        )
-        .expect("append second hypothesis");
+        let second =
+            graduate_to_library_in_db(&mut connection, "hypothesis-2", Some(&group_id), 40)
+                .expect("append second hypothesis");
 
-        assert_eq!(second.promoted_to_library_id.as_deref(), Some(group_id.as_str()));
+        assert_eq!(
+            second.promoted_to_library_id.as_deref(),
+            Some(group_id.as_str())
+        );
         let (version, versions, nodes): (String, i64, i64) = connection
             .query_row(
                 "SELECT groups.version,
@@ -1880,7 +1872,9 @@ mod tests {
 
         assert!(graduate_to_library_in_db(&mut connection, "hypothesis-1", None, 20).is_err());
         let groups: i64 = connection
-            .query_row("SELECT COUNT(*) FROM library_item_groups", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM library_item_groups", [], |row| {
+                row.get(0)
+            })
             .expect("count Library groups");
         assert_eq!(groups, 0);
     }
@@ -2063,16 +2057,11 @@ mod tests {
             25,
         )
         .expect("create refinement from partial hypothesis");
-        assert_eq!(
-            child.refined_from_id.as_deref(),
-            Some("hypothesis-1")
-        );
+        assert_eq!(child.refined_from_id.as_deref(), Some("hypothesis-1"));
 
         let graduated = graduate_to_library_in_db(&mut connection, "hypothesis-1", None, 30)
             .expect("graduate partial hypothesis");
-        let group_id = graduated
-            .promoted_to_library_id
-            .expect("Library group ID");
+        let group_id = graduated.promoted_to_library_id.expect("Library group ID");
         let (name, snapshot_json): (String, String) = connection
             .query_row(
                 "SELECT name, snapshot_json FROM library_item_groups WHERE id = ?1",

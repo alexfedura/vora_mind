@@ -70,9 +70,7 @@ async fn install_update(
 }
 
 #[tauri::command]
-fn get_last_update_failure(
-    app: tauri::AppHandle,
-) -> Result<Option<UpdaterFailureMarker>, String> {
+fn get_last_update_failure(app: tauri::AppHandle) -> Result<Option<UpdaterFailureMarker>, String> {
     let marker_path = app
         .path()
         .app_local_data_dir()
@@ -363,8 +361,7 @@ fn select_for_promotion(
 ) -> Result<mind::questions::QuestionItem, String> {
     let now = task_flow_now()?;
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
-    mind::questions::select_for_promotion(&mut conn, &id, now)
-        .map_err(|error| error.to_string())
+    mind::questions::select_for_promotion(&mut conn, &id, now).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
