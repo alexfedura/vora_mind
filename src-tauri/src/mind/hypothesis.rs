@@ -18,6 +18,15 @@ pub struct LinkedDefinition {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct HypothesisInsight {
+    pub id: String,
+    pub hypothesis_id: String,
+    pub content: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Hypothesis {
     pub id: String,
     pub inquiry_id: String,
@@ -105,9 +114,133 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             FOREIGN KEY(hypothesis_id) REFERENCES hypotheses(id) ON DELETE CASCADE,
             FOREIGN KEY(library_group_id) REFERENCES library_item_groups(id),
             FOREIGN KEY(library_version_id) REFERENCES library_item_group_versions(id)
+        );
+        CREATE TABLE IF NOT EXISTS hypothesis_insights (
+            id TEXT PRIMARY KEY,
+            hypothesis_id TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY(hypothesis_id) REFERENCES hypotheses(id) ON DELETE CASCADE
         );",
     )?;
     Ok(())
+}
+
+fn add_hypothesis_insight_in_db(
+    conn: &Connection,
+    id: &str,
+    hypothesis_id: &str,
+    content: &str,
+    created_at: i64,
+) -> std::result::Result<HypothesisInsight, String> {
+    if content.trim().is_empty() {
+        return Err("Insight content cannot be empty.".to_string());
+    }
+    let exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM hypotheses WHERE id = ?1)",
+            [hypothesis_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !exists {
+        return Err(format!("Hypothesis not found: {hypothesis_id}"));
+    }
+    conn.execute(
+        "INSERT INTO hypothesis_insights (id, hypothesis_id, content, created_at)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![id, hypothesis_id, content, created_at],
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(HypothesisInsight {
+        id: id.to_string(),
+        hypothesis_id: hypothesis_id.to_string(),
+        content: content.to_string(),
+        created_at,
+    })
+}
+
+fn list_hypothesis_insights(
+    conn: &Connection,
+    hypothesis_id: &str,
+) -> std::result::Result<Vec<HypothesisInsight>, String> {
+    let exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM hypotheses WHERE id = ?1)",
+            [hypothesis_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !exists {
+        return Err(format!("Hypothesis not found: {hypothesis_id}"));
+    }
+    let mut statement = conn
+        .prepare(
+            "SELECT id, hypothesis_id, content, created_at
+             FROM hypothesis_insights
+             WHERE hypothesis_id = ?1
+             ORDER BY created_at DESC, id DESC",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([hypothesis_id], |row| {
+            Ok(HypothesisInsight {
+                id: row.get(0)?,
+                hypothesis_id: row.get(1)?,
+                content: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>>>()
+        .map_err(|error| error.to_string())
+}
+
+fn delete_hypothesis_insight_in_db(
+    conn: &Connection,
+    id: &str,
+) -> std::result::Result<(), String> {
+    let deleted = conn
+        .execute("DELETE FROM hypothesis_insights WHERE id = ?1", [id])
+        .map_err(|error| error.to_string())?;
+    if deleted == 0 {
+        return Err(format!("Hypothesis insight not found: {id}"));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn add_hypothesis_insight(
+    state: State<AppState>,
+    hypothesis_id: String,
+    content: String,
+) -> std::result::Result<HypothesisInsight, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let now = i64::try_from(now).map_err(|error| error.to_string())?;
+    let id = format!("insight_{}", uuid::Uuid::now_v7());
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    add_hypothesis_insight_in_db(&conn, &id, &hypothesis_id, &content, now)
+}
+
+#[tauri::command]
+pub fn get_hypothesis_insights(
+    state: State<AppState>,
+    hypothesis_id: String,
+) -> std::result::Result<Vec<HypothesisInsight>, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    list_hypothesis_insights(&conn, &hypothesis_id)
+}
+
+#[tauri::command]
+pub fn delete_hypothesis_insight(
+    state: State<AppState>,
+    id: String,
+) -> std::result::Result<(), String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    delete_hypothesis_insight_in_db(&conn, &id)
 }
 
 fn insert_linked_definitions(
