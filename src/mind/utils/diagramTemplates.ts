@@ -35,7 +35,7 @@ function createShapeNode(
 ): Node {
   const width = 180;
   const height = 100;
-  const id = `vora-node-${crypto.randomUUID()}`;
+  const id = `vora-node-${boardId}-${crypto.randomUUID()}`;
   const data: VoraShapeData = {
     shape: shape.shape,
     label: shape.label,
@@ -85,7 +85,7 @@ export function createFlowchartTemplate(
     const target = nodes[targetIndex];
     return source && target
       ? [{
-        id: `vora-edge-${crypto.randomUUID()}`,
+        id: `vora-edge-${boardId}-${crypto.randomUUID()}`,
         source: source.id,
         target: target.id,
         type: "default",
