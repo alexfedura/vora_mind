@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Node, Edge } from "@xyflow/react";
+import { Edge, Node } from "@xyflow/react";
 import type {
   BoardItem,
   LibraryItemGroup,
@@ -647,6 +647,6 @@ function toEdgePayloads(edges: Edge[]): EdgePayload[] {
     id: edge.id,
     source: edge.source,
     target: edge.target,
-    link_type: "connects_to",
+    link_type: edge.markerEnd ? "directed" : "connects_to",
   }));
 }
