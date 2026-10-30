@@ -33,6 +33,33 @@ export interface VoraCard {
   deleted_at?: number | null;
 }
 
+export interface VoraBoardTransferNode {
+  id: string;
+  type: "voraCard" | "voraText" | "voraShape" | "forgeAst";
+  position: VoraShapePoint;
+  width?: number;
+  height?: number;
+  data: Record<string, unknown>;
+  draggable?: boolean;
+  style?: Record<string, string | number>;
+}
+
+export interface VoraBoardTransferEdge {
+  id: string;
+  source: string;
+  target: string;
+}
+
+export interface VoraBoardTransfer {
+  format: "vora-mind-board";
+  version: 1;
+  boardName: string;
+  exportedAt: string;
+  nodes: VoraBoardTransferNode[];
+  edges: VoraBoardTransferEdge[];
+  cards: Pick<VoraCard, "id" | "title" | "content" | "version">[];
+}
+
 export type TextLinkField = "title" | "content";
 
 export interface TextLink {
