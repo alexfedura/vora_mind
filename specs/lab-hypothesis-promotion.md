@@ -28,7 +28,11 @@ and `executed_at` fields idempotently. Protocol steps are locked when saved and
 cannot be changed after they are locked or test execution begins. Execution
 requires a locked protocol and records the raw data and execution timestamp.
 Verdict recording requires an execution and stores analysis, evidence, and the
-verdict timestamp without allowing raw data to be changed.
+verdict timestamp without allowing raw data to be changed. Verdicts include
+supported, partially supported, rejected, and inconclusive. A verdict may
+record nullable boundary conditions describing where the result applies.
+Hypotheses also store an optional `refined_from_id` lineage to a prior
+supported or partially supported hypothesis.
 Create a `hypothesis_insights` table for immutable mid-test scratchpad entries,
 with a cascading foreign key to the owning hypothesis and a creation timestamp.
 Insights are listed newest-first and can be deleted independently of the
@@ -68,18 +72,23 @@ verdict and evidence notes.
 
 ## Post-verdict actions
 
-A supported hypothesis can be graduated to the Library once. Graduation saves
-its H1/H0 statements, variables, metric, success threshold, and evidence notes
-as a Library item-group version and records that group's ID on the hypothesis
-in the same transaction. An optional existing Library group receives an
-appended version; otherwise graduation creates a new group.
+A supported or partially supported hypothesis can be graduated to the Library
+once. Graduation saves its H1/H0 statements, variables, metric, success
+threshold, evidence notes, and boundary conditions as a Library item-group
+version and records that group's ID on the hypothesis in the same transaction.
+For partially supported hypotheses, the new Library item title includes the
+boundary conditions. An optional existing Library group receives an appended
+version; otherwise graduation creates a new group.
 
-A rejected hypothesis can create a draft child hypothesis. The child inherits
-the source inquiry, stores the parent hypothesis ID, and starts with its
-parent's H1/H0, variables, metric, and success threshold so those values can be
-iterated. It also inherits the parent's exact linked definition versions so
-the changed hypothesis variable is not confounded by a changed definition.
-Hypothesis detail shows linked definitions with their recorded version.
+A rejected, supported, or partially supported hypothesis can create a draft
+child hypothesis. The child inherits the source inquiry, stores the parent
+hypothesis ID, and starts with its parent's H1/H0, variables, metric, and
+success threshold so those values can be iterated. Children of supported or
+partially supported hypotheses also set `refined_from_id` to preserve the
+proven-concept lineage. They inherit the parent's exact linked definition
+versions so the changed hypothesis variable is not confounded by a changed
+definition. Hypothesis detail shows linked definitions with their recorded
+version and displays the refined-from hypothesis lineage.
 
 ## Mid-test Scratchpad
 
