@@ -61,6 +61,7 @@ import { VoraCardNode } from "./mind/components/canvas/VoraCardNode";
 import { VoraTextNode } from "./mind/components/canvas/VoraTextNode";
 import { VoraShapeNode } from "./mind/components/canvas/VoraShapeNode";
 import { CanvasZoomContext } from "./mind/components/canvas/CanvasZoomContext";
+import { isVoraDiagramShape } from "./mind/utils/shapeGeometry";
 import type { VoraShapeData, VoraShapeDefaults, VoraShapePoint, VoraShapeStyleSettings } from "./mind/types";
 import {
   canJoinPathNodes,
@@ -1077,7 +1078,7 @@ function AppContent() {
       }));
       setShapeDefaults((current) => {
         const next: VoraShapeDefaults = { ...current };
-        const shapes = new Set(targets.map((node) => node.data.shape));
+        const shapes = new Set(targets.map((node) => node.data.shape).filter(isVoraDiagramShape));
         for (const shape of shapes) {
           const previous = current[shape];
           const updated: VoraShapeStyleSettings = {
