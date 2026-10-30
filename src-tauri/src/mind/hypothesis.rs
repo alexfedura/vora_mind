@@ -503,26 +503,153 @@ pub fn get_hypotheses(state: State<AppState>) -> Result<Vec<Hypothesis>, String>
     list_hypotheses(&conn).map_err(|error| error.to_string())
 }
 
+fn save_hypothesis_protocol_in_db(
+    conn: &mut Connection,
+    id: &str,
+    protocol_steps: &str,
+    now: i64,
+) -> std::result::Result<Hypothesis, String> {
+    if protocol_steps.trim().is_empty() {
+        return Err("Protocol steps cannot be empty.".to_string());
+    }
+
+    let transaction = conn.transaction().map_err(|error| error.to_string())?;
+    let existing: Option<(Option<String>, Option<i64>, Option<i64>)> = transaction
+        .query_row(
+            "SELECT protocol_steps, protocol_locked_at, executed_at
+             FROM hypotheses WHERE id = ?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let (existing_steps, locked_at, executed_at) =
+        existing.ok_or_else(|| format!("Hypothesis not found: {id}"))?;
+
+    if let Some(existing_steps) = existing_steps {
+        if existing_steps == protocol_steps {
+            return query_hypothesis(&transaction, id).map_err(|error| error.to_string());
+        }
+        return Err(if executed_at.is_some() {
+            "Protocol steps cannot be changed after test execution.".to_string()
+        } else {
+            "Protocol steps are locked and cannot be changed.".to_string()
+        });
+    }
+    if locked_at.is_some() || executed_at.is_some() {
+        return Err("Protocol steps cannot be changed after test execution.".to_string());
+    }
+
+    transaction
+        .execute(
+            "UPDATE hypotheses
+             SET protocol_steps = ?1, protocol_locked_at = ?2, updated_at = ?2
+             WHERE id = ?3 AND protocol_locked_at IS NULL AND executed_at IS NULL",
+            params![protocol_steps, now, id],
+        )
+        .map_err(|error| error.to_string())?;
+    let hypothesis = query_hypothesis(&transaction, id).map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(hypothesis)
+}
+
+#[tauri::command]
+pub fn save_hypothesis_protocol(
+    state: State<AppState>,
+    id: String,
+    protocol_steps: String,
+) -> std::result::Result<Hypothesis, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let now = i64::try_from(now).map_err(|error| error.to_string())?;
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    save_hypothesis_protocol_in_db(&mut conn, &id, &protocol_steps, now)
+}
+
+fn record_hypothesis_execution_in_db(
+    conn: &mut Connection,
+    id: &str,
+    raw_data: &str,
+    now: i64,
+) -> std::result::Result<Hypothesis, String> {
+    let changed = conn
+        .execute(
+            "UPDATE hypotheses
+             SET raw_data = ?1, executed_at = ?2, updated_at = ?2
+             WHERE id = ?3 AND protocol_locked_at IS NOT NULL
+               AND protocol_steps IS NOT NULL AND length(trim(protocol_steps)) > 0
+               AND executed_at IS NULL",
+            params![raw_data, now, id],
+        )
+        .map_err(|error| error.to_string())?;
+    if changed != 1 {
+        let state: Option<(Option<i64>, Option<i64>)> = conn
+            .query_row(
+                "SELECT protocol_locked_at, executed_at FROM hypotheses WHERE id = ?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        return match state {
+            None => Err(format!("Hypothesis not found: {id}")),
+            Some((_, Some(_))) => Err("Test execution has already been recorded.".to_string()),
+            Some(_) => Err("Save and lock the protocol before recording execution.".to_string()),
+        };
+    }
+    query_hypothesis(conn, id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn record_hypothesis_execution(
+    state: State<AppState>,
+    id: String,
+    raw_data: String,
+) -> std::result::Result<Hypothesis, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let now = i64::try_from(now).map_err(|error| error.to_string())?;
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    record_hypothesis_execution_in_db(&mut conn, &id, &raw_data, now)
+}
+
 fn record_verdict_in_db(
     conn: &Connection,
     id: &str,
     evidence_notes: &str,
     verdict: &str,
+    raw_data: Option<&str>,
+    data_analysis: Option<&str>,
     now: i64,
 ) -> std::result::Result<Hypothesis, String> {
     if !matches!(verdict, "supported" | "rejected" | "inconclusive") {
         return Err(format!("Invalid hypothesis verdict: {verdict}"));
     }
+    let stored_raw_data: Option<String> = conn
+        .query_row("SELECT raw_data FROM hypotheses WHERE id = ?1", [id], |row| {
+            row.get(0)
+        })
+        .optional()
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("Hypothesis not found: {id}"))?;
+    if raw_data.is_some_and(|submitted| Some(submitted) != stored_raw_data.as_deref()) {
+        return Err("Raw data cannot be changed after test execution.".to_string());
+    }
     let changed = conn
         .execute(
             "UPDATE hypotheses
-             SET evidence_notes = ?1, verdict = ?2, evaluated_at = ?3, updated_at = ?3
-             WHERE id = ?4",
-            params![evidence_notes, verdict, now, id],
+             SET evidence_notes = ?1, verdict = ?2, data_analysis = COALESCE(?3, data_analysis),
+                 evaluated_at = ?4, updated_at = ?4
+             WHERE id = ?5 AND executed_at IS NOT NULL",
+            params![evidence_notes, verdict, data_analysis, now, id],
         )
         .map_err(|error| error.to_string())?;
     if changed != 1 {
-        return Err(format!("Hypothesis not found: {id}"));
+        return Err("Record test execution before saving a verdict.".to_string());
     }
     query_hypothesis(conn, id).map_err(|error| error.to_string())
 }
@@ -533,6 +660,8 @@ pub fn record_verdict(
     id: String,
     evidence_notes: String,
     verdict: String,
+    raw_data: Option<String>,
+    data_analysis: Option<String>,
 ) -> std::result::Result<Hypothesis, String> {
     if !matches!(verdict.as_str(), "supported" | "rejected" | "inconclusive") {
         return Err(format!("Invalid hypothesis verdict: {verdict}"));
@@ -543,7 +672,15 @@ pub fn record_verdict(
         .as_millis();
     let now = i64::try_from(now).map_err(|error| error.to_string())?;
     let conn = state.db.lock().map_err(|error| error.to_string())?;
-    record_verdict_in_db(&conn, &id, &evidence_notes, &verdict, now)
+    record_verdict_in_db(
+        &conn,
+        &id,
+        &evidence_notes,
+        &verdict,
+        raw_data.as_deref(),
+        data_analysis.as_deref(),
+        now,
+    )
 }
 
 fn query_hypothesis(conn: &Connection, id: &str) -> Result<Hypothesis> {
@@ -572,6 +709,11 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
         promoted_to_library_id: row.get(14)?,
         parent_hypothesis_id: row.get(15)?,
         linked_definitions: Vec::new(),
+        protocol_steps: row.get(16)?,
+        protocol_locked_at: row.get(17)?,
+        raw_data: row.get(18)?,
+        data_analysis: row.get(19)?,
+        executed_at: row.get(20)?,
     })
 }
 
