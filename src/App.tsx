@@ -2511,8 +2511,9 @@ function AppContent() {
         <button
           type="button"
           aria-label="Import Board JSON"
+          disabled={Boolean(libraryBoardSession)}
           onClick={() => boardImportInputRef.current?.click()}
-          className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
+          className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS} disabled:cursor-not-allowed disabled:opacity-40`}
           title="Import Board JSON"
         >
           <Upload size={16} />
@@ -2528,8 +2529,9 @@ function AppContent() {
         <button
           type="button"
           aria-label="Export Board JSON"
+          disabled={Boolean(libraryBoardSession)}
           onClick={handleExportBoard}
-          className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
+          className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS} disabled:cursor-not-allowed disabled:opacity-40`}
           title="Export Board JSON"
         >
           <Download size={16} />
@@ -2554,6 +2556,7 @@ function AppContent() {
                   pathPointsRef.current = [];
                   setShapePreview(null);
                   setActiveShapeTool(shape);
+                  setIsDiagramPaletteOpen(false);
                 }}
               >
                 {shape === "decision" ? <Diamond size={15} /> :
