@@ -17,6 +17,10 @@ const verdictPresentation: Record<
     label: "Supported",
     className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
   },
+  partially_supported: {
+    label: "Partially Supported",
+    className: "border-amber-500/30 bg-amber-500/10 text-amber-200",
+  },
   rejected: {
     label: "Rejected",
     className: "border-rose-500/30 bg-rose-500/10 text-rose-300",
@@ -47,6 +51,11 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   const loadHypothesisInsights = useAppStore((state) => state.loadHypothesisInsights);
   const addHypothesisInsight = useAppStore((state) => state.addHypothesisInsight);
   const createQuestion = useAppStore((state) => state.createQuestion);
+  const refinedFromHypothesis = useAppStore((state) =>
+    hypothesis.refinedFromId
+      ? state.hypotheses.find((item) => item.id === hypothesis.refinedFromId) ?? null
+      : null
+  );
   const insights = useAppStore(
     (state) => state.hypothesisInsights[hypothesis.id] ?? EMPTY_INSIGHTS,
   );
@@ -54,6 +63,9 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   const [protocolSteps, setProtocolSteps] = useState(hypothesis.protocolSteps ?? "");
   const [rawData, setRawData] = useState(hypothesis.rawData ?? "");
   const [dataAnalysis, setDataAnalysis] = useState(hypothesis.dataAnalysis ?? "");
+  const [boundaryConditions, setBoundaryConditions] = useState(
+    hypothesis.boundaryConditions ?? "",
+  );
   const [isEditingVerdict, setIsEditingVerdict] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,12 +84,14 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
     setProtocolSteps(hypothesis.protocolSteps ?? "");
     setRawData(hypothesis.rawData ?? "");
     setDataAnalysis(hypothesis.dataAnalysis ?? "");
+    setBoundaryConditions(hypothesis.boundaryConditions ?? "");
   }, [
     hypothesis.id,
     hypothesis.evidenceNotes,
     hypothesis.protocolSteps,
     hypothesis.rawData,
     hypothesis.dataAnalysis,
+    hypothesis.boundaryConditions,
   ]);
 
   useEffect(() => {
@@ -179,6 +193,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
         verdict,
         rawData,
         dataAnalysis,
+        boundaryConditions,
       );
       onUpdated(updated);
       setIsEditingVerdict(false);
@@ -196,6 +211,15 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
       {hypothesis.parentHypothesisId && (
         <p className="mt-2 text-xs text-gray-500">
           This is an iteration of a previous hypothesis.
+        </p>
+      )}
+      {hypothesis.refinedFromId && (
+        <p
+          dir="auto"
+          className="mt-2 inline-flex max-w-full rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-200"
+          title={refinedFromHypothesis?.statementH1 ?? hypothesis.refinedFromId}
+        >
+          🔗 Refined from: {refinedFromHypothesis?.statementH1 ?? hypothesis.refinedFromId}
         </p>
       )}
 
@@ -438,6 +462,20 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
                   className="w-full resize-y rounded-xl border border-[#343741] bg-[#101114] px-4 py-3 text-sm text-gray-200 outline-none transition focus:border-[#e8ad55]/70 disabled:opacity-60"
                 />
               </label>
+              <label dir="auto" className="mt-4 block">
+                <span className="mb-2 block text-xs font-medium text-gray-400">
+                  Boundary Conditions (Where does this hold true?)
+                </span>
+                <textarea
+                  dir="auto"
+                  value={boundaryConditions}
+                  onChange={(event) => setBoundaryConditions(event.target.value)}
+                  rows={3}
+                  disabled={isSaving}
+                  placeholder="Describe the conditions where the result applies..."
+                  className="w-full resize-y rounded-xl border border-[#343741] bg-[#101114] px-4 py-3 text-sm text-gray-200 outline-none transition focus:border-[#e8ad55]/70 disabled:opacity-60"
+                />
+              </label>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -446,6 +484,14 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
                   className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-50"
                 >
                   ✅ {isEditingVerdict ? "Mark Supported" : "Supported"}
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving || !boundaryConditions.trim()}
+                  onClick={() => void handleRecordVerdict("partially_supported")}
+                  className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20 disabled:opacity-50"
+                >
+                  ⚖️ Partially Supported
                 </button>
                 <button
                   type="button"
@@ -470,6 +516,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
                     onClick={() => {
                       setEvidenceNotes(hypothesis.evidenceNotes ?? "");
                       setDataAnalysis(hypothesis.dataAnalysis ?? "");
+                      setBoundaryConditions(hypothesis.boundaryConditions ?? "");
                       setIsEditingVerdict(false);
                     }}
                     className="rounded-lg border border-[#343741] px-3 py-2 text-sm font-medium text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
@@ -481,8 +528,15 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
             </>
           )}
 
-          {hypothesis.verdict === "supported" && !isEditingVerdict && (
+          {(hypothesis.verdict === "supported" ||
+            hypothesis.verdict === "partially_supported") &&
+            !isEditingVerdict && (
             <div className="mt-5 border-t border-[#292c34] pt-4">
+              {hypothesis.boundaryConditions && (
+                <p dir="auto" className="mb-3 text-sm text-amber-200">
+                  Boundary conditions: {hypothesis.boundaryConditions}
+                </p>
+              )}
               {hypothesis.promotedToLibraryId ? (
                 <span className="inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-sm font-semibold text-emerald-300">
                   ✅ Saved to Library
@@ -500,7 +554,10 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
             </div>
           )}
 
-          {hypothesis.verdict === "rejected" && !isEditingVerdict && (
+          {(hypothesis.verdict === "rejected" ||
+            hypothesis.verdict === "partially_supported" ||
+            hypothesis.verdict === "supported") &&
+            !isEditingVerdict && (
             <div className="mt-5 border-t border-[#292c34] pt-4">
               <button
                 type="button"
@@ -511,7 +568,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
                 }}
                 className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-50"
               >
-                🌱 Create Child Hypothesis
+                🌱 Create Refined Hypothesis (Child)
               </button>
             </div>
           )}
