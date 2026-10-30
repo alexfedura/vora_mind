@@ -1049,6 +1049,7 @@ mod tests {
             "supported",
             Some("Raw observations"),
             Some("Results support H1."),
+            None,
             20,
         )
             .expect("record supported verdict");
@@ -1210,6 +1211,7 @@ mod tests {
             "rejected",
             Some("Raw observations"),
             Some("Reanalysis contradicts H1."),
+            None,
             30,
         )
         .expect("update verdict");
@@ -1230,6 +1232,7 @@ mod tests {
             "hypothesis-1",
             "Invalid verdict attempt",
             "maybe",
+            None,
             None,
             None,
             40,
@@ -1297,6 +1300,7 @@ mod tests {
             "supported",
             None,
             None,
+            None,
             15,
         )
         .is_err());
@@ -1311,6 +1315,7 @@ mod tests {
             "Evidence",
             "supported",
             Some("Altered data"),
+            None,
             None,
             40,
         )
