@@ -1416,7 +1416,7 @@ mod tests {
         let mut connection = setup();
         select_inquiry(&mut connection, "inquiry-1");
         let definition = insert_test_definition(&connection);
-        let parent = promote_with_definitions(
+        promote_with_definitions(
             &mut connection,
             "inquiry-1",
             "hypothesis-1",
