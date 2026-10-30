@@ -125,6 +125,8 @@ interface AppState {
   libraryDefinitionsForSelection: LibraryDefinitionSelection[];
   loadLibraryDefinitionsForSelection: () => Promise<LibraryDefinitionSelection[]>;
   loadHypotheses: () => Promise<void>;
+  saveHypothesisProtocol: (id: string, protocolSteps: string) => Promise<Hypothesis>;
+  recordHypothesisExecution: (id: string, rawData: string) => Promise<Hypothesis>;
   promoteToHypothesis: (input: HypothesisPromotionInput) => Promise<Hypothesis>;
   graduateToLibrary: (hypothesisId: string, libraryGroupId?: string | null) => Promise<Hypothesis>;
   createChildHypothesis: (input: ChildHypothesisInput) => Promise<Hypothesis>;
@@ -132,6 +134,8 @@ interface AppState {
     id: string,
     evidenceNotes: string,
     verdict: HypothesisVerdict,
+    rawData?: string,
+    dataAnalysis?: string,
   ) => Promise<Hypothesis>;
 
   fetchCanonicalEntities: () => Promise<void>;
@@ -726,6 +730,24 @@ export const useAppStore = create<AppState>()(
         const hypotheses = await dbService.getHypotheses();
         set({ hypotheses });
       },
+      saveHypothesisProtocol: async (id, protocolSteps) => {
+        const hypothesis = await dbService.saveHypothesisProtocol(id, protocolSteps);
+        set((state) => ({
+          hypotheses: state.hypotheses.map((item) =>
+            item.id === hypothesis.id ? hypothesis : item
+          ),
+        }));
+        return hypothesis;
+      },
+      recordHypothesisExecution: async (id, rawData) => {
+        const hypothesis = await dbService.recordHypothesisExecution(id, rawData);
+        set((state) => ({
+          hypotheses: state.hypotheses.map((item) =>
+            item.id === hypothesis.id ? hypothesis : item
+          ),
+        }));
+        return hypothesis;
+      },
       promoteToHypothesis: async (input) => {
         const hypothesis = await dbService.promoteToHypothesis(input);
         set((state) => ({
@@ -764,8 +786,14 @@ export const useAppStore = create<AppState>()(
         }));
         return hypothesis;
       },
-      recordVerdict: async (id, evidenceNotes, verdict) => {
-        const hypothesis = await dbService.recordVerdict(id, evidenceNotes, verdict);
+      recordVerdict: async (id, evidenceNotes, verdict, rawData, dataAnalysis) => {
+        const hypothesis = await dbService.recordVerdict(
+          id,
+          evidenceNotes,
+          verdict,
+          rawData,
+          dataAnalysis,
+        );
         set((state) => ({
           hypotheses: state.hypotheses.map((item) =>
             item.id === hypothesis.id ? hypothesis : item

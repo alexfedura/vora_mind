@@ -130,6 +130,11 @@ export interface Hypothesis {
   promotedToLibraryId?: string | null;
   parentHypothesisId?: string | null;
   linkedDefinitions: LinkedDefinition[];
+  protocolSteps?: string | null;
+  protocolLockedAt?: number | null;
+  rawData?: string | null;
+  dataAnalysis?: string | null;
+  executedAt?: number | null;
 }
 
 export interface HypothesisPromotionInput {

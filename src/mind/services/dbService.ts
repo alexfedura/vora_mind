@@ -179,6 +179,14 @@ export const dbService = {
     return await invoke<Hypothesis[]>("get_hypotheses");
   },
 
+  async saveHypothesisProtocol(id: string, protocolSteps: string): Promise<Hypothesis> {
+    return await invoke<Hypothesis>("save_hypothesis_protocol", { id, protocolSteps });
+  },
+
+  async recordHypothesisExecution(id: string, rawData: string): Promise<Hypothesis> {
+    return await invoke<Hypothesis>("record_hypothesis_execution", { id, rawData });
+  },
+
   async getLibraryDefinitionsForSelection(): Promise<LibraryDefinitionSelection[]> {
     return await invoke<LibraryDefinitionSelection[]>("get_library_definitions_for_selection");
   },
@@ -200,8 +208,16 @@ export const dbService = {
     id: string,
     evidenceNotes: string,
     verdict: HypothesisVerdict,
+    rawData?: string,
+    dataAnalysis?: string,
   ): Promise<Hypothesis> {
-    return await invoke<Hypothesis>("record_verdict", { id, evidenceNotes, verdict });
+    return await invoke<Hypothesis>("record_verdict", {
+      id,
+      evidenceNotes,
+      verdict,
+      rawData: rawData ?? null,
+      dataAnalysis: dataAnalysis ?? null,
+    });
   },
 
   async graduateToLibrary(
