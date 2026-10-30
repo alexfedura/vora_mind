@@ -50,6 +50,12 @@ function formatTraceTimestamp(timestamp: number | null | undefined): string {
 
 const EMPTY_INSIGHTS: HypothesisInsight[] = [];
 const EMPTY_DATA_ENTRIES: DataEntry[] = [];
+let checklistDraftSequence = 0;
+
+function createChecklistFieldDraft(): ChecklistFieldDraft {
+  checklistDraftSequence += 1;
+  return { id: `checklist-field-${checklistDraftSequence}`, label: "", type: "select", optionsText: "" };
+}
 
 interface ChecklistFieldDraft {
   id: string;
@@ -161,6 +167,10 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   const recordVerdict = useAppStore((state) => state.recordVerdict);
   const saveHypothesisProtocol = useAppStore((state) => state.saveHypothesisProtocol);
   const recordHypothesisExecution = useAppStore((state) => state.recordHypothesisExecution);
+  const saveChecklistSchema = useAppStore((state) => state.saveChecklistSchema);
+  const loadDataEntries = useAppStore((state) => state.loadDataEntries);
+  const addDataEntry = useAppStore((state) => state.addDataEntry);
+  const deleteDataEntry = useAppStore((state) => state.deleteDataEntry);
   const graduateToLibrary = useAppStore((state) => state.graduateToLibrary);
   const loadHypothesisInsights = useAppStore((state) => state.loadHypothesisInsights);
   const addHypothesisInsight = useAppStore((state) => state.addHypothesisInsight);
@@ -175,6 +185,34 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   );
   const insights = useAppStore(
     (state) => state.hypothesisInsights[hypothesis.id] ?? EMPTY_INSIGHTS,
+  );
+  const dataEntries = useAppStore(
+    (state) => state.hypothesisDataEntries[hypothesis.id] ?? EMPTY_DATA_ENTRIES,
+  );
+  const checklistSchema = useMemo(
+    () => parseChecklistSchema(hypothesis.checklistSchema),
+    [hypothesis.checklistSchema],
+  );
+  const parsedDataEntries = useMemo(() => {
+    try {
+      const entries: ParsedDataEntry[] = dataEntries.map((entry) => {
+        const values: unknown = JSON.parse(entry.dataJson);
+        if (!isRecord(values)) throw new Error(`Entry ${entry.id} is not a JSON object.`);
+        return { entry, values };
+      });
+      return { entries, error: null };
+    } catch (cause) {
+      return {
+        entries: [] as ParsedDataEntry[],
+        error: cause instanceof Error ? cause.message : String(cause),
+      };
+    }
+  }, [dataEntries]);
+  const checklistAnalysis = useMemo(
+    () => checklistSchema.fields
+      ? analyzeChecklistEntries(checklistSchema.fields, parsedDataEntries.entries)
+      : [],
+    [checklistSchema.fields, parsedDataEntries.entries],
   );
   const [evidenceNotes, setEvidenceNotes] = useState(hypothesis.evidenceNotes ?? "");
   const [protocolSteps, setProtocolSteps] = useState(hypothesis.protocolSteps ?? "");
@@ -197,6 +235,15 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   const [isSnapshotPickerOpen, setIsSnapshotPickerOpen] = useState(false);
   const [isLoadingSnapshots, setIsLoadingSnapshots] = useState(true);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const [isChecklistBuilderOpen, setIsChecklistBuilderOpen] = useState(false);
+  const [checklistDraftFields, setChecklistDraftFields] = useState<ChecklistFieldDraft[]>([]);
+  const [isSavingChecklistSchema, setIsSavingChecklistSchema] = useState(false);
+  const [checklistValues, setChecklistValues] = useState<Record<string, string | boolean>>({});
+  const [isSavingDataEntry, setIsSavingDataEntry] = useState(false);
+  const [deletingDataEntryId, setDeletingDataEntryId] = useState<string | null>(null);
+  const [dataCollectionError, setDataCollectionError] = useState<string | null>(null);
+  const [showChecklistAnalysis, setShowChecklistAnalysis] = useState(false);
+  const dataEntryFormRef = useRef<HTMLFormElement | null>(null);
   const isProtocolLocked = hypothesis.protocolLockedAt != null;
   const isExecuted = hypothesis.executedAt != null;
 
@@ -222,6 +269,15 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
       setScratchpadError(cause instanceof Error ? cause.message : String(cause));
     });
   }, [hypothesis.id, loadHypothesisInsights]);
+
+  useEffect(() => {
+    if (!isProtocolLocked || hypothesis.checklistSchema == null) return;
+    setDataCollectionError(null);
+    void loadDataEntries(hypothesis.id).catch((cause: unknown) => {
+      console.error("Could not load hypothesis data entries:", cause);
+      setDataCollectionError(cause instanceof Error ? cause.message : String(cause));
+    });
+  }, [hypothesis.id, hypothesis.checklistSchema, isProtocolLocked, loadDataEntries]);
 
   useEffect(() => {
     let cancelled = false;
