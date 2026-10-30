@@ -1141,7 +1141,8 @@ fn save_hypothesis_protocol_in_db(
     transaction
         .execute(
             "UPDATE hypotheses
-             SET protocol_steps = ?1, protocol_locked_at = ?2, updated_at = ?2
+             SET protocol_type = 'text', protocol_steps = ?1,
+                 protocol_locked_at = ?2, updated_at = ?2
              WHERE id = ?3 AND protocol_locked_at IS NULL AND executed_at IS NULL",
             params![protocol_steps, now, id],
         )
@@ -1184,15 +1185,42 @@ fn validate_protocol_flowchart(flowchart_json: &str) -> std::result::Result<(), 
         if !matches!(kind, "step" | "decision" | "start-end") {
             return Err(format!("Flowchart node '{id}' has an unsupported kind."));
         }
-        let label = node
+        if node
             .get("data")
             .and_then(|data| data.get("label"))
             .and_then(serde_json::Value::as_str)
             .filter(|label| !label.trim().is_empty())
-            .ok_or_else(|| format!("Flowchart node '{id}' must have a label."))?;
-        let _ = label;
+            .is_none()
+        {
+            return Err(format!("Flowchart node '{id}' must have a label."));
+        }
+        let has_position = node
+            .get("position")
+            .and_then(serde_json::Value::as_object)
+            .is_some_and(|position| {
+                position
+                    .get("x")
+                    .and_then(serde_json::Value::as_f64)
+                    .is_some_and(f64::is_finite)
+                    && position
+                        .get("y")
+                        .and_then(serde_json::Value::as_f64)
+                        .is_some_and(f64::is_finite)
+            });
+        if !has_position {
+            return Err(format!("Flowchart node '{id}' must have a valid position."));
+        }
     }
+    let mut edge_ids = HashSet::new();
     for edge in edges {
+        let edge_id = edge
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .filter(|edge_id| !edge_id.trim().is_empty())
+            .ok_or_else(|| "Every flowchart connection must have an ID.".to_string())?;
+        if !edge_ids.insert(edge_id) {
+            return Err(format!("Flowchart contains duplicate connection ID: {edge_id}"));
+        }
         let source = edge
             .get("source")
             .and_then(serde_json::Value::as_str)
