@@ -634,12 +634,28 @@ mod tests {
         assert_eq!(hypothesis.evaluated_at, Some(20));
         assert_eq!(hypothesis.updated_at, 20);
 
+        let updated_hypothesis = record_verdict_in_db(
+            &connection,
+            "hypothesis-1",
+            "New evidence contradicts H1",
+            "rejected",
+            30,
+        )
+        .expect("update verdict");
+        assert_eq!(
+            updated_hypothesis.evidence_notes.as_deref(),
+            Some("New evidence contradicts H1")
+        );
+        assert_eq!(updated_hypothesis.verdict.as_deref(), Some("rejected"));
+        assert_eq!(updated_hypothesis.evaluated_at, Some(30));
+        assert_eq!(updated_hypothesis.updated_at, 30);
+
         assert!(record_verdict_in_db(
             &connection,
             "hypothesis-1",
             "Invalid verdict attempt",
             "maybe",
-            30,
+            40,
         )
         .is_err());
     }

@@ -41,7 +41,9 @@ its H1, H0, variables, metric, and success threshold. A hypothesis without a
 verdict accepts evidence notes and one of three verdicts: supported, rejected,
 or inconclusive. The `record_verdict` IPC command validates the verdict,
 persists the notes and verdict, and records the evaluation timestamp. A
-recorded verdict and its evidence are shown in the detail view.
+recorded verdict and its evidence are shown in the detail view. Users can edit
+a recorded verdict after confirming; saving the edit replaces the previous
+verdict and evidence notes.
 
 ## Post-verdict actions
 
@@ -60,7 +62,7 @@ iterated.
 
 Unit tests cover successful promotion and inquiry state changes, rejection of
 unselected and missing inquiries, and descending hypothesis retrieval order.
-They also cover verdict recording, validation, and schema migration
-idempotency. The focused command is:
+They also cover verdict recording, overwriting an existing verdict and its
+evidence, validation, and schema migration idempotency. The focused command is:
 
 `cargo test --manifest-path src-tauri/Cargo.toml --lib mind::hypothesis -- --nocapture`

@@ -35,6 +35,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
   const recordVerdict = useAppStore((state) => state.recordVerdict);
   const graduateToLibrary = useAppStore((state) => state.graduateToLibrary);
   const [evidenceNotes, setEvidenceNotes] = useState(hypothesis.evidenceNotes ?? "");
+  const [isEditingVerdict, setIsEditingVerdict] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCreatingChild, setIsCreatingChild] = useState(false);
@@ -61,6 +62,7 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
       const updated = await recordVerdict(hypothesis.id, evidenceNotes, verdict);
       onUpdated(updated);
       setIsRetesting(false);
+      setIsEditingVerdict(false);
     } catch (cause) {
       console.error("Could not record hypothesis verdict:", cause);
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -165,36 +167,65 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
       {hypothesis.verdict && (
         <section className="mt-7 border-t border-[#292c34] pt-5">
           <h3 className="text-sm font-semibold text-white">Test Verdict</h3>
-          <span
-            className={`mt-3 inline-flex rounded-full border px-3 py-1.5 text-sm font-semibold ${
-              verdictPresentation[hypothesis.verdict].className
-            }`}
-          >
-            {verdictPresentation[hypothesis.verdict].label}
-          </span>
-          <p dir="auto" className="mt-4 whitespace-pre-wrap text-sm text-gray-300">
-            {hypothesis.evidenceNotes || "No evidence notes recorded."}
-          </p>
-          {hypothesis.verdict === "inconclusive" && !isRetesting && (
-            <button
-              type="button"
-              onClick={() => {
-                setEvidenceNotes(hypothesis.evidenceNotes ?? "");
-                setError(null);
-                setIsRetesting(true);
-              }}
-              className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20"
-            >
-              🔄 Re-test / Update Evidence
-            </button>
+          {!isEditingVerdict && (
+            <>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <span
+                  className={`inline-flex rounded-full border px-3 py-1.5 text-sm font-semibold ${
+                    verdictPresentation[hypothesis.verdict].className
+                  }`}
+                >
+                  {verdictPresentation[hypothesis.verdict].label}
+                </span>
+                {!isRetesting && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Are you sure you want to change the verdict? This will allow you to update the evidence and re-evaluate the test.",
+                        )
+                      ) {
+                        setEvidenceNotes(hypothesis.evidenceNotes ?? "");
+                        setError(null);
+                        setIsEditingVerdict(true);
+                      }
+                    }}
+                    className="rounded-lg border border-[#343741] px-3 py-1.5 text-sm font-medium text-gray-300 transition hover:bg-[#24262d]"
+                  >
+                    ✏️ Edit Verdict
+                  </button>
+                )}
+              </div>
+              <p dir="auto" className="mt-4 whitespace-pre-wrap text-sm text-gray-300">
+                {hypothesis.evidenceNotes || "No evidence notes recorded."}
+              </p>
+              {hypothesis.verdict === "inconclusive" && !isRetesting && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEvidenceNotes(hypothesis.evidenceNotes ?? "");
+                    setError(null);
+                    setIsRetesting(true);
+                  }}
+                  className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20"
+                >
+                  🔄 Re-test / Update Evidence
+                </button>
+              )}
+            </>
           )}
         </section>
       )}
 
-      {(!hypothesis.verdict || isRetesting) && (
+      {(!hypothesis.verdict || isRetesting || isEditingVerdict) && (
         <section className="mt-7 border-t border-[#292c34] pt-5">
           <h3 className="text-sm font-semibold text-white">
-            {isRetesting ? "Re-test Hypothesis" : "Log Test Results"}
+            {isEditingVerdict
+              ? "Edit Verdict"
+              : isRetesting
+                ? "Re-test Hypothesis"
+                : "Log Test Results"}
           </h3>
           <label className="mt-4 block">
             <span className="mb-2 block text-xs font-medium text-gray-400">
@@ -239,11 +270,15 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
             >
               ⚠️ Inconclusive
             </button>
-            {isRetesting && (
+            {(isRetesting || isEditingVerdict) && (
               <button
                 type="button"
                 disabled={isSaving}
-                onClick={() => setIsRetesting(false)}
+                onClick={() => {
+                  setEvidenceNotes(hypothesis.evidenceNotes ?? "");
+                  setIsRetesting(false);
+                  setIsEditingVerdict(false);
+                }}
                 className="rounded-lg border border-[#343741] px-3 py-2 text-sm font-medium text-gray-300 transition hover:bg-[#24262d] disabled:opacity-50"
               >
                 Cancel
