@@ -27,6 +27,9 @@ chart load/older-history workflows.
 - Use `[start_ts, end_ts)` tick bounds, return no more than `limit` candles in
   chronological order, and return explicit errors for missing files, bad input,
   and query/schema failures.
+- Read nested symbol/year partitions with a recursive Parquet glob. When a
+  valid query has no rows, include an actionable hint for
+  `data/ticks/{SYMBOL}/2020/2020_normalized.parquet`.
 - Compute OHLC, summed volume, tick count, and the first high/low occurrence
   from the tick rows. A flat bucket has `first_extreme = "same"`.
 - Package the root `data/ticks` tree as Tauri resources. Users may populate the
@@ -41,6 +44,10 @@ chart load/older-history workflows.
 - Initial, restore, older-history, and market-page fetches use the local
   command. Request windows are derived from the requested interval and candle
   count.
+- The chart's Quick Jump to 2020 action selects XAUUSD and daily candles, then
+  requests the full 2020 UTC range with an exclusive 2021-01-01 end timestamp.
+  Daily candles keep the 366-day leap year within the 5,000-candle request cap;
+  the action can be cleared to return to the latest local range.
 - Candles remain page-local React state; no new frontend persistence is added.
 
 ## Verification
