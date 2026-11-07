@@ -6,6 +6,10 @@ import type {
   LibraryItemGroupSnapshot,
   LibraryItemGroupUsage,
   LibraryItemGroupVersion,
+  MediaSlice,
+  MediaSliceInput,
+  MediaSliceWithSource,
+  MediaSource,
   TextChangeSet,
   TextLink,
   TextLinkInput,
@@ -511,6 +515,90 @@ export const dbService = {
 
   async deleteTextLink(linkId: string): Promise<void> {
     await invoke("delete_text_link", { linkId });
+  },
+
+  async registerMediaSource(path: string): Promise<MediaSource> {
+    return await invoke<MediaSource>("register_media_source", { path });
+  },
+
+  async getMediaSource(sourceId: string): Promise<MediaSource> {
+    return await invoke<MediaSource>("get_media_source", { sourceId });
+  },
+
+  async getLastMediaSource(): Promise<MediaSource | null> {
+    return await invoke<MediaSource | null>("get_last_media_source");
+  },
+
+  async validateMediaSource(sourceId: string): Promise<MediaSource> {
+    return await invoke<MediaSource>("validate_media_source", { sourceId });
+  },
+
+  async updateMediaSourceDuration(sourceId: string, durationSeconds: number): Promise<void> {
+    await invoke("update_media_source_duration", { sourceId, durationSeconds });
+  },
+
+  async saveMediaSourcePosition(sourceId: string, positionSeconds: number): Promise<void> {
+    await invoke("save_media_source_position", { sourceId, positionSeconds });
+  },
+
+  async listMediaSlices(sourceId: string): Promise<MediaSlice[]> {
+    return await invoke<MediaSlice[]>("list_media_slices", { sourceId });
+  },
+
+  async saveMediaSlice(input: MediaSliceInput): Promise<MediaSlice> {
+    return await invoke<MediaSlice>("save_media_slice", { input });
+  },
+
+  async deleteMediaSlice(sliceId: string): Promise<void> {
+    await invoke("delete_media_slice", { sliceId });
+  },
+
+  async getMediaSlice(sliceId: string): Promise<MediaSliceWithSource> {
+    return await invoke<MediaSliceWithSource>("get_media_slice", { sliceId });
+  },
+
+  async playerSpawn(): Promise<number> {
+    return await invoke<number>("player_spawn");
+  },
+
+  async playerKill(): Promise<void> {
+    await invoke("player_kill");
+  },
+
+  async playerLoad(path: string): Promise<void> {
+    await invoke("player_load", { path });
+  },
+
+  async playerLoadAt(path: string, startSeconds: number): Promise<void> {
+    await invoke("player_load_at", { path, startSeconds });
+  },
+
+  async playerPlay(): Promise<void> {
+    await invoke("player_play");
+  },
+
+  async playerPause(): Promise<void> {
+    await invoke("player_pause");
+  },
+
+  async playerSeek(seconds: number): Promise<void> {
+    await invoke("player_seek", { seconds });
+  },
+
+  async playerSetSpeed(speed: number): Promise<void> {
+    await invoke("player_set_speed", { speed });
+  },
+
+  async playerSetVolume(volume: number): Promise<void> {
+    await invoke("player_set_volume", { volume });
+  },
+
+  async playerGetPosition(): Promise<number> {
+    return await invoke<number>("player_get_position");
+  },
+
+  async playerGetDuration(): Promise<number> {
+    return await invoke<number>("player_get_duration");
   },
 
   async moveToBin(boardId: string, id: string): Promise<void> {
