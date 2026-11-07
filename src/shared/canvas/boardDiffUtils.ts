@@ -41,7 +41,8 @@ function cardPositions(snapshot: BoardVersionSnapshot): Map<string, { x: number;
   const positions = new Map<string, { x: number; y: number }>();
   for (const node of snapshot.nodes) {
     if (node.node_type !== "voraCard") continue;
-    const cardId = typeof node.data.cardId === "string" ? node.data.cardId : node.id;
+    const cardIdValue = node.data?.cardId;
+    const cardId = typeof cardIdValue === "string" ? cardIdValue : node.id;
     positions.set(cardId, { x: node.x, y: node.y });
   }
   return positions;

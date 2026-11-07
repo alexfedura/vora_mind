@@ -1607,6 +1607,36 @@ mod board_version_tests {
         assert!(get_all_boards(&conn).unwrap().is_empty());
     }
 
+    #[test]
+    fn existing_board_version_table_migrates_reason_column() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE mind_boards (id TEXT PRIMARY KEY);
+             CREATE TABLE mind_board_versions (
+                 id TEXT PRIMARY KEY,
+                 board_id TEXT NOT NULL,
+                 version_major INTEGER NOT NULL,
+                 version_minor INTEGER NOT NULL,
+                 version_patch INTEGER NOT NULL,
+                 parent_version_id TEXT,
+                 forked_from_version_id TEXT,
+                 snapshot_json TEXT NOT NULL,
+                 created_at INTEGER NOT NULL
+             );",
+        )
+        .unwrap();
+
+        super::ensure_board_version_columns(&conn).unwrap();
+        let columns = conn
+            .prepare("PRAGMA table_info(mind_board_versions)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert!(columns.iter().any(|column| column == "reason"));
+    }
+
     #[cfg(test)]
     mod text_link_tests {
         use super::super::{
