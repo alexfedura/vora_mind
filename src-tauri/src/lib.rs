@@ -141,6 +141,30 @@ fn parse_card_version(version: &str) -> Result<(String, i32, i32, i32), String> 
     ))
 }
 
+#[cfg(test)]
+mod card_version_tests {
+    use super::parse_card_version;
+
+    #[test]
+    fn parses_card_version_with_or_without_prefix() {
+        assert_eq!(
+            parse_card_version("v1.2.3").unwrap(),
+            ("v1.2.3".to_string(), 1, 2, 3)
+        );
+        assert_eq!(
+            parse_card_version("0.1.0").unwrap(),
+            ("v0.1.0".to_string(), 0, 1, 0)
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_card_versions() {
+        for version in ["", "v1.2", "1.2.3.4", "v01.2.3", "1.2.-1", "1.2.2147483648"] {
+            assert!(parse_card_version(version).is_err(), "accepted {version}");
+        }
+    }
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct GitCommitDto {
     pub hash: String,
