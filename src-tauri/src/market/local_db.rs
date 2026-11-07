@@ -61,6 +61,15 @@ fn build_candle_query(interval_minutes: u32) -> String {
 }
 
 pub fn resolve_tick_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    #[cfg(debug_assertions)]
+    {
+        let dev_path = PathBuf::from("D:/workspace/vora_mind/data/ticks");
+        if dev_path.exists() {
+            println!("DEBUG: Found dev tick data at {:?}", dev_path);
+            return Ok(dev_path);
+        }
+    }
+
     let current_dir = std::env::current_dir()
         .map_err(|error| format!("Could not resolve current working directory: {error}"))?;
     let working_dir_ticks = current_dir.join("data").join("ticks");
@@ -125,6 +134,7 @@ pub fn fetch_local_candles(
     }
     let parquet_glob = symbol_dir.join("**").join("*.parquet");
     let parquet_glob_str = parquet_glob.to_string_lossy().replace('\\', "/");
+    println!("DEBUG: Running DuckDB query on path: {}", parquet_glob_str);
     let connection = Connection::open_in_memory()
         .map_err(|error| format!("Could not open in-memory DuckDB: {error}"))?;
     let mut statement = connection
