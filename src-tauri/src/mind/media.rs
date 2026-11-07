@@ -447,7 +447,7 @@ pub fn get_media_slice(
 
 #[cfg(test)]
 mod tests {
-    use super::{fingerprint, valid_range};
+    use super::{fingerprint, valid_range, verify_source, MediaSource};
     use std::fs;
     use std::io::Write;
     use std::path::PathBuf;
@@ -463,6 +463,26 @@ mod tests {
         fs::write(&path, b"changed-size").unwrap();
         let changed = fingerprint(&path).unwrap();
         assert_ne!(original, changed);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn verification_rejects_a_changed_source() {
+        let path: PathBuf = std::env::temp_dir().join(format!("vora-media-{}.bin", Uuid::now_v7()));
+        fs::write(&path, b"original").unwrap();
+        let (size, modified_ms) = fingerprint(&path).unwrap();
+        let source = MediaSource {
+            id: Uuid::now_v7().to_string(),
+            path: path.to_string_lossy().into_owned(),
+            fingerprint_size: size,
+            fingerprint_modified_ms: modified_ms,
+            duration_seconds: None,
+            last_position_seconds: 0.0,
+            created_at: 0,
+            last_used_at: 0,
+        };
+        fs::write(&path, b"replaced source").unwrap();
+        assert!(verify_source(&source).is_err());
         fs::remove_file(path).unwrap();
     }
 
