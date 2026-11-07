@@ -121,7 +121,9 @@ fn verify_source(source: &MediaSource) -> Result<(), String> {
     Ok(())
 }
 
-fn lock_database(state: &State<'_, AppState>) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
+fn lock_database<'a>(
+    state: &State<'a, AppState>,
+) -> Result<std::sync::MutexGuard<'a, Connection>, String> {
     state
         .db
         .lock()
