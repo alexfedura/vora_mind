@@ -25,6 +25,9 @@ Give every Board an immutable, Git-like history that a user explicitly creates a
 - Display a branched version as `VERSION - FORK_POINT`, for example `0.2.2 - 0.3.0`. A version on the uninterrupted history displays only `VERSION`.
 - Checking out a version does not mutate or delete any version snapshot. The current working Board remains autosaved through the existing Board persistence flow.
 - Version snapshots are scoped to a Board and are deleted only when that Board is deleted.
+- A user can create an independent Board branch from any version. The branch copies that version's full canvas snapshot, receives its own Board ID and initial `0.1.0` version, and records the source Board in `parent_board_id`.
+- Branch snapshots remap node, card, edge, and in-snapshot references to new IDs so the new Board owns independent canvas objects while retaining the selected version's content and layout.
+- A branch's initial version records the source version as its fork origin. Deleting the source Board preserves the branch and clears its now-unavailable ancestry references.
 
 ## Data model
 
@@ -46,9 +49,11 @@ Give every Board an immutable, Git-like history that a user explicitly creates a
 - Prompt for the reason before creating a Major, Minor, or Patch version.
 - Allow two versions to be selected for a structural comparison. Compare nodes by stable ID and report additions, removals, and title/content/position modifications; compare links by ID and endpoints and report additions/removals.
 - Show title and content line differences for modified cards, plus position changes and added/removed links.
+- Show branch Boards indented in the Boards list and offer a Create Branch action beside each version-history entry. Ask for the new Board name before creating the branch, then open the new Board.
 
 ## Validation
 
 - Rust tests cover baseline versions, version increments, branch ancestry/fork-point metadata, full snapshot restoration, Board isolation, and Board deletion cleanup.
+- Rust tests cover creating an independent Board from a selected version, including remapped snapshot identities and parent-board metadata.
 - Frontend checks: `pnpm tsc --noEmit`, `pnpm build`.
 - Backend check: `cargo check --manifest-path src-tauri/Cargo.toml`.
