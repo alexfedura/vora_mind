@@ -102,6 +102,52 @@ export interface TextLinkInput {
   target_end: number;
 }
 
+export interface MediaSource {
+  id: string;
+  path: string;
+  fingerprint_size: number;
+  fingerprint_modified_ms: number;
+  duration_seconds: number | null;
+  last_position_seconds: number;
+  created_at: number;
+  last_used_at: number;
+}
+
+export interface MediaSlice {
+  id: string;
+  source_id: string;
+  title: string;
+  start_seconds: number;
+  end_seconds: number;
+  note: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface MediaSliceInput {
+  id?: string | null;
+  source_id: string;
+  title: string;
+  start_seconds: number;
+  end_seconds: number;
+  note: string;
+}
+
+export interface MediaSliceWithSource {
+  slice: MediaSlice;
+  source: MediaSource;
+}
+
+export interface MediaLinkPayload {
+  sourceId: string;
+  sliceId: string;
+  startSeconds: number;
+  endSeconds: number;
+  path: string;
+  fingerprintSize: number;
+  fingerprintModifiedMs: number;
+}
+
 export interface TextChangeRange {
   from: number;
   to: number;
