@@ -35,6 +35,8 @@ export function PlayerWorkspace({
   const player = useMediaPlayer(active, request);
   const [seekValue, setSeekValue] = useState(0);
   const seekingRef = useRef(false);
+  const playerRef = useRef(player);
+  playerRef.current = player;
 
   useEffect(() => {
     if (!seekingRef.current) setSeekValue(player.position);
@@ -57,25 +59,25 @@ export function PlayerWorkspace({
       switch (event.key.toLowerCase()) {
         case " ":
           event.preventDefault();
-          void player.togglePlayback();
+          void playerRef.current.togglePlayback();
           break;
         case "arrowleft":
           event.preventDefault();
-          void player.seekBy(-5);
+          void playerRef.current.seekBy(-5);
           break;
         case "arrowright":
           event.preventDefault();
-          void player.seekBy(5);
+          void playerRef.current.seekBy(5);
           break;
         case "f":
           event.preventDefault();
-          void player.toggleFullscreen();
+          void playerRef.current.toggleFullscreen();
           break;
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [active, player]);
+  }, [active]);
 
   const openNewReference = (): void => {
     player.startNewReference();
@@ -331,7 +333,7 @@ export function PlayerWorkspace({
             />
             <button
               type="button"
-              onClick={() => void navigator.clipboard.writeText(player.linkPreview ?? "")}
+              onClick={() => void player.copyMarkdownLink(player.linkPreview ?? "")}
               className="rounded-md px-2 text-xs text-zinc-300 transition hover:bg-white/10"
             >
               Copy

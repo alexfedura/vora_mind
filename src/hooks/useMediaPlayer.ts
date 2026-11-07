@@ -224,13 +224,6 @@ export function useMediaPlayer(
     const selected = await open({
       multiple: false,
       directory: false,
-      filters: [{
-        name: "Audio and video",
-        extensions: [
-          "mp4", "mkv", "mov", "webm", "avi", "m4v", "mpeg", "mpg", "wmv", "flv",
-          "ts", "m2ts", "mp3", "wav", "flac", "m4a", "aac", "ogg", "opus", "wma", "ape",
-        ],
-      }],
     });
     if (typeof selected !== "string") return;
     setIsBusy(true);
