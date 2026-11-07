@@ -20,7 +20,7 @@ export interface VoraCardData {
   version?: string;
 }
 
-export interface VoraMediaData {
+export interface VoraMediaData extends Record<string, unknown> {
   type: "image" | "audio";
   filePath: string;
   fileName: string;
