@@ -244,7 +244,17 @@ export const useAppStore = create<AppState>()(
         set((state) => {
           const card = state.cards[id];
           if (!card) return state;
-          const updatedCard = { ...card, title, content };
+          const updatedAt = Date.now();
+          const updatedCard = { ...card, title, content, updated_at: updatedAt };
+          const cards = { ...state.cards, [id]: updatedCard };
+          if (card.librarySourceCardId && cards[card.librarySourceCardId]) {
+            cards[card.librarySourceCardId] = {
+              ...cards[card.librarySourceCardId],
+              title,
+              content,
+              updated_at: updatedAt,
+            };
+          }
           const textChangeSets = [
             createTextChangeSet("title", card.title, title),
             createTextChangeSet("content", card.content, content),
@@ -258,6 +268,7 @@ export const useAppStore = create<AppState>()(
                 content,
                 card.version ?? "v0.1.0",
                 textChangeSets,
+                card.librarySourceCardId,
               )
               .then(() => {
                 window.dispatchEvent(new CustomEvent("vora:text-links-updated", {
@@ -266,7 +277,7 @@ export const useAppStore = create<AppState>()(
               })
               .catch((error: unknown) => console.error("Failed to save card content:", error));
           }
-          return { cards: { ...state.cards, [id]: updatedCard } };
+          return { cards };
         }),
 
       updateCardVersion: (id, version) =>
