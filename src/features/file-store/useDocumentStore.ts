@@ -63,9 +63,44 @@ function toCard(boardId: string, card: CardDto, existing?: VoraCard): VoraCard {
 function syncCard(boardId: string, card: CardDto): void {
   const appState = useAppStore.getState();
   if (appState.activeBoardId !== boardId) return;
-  appState.setCards({
+  const updatedAt = Date.now();
+  const updatedCard = {
+    ...toCard(boardId, card, appState.cards[card.id]),
+    updated_at: updatedAt,
+  };
+  const cards = {
     ...appState.cards,
-    [card.id]: toCard(boardId, card, appState.cards[card.id]),
+    [card.id]: updatedCard,
+  };
+  if (updatedCard.librarySourceCardId && cards[updatedCard.librarySourceCardId]) {
+    cards[updatedCard.librarySourceCardId] = {
+      ...cards[updatedCard.librarySourceCardId],
+      title: card.title,
+      content: card.content,
+      updated_at: updatedAt,
+    };
+  }
+  appState.setCards({
+    ...cards,
+  });
+}
+
+function syncDocumentCard(
+  boardId: string,
+  id: string,
+  title: string,
+  content: string,
+  version: string,
+): void {
+  const card = useAppStore.getState().cards[id];
+  if (!card) return;
+  syncCard(boardId, {
+    id,
+    title,
+    content,
+    version,
+    deleted_at: card.deleted_at ?? null,
+    library_source_card_id: card.librarySourceCardId ?? null,
   });
 }
 
@@ -159,6 +194,9 @@ export const useDocumentStore = create<DocumentState>()(
           ? [...state.pendingTextChangeSets, changeSet]
           : state.pendingTextChangeSets,
       });
+      if (state.currentBoardId) {
+        syncDocumentCard(state.currentBoardId, state.currentDocId, state.currentTitle, content, state.currentVersion);
+      }
       scheduleSave(get);
     },
 
@@ -173,6 +211,9 @@ export const useDocumentStore = create<DocumentState>()(
           ? [...state.pendingTextChangeSets, changeSet]
           : state.pendingTextChangeSets,
       });
+      if (state.currentBoardId) {
+        syncDocumentCard(state.currentBoardId, state.currentDocId, currentTitle, state.content, state.currentVersion);
+      }
       scheduleSave(get);
     },
 
@@ -203,6 +244,7 @@ export const useDocumentStore = create<DocumentState>()(
         content,
         pendingTextChangeSets,
       } = state;
+      const librarySourceCardId = useAppStore.getState().cards[id]?.librarySourceCardId;
       const save = (async () => {
         try {
           await dbService.saveCardDirect(
@@ -212,6 +254,7 @@ export const useDocumentStore = create<DocumentState>()(
             content,
             currentVersion,
             pendingTextChangeSets,
+            librarySourceCardId,
           );
           const latest = get();
           if (latest.currentDocId !== id || latest.currentBoardId !== boardId) return;
@@ -224,7 +267,7 @@ export const useDocumentStore = create<DocumentState>()(
             content: latest.content,
             version: latest.currentVersion,
             deleted_at: null,
-            library_source_card_id: null,
+            library_source_card_id: librarySourceCardId ?? null,
           };
           syncCard(boardId, card);
           window.dispatchEvent(new CustomEvent("vora:text-links-updated", {
