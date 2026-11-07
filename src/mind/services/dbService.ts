@@ -483,6 +483,10 @@ export const dbService = {
     await invoke("delete_board", { boardId });
   },
 
+  async importMediaFile(sourcePath: string): Promise<string> {
+    return await invoke<string>("import_media_file", { sourcePath });
+  },
+
   async getAllCards(boardId: string): Promise<CardDto[]> {
     return await invoke<CardDto[]>("get_all_cards", { boardId });
   },

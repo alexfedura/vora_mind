@@ -1,5 +1,7 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -37,6 +39,7 @@ import {
   CandlestickChart,
   Menu,
   Film,
+  ImagePlus,
 } from "lucide-react";
 
 import { ForgeAgentDrawer } from "./forge/components/agent/ForgeAgentDrawer";
@@ -62,10 +65,12 @@ import {
   type VoraPathSegment,
   type VoraDiagramShape,
   VORA_DIAGRAM_SHAPE_LABELS,
+  type VoraMediaData,
 } from "./mind/types";
 import { VoraCardNode } from "./mind/components/canvas/VoraCardNode";
 import { VoraTextNode } from "./mind/components/canvas/VoraTextNode";
 import { VoraShapeNode } from "./mind/components/canvas/VoraShapeNode";
+import { VoraMediaNode } from "./mind/components/canvas/VoraMediaNode";
 import { CanvasZoomContext } from "./mind/components/canvas/CanvasZoomContext";
 import { isVoraDiagramShape } from "./mind/utils/shapeGeometry";
 import type { VoraShapeData, VoraShapeDefaults, VoraShapePoint, VoraShapeStyleSettings } from "./mind/types";
@@ -253,6 +258,19 @@ function getCanvasGroupId(node: Node): string | null {
     node.data.canvasGroupId.length > 0
     ? node.data.canvasGroupId
     : null;
+}
+
+const MEDIA_IMPORT_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "mp3", "wav", "ogg"];
+
+function getMediaTypeFromPath(path: string): VoraMediaData["type"] | null {
+  const extension = path.split(/[\\/]/).pop()?.split(".").pop()?.toLowerCase();
+  if (extension && ["png", "jpg", "jpeg", "gif", "webp"].includes(extension)) return "image";
+  if (extension && ["mp3", "wav", "ogg"].includes(extension)) return "audio";
+  return null;
+}
+
+function getFileNameFromPath(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
 }
 
 function getNodeIds(detail: Record<string, unknown>): string[] | null {
@@ -471,6 +489,7 @@ function AppContent() {
   const [isCreateItemGroupOpen, setIsCreateItemGroupOpen] = useState(false);
   const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
   const [boardTransferError, setBoardTransferError] = useState<string | null>(null);
+  const [mediaImportError, setMediaImportError] = useState<string | null>(null);
   const boardImportInputRef = React.useRef<HTMLInputElement>(null);
   const [canvasNodeContextMenu, setCanvasNodeContextMenu] = useState<CanvasNodeContextMenu | null>(null);
   const [connectionCreateMenu, setConnectionCreateMenu] = useState<ConnectionCreateMenu | null>(null);
@@ -598,13 +617,126 @@ function AppContent() {
     viewport.style.transformOrigin = "0 0";
   }, [flow.reactFlowWrapper, zoomScale]);
 
-  const toCanvasFlowPosition = (point: { x: number; y: number }): { x: number; y: number } => {
+  const toCanvasFlowPosition = useCallback((point: { x: number; y: number }): { x: number; y: number } => {
     const bounds = flow.reactFlowWrapper.current?.getBoundingClientRect();
     if (!bounds) return screenToFlowPosition(point);
     return screenToFlowPosition({
       x: bounds.left + (point.x - bounds.left) / zoomScale,
       y: bounds.top + (point.y - bounds.top) / zoomScale,
     });
+  }, [flow.reactFlowWrapper, screenToFlowPosition, zoomScale]);
+
+  const saveCanvasHistorySnapshotRef = React.useRef(flow.saveHistorySnapshot);
+  saveCanvasHistorySnapshotRef.current = flow.saveHistorySnapshot;
+
+  const addMediaNodeAtPosition = useCallback(async (
+    sourcePath: string,
+    position: Node["position"],
+  ): Promise<void> => {
+    if (!canvasBoardId) throw new Error("Create or open a Board before importing media.");
+    const type = getMediaTypeFromPath(sourcePath);
+    if (!type) {
+      throw new Error(`${getFileNameFromPath(sourcePath)} is not a supported image or audio file.`);
+    }
+
+    const filePath = await dbService.importMediaFile(sourcePath);
+    const node: Node<VoraMediaData, "voraMedia"> = {
+      id: `media-${crypto.randomUUID()}`,
+      type: "voraMedia",
+      position,
+      width: type === "image" ? 420 : 360,
+      height: type === "image" ? 300 : 128,
+      selected: true,
+      data: { type, filePath, fileName: getFileNameFromPath(sourcePath) },
+    };
+    saveCanvasHistorySnapshotRef.current();
+    flow.setNodes((nodes) => [
+      ...nodes.map((current): Node => ({ ...current, selected: false })),
+      node,
+    ]);
+  }, [canvasBoardId, flow.setNodes]);
+
+  const handleNativeMediaDrop = useCallback(async (
+    paths: string[],
+    screenPosition: { x: number; y: number },
+  ): Promise<void> => {
+    if (!canvasBoardId || isWorkspacePageOpen || paths.length === 0) return;
+    setMediaImportError(null);
+    const position = toCanvasFlowPosition(screenPosition);
+    const errors: string[] = [];
+
+    for (const [index, path] of paths.entries()) {
+      const type = getMediaTypeFromPath(path);
+      if (!type) {
+        errors.push(`${getFileNameFromPath(path)} is not a supported image or audio file.`);
+        continue;
+      }
+      try {
+        await addMediaNodeAtPosition(path, {
+          x: position.x + index * 24,
+          y: position.y + index * 24,
+        });
+      } catch (error) {
+        console.error(`Could not import dropped media file ${path}:`, error);
+        errors.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+    setMediaImportError(errors.length > 0 ? errors.join(" ") : null);
+  }, [addMediaNodeAtPosition, canvasBoardId, isWorkspacePageOpen, toCanvasFlowPosition]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type !== "drop") return;
+      const bounds = flow.reactFlowWrapper.current?.getBoundingClientRect();
+      if (!bounds) {
+        setMediaImportError("The canvas is not ready to receive dropped media.");
+        return;
+      }
+      const scale = window.devicePixelRatio || 1;
+      const screenPosition = {
+        x: bounds.left + event.payload.position.x / scale,
+        y: bounds.top + event.payload.position.y / scale,
+      };
+      void handleNativeMediaDrop(event.payload.paths, screenPosition).catch((error: unknown) => {
+        console.error("Could not import dropped media files:", error);
+        setMediaImportError(error instanceof Error ? error.message : String(error));
+      });
+    }).then((stopListening) => {
+      if (disposed) stopListening();
+      else unlisten = stopListening;
+    }).catch((error: unknown) => {
+      if (disposed) return;
+      console.error("Could not listen for native media drops:", error);
+      setMediaImportError(`Could not enable file drop on the canvas: ${error instanceof Error ? error.message : String(error)}`);
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [flow.reactFlowWrapper, handleNativeMediaDrop]);
+
+  const handleImportMedia = async (): Promise<void> => {
+    setMediaImportError(null);
+    try {
+      const selectedPath = await open({
+        multiple: false,
+        directory: false,
+        filters: [{ name: "Image and audio files", extensions: MEDIA_IMPORT_EXTENSIONS }],
+      });
+      if (typeof selectedPath !== "string") return;
+      const bounds = flow.reactFlowWrapper.current?.getBoundingClientRect();
+      if (!bounds) throw new Error("The canvas is not ready to receive media.");
+      await addMediaNodeAtPosition(selectedPath, toCanvasFlowPosition({
+        x: bounds.left + bounds.width / 2,
+        y: bounds.top + bounds.height / 2,
+      }));
+    } catch (error) {
+      console.error("Could not import media file:", error);
+      setMediaImportError(error instanceof Error ? error.message : String(error));
+    }
   };
 
   const changeCanvasZoom = (
@@ -637,6 +769,7 @@ function AppContent() {
       voraCard: VoraCardNode,
       voraText: VoraTextNode,
       voraShape: VoraShapeNode,
+      voraMedia: VoraMediaNode,
       forgeAst: ForgeAstNode,
     }),
     []
