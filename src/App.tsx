@@ -2328,6 +2328,10 @@ function AppContent() {
   }, [activeShapeTool, finishPath]);
 
   const handleMenuToggle = () => {
+    if (isPlayerOpen) {
+      setIsPlayerOpen(false);
+      return;
+    }
     const next = activeOpenPanel === "none" ? lastActivePanel : "none";
     if (next === "boards") {
       setIsTaskFlowOpen(false);
@@ -2779,6 +2783,7 @@ function AppContent() {
               setIsTaskFlowOpen(false);
               setIsAiTasksOpen(false);
               setIsVoraTraceOpen(false);
+              setIsPlayerOpen(false);
               setActiveOpenPanel("none");
             }}
           />

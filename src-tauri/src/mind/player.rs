@@ -186,7 +186,7 @@ pub fn player_load_at(path: String, start_seconds: f64) -> Result<(), String> {
         json!("loadfile"),
         json!(path),
         json!("replace"),
-        json!({ "start": start_seconds }),
+        json!(format!("start={start_seconds}")),
     ])
     .map(|_| ())
 }
