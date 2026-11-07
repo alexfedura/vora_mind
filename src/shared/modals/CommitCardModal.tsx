@@ -7,12 +7,14 @@ import { useDocumentStore } from "@/features/file-store/useDocumentStore";
 interface CommitCardModalProps {
   isOpen: boolean;
   cardId: string | null;
+  isFirstVersion: boolean;
   onClose: () => void;
 }
 
 export const CommitCardModal: React.FC<CommitCardModalProps> = ({
   isOpen,
   cardId,
+  isFirstVersion,
   onClose,
 }) => {
   const [version, setVersion] = useState("v0.1.1");
@@ -23,17 +25,17 @@ export const CommitCardModal: React.FC<CommitCardModalProps> = ({
   useEffect(() => {
     if (!isOpen || !cardId) return;
     const card = useAppStore.getState().cards[cardId];
-    setVersion(nextPatchVersion(card?.version ?? "v0.1.0"));
-    setReason("");
+    setVersion(isFirstVersion ? "v0.1.0" : nextPatchVersion(card?.version ?? "v0.1.0"));
+    setReason(isFirstVersion ? "Initial Version (Baseline)" : "");
     setError(null);
-  }, [cardId, isOpen]);
+  }, [cardId, isFirstVersion, isOpen]);
 
   if (!isOpen || !cardId) return null;
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const versionTag = version.trim();
-    const changeReason = reason.trim();
+    const changeReason = isFirstVersion ? "Initial Version (Baseline)" : reason.trim();
     if (!changeReason) {
       setError("Enter a reason for this card version.");
       return;
@@ -90,7 +92,7 @@ export const CommitCardModal: React.FC<CommitCardModalProps> = ({
         <div className="flex items-center justify-between">
           <h2 id="commit-card-version-title" className="flex items-center gap-2 text-sm font-semibold text-amber-200">
             <GitCommit size={17} />
-            Commit card version
+            {isFirstVersion ? "Create Initial Version" : "Commit New Version"}
           </h2>
           <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-zinc-400 hover:bg-[#282d38] hover:text-white">
             <X size={16} />
@@ -106,10 +108,11 @@ export const CommitCardModal: React.FC<CommitCardModalProps> = ({
           required
           value={version}
           onChange={(event) => setVersion(event.target.value)}
+          disabled={isFirstVersion}
           placeholder="v0.1.1"
           pattern="v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
           title="Use a three-part numeric version, such as v0.1.1"
-          className="mt-2 w-full rounded-lg border border-[#363b47] bg-[#101217] px-3 py-2 font-mono text-sm text-white outline-none focus:border-amber-500/60"
+          className="mt-2 w-full rounded-lg border border-[#363b47] bg-[#101217] px-3 py-2 font-mono text-sm text-white outline-none focus:border-amber-500/60 disabled:cursor-not-allowed disabled:opacity-70"
         />
         <label htmlFor="card-version-reason" className="mt-4 block text-xs font-medium text-zinc-300">
           Reason for change
@@ -119,6 +122,7 @@ export const CommitCardModal: React.FC<CommitCardModalProps> = ({
           required
           value={reason}
           onChange={(event) => setReason(event.target.value)}
+          readOnly={isFirstVersion}
           rows={3}
           placeholder="Why are you saving this version?"
           className="mt-2 w-full resize-y rounded-lg border border-[#363b47] bg-[#101217] px-3 py-2 text-sm text-white outline-none focus:border-amber-500/60"
@@ -134,7 +138,9 @@ export const CommitCardModal: React.FC<CommitCardModalProps> = ({
             disabled={isSubmitting}
             className="rounded-lg bg-amber-500/20 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-500/30 disabled:cursor-wait disabled:opacity-50"
           >
-            {isSubmitting ? "Committing..." : "Commit version"}
+            {isSubmitting
+              ? "Committing..."
+              : isFirstVersion ? "Save Initial Version" : "Commit version"}
           </button>
         </div>
       </form>

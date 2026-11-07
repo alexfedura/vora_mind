@@ -526,6 +526,10 @@ export const dbService = {
     return await invoke<CardVersion[]>("get_card_versions", { id });
   },
 
+  async hasCardVersions(id: string): Promise<boolean> {
+    return await invoke<boolean>("has_card_versions", { id });
+  },
+
   async getCardVersionContent(versionId: string): Promise<CardVersionContent> {
     return await invoke<CardVersionContent>("get_card_version_content", { versionId });
   },

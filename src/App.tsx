@@ -495,10 +495,11 @@ function AppContent() {
   const [connectionCreateMenu, setConnectionCreateMenu] = useState<ConnectionCreateMenu | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [fullscreenCardId, setFullscreenCardId] = useState<string | null>(null);
-  const [cardVersionDialog, setCardVersionDialog] = useState<{
-    mode: "commit" | "history";
-    cardId: string;
-  } | null>(null);
+  const [cardVersionDialog, setCardVersionDialog] = useState<
+    | { mode: "commit"; cardId: string; isFirstVersion: boolean }
+    | { mode: "history"; cardId: string }
+    | null
+  >(null);
   const [activeCanvasGroupId, setActiveCanvasGroupId] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(0);
   const [marqueePreview, setMarqueePreview] = useState<MarqueePreview | null>(null);
@@ -510,7 +511,19 @@ function AppContent() {
   useEffect(() => {
     const handleOpenCardCommit = (event: Event): void => {
       if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
-      setCardVersionDialog({ mode: "commit", cardId: event.detail });
+      void dbService.hasCardVersions(event.detail).then((hasVersions) => {
+        setBoardTransferError(null);
+        setCardVersionDialog({
+          mode: "commit",
+          cardId: event.detail,
+          isFirstVersion: !hasVersions,
+        });
+      }).catch((error: unknown) => {
+        console.error("Could not check card version history:", error);
+        setBoardTransferError(
+          `Could not check card version history: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
     };
     const handleOpenCardHistory = (event: Event): void => {
       if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
@@ -3446,6 +3459,7 @@ function AppContent() {
       <CommitCardModal
         isOpen={cardVersionDialog?.mode === "commit"}
         cardId={cardVersionDialog?.mode === "commit" ? cardVersionDialog.cardId : null}
+        isFirstVersion={cardVersionDialog?.mode === "commit" ? cardVersionDialog.isFirstVersion : false}
         onClose={() => setCardVersionDialog(null)}
       />
       <CardHistoryModal
