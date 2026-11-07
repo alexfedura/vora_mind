@@ -54,6 +54,13 @@ fn now_ms() -> Result<i64, String> {
     i64::try_from(elapsed.as_millis()).map_err(|error| error.to_string())
 }
 
+fn valid_range(start_seconds: f64, end_seconds: f64) -> bool {
+    start_seconds.is_finite()
+        && end_seconds.is_finite()
+        && start_seconds >= 0.0
+        && end_seconds > start_seconds
+}
+
 fn fingerprint(path: &Path) -> Result<(i64, i64), String> {
     let metadata = fs::metadata(path).map_err(|error| {
         format!("Cannot read media source metadata for {}: {error}", path.display())
@@ -298,11 +305,7 @@ pub fn save_media_slice(
     state: State<'_, AppState>,
     input: MediaSliceInput,
 ) -> Result<MediaSlice, String> {
-    if !input.start_seconds.is_finite()
-        || !input.end_seconds.is_finite()
-        || input.start_seconds < 0.0
-        || input.end_seconds <= input.start_seconds
-    {
+    if !valid_range(input.start_seconds, input.end_seconds) {
         return Err("The media reference requires finite times with end greater than start.".to_string());
     }
     let title = input.title.trim();
@@ -325,28 +328,53 @@ pub fn save_media_slice(
     let now = now_ms()?;
     let id = input.id.unwrap_or_else(|| Uuid::now_v7().to_string());
     let tx = conn.transaction().map_err(|error| error.to_string())?;
-    tx.execute(
-        "INSERT INTO mind_media_slices
-            (id, source_id, title, start_seconds, end_seconds, note, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)
-         ON CONFLICT(id) DO UPDATE SET
-            title = excluded.title,
-            start_seconds = excluded.start_seconds,
-            end_seconds = excluded.end_seconds,
-            note = excluded.note,
-            updated_at = excluded.updated_at
-         WHERE mind_media_slices.source_id = excluded.source_id",
-        params![
-            id,
-            input.source_id,
-            title,
-            input.start_seconds,
-            input.end_seconds,
-            input.note,
-            now
-        ],
-    )
-    .map_err(|error| error.to_string())?;
+    let existing_source_id = tx
+        .query_row(
+            "SELECT source_id FROM mind_media_slices WHERE id = ?1",
+            [&id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    if existing_source_id
+        .as_ref()
+        .is_some_and(|existing| existing != &input.source_id)
+    {
+        return Err("A media reference cannot be moved to a different source.".to_string());
+    }
+    if existing_source_id.is_some() {
+        tx.execute(
+            "UPDATE mind_media_slices
+             SET title = ?1, start_seconds = ?2, end_seconds = ?3, note = ?4, updated_at = ?5
+             WHERE id = ?6 AND source_id = ?7",
+            params![
+                title,
+                input.start_seconds,
+                input.end_seconds,
+                input.note,
+                now,
+                id,
+                input.source_id
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    } else {
+        tx.execute(
+            "INSERT INTO mind_media_slices
+                (id, source_id, title, start_seconds, end_seconds, note, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+            params![
+                id,
+                input.source_id,
+                title,
+                input.start_seconds,
+                input.end_seconds,
+                input.note,
+                now
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    }
     let slice = tx
         .query_row(
             "SELECT id, source_id, title, start_seconds, end_seconds, note, created_at, updated_at
@@ -417,7 +445,7 @@ pub fn get_media_slice(
 
 #[cfg(test)]
 mod tests {
-    use super::{fingerprint, MediaSliceInput};
+    use super::{fingerprint, valid_range};
     use std::fs;
     use std::io::Write;
     use std::path::PathBuf;
@@ -438,35 +466,10 @@ mod tests {
 
     #[test]
     fn rejects_non_finite_and_reversed_time_ranges() {
-        let invalid_inputs = [
-            MediaSliceInput {
-                id: None,
-                source_id: "source".to_string(),
-                title: "Invalid".to_string(),
-                start_seconds: f64::NAN,
-                end_seconds: 4.0,
-                note: String::new(),
-            },
-            MediaSliceInput {
-                id: None,
-                source_id: "source".to_string(),
-                title: "Invalid".to_string(),
-                start_seconds: 5.0,
-                end_seconds: 5.0,
-                note: String::new(),
-            },
-        ];
-        assert!(invalid_inputs.iter().any(|input| {
-            !input.start_seconds.is_finite()
-                || !input.end_seconds.is_finite()
-                || input.start_seconds < 0.0
-                || input.end_seconds <= input.start_seconds
-        }));
-        assert!(invalid_inputs.iter().all(|input| {
-            !input.start_seconds.is_finite()
-                || !input.end_seconds.is_finite()
-                || input.start_seconds < 0.0
-                || input.end_seconds <= input.start_seconds
-        }));
+        assert!(!valid_range(f64::NAN, 4.0));
+        assert!(!valid_range(5.0, 5.0));
+        assert!(!valid_range(6.0, 4.0));
+        assert!(!valid_range(-1.0, 4.0));
+        assert!(valid_range(0.0, 4.0));
     }
 }
