@@ -61,21 +61,34 @@ fn build_candle_query(interval_minutes: u32) -> String {
 }
 
 pub fn resolve_tick_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    #[cfg(debug_assertions)]
-    {
-        let source_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("data")
-            .join("ticks");
-        if source_dir.is_dir() {
-            return Ok(source_dir);
-        }
+    let current_dir = std::env::current_dir()
+        .map_err(|error| format!("Could not resolve current working directory: {error}"))?;
+    let working_dir_ticks = current_dir.join("data").join("ticks");
+    if working_dir_ticks.join("XAUUSD").is_dir() {
+        return Ok(working_dir_ticks);
     }
 
-    app.path()
+    let source_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("data")
+        .join("ticks");
+    if source_dir.join("XAUUSD").is_dir() {
+        return Ok(source_dir);
+    }
+
+    let resource_dir = app
+        .path()
         .resource_dir()
-        .map(|path| path.join("data").join("ticks"))
-        .map_err(|error| format!("Could not resolve bundled tick-data directory: {error}"))
+        .map_err(|error| format!("Could not resolve bundled tick-data directory: {error}"))?;
+    let resource_ticks = resource_dir.join("data").join("ticks");
+    if resource_ticks.join("XAUUSD").is_dir() {
+        return Ok(resource_ticks);
+    }
+
+    Err(format!(
+        "No local tick-data directory found at: {}",
+        working_dir_ticks.display()
+    ))
 }
 
 pub fn fetch_local_candles(
@@ -111,6 +124,7 @@ pub fn fetch_local_candles(
         ));
     }
     let parquet_glob = symbol_dir.join("**").join("*.parquet");
+    let parquet_glob_str = parquet_glob.to_string_lossy().replace('\\', "/");
     let connection = Connection::open_in_memory()
         .map_err(|error| format!("Could not open in-memory DuckDB: {error}"))?;
     let mut statement = connection
@@ -119,7 +133,7 @@ pub fn fetch_local_candles(
     let rows = statement
         .query_map(
             params![
-                parquet_glob.to_string_lossy().replace('\\', "/"),
+                parquet_glob_str,
                 start_ts,
                 end_ts,
                 limit as i64

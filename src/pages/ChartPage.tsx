@@ -2145,7 +2145,12 @@ export const ChartPage: React.FC<{ isVisible?: boolean }> = ({ isVisible = true 
       if (myId !== reqIdRef.current) return;
       replayTimeframeRestoreRef.current = null;
       replayTimestampOverridesRef.current = null;
-      setError(String(e));
+      const errorMessage = String(e);
+      setError(
+        errorMessage.startsWith("No local tick-data directory found")
+          ? "Data folder not found. Please ensure your Parquet files are located in data/ticks/XAUUSD/."
+          : errorMessage,
+      );
       setCandles([]);
       viewportToRestoreRef.current = null;
       timeframeChangeInFlightRef.current = false;
