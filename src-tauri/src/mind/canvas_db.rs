@@ -1128,6 +1128,7 @@ pub fn fork_board_from_version(
         remapped_snapshot_id(&mut ids, &node.id);
     }
     for edge in &snapshot.edges {
+        remapped_snapshot_id(&mut ids, &edge.id);
         remapped_snapshot_id(&mut ids, &edge.source);
         remapped_snapshot_id(&mut ids, &edge.target);
     }
@@ -1139,7 +1140,7 @@ pub fn fork_board_from_version(
         remap_snapshot_references(&mut node.data, &ids);
     }
     for edge in &mut snapshot.edges {
-        edge.id = uuid::Uuid::now_v7().to_string();
+        edge.id = ids[&edge.id].clone();
         edge.source = ids[&edge.source].clone();
         edge.target = ids[&edge.target].clone();
     }
@@ -1765,6 +1766,14 @@ mod board_version_tests {
             .collect::<rusqlite::Result<Vec<_>>>()
             .unwrap();
         assert!(columns.iter().any(|column| column == "reason"));
+        let board_columns = conn
+            .prepare("PRAGMA table_info(mind_boards)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert!(board_columns.iter().any(|column| column == "parent_board_id"));
     }
 
     #[cfg(test)]
@@ -1997,6 +2006,56 @@ mod board_version_tests {
         assert_eq!(history.len(), 4);
         assert!(history.last().is_some_and(|version| version.is_active));
         assert!(checkout_board_version(&mut conn, "board-2", &branch.id).is_err());
+    }
+
+    #[test]
+    fn forking_a_board_version_creates_an_independent_board_snapshot() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        create_board(&mut conn, "Source Board", 1, "source-board").unwrap();
+        let source_version = create_board_version(
+            &mut conn,
+            "source-board",
+            "minor",
+            "A saved version",
+            board_snapshot("Saved content"),
+        )
+        .unwrap();
+
+        let branch_id = super::fork_board_from_version(
+            &mut conn,
+            "source-board",
+            &source_version.id,
+            "Independent Branch",
+        )
+        .unwrap();
+        let boards = get_all_boards(&conn).unwrap();
+        let branch = boards.iter().find(|board| board.id == branch_id).unwrap();
+        assert_eq!(branch.title, "Independent Branch");
+        assert_eq!(branch.parent_board_id.as_deref(), Some("source-board"));
+        assert_eq!(branch.active_version, "0.1.0 - 0.2.0");
+
+        let branch_history = get_board_versions(&conn, &branch_id).unwrap();
+        assert_eq!(branch_history.len(), 1);
+        assert_eq!(
+            branch_history[0].forked_from_version_id.as_deref(),
+            Some(source_version.id.as_str())
+        );
+        assert_eq!(branch_history[0].version, "0.1.0");
+        let forked_snapshot =
+            get_board_version_snapshot(&conn, &branch_history[0].id).unwrap();
+        let source_snapshot = get_board_version_snapshot(&conn, &source_version.id).unwrap();
+        assert_eq!(forked_snapshot.nodes[0].title, source_snapshot.nodes[0].title);
+        assert_eq!(forked_snapshot.cards[0].content, source_snapshot.cards[0].content);
+        assert_eq!(forked_snapshot.nodes[0].x, source_snapshot.nodes[0].x);
+        assert_ne!(forked_snapshot.nodes[0].id, source_snapshot.nodes[0].id);
+        assert_ne!(forked_snapshot.cards[0].id, source_snapshot.cards[0].id);
+        assert_ne!(forked_snapshot.edges[0].id, source_snapshot.edges[0].id);
+        assert_eq!(
+            forked_snapshot.nodes[0].data["cardId"],
+            forked_snapshot.cards[0].id
+        );
+        assert_eq!(get_board_versions(&conn, "source-board").unwrap().len(), 2);
     }
 
     #[test]
