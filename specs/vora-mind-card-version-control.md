@@ -28,6 +28,16 @@ state and do not create user-visible history entries.
 
 - Clicking the card version badge opens a commit dialog with a suggested patch
   increment and a required change reason.
+- A card with no committed history starts at exactly `v0.1.0`; its initial
+  commit reason is fixed to `Initial Version (Baseline)`.
+- Routine `Auto Save` working copies do not count as committed history or
+  prevent the first-version baseline.
+- Later commits suggest a patch increment from the card's current version and
+  allow the user to enter a reason.
+- The backend independently enforces the exact initial version and baseline
+  reason so clients cannot bypass the initial-version rule.
+- The card history action shows an indicator until the first explicit version
+  is committed.
 - The History action opens a per-card history modal showing version, date, and
   reason.
 - The modal compares the selected historical content against the current
