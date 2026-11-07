@@ -1331,6 +1331,13 @@ fn forge_get_task_audit_history(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                if let Err(error) = mind::player::player_kill() {
+                    eprintln!("Failed to stop MPV when closing Vora Mind: {error}");
+                }
+            }
+        })
         .setup(|app| {
             let app_dir = app
                 .path()
@@ -1367,6 +1374,7 @@ pub fn run() {
                 db: Mutex::new(conn),
                 db_path: Mutex::new(Some(db_path.to_string_lossy().into_owned())),
             });
+            mind::player::start_position_polling(app.handle().clone());
 
             Ok(())
         })
@@ -1521,6 +1529,27 @@ pub fn run() {
             crate::market::ipc::mkt_delete_drawing_alert,
             crate::market::ipc::mkt_delete_drawing_alerts_for_drawings,
             crate::market::ipc::mkt_list_pivots,
+            mind::media::register_media_source,
+            mind::media::get_media_source,
+            mind::media::get_last_media_source,
+            mind::media::validate_media_source,
+            mind::media::update_media_source_duration,
+            mind::media::save_media_source_position,
+            mind::media::list_media_slices,
+            mind::media::save_media_slice,
+            mind::media::delete_media_slice,
+            mind::media::get_media_slice,
+            mind::player::player_spawn,
+            mind::player::player_kill,
+            mind::player::player_load,
+            mind::player::player_load_at,
+            mind::player::player_play,
+            mind::player::player_pause,
+            mind::player::player_seek,
+            mind::player::player_set_speed,
+            mind::player::player_set_volume,
+            mind::player::player_get_position,
+            mind::player::player_get_duration,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

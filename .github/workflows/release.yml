@@ -16,6 +16,8 @@ jobs:
       CARGO_PROFILE: ci
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
       - name: Install pnpm
