@@ -1562,7 +1562,8 @@ pub fn save_semantic_snapshot(
 mod board_version_tests {
     use super::{
         checkout_board_version, create_board, create_board_version, get_all_boards,
-        get_board_versions, init_db, BoardVersionCard, BoardVersionSnapshot, EdgeInput, NodeInput,
+        get_board_version_snapshot, get_board_versions, init_db, BoardVersionCard,
+        BoardVersionSnapshot, EdgeInput, NodeInput,
     };
     use rusqlite::Connection;
     use serde_json::json;
@@ -1795,6 +1796,16 @@ mod board_version_tests {
             )
             .unwrap();
         assert_eq!(v0_3.version, "0.3.0");
+        assert_eq!(v0_2.reason.as_deref(), Some("Add first milestone"));
+
+        let active_version_before_read = get_all_boards(&conn).unwrap()[0].active_version_id.clone();
+        let fetched_snapshot = get_board_version_snapshot(&conn, &v0_2.id).unwrap();
+        assert_eq!(fetched_snapshot.nodes[0].title, "v0.2.0");
+        assert_eq!(fetched_snapshot.reason.as_deref(), Some("Add first milestone"));
+        assert_eq!(
+            get_all_boards(&conn).unwrap()[0].active_version_id,
+            active_version_before_read
+        );
 
         let restored = checkout_board_version(&mut conn, "board-1", &v0_2.id).unwrap();
         assert_eq!(restored.nodes[0].title, "v0.2.0");
@@ -1814,6 +1825,7 @@ mod board_version_tests {
         )
         .unwrap();
         assert_eq!(branch.version, "0.2.1");
+        assert_eq!(branch.reason.as_deref(), Some("Fix checked-out Board"));
         assert_eq!(branch.parent_version_id.as_deref(), Some(v0_2.id.as_str()));
         assert_eq!(branch.forked_from_version.as_deref(), Some("0.3.0"));
         assert_ne!(
