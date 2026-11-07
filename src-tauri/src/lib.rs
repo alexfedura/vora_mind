@@ -329,6 +329,27 @@ fn create_board(state: State<AppState>, title: String) -> Result<BoardSummary, S
     mind::canvas_db::create_board(&mut conn, title, now, &id).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn fork_board_from_version(
+    state: State<AppState>,
+    source_board_id: String,
+    version_id: String,
+    new_board_title: String,
+) -> Result<String, String> {
+    let title = new_board_title.trim();
+    if title.is_empty() || title.chars().count() > 80 {
+        return Err("Board title must contain between 1 and 80 characters".to_string());
+    }
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::canvas_db::fork_board_from_version(
+        &mut conn,
+        &source_board_id,
+        &version_id,
+        title,
+    )
+    .map_err(|error| error.to_string())
+}
+
 fn task_flow_now() -> Result<i64, String> {
     let milliseconds = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1939,6 +1960,7 @@ pub fn run() {
             mind::hypothesis::create_child_hypothesis,
             get_board_versions,
             create_board_version,
+            fork_board_from_version,
             get_board_version_snapshot,
             checkout_board_version,
             get_library_item_groups,
