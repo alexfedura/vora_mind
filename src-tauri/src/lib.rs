@@ -141,9 +141,29 @@ fn parse_card_version(version: &str) -> Result<(String, i32, i32, i32), String> 
     ))
 }
 
+fn has_committed_card_versions(conn: &Connection, id: &str) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM object_versions
+            WHERE object_id = ?1 AND COALESCE(reason, '') <> 'Auto Save'
+        )",
+        rusqlite::params![id],
+        |row| row.get(0),
+    )
+    .map_err(|error| error.to_string())
+}
+
+fn validate_initial_card_version(has_versions: bool, version: &str) -> Result<(), String> {
+    if !has_versions && version != "v0.1.0" {
+        return Err("The initial card version must be exactly v0.1.0.".to_string());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod card_version_tests {
-    use super::parse_card_version;
+    use super::{has_committed_card_versions, parse_card_version, validate_initial_card_version};
+    use rusqlite::Connection;
 
     #[test]
     fn parses_card_version_with_or_without_prefix() {
@@ -162,6 +182,37 @@ mod card_version_tests {
         for version in ["", "v1.2", "1.2.3.4", "v01.2.3", "1.2.-1", "1.2.2147483648"] {
             assert!(parse_card_version(version).is_err(), "accepted {version}");
         }
+    }
+
+    #[test]
+    fn automatic_saves_do_not_count_as_committed_card_versions() {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        conn.execute_batch(
+            "CREATE TABLE object_versions (object_id TEXT NOT NULL, reason TEXT);",
+        )
+        .expect("create object_versions table");
+
+        assert!(!has_committed_card_versions(&conn, "card-1").expect("check empty history"));
+        conn.execute(
+            "INSERT INTO object_versions (object_id, reason) VALUES ('card-1', 'Auto Save')",
+            [],
+        )
+        .expect("insert automatic save");
+        assert!(!has_committed_card_versions(&conn, "card-1").expect("check autosave history"));
+        conn.execute(
+            "INSERT INTO object_versions (object_id, reason) VALUES ('card-1', 'Initial Version (Baseline)')",
+            [],
+        )
+        .expect("insert committed version");
+        assert!(has_committed_card_versions(&conn, "card-1").expect("check committed history"));
+    }
+
+    #[test]
+    fn requires_exact_version_for_first_committed_version() {
+        assert!(validate_initial_card_version(false, "v0.1.0").is_ok());
+        assert!(validate_initial_card_version(false, "0.1.0").is_err());
+        assert!(validate_initial_card_version(false, "v0.1.1").is_err());
+        assert!(validate_initial_card_version(true, "v0.1.1").is_ok());
     }
 }
 
@@ -668,12 +719,6 @@ fn commit_card_version(
     version: String,
     reason: String,
 ) -> Result<(), String> {
-    let (version, version_major, version_minor, version_patch) = parse_card_version(&version)?;
-    let reason = reason.trim();
-    if reason.is_empty() {
-        return Err("A reason is required to commit a card version".to_string());
-    }
-
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -718,6 +763,18 @@ fn commit_card_version(
         return Err("Card does not belong to the requested Board".to_string());
     }
 
+    let has_versions = has_committed_card_versions(&tx, &id)?;
+    validate_initial_card_version(has_versions, &version)?;
+    let (version, version_major, version_minor, version_patch) = parse_card_version(&version)?;
+    let reason = if has_versions {
+        reason.trim()
+    } else {
+        "Initial Version (Baseline)"
+    };
+    if reason.is_empty() {
+        return Err("A reason is required to commit a card version".to_string());
+    }
+
     let parent_version_id: Option<String> = tx
         .query_row(
             "SELECT id FROM object_versions
@@ -759,6 +816,22 @@ fn commit_card_version(
     )
     .map_err(|error| error.to_string())?;
     tx.commit().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn has_card_versions(state: State<AppState>, id: String) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    let is_card: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM objects WHERE id = ?1 AND type = 'card')",
+            rusqlite::params![&id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !is_card {
+        return Err("Card does not exist".to_string());
+    }
+    has_committed_card_versions(&conn, &id)
 }
 
 #[tauri::command]
@@ -1798,6 +1871,7 @@ pub fn run() {
             get_all_snapshots,
             get_all_cards,
             commit_card_version,
+            has_card_versions,
             get_card_versions,
             get_card_version_content,
             restore_card_version,
