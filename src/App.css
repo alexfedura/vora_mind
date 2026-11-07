@@ -273,6 +273,11 @@ body, #root {
   user-select: none;
 }
 
+body.vora-player-active,
+body.vora-player-active #root {
+  background-color: transparent !important;
+}
+
 /* استایل خطوط اتصال بوم */
 .react-flow__edge-path {
   stroke: #4b5563 !important;
