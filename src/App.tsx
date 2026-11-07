@@ -90,6 +90,8 @@ import { BoardsPanel } from "./shared/layout/BoardsPanel";
 import { RightDrawer } from "./shared/layout/RightDrawer";
 import { ReplayController } from "./shared/canvas/ReplayController";
 import { CommitModal } from "./shared/modals/CommitModal";
+import { CommitCardModal } from "./shared/modals/CommitCardModal";
+import { CardHistoryModal } from "./shared/modals/CardHistoryModal";
 import { FullscreenDocModal } from "./shared/modals/FullscreenDocModal";
 import { OpenPanel } from "./mind/types";
 
@@ -474,6 +476,10 @@ function AppContent() {
   const [connectionCreateMenu, setConnectionCreateMenu] = useState<ConnectionCreateMenu | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [fullscreenCardId, setFullscreenCardId] = useState<string | null>(null);
+  const [cardVersionDialog, setCardVersionDialog] = useState<{
+    mode: "commit" | "history";
+    cardId: string;
+  } | null>(null);
   const [activeCanvasGroupId, setActiveCanvasGroupId] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(0);
   const [marqueePreview, setMarqueePreview] = useState<MarqueePreview | null>(null);
@@ -481,6 +487,23 @@ function AppContent() {
   const [isSpacePanActive, setIsSpacePanActive] = useState(false);
   const isSpacePanActiveRef = React.useRef(false);
   const lastPointerPositionRef = React.useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const handleOpenCardCommit = (event: Event): void => {
+      if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
+      setCardVersionDialog({ mode: "commit", cardId: event.detail });
+    };
+    const handleOpenCardHistory = (event: Event): void => {
+      if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
+      setCardVersionDialog({ mode: "history", cardId: event.detail });
+    };
+    window.addEventListener("vora:open-card-commit", handleOpenCardCommit);
+    window.addEventListener("vora:open-card-history", handleOpenCardHistory);
+    return () => {
+      window.removeEventListener("vora:open-card-commit", handleOpenCardCommit);
+      window.removeEventListener("vora:open-card-history", handleOpenCardHistory);
+    };
+  }, []);
 
   // حالت ابزار متن
   const [isAddCardToolActive, setIsAddCardToolActive] = useState(false);
@@ -3263,6 +3286,17 @@ function AppContent() {
         onClose={() => flow.setIsCommitModalOpen(false)}
         onCommit={flow.handleCommitSnapshot}
         currentSnapshotDepth={flow.snapshots.length}
+      />
+
+      <CommitCardModal
+        isOpen={cardVersionDialog?.mode === "commit"}
+        cardId={cardVersionDialog?.mode === "commit" ? cardVersionDialog.cardId : null}
+        onClose={() => setCardVersionDialog(null)}
+      />
+      <CardHistoryModal
+        isOpen={cardVersionDialog?.mode === "history"}
+        cardId={cardVersionDialog?.mode === "history" ? cardVersionDialog.cardId : null}
+        onClose={() => setCardVersionDialog(null)}
       />
 
       {libraryBoardSession && isLibraryVersionDialogOpen && (
