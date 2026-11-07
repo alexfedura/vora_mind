@@ -62,12 +62,17 @@ pub fn player_spawn(app: tauri::AppHandle, window: tauri::Window) -> Result<u32,
     let parent = executable
         .parent()
         .ok_or_else(|| "The bundled MPV executable has no parent directory.".to_string())?;
+    let input_config = parent.join("input.conf");
+    if !input_config.is_file() {
+        return Err("The bundled MPV mouse controls configuration is missing.".to_string());
+    }
     let mut command = Command::new(&executable);
     command
         .current_dir(parent)
         .args([
             "--no-config",
             "--idle=yes",
+            "--pause=yes",
             "--force-window=yes",
             "--keep-open=yes",
             "--hr-seek=yes",
@@ -80,6 +85,7 @@ pub fn player_spawn(app: tauri::AppHandle, window: tauri::Window) -> Result<u32,
             "--no-resume-playback",
             "--no-terminal",
         ])
+        .arg(format!("--input-conf={}", input_config.display()))
         .arg(format!("--input-ipc-server={MPV_IPC_PIPE}"));
 
     #[cfg(target_os = "windows")]
@@ -174,6 +180,7 @@ pub fn player_kill() -> Result<(), String> {
 
 #[tauri::command]
 pub fn player_load(path: String) -> Result<(), String> {
+    send_command(vec![json!("set_property"), json!("pause"), json!(true)])?;
     send_command(vec![json!("loadfile"), json!(path), json!("replace")]).map(|_| ())
 }
 
@@ -182,6 +189,7 @@ pub fn player_load_at(path: String, start_seconds: f64) -> Result<(), String> {
     if !start_seconds.is_finite() || start_seconds < 0.0 {
         return Err("Seek position must be finite and non-negative.".to_string());
     }
+    send_command(vec![json!("set_property"), json!("pause"), json!(true)])?;
     send_command(vec![
         json!("loadfile"),
         json!(path),
@@ -199,6 +207,16 @@ pub fn player_play() -> Result<(), String> {
 #[tauri::command]
 pub fn player_pause() -> Result<(), String> {
     send_command(vec![json!("set_property"), json!("pause"), json!(true)]).map(|_| ())
+}
+
+#[tauri::command]
+pub fn player_set_fullscreen(fullscreen: bool) -> Result<(), String> {
+    send_command(vec![
+        json!("set_property"),
+        json!("fullscreen"),
+        json!(fullscreen),
+    ])
+    .map(|_| ())
 }
 
 #[tauri::command]
@@ -247,6 +265,8 @@ pub fn player_get_duration() -> Result<f64, String> {
 pub fn start_position_polling(app: tauri::AppHandle) {
     thread::spawn(move || {
         let mut poll_count = 0u32;
+        let mut last_paused = None;
+        let mut last_fullscreen = None;
         loop {
             thread::sleep(Duration::from_millis(200));
             let running = process_lock()
@@ -268,6 +288,26 @@ pub fn start_position_polling(app: tauri::AppHandle) {
 
             if let Ok(position) = player_get_position() {
                 let _ = app.emit("mind-player-position", position);
+            }
+            if let Ok(paused) = property("pause").and_then(|value| {
+                value
+                    .as_bool()
+                    .ok_or_else(|| "MPV returned an invalid pause state.".to_string())
+            }) {
+                if last_paused != Some(paused) {
+                    last_paused = Some(paused);
+                    let _ = app.emit("mind-player-paused", paused);
+                }
+            }
+            if let Ok(fullscreen) = property("fullscreen").and_then(|value| {
+                value
+                    .as_bool()
+                    .ok_or_else(|| "MPV returned an invalid fullscreen state.".to_string())
+            }) {
+                if last_fullscreen != Some(fullscreen) {
+                    last_fullscreen = Some(fullscreen);
+                    let _ = app.emit("mind-player-fullscreen", fullscreen);
+                }
             }
             poll_count = poll_count.wrapping_add(1);
             if poll_count % 5 == 0 {

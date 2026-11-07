@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { GitCommit, X } from "lucide-react";
-import { dbService } from "@/mind/services/dbService";
 import { nextPatchVersion } from "@/mind/utils/cardVersion";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { useDocumentStore } from "@/features/file-store/useDocumentStore";
@@ -46,29 +45,20 @@ export const CommitCardModal: React.FC<CommitCardModalProps> = ({
       const documentStore = useDocumentStore.getState();
       if (documentStore.currentDocId === cardId) await documentStore.saveDoc();
 
-      const appState = useAppStore.getState();
-      const card = appState.cards[cardId];
+      const card = useAppStore.getState().cards[cardId];
       if (!card) throw new Error("The card is no longer available.");
       const currentDocument = useDocumentStore.getState();
       const isCurrentDocument = currentDocument.currentDocId === cardId;
       const title = isCurrentDocument ? currentDocument.currentTitle : card.title;
       const content = isCurrentDocument ? currentDocument.content : card.content;
-      const boardId = card.boardId ?? appState.activeBoardId;
-      if (!boardId) throw new Error("Select a Board before committing a card version.");
-
-      await dbService.commitCardVersion(
+      await useAppStore.getState().commitCardVersion(
         cardId,
-        boardId,
         title,
         content,
         versionTag,
         changeReason,
       );
 
-      appState.setCards({
-        ...appState.cards,
-        [cardId]: { ...card, title, content, version: versionTag },
-      });
       if (isCurrentDocument) {
         useDocumentStore.setState({
           currentTitle: title,

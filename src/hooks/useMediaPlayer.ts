@@ -120,6 +120,25 @@ export function useMediaPlayer(
     }).catch((listenError: unknown) => {
       if (!cancelled) setError(`Could not receive player duration updates: ${errorMessage(listenError)}`);
     });
+    void listen<boolean>("mind-player-paused", (event) => {
+      setIsPlaying(!event.payload);
+    }).then((unlisten) => {
+      if (cancelled) unlisten();
+      else unlisteners.push(unlisten);
+    }).catch((listenError: unknown) => {
+      if (!cancelled) setError(`Could not receive player playback updates: ${errorMessage(listenError)}`);
+    });
+    void listen<boolean>("mind-player-fullscreen", (event) => {
+      setIsFullscreen(event.payload);
+      void getCurrentWindow().setFullscreen(event.payload).catch((fullscreenError: unknown) => {
+        setError(`Could not update the player window fullscreen state: ${errorMessage(fullscreenError)}`);
+      });
+    }).then((unlisten) => {
+      if (cancelled) unlisten();
+      else unlisteners.push(unlisten);
+    }).catch((listenError: unknown) => {
+      if (!cancelled) setError(`Could not receive player fullscreen updates: ${errorMessage(listenError)}`);
+    });
     void dbService.playerSpawn().then(() => {
       if (!cancelled) setIsReady(true);
     }).catch((spawnError: unknown) => {
@@ -166,8 +185,7 @@ export function useMediaPlayer(
         setSlices(await dbService.listMediaSlices(verifiedSource.id));
         setDuration(verifiedSource.duration_seconds ?? 0);
         setPosition(media.slice.start_seconds);
-        await dbService.playerPlay();
-        setIsPlaying(true);
+        setIsPlaying(false);
         setStatus(`Opened ${media.slice.title} at ${formatMediaTime(media.slice.start_seconds)}.`);
       } catch (openError: unknown) {
         if (latestRequestId.current === request.requestId) {
@@ -212,8 +230,7 @@ export function useMediaPlayer(
     setSlices(await dbService.listMediaSlices(verifiedSource.id));
     setPosition(startSeconds);
     setDuration(verifiedSource.duration_seconds ?? 0);
-    await dbService.playerPlay();
-    setIsPlaying(true);
+    setIsPlaying(false);
   };
 
   const openMediaFile = async (): Promise<void> => {
@@ -295,8 +312,10 @@ export function useMediaPlayer(
 
   const toggleFullscreen = async (): Promise<void> => {
     await run(async () => {
-      await getCurrentWindow().setFullscreen(!isFullscreen);
-      setIsFullscreen(!isFullscreen);
+      const fullscreen = !isFullscreen;
+      await dbService.playerSetFullscreen(fullscreen);
+      await getCurrentWindow().setFullscreen(fullscreen);
+      setIsFullscreen(fullscreen);
     });
   };
 

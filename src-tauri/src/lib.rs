@@ -1852,6 +1852,7 @@ pub fn run() {
             mind::player::player_load_at,
             mind::player::player_play,
             mind::player::player_pause,
+            mind::player::player_set_fullscreen,
             mind::player::player_seek,
             mind::player::player_set_speed,
             mind::player::player_set_volume,

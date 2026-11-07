@@ -606,6 +606,10 @@ export const dbService = {
     await invoke("player_pause");
   },
 
+  async playerSetFullscreen(fullscreen: boolean): Promise<void> {
+    await invoke("player_set_fullscreen", { fullscreen });
+  },
+
   async playerSeek(seconds: number): Promise<void> {
     await invoke("player_seek", { seconds });
   },

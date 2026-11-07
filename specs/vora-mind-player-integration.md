@@ -30,6 +30,9 @@ from text on any Board.
   playback/pause, precise seeking, elapsed/duration display, playback speed,
   volume, fullscreen, keyboard controls, and the existing Vora Player slice
   list and editor.
+- Newly opened media starts paused. A single left-click on the video toggles
+  playback, and a double left-click toggles the Vora Mind window fullscreen;
+  playback state and fullscreen changes stay synchronized with the controls.
 - Open media using a native file picker. Record its normalized absolute path,
   file size, modification time, and media duration for source provenance.
   Missing or changed sources are reported explicitly; they are never silently
@@ -90,5 +93,7 @@ from text on any Board.
 - Verify opening audio and video, accurate seek from a link on another Board,
   persistence across restart, missing/changed source feedback, and return to
   the original Board.
+- Verify newly opened media is paused, single-click toggles playback, and
+  double-click enters/exits fullscreen.
 - Verify by code path and test that no clip-export/FFmpeg command is
   registered or invoked from Vora Mind.

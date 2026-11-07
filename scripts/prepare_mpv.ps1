@@ -116,11 +116,16 @@ try {
     }
 
     Set-Content -LiteralPath (Join-Path $resourceDirectory "MPV-VERSION.txt") -Value $runtimeVersion -Encoding UTF8
+    Copy-Item -LiteralPath (Join-Path $root "src-tauri\resources\mpv-input.conf") `
+        -Destination (Join-Path $resourceDirectory "input.conf") -Force
     Copy-Item -LiteralPath (Join-Path $root "licenses\mpv-third-party-notice.txt") `
         -Destination (Join-Path $resourceDirectory "THIRD-PARTY-NOTICE.txt") -Force
 
     if (-not (Test-Path -LiteralPath (Join-Path $resourceDirectory "mpv.exe") -PathType Leaf)) {
         throw "MPV preparation completed without creating the expected executable."
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $resourceDirectory "input.conf") -PathType Leaf)) {
+        throw "MPV preparation completed without creating its mouse controls configuration."
     }
 
     Write-Host "Prepared MPV runtime in $resourceDirectory"
