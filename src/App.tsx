@@ -36,6 +36,7 @@ import {
   BookOpen,
   CandlestickChart,
   Menu,
+  Film,
 } from "lucide-react";
 
 import { ForgeAgentDrawer } from "./forge/components/agent/ForgeAgentDrawer";
@@ -82,6 +83,9 @@ import { LeftSidebar } from "./shared/layout/LeftSidebar";
 import { TaskFlowPage } from "./shared/layout/TaskFlowPage";
 import VoraTraceApp from "./features/vora-trace/App";
 import { JournalPage } from "./shared/layout/JournalPage";
+import { PlayerWorkspace } from "./features/vora-player/PlayerWorkspace";
+import type { MediaPlayerRequest } from "./hooks/useMediaPlayer";
+import { parseMediaLinkHash } from "./mind/utils/mediaLinks";
 import { BoardsPanel } from "./shared/layout/BoardsPanel";
 import { RightDrawer } from "./shared/layout/RightDrawer";
 import { ReplayController } from "./shared/canvas/ReplayController";
@@ -391,8 +395,39 @@ function AppContent() {
   const [isAiTasksOpen, setIsAiTasksOpen] = useState(false);
   const [isVoraTraceOpen, setIsVoraTraceOpen] = useState(false);
   const [isJournalOpen, setIsJournalOpen] = useState(false);
+  const [isPlayerOpen, setIsPlayerOpen] = useState(false);
+  const [mediaPlayerRequest, setMediaPlayerRequest] = useState<MediaPlayerRequest | null>(null);
+  const mediaPlayerRequestId = React.useRef(0);
   const [isJournalMenuOpen, setIsJournalMenuOpen] = useState(false);
-  const isWorkspacePageOpen = isTaskFlowOpen || isAiTasksOpen || isVoraTraceOpen || isJournalOpen;
+  const isWorkspacePageOpen = isTaskFlowOpen || isAiTasksOpen || isVoraTraceOpen || isJournalOpen || isPlayerOpen;
+
+  useEffect(() => {
+    const handleMediaLinkClick = (event: MouseEvent): void => {
+      if (!(event.target instanceof Element)) return;
+      const anchor = event.target.closest("a[href]");
+      const href = anchor?.getAttribute("href");
+      if (!href?.startsWith("#vora-media-v1")) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      mediaPlayerRequestId.current += 1;
+      const payload = parseMediaLinkHash(href);
+      setMediaPlayerRequest({
+        requestId: mediaPlayerRequestId.current,
+        payload,
+        error: payload ? null : "This Vora media link is malformed or unsupported.",
+      });
+      setIsTaskFlowOpen(false);
+      setIsAiTasksOpen(false);
+      setIsVoraTraceOpen(false);
+      setIsJournalOpen(false);
+      setIsPlayerOpen(true);
+      setActiveOpenPanel("none");
+    };
+
+    document.addEventListener("click", handleMediaLinkClick, true);
+    return () => document.removeEventListener("click", handleMediaLinkClick, true);
+  }, []);
 
   useEffect(() => {
     if (!isRecord(location.state) || location.state.openJournal !== true) return;
@@ -400,6 +435,7 @@ function AppContent() {
     setIsAiTasksOpen(false);
     setIsVoraTraceOpen(false);
     setIsJournalOpen(true);
+    setIsPlayerOpen(false);
     setActiveOpenPanel("none");
     navigate("/home", { replace: true, state: null });
   }, [location.state, navigate]);
@@ -409,6 +445,7 @@ function AppContent() {
     setIsAiTasksOpen(false);
     setIsVoraTraceOpen(false);
     setIsJournalOpen(false);
+    setIsPlayerOpen(false);
     setIsTaskFlowOpen(true);
     setLastActivePanel("sidebar");
     setActiveOpenPanel("sidebar");
