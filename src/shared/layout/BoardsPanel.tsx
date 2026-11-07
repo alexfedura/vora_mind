@@ -145,7 +145,8 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
 
   const commitVersion = async (reason: string): Promise<void> => {
     if (!commitTarget) return;
-    setBusyBoardId(board.id);
+    setError(null);
+    setBusyBoardId(commitTarget.board.id);
     try {
       const versions = await onCreateBoardVersion(
         commitTarget.board.id,
