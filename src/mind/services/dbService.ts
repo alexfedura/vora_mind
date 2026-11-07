@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { Edge, Node } from "@xyflow/react";
 import type {
   BoardItem,
+  CardVersion,
+  CardVersionContent,
   LibraryItemGroup,
   LibraryItemGroupSnapshot,
   LibraryItemGroupUsage,
@@ -503,6 +505,29 @@ export const dbService = {
       textChangeSets,
       librarySourceCardId: librarySourceCardId ?? null,
     });
+  },
+
+  async commitCardVersion(
+    id: string,
+    boardId: string,
+    title: string,
+    content: string,
+    version: string,
+    reason: string,
+  ): Promise<void> {
+    await invoke("commit_card_version", { id, boardId, title, content, version, reason });
+  },
+
+  async getCardVersions(id: string): Promise<CardVersion[]> {
+    return await invoke<CardVersion[]>("get_card_versions", { id });
+  },
+
+  async getCardVersionContent(versionId: string): Promise<CardVersionContent> {
+    return await invoke<CardVersionContent>("get_card_version_content", { versionId });
+  },
+
+  async restoreCardVersion(id: string, versionId: string): Promise<CardVersionContent> {
+    return await invoke<CardVersionContent>("restore_card_version", { id, versionId });
   },
 
   async getTextLinksForCard(boardId: string, cardId: string): Promise<TextLink[]> {
