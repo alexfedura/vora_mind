@@ -594,6 +594,232 @@ fn get_all_cards(state: State<AppState>, board_id: String) -> Result<Vec<CardDto
 }
 
 #[tauri::command]
+fn commit_card_version(
+    state: State<AppState>,
+    id: String,
+    board_id: String,
+    title: String,
+    content: String,
+    version: String,
+    reason: String,
+) -> Result<(), String> {
+    let (version, version_major, version_minor, version_patch) = parse_card_version(&version)?;
+    let reason = reason.trim();
+    if reason.is_empty() {
+        return Err("A reason is required to commit a card version".to_string());
+    }
+
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis() as i64;
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+
+    let board_exists: bool = tx
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM mind_boards WHERE id = ?1)",
+            rusqlite::params![&board_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !board_exists {
+        return Err("Board does not exist".to_string());
+    }
+
+    tx.execute(
+        "INSERT INTO objects (id, type, board_id, created_at, updated_at)
+         VALUES (?1, 'card', ?2, ?3, ?3)
+         ON CONFLICT(id) DO NOTHING",
+        rusqlite::params![&id, &board_id, now],
+    )
+    .map_err(|error| error.to_string())?;
+    let belongs_to_board: bool = tx
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM objects WHERE id = ?1 AND board_id = ?2 AND type = 'card')",
+            rusqlite::params![&id, &board_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !belongs_to_board {
+        return Err("Card does not belong to the requested Board".to_string());
+    }
+
+    let parent_version_id: Option<String> = tx
+        .query_row(
+            "SELECT id FROM object_versions
+             WHERE object_id = ?1 AND COALESCE(reason, '') <> 'Auto Save'
+             ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            rusqlite::params![&id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let version_id = format!("ver_{}_{}_{}", id, now, uuid::Uuid::now_v7());
+    let content_json = serde_json::json!({
+        "title": title,
+        "content": content,
+        "version": version,
+    })
+    .to_string();
+
+    tx.execute(
+        "INSERT INTO object_versions
+         (id, object_id, version_major, version_minor, version_patch, parent_version_id, reason, summary, content, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'Card version commit', ?8, ?9)",
+        rusqlite::params![
+            &version_id,
+            &id,
+            version_major,
+            version_minor,
+            version_patch,
+            parent_version_id,
+            reason,
+            content_json,
+            now
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+    tx.execute(
+        "UPDATE objects SET updated_at = ?1 WHERE id = ?2 AND board_id = ?3",
+        rusqlite::params![now, &id, &board_id],
+    )
+    .map_err(|error| error.to_string())?;
+    tx.commit().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_card_versions(state: State<AppState>, id: String) -> Result<Vec<CardVersionSummary>, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    let is_card: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM objects WHERE id = ?1 AND type = 'card')",
+            rusqlite::params![&id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !is_card {
+        return Err("Card does not exist".to_string());
+    }
+
+    let mut statement = conn
+        .prepare(
+            "SELECT id,
+                    COALESCE(json_extract(content, '$.version'),
+                             printf('v%d.%d.%d', version_major, version_minor, version_patch)),
+                    reason,
+                    created_at
+             FROM object_versions
+             WHERE object_id = ?1 AND COALESCE(reason, '') <> 'Auto Save'
+             ORDER BY created_at DESC, rowid DESC",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(rusqlite::params![&id], |row| {
+            Ok(CardVersionSummary {
+                id: row.get(0)?,
+                version: row.get(1)?,
+                reason: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+    rows.map(|row| row.map_err(|error| error.to_string()))
+        .collect()
+}
+
+#[tauri::command]
+fn get_card_version_content(
+    state: State<AppState>,
+    version_id: String,
+) -> Result<serde_json::Value, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    let content: String = conn
+        .query_row(
+            "SELECT content FROM object_versions WHERE id = ?1",
+            rusqlite::params![&version_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    serde_json::from_str(&content).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn restore_card_version(
+    state: State<AppState>,
+    id: String,
+    version_id: String,
+) -> Result<serde_json::Value, String> {
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis() as i64;
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+
+    let object_exists: bool = tx
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM objects WHERE id = ?1 AND type = 'card')",
+            rusqlite::params![&id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !object_exists {
+        return Err("Card does not exist".to_string());
+    }
+    let (version_major, version_minor, version_patch, content): (i32, i32, i32, String) = tx
+        .query_row(
+            "SELECT version_major, version_minor, version_patch, content
+             FROM object_versions WHERE id = ?1 AND object_id = ?2",
+            rusqlite::params![&version_id, &id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .map_err(|error| error.to_string())?;
+    let restored_content: serde_json::Value =
+        serde_json::from_str(&content).map_err(|error| error.to_string())?;
+    let version = restored_content
+        .get("version")
+        .and_then(serde_json::Value::as_str)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| format!("v{version_major}.{version_minor}.{version_patch}"));
+    let parent_version_id: Option<String> = tx
+        .query_row(
+            "SELECT id FROM object_versions
+             WHERE object_id = ?1 AND COALESCE(reason, '') <> 'Auto Save'
+             ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            rusqlite::params![&id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let restored_version_id = format!("ver_{}_{}_{}", id, now, uuid::Uuid::now_v7());
+    tx.execute(
+        "INSERT INTO object_versions
+         (id, object_id, version_major, version_minor, version_patch, parent_version_id, reason, summary, content, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'Card version restore', ?8, ?9)",
+        rusqlite::params![
+            &restored_version_id,
+            &id,
+            version_major,
+            version_minor,
+            version_patch,
+            parent_version_id,
+            format!("Restored from {version}"),
+            content,
+            now
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+    tx.execute(
+        "UPDATE objects SET updated_at = ?1 WHERE id = ?2 AND type = 'card'",
+        rusqlite::params![now, &id],
+    )
+    .map_err(|error| error.to_string())?;
+    tx.commit().map_err(|error| error.to_string())?;
+    Ok(restored_content)
+}
+
+#[tauri::command]
 fn get_text_links_for_card(
     state: State<AppState>,
     board_id: String,
