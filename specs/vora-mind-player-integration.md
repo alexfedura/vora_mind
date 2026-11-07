@@ -12,7 +12,7 @@ from text on any Board.
 
 ## Confirmed requirements
 
-- Integrate the existing project at `D:\workspace\v ora_player`; do not create
+- Integrate the existing project at `D:\workspace\vora_player`; do not create
   an unrelated browser-only player.
 - The player workspace is part of Vora Mind. Selecting a time reference from
   any Board opens the workspace, resolves the same local source, and seeks to
