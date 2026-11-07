@@ -126,6 +126,8 @@ export const CommitCardModal: React.FC<CommitCardModalProps> = ({
           readOnly={isFirstVersion}
           rows={3}
           placeholder="Why are you saving this version?"
+          dir="auto"
+          style={{ textAlign: "start", unicodeBidi: "plaintext" }}
           className="mt-2 w-full resize-y rounded-lg border border-[#363b47] bg-[#101217] px-3 py-2 text-sm text-white outline-none focus:border-amber-500/60"
         />
         {error && <p role="alert" className="mt-3 text-sm text-rose-300">{error}</p>}
