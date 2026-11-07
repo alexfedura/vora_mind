@@ -39,7 +39,6 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
   const {
     cards,
     updateCardContent,
-    updateCardVersion,
     activeBoardId,
     isRightDrawerOpen,
     toggleRightDrawer,
@@ -298,28 +297,20 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
       <div className={`w-full min-h-[26px] flex items-center justify-between select-none transition-opacity ${selected ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
         {/* سمت چپ: بج نسخه با تایپوگرافی مدرن و متقارن */}
         <div className="flex items-center gap-2 text-gray-400">
-          <input
-            type="text"
-            value={card.version || "v0.1.0"}
-            onChange={(e) => {
-              if (isMarkdownEditorOpen) {
-                const appState = useAppStore.getState();
-                const currentCard = appState.cards[realCardId];
-                if (currentCard) {
-                  appState.setCards({
-                    ...appState.cards,
-                    [realCardId]: { ...currentCard, version: e.target.value },
-                  });
-                }
-                useDocumentStore.getState().setVersion(e.target.value);
-              } else {
-                updateCardVersion(realCardId, e.target.value);
-              }
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              window.dispatchEvent(new CustomEvent<string>("vora:open-card-commit", {
+                detail: realCardId,
+              }));
             }}
             style={{ fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace" }}
-            className="nodrag w-14 text-center text-[11px] font-medium tracking-tight text-gray-300 bg-[#16181f] hover:bg-[#222530] focus:bg-[#272b38] focus:text-white focus:outline-none rounded-lg px-2 py-0.5 border border-[#2c3140] transition-colors cursor-text shadow-sm"
-            title="Card Version"
-          />
+            className="nodrag rounded-lg border border-[#2c3140] bg-[#16181f] px-2 py-0.5 text-center text-[11px] font-medium tracking-tight text-gray-300 shadow-sm transition-colors hover:bg-[#222530] hover:text-white focus:bg-[#272b38] focus:text-white focus:outline-none"
+            title="Commit a new card version"
+          >
+            {card.version || "v0.1.0"}
+          </button>
           <button className="p-1 hover:text-white hover:bg-[#252834] rounded transition" title="Bookmark">
             <Bookmark size={14} />
           </button>
@@ -340,7 +331,18 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
 
         {/* سمت راست: اکشن‌های ناوبری */}
         <div className="flex items-center gap-1 text-gray-400">
-          <button className="p-1 hover:text-white hover:bg-[#252834] rounded transition" title="History">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              window.dispatchEvent(new CustomEvent<string>("vora:open-card-history", {
+                detail: realCardId,
+              }));
+            }}
+            className="nodrag p-1 hover:text-white hover:bg-[#252834] rounded transition"
+            title="Card version history"
+            aria-label="Card version history"
+          >
             <Clock size={14} />
           </button>
           <button
