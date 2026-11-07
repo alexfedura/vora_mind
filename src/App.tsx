@@ -422,7 +422,6 @@ function AppContent() {
       setIsVoraTraceOpen(false);
       setIsJournalOpen(false);
       setIsPlayerOpen(true);
-      setActiveOpenPanel("none");
     };
 
     document.addEventListener("click", handleMediaLinkClick, true);
@@ -2760,7 +2759,7 @@ function AppContent() {
         onDoubleClickCapture={isWorkspacePageOpen ? undefined : handleCanvasDoubleClick}
         onKeyDown={isWorkspacePageOpen ? undefined : handleCanvasKeyDown}
         className={`w-full h-full relative ${isPlayerOpen ? "bg-transparent" : "bg-background"} flex-1 transition-all duration-300 ease-in-out ${
-          isWorkspacePageOpen && activeOpenPanel === "sidebar" ? "ml-56" : "ml-0"
+          !isPlayerOpen && isWorkspacePageOpen && activeOpenPanel === "sidebar" ? "ml-56" : "ml-0"
         } ${isSpacePanActive ? "space-pan-active" : ""} ${
           isTextToolActive ? "cursor-text" : activeShapeTool || isAddCardToolActive ? "cursor-crosshair" : ""
         }`}
