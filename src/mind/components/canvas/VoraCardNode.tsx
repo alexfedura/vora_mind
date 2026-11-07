@@ -68,14 +68,17 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
 
   useEffect(() => {
     let cancelled = false;
+    let versionSaved = false;
+    setHasCardVersions(null);
     void dbService.hasCardVersions(realCardId).then((hasVersions) => {
-      if (!cancelled) setHasCardVersions(hasVersions);
+      if (!cancelled && !versionSaved) setHasCardVersions(hasVersions);
     }).catch((error: unknown) => {
       console.error("Could not check whether the card has a committed version:", error);
     });
 
     const handleCardVersionSaved = (event: Event): void => {
       if (event instanceof CustomEvent && event.detail === realCardId) {
+        versionSaved = true;
         setHasCardVersions(true);
       }
     };
