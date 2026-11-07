@@ -640,6 +640,10 @@ function AppContent() {
     }
 
     const filePath = await dbService.importMediaFile(sourcePath);
+    setIsDiagramPaletteOpen(false);
+    setIsAddCardToolActive(false);
+    setIsTextToolActive(false);
+    setActiveShapeTool(null);
     const node: Node<VoraMediaData, "voraMedia"> = {
       id: `media-${crypto.randomUUID()}`,
       type: "voraMedia",
@@ -2699,6 +2703,15 @@ function AppContent() {
         </button>
         <button
           type="button"
+          aria-label="Import Media"
+          onClick={() => { void handleImportMedia(); }}
+          className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
+          title="Import image or audio"
+        >
+          <ImagePlus size={16} />
+        </button>
+        <button
+          type="button"
           aria-label="Diagram templates"
           aria-expanded={isTemplateGalleryOpen}
           onClick={() => {
@@ -2802,6 +2815,15 @@ function AppContent() {
         >
           <span>{boardTransferError}</span>
           <button type="button" className="shrink-0 text-rose-100 underline" onClick={() => setBoardTransferError(null)}>Dismiss</button>
+        </div>
+      )}
+      {mediaImportError && (
+        <div
+          role="alert"
+          className="absolute left-16 top-[160px] z-50 flex max-w-[min(28rem,calc(100vw-5rem))] items-start gap-3 rounded-lg border border-rose-500/40 bg-[#21171b] px-3 py-2 text-xs text-rose-200 shadow-lg"
+        >
+          <span>{mediaImportError}</span>
+          <button type="button" className="shrink-0 text-rose-100 underline" onClick={() => setMediaImportError(null)}>Dismiss</button>
         </div>
       )}
 
