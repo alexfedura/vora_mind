@@ -1,7 +1,13 @@
 import React, { useState } from "react";
-import { Check, Folder, FolderPlus, GitBranch, History, LayoutGrid, Pencil, Trash2, X } from "lucide-react";
+import { Check, Folder, FolderPlus, GitBranch, GitCompare, History, LayoutGrid, Pencil, Trash2, X } from "lucide-react";
 import type { BoardItem } from "@/mind/types";
-import type { BoardVersionIncrement, BoardVersionSummary } from "@/mind/services/dbService";
+import type {
+  BoardVersionIncrement,
+  BoardVersionSnapshot,
+  BoardVersionSummary,
+} from "@/mind/services/dbService";
+import { BoardDiffModal } from "@/shared/modals/BoardDiffModal";
+import { CommitBoardModal } from "@/shared/modals/CommitBoardModal";
 import { WorkspaceMenuFooter } from "@/shared/layout/WorkspaceMenuFooter";
 
 interface BoardsPanelProps {
@@ -17,9 +23,11 @@ interface BoardsPanelProps {
   onRenameBoard: (boardId: string, title: string) => Promise<void>;
   onDeleteBoard: (boardId: string) => Promise<void>;
   onGetBoardVersions: (boardId: string) => Promise<BoardVersionSummary[]>;
+  onGetBoardVersionSnapshot: (versionId: string) => Promise<BoardVersionSnapshot>;
   onCreateBoardVersion: (
     boardId: string,
     increment: BoardVersionIncrement,
+    reason: string,
   ) => Promise<BoardVersionSummary[]>;
   onCheckoutBoardVersion: (boardId: string, versionId: string) => Promise<void>;
 }
@@ -37,6 +45,7 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
   onRenameBoard,
   onDeleteBoard,
   onGetBoardVersions,
+  onGetBoardVersionSnapshot,
   onCreateBoardVersion,
   onCheckoutBoardVersion,
 }) => {
@@ -46,6 +55,11 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
   const [busyBoardId, setBusyBoardId] = useState<string | null>(null);
   const [expandedBoardId, setExpandedBoardId] = useState<string | null>(null);
   const [versionsByBoard, setVersionsByBoard] = useState<Record<string, BoardVersionSummary[]>>({});
+  const [commitTarget, setCommitTarget] = useState<{
+    board: BoardItem;
+    increment: BoardVersionIncrement;
+  } | null>(null);
+  const [diffBoardId, setDiffBoardId] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (!shouldStartCreatingBoard) return;
@@ -126,14 +140,20 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
     board: BoardItem,
     increment: BoardVersionIncrement,
   ): Promise<void> => {
-    setError(null);
+    setCommitTarget({ board, increment });
+  };
+
+  const commitVersion = async (reason: string): Promise<void> => {
+    if (!commitTarget) return;
     setBusyBoardId(board.id);
     try {
-      const versions = await onCreateBoardVersion(board.id, increment);
-      setVersionsByBoard((current) => ({ ...current, [board.id]: versions }));
-    } catch (cause) {
-      console.error("Could not create Board version:", cause);
-      setError(`Could not create version: ${errorText(cause)}`);
+      const versions = await onCreateBoardVersion(
+        commitTarget.board.id,
+        commitTarget.increment,
+        reason,
+      );
+      setVersionsByBoard((current) => ({ ...current, [commitTarget.board.id]: versions }));
+      setCommitTarget(null);
     } finally {
       setBusyBoardId(null);
     }
