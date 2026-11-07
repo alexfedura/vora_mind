@@ -44,6 +44,7 @@ fn object_type_for_node(node_type: &str) -> &'static str {
         "voraCard" => "card",
         "voraText" => "text",
         "voraShape" => "shape",
+        "voraMedia" => "media",
         _ => "canvas_node",
     }
 }

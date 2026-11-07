@@ -7,7 +7,7 @@ import type {
 } from "@/mind/types";
 import { isVoraDiagramShape } from "@/mind/utils/shapeGeometry";
 
-const SUPPORTED_NODE_TYPES = new Set(["voraCard", "voraText", "voraShape", "forgeAst"]);
+const SUPPORTED_NODE_TYPES = new Set(["voraCard", "voraText", "voraShape", "voraMedia", "forgeAst"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -60,6 +60,18 @@ function isTransferNode(value: unknown): value is VoraBoardTransferNode {
     ) return false;
   }
 
+  if (value.type === "voraMedia") {
+    const data = value.data;
+    if ((data.type !== "image" && data.type !== "audio") ||
+      typeof data.filePath !== "string" ||
+      data.filePath.length === 0 ||
+      typeof data.fileName !== "string" ||
+      data.fileName.length === 0 ||
+      (data.width !== undefined && (!isFiniteNumber(data.width) || data.width <= 0)) ||
+      (data.height !== undefined && (!isFiniteNumber(data.height) || data.height <= 0))
+    ) return false;
+  }
+
   return true;
 }
 
@@ -67,6 +79,7 @@ function isTransferNodeType(value: string): value is VoraBoardTransferNode["type
   return value === "voraCard" ||
     value === "voraText" ||
     value === "voraShape" ||
+    value === "voraMedia" ||
     value === "forgeAst";
 }
 

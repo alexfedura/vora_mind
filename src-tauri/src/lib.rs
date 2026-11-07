@@ -215,6 +215,47 @@ fn active_database_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
+fn import_media_file(app: tauri::AppHandle, source_path: String) -> Result<String, String> {
+    let source = Path::new(&source_path);
+    let source = source
+        .canonicalize()
+        .map_err(|error| format!("Cannot access media file {}: {error}", source.display()))?;
+    if !source.is_file() {
+        return Err(format!("Media source is not a file: {}", source.display()));
+    }
+
+    let extension = source
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .ok_or_else(|| "Media file must have a supported file extension.".to_string())?;
+    if !matches!(
+        extension.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "mp3" | "wav" | "ogg"
+    ) {
+        return Err(format!("Unsupported media file extension: .{extension}"));
+    }
+
+    let assets_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Cannot resolve the Vora Mind app data directory: {error}"))?
+        .join("assets");
+    fs::create_dir_all(&assets_dir)
+        .map_err(|error| format!("Cannot create media assets directory: {error}"))?;
+
+    let destination = assets_dir.join(format!("{}.{}", uuid::Uuid::now_v7(), extension));
+    fs::copy(&source, &destination).map_err(|error| {
+        format!(
+            "Cannot copy media file {} to {}: {error}",
+            source.display(),
+            destination.display()
+        )
+    })?;
+    Ok(destination.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
 fn get_all_boards(state: State<AppState>) -> Result<Vec<BoardSummary>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     mind::canvas_db::ensure_board_version_baselines(&conn).map_err(|e| e.to_string())?;
@@ -1764,6 +1805,7 @@ pub fn run() {
             create_text_link,
             delete_text_link,
             save_card_direct,
+            import_media_file,
             move_card_to_bin,
             restore_card_from_bin,
             parse_code_ast,

@@ -20,6 +20,14 @@ export interface VoraCardData {
   version?: string;
 }
 
+export interface VoraMediaData {
+  type: "image" | "audio";
+  filePath: string;
+  fileName: string;
+  width?: number;
+  height?: number;
+}
+
 export interface VoraCard {
   id: string;
   title: string;
@@ -54,7 +62,7 @@ export interface CardVersionContent {
 
 export interface VoraBoardTransferNode {
   id: string;
-  type: "voraCard" | "voraText" | "voraShape" | "forgeAst";
+  type: "voraCard" | "voraText" | "voraShape" | "voraMedia" | "forgeAst";
   position: VoraShapePoint;
   width?: number;
   height?: number;
