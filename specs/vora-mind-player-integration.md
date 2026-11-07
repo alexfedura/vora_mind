@@ -52,6 +52,9 @@ from text on any Board.
   its canvas selection/state. A clear return-to-Board action is provided.
 - MPV is bundled with Vora Mind for offline use. The installer will grow by
   approximately the MPV runtime size (about 120 MB, excluding compression).
+- Build-time MPV assets are pinned in `vendor/mpv` and SHA-256 verified by
+  `scripts/prepare_mpv.ps1`; generated unpacked resources stay out of Git.
+  `pnpm prepare:mpv` prepares the runtime before Tauri development/builds.
 - The integration must not call `slice_export`, `chapters_export`, or FFmpeg.
   No action in Vora Mind may alter, replace, trim, or rewrite the selected
   source media.

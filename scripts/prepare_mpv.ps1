@@ -36,11 +36,14 @@ if ($localRuntime) {
     }
 } else {
     $assetName = "mpv-x86_64-20261107-git-9028187538.7z"
-    $assetUrl = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261107/$assetName"
+    $archivePath = Join-Path $root "vendor\mpv\$assetName"
     $expectedSha256 = "4b7afb4bbe7572634eea4352b9fa3101d4f2b328d83bff09f7b9bac125bb2b3a"
     $tempDirectory = Join-Path $env:TEMP ("vora-mind-mpv-20261107-" + [guid]::NewGuid().ToString("N"))
-    $archivePath = Join-Path $tempDirectory $assetName
     $extractDirectory = Join-Path $tempDirectory "extracted"
+
+    if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
+        throw "The pinned MPV archive is missing from vendor\mpv."
+    }
 
     $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
     if (-not $sevenZip) {
@@ -60,7 +63,6 @@ if ($localRuntime) {
 
     try {
         New-Item -ItemType Directory -Force -Path $tempDirectory | Out-Null
-        Invoke-WebRequest -Uri $assetUrl -OutFile $archivePath -UseBasicParsing
         $actualSha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($actualSha256 -ne $expectedSha256) {
             throw "The downloaded MPV archive failed its SHA-256 verification."
