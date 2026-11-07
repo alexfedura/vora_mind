@@ -397,6 +397,18 @@ export const dbService = {
     return await invoke<BoardDto>("create_board", { title });
   },
 
+  async forkBoardFromVersion(
+    sourceBoardId: string,
+    versionId: string,
+    newBoardTitle: string,
+  ): Promise<string> {
+    return await invoke<string>("fork_board_from_version", {
+      sourceBoardId,
+      versionId,
+      newBoardTitle,
+    });
+  },
+
   async getBoardVersions(boardId: string): Promise<BoardVersionSummary[]> {
     return await invoke<BoardVersionSummary[]>("get_board_versions", { boardId });
   },

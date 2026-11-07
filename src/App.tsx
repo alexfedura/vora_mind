@@ -852,6 +852,29 @@ function AppContent() {
     setActiveBoardId(created.id);
   };
 
+  const handleForkBoardFromVersion = async (
+    sourceBoardId: string,
+    versionId: string,
+    newBoardTitle: string,
+  ): Promise<void> => {
+    await flow.flushCanvas();
+    const newBoardId = await dbService.forkBoardFromVersion(
+      sourceBoardId,
+      versionId,
+      newBoardTitle,
+    );
+    const updatedBoards = await dbService.getAllBoards();
+    setBoards(updatedBoards);
+    setActiveBoardId(newBoardId);
+    await flow.waitForBoardReady(newBoardId);
+    const branch = updatedBoards.find((board) => board.id === newBoardId);
+    if (!branch) {
+      throw new Error("The new Board branch was not returned after creation.");
+    }
+    const snapshot = await dbService.getBoardVersionSnapshot(branch.active_version_id);
+    await flow.applyBoardVersionSnapshot(snapshot, newBoardId);
+  };
+
   const handleCreateLibraryItemGroup = async (name: string, version: string): Promise<void> => {
     if (!canvasBoardId) {
       throw new Error("Create a Board before adding items to the Library.");
@@ -2936,6 +2959,7 @@ function AppContent() {
               activeBoardId={activeBoardId}
               onSelectBoard={handleSelectBoard}
               onCreateBoard={handleCreateBoard}
+              onForkBoardFromVersion={handleForkBoardFromVersion}
               onRenameBoard={handleRenameBoard}
               onDeleteBoard={handleDeleteBoard}
               onGetBoardVersions={handleGetBoardVersions}

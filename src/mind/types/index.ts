@@ -195,6 +195,7 @@ export interface BoardItem {
   updated_at: number;
   active_version_id: string;
   active_version: string;
+  parent_board_id: string | null;
 }
 
 export interface LibraryItemGroupNode {
