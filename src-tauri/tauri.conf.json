@@ -4,9 +4,9 @@
   "version": "0.7.5",
   "identifier": "com.alexfedura.voramind",
   "build": {
-    "beforeDevCommand": "pnpm dev:frontend",
+    "beforeDevCommand": "pnpm prepare:mpv && pnpm dev:frontend",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm prepare:mpv && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -36,7 +36,8 @@
     ],
     "resources": [
       "../data/ticks/**/*",
-      "resources/binaries/mpv/*"
+      "resources/binaries/mpv/*",
+      "resources/binaries/mpv/**/*"
     ],
     "windows": {
       "nsis": {

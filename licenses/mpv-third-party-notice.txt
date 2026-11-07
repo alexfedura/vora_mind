@@ -1,0 +1,17 @@
+MPV runtime notice
+
+Vora Mind bundles the unmodified Windows x64 mpv runtime. The mpv project is
+licensed under GNU GPL version 2 or later. The runtime package and build
+scripts are published by shinchiro at:
+
+  https://github.com/shinchiro/mpv-winbuild-cmake
+  https://github.com/mpv-player/mpv
+
+The CI build uses the pinned mpv-winbuild-cmake release 20261107. Its exact
+binary archive and published SHA-256 digest are recorded in
+scripts/prepare_mpv.ps1. Any license and copyright notices included in the
+upstream runtime package are copied into the installed resource directory.
+
+The mpv build may include third-party libraries with their own license terms.
+Refer to the upstream build repository and the notices distributed with the
+runtime for those terms.

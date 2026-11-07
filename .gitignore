@@ -96,6 +96,7 @@ ehthumbs.db
 *.cert
 *.crt
 /src-tauri/vora.key
+/src-tauri/resources/binaries/mpv/
 .env
 .env.*
 !.env.example

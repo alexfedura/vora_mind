@@ -1,14 +1,9 @@
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
-$resourceDirectory = Join-Path $root "src-tauri\resources\binaries\mpv"
-$expectedResourceDirectory = [System.IO.Path]::GetFullPath(
+$resourceDirectory = [System.IO.Path]::GetFullPath(
     (Join-Path $root "src-tauri\resources\binaries\mpv")
 )
-
-if ($resourceDirectory -ne $expectedResourceDirectory) {
-    throw "Resolved MPV resource path does not match the expected project resource directory."
-}
 
 $localRuntimeCandidates = @()
 if (-not [string]::IsNullOrWhiteSpace($env:VORA_PLAYER_MPV_DIR)) {
@@ -29,8 +24,10 @@ if ($localRuntime) {
             $_.Name -eq "mpv.com" -or
             $_.Name -eq "d3dcompiler_43.dll" -or
             $_.Extension -eq ".dll" -or
-            $_.Name -eq "fonts.conf"
+            $_.Name -eq "fonts.conf" -or
+            $_.Name -match "^(LICENSE|COPYING|NOTICE)(\..*)?$"
         }
+    $runtimeBase = $localRuntime
     $versionPath = Join-Path $localRuntime "VERSION.txt"
     if (Test-Path -LiteralPath $versionPath -PathType Leaf) {
         $runtimeVersion = Get-Content -LiteralPath $versionPath -Raw
@@ -41,7 +38,7 @@ if ($localRuntime) {
     $assetName = "mpv-x86_64-20261107-git-9028187538.7z"
     $assetUrl = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261107/$assetName"
     $expectedSha256 = "4b7afb4bbe7572634eea4352b9fa3101d4f2b328d83bff09f7b9bac125bb2b3a"
-    $tempDirectory = Join-Path $env:TEMP "vora-mind-mpv-20261107"
+    $tempDirectory = Join-Path $env:TEMP ("vora-mind-mpv-20261107-" + [guid]::NewGuid().ToString("N"))
     $archivePath = Join-Path $tempDirectory $assetName
     $extractDirectory = Join-Path $tempDirectory "extracted"
 
@@ -87,8 +84,10 @@ if ($localRuntime) {
                 $_.Name -eq "mpv.com" -or
                 $_.Name -eq "d3dcompiler_43.dll" -or
                 $_.Extension -eq ".dll" -or
-                $_.Name -eq "fonts.conf"
+                $_.Name -eq "fonts.conf" -or
+                $_.Name -match "^(LICENSE|COPYING|NOTICE)(\..*)?$"
             }
+        $runtimeBase = $runtimeRoot
         $runtimeVersion = "MPV release 20261107 (9028187538)"
     } finally {
         if (Test-Path -LiteralPath $tempDirectory) {
@@ -107,11 +106,12 @@ if (Test-Path -LiteralPath $resourceDirectory) {
 New-Item -ItemType Directory -Force -Path $resourceDirectory | Out-Null
 
 foreach ($file in $runtimeFiles) {
-    $relativePath = $file.FullName.Substring(
-        [System.IO.Path]::GetFullPath(
-            if ($localRuntime) { $localRuntime } else { $runtimeRoot }
-        ).TrimEnd([System.IO.Path]::DirectorySeparatorChar).Length
-    ).TrimStart([System.IO.Path]::DirectorySeparatorChar)
+    $runtimeBasePath = [System.IO.Path]::GetFullPath($runtimeBase).TrimEnd(
+        [System.IO.Path]::DirectorySeparatorChar
+    )
+    $relativePath = $file.FullName.Substring($runtimeBasePath.Length).TrimStart(
+        [System.IO.Path]::DirectorySeparatorChar
+    )
     $destination = Join-Path $resourceDirectory $relativePath
     $destinationDirectory = Split-Path -Parent $destination
     New-Item -ItemType Directory -Force -Path $destinationDirectory | Out-Null
