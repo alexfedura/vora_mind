@@ -402,6 +402,11 @@ function AppContent() {
   const isWorkspacePageOpen = isTaskFlowOpen || isAiTasksOpen || isVoraTraceOpen || isJournalOpen || isPlayerOpen;
 
   useEffect(() => {
+    document.body.classList.toggle("vora-player-active", isPlayerOpen);
+    return () => document.body.classList.remove("vora-player-active");
+  }, [isPlayerOpen]);
+
+  useEffect(() => {
     const handleMediaLinkClick = (event: MouseEvent): void => {
       if (!(event.target instanceof Element)) return;
       const anchor = event.target.closest("a[href]");
@@ -2449,7 +2454,7 @@ function AppContent() {
   const canvasControlsLeft = activeOpenPanel === "none" ? 16 : "calc(14rem + 16px)";
 
   return (
-    <div className="vora-mind-theme flex h-screen w-screen bg-background text-gray-200 overflow-hidden select-none font-sans relative">
+    <div className={`vora-mind-theme flex h-screen w-screen ${isPlayerOpen ? "bg-transparent" : "bg-background"} text-gray-200 overflow-hidden select-none font-sans relative`}>
     {/* تولبار ابزارها */}
     {!isWorkspacePageOpen && canvasBoardId && <div
       className="absolute top-[117.5px] z-40 transition-all duration-200"
