@@ -104,6 +104,43 @@ pub struct CardDto {
     pub library_source_card_id: Option<String>,
 }
 
+#[derive(serde::Serialize)]
+struct CardVersionSummary {
+    id: String,
+    version: String,
+    reason: Option<String>,
+    created_at: i64,
+}
+
+fn parse_card_version(version: &str) -> Result<(String, i32, i32, i32), String> {
+    let trimmed = version.trim();
+    let numeric_version = trimmed.strip_prefix('v').unwrap_or(trimmed);
+    let parts: Vec<&str> = numeric_version.split('.').collect();
+    if parts.len() != 3 {
+        return Err("Card version must use three numeric components, such as v0.1.1".to_string());
+    }
+
+    let mut parsed = [0_i32; 3];
+    for (index, part) in parts.iter().enumerate() {
+        if part.is_empty()
+            || (part.len() > 1 && part.starts_with('0'))
+            || !part.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            return Err("Card version must use three numeric components, such as v0.1.1".to_string());
+        }
+        parsed[index] = part
+            .parse::<i32>()
+            .map_err(|_| "Card version components must not exceed 2147483647".to_string())?;
+    }
+
+    Ok((
+        format!("v{}.{}.{}", parsed[0], parsed[1], parsed[2]),
+        parsed[0],
+        parsed[1],
+        parsed[2],
+    ))
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct GitCommitDto {
     pub hash: String,
