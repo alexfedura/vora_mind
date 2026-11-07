@@ -211,7 +211,7 @@ export const useAppStore = create<AppState>()(
 
       addCard: (title = "New card", content = "", librarySourceCardId) => {
         const boardId = get().activeBoardId;
-        const id = `card-${boardId}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        const id = crypto.randomUUID();
         const newCard: VoraCard = {
           id,
           title,

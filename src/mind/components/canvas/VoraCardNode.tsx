@@ -65,6 +65,13 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
   const [linkedTextById, setLinkedTextById] = useState<Record<string, string>>({});
   const [linkedSourceTitleById, setLinkedSourceTitleById] = useState<Record<string, string>>({});
   const [hasCardVersions, setHasCardVersions] = useState<boolean | null>(null);
+  const [idCopyStatus, setIdCopyStatus] = useState<"copied" | "error" | null>(null);
+
+  useEffect(() => {
+    if (!idCopyStatus) return;
+    const timeoutId = window.setTimeout(() => setIdCopyStatus(null), 1600);
+    return () => window.clearTimeout(timeoutId);
+  }, [idCopyStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -335,6 +342,34 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
           >
             {card.version || "v0.1.0"}
           </button>
+          <span className="relative">
+            <button
+              type="button"
+              dir="ltr"
+              onClick={(event) => {
+                event.stopPropagation();
+                void navigator.clipboard.writeText(realCardId).then(() => {
+                  setIdCopyStatus("copied");
+                }).catch((error: unknown) => {
+                  console.error("Could not copy card ID:", error);
+                  setIdCopyStatus("error");
+                });
+              }}
+              className="nodrag rounded-lg border border-[#2c3140] bg-[#16181f] px-2 py-0.5 font-mono text-[10px] text-gray-400 transition-colors hover:bg-[#222530] hover:text-white focus:outline-none"
+              title={idCopyStatus === "copied" ? "ID Copied" : "Copy card ID"}
+              aria-label={`Copy card ID ${realCardId}`}
+            >
+              #{realCardId.slice(0, 6)}
+            </button>
+            {idCopyStatus && (
+              <span
+                role="status"
+                className="absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-[#101217] px-2 py-1 text-[10px] text-zinc-200 shadow-lg"
+              >
+                {idCopyStatus === "copied" ? "ID Copied" : "Could not copy ID"}
+              </span>
+            )}
+          </span>
           <button className="p-1 hover:text-white hover:bg-[#252834] rounded transition" title="Bookmark">
             <Bookmark size={14} />
           </button>

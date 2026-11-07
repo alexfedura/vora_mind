@@ -50,6 +50,7 @@ export interface ParsedCardVersion {
 export interface CardVersion {
   id: string;
   version: string;
+  title: string | null;
   reason: string | null;
   created_at: number;
 }

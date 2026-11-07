@@ -26,6 +26,12 @@ function getWorkingContent(cardId: string): string {
   return useAppStore.getState().cards[cardId]?.content ?? "";
 }
 
+function getWorkingTitle(cardId: string): string {
+  const document = useDocumentStore.getState();
+  if (document.currentDocId === cardId) return document.currentTitle;
+  return useAppStore.getState().cards[cardId]?.title ?? "";
+}
+
 export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
   isOpen,
   cardId,
@@ -37,6 +43,7 @@ export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
   const [compareVersionId, setCompareVersionId] = useState("");
   const [selectedContent, setSelectedContent] = useState<CardVersionContent | null>(null);
   const [compareContent, setCompareContent] = useState("");
+  const [compareTitle, setCompareTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [restoringVersionId, setRestoringVersionId] = useState<string | null>(null);
@@ -67,6 +74,7 @@ export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
     if (!isOpen || !cardId || !selectedVersionId) {
       setSelectedContent(null);
       setCompareContent("");
+      setCompareTitle("");
       return () => { cancelled = true; };
     }
 
@@ -81,6 +89,7 @@ export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
         if (cancelled) return;
         setSelectedContent(selected);
         setCompareContent(comparison?.content ?? getWorkingContent(cardId));
+        setCompareTitle(comparison?.title ?? getWorkingTitle(cardId));
         setError(null);
       } catch (cause) {
         console.error("Could not load card version content:", cause);
@@ -108,6 +117,7 @@ export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
     });
   }, [compareContent, selectedContent]);
   const hasChanges = diffLinesResult.some((line) => line.kind !== "unchanged");
+  const hasTitleChange = selectedContent !== null && compareTitle !== selectedContent.title;
 
   if (!isOpen || !cardId) return null;
 
@@ -199,6 +209,13 @@ export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
                         style={{ unicodeBidi: "plaintext", textAlign: "start" }}
                         className="mt-2 block whitespace-pre-wrap text-xs text-zinc-300"
                       >
+                        {version.title || "Untitled"}
+                      </span>
+                      <span
+                        dir="auto"
+                        style={{ unicodeBidi: "plaintext", textAlign: "start" }}
+                        className="mt-1 block whitespace-pre-wrap text-[11px] text-zinc-400"
+                      >
                         {version.reason || "No reason recorded"}
                       </span>
                     </button>
@@ -248,7 +265,18 @@ export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
             {error && <p role="alert" className="mb-3 text-sm text-rose-300">{error}</p>}
             <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-[#292e39] bg-[#0e1014]">
               {selectedContent ? (
-                hasChanges ? (
+                <>
+                  {hasTitleChange && (
+                    <p
+                      dir="auto"
+                      style={{ unicodeBidi: "plaintext", textAlign: "start" }}
+                      className="border-b border-[#292e39] bg-amber-500/5 px-3 py-2 text-xs text-amber-100"
+                    >
+                      Title changed from <bdi>{compareTitle || "Untitled"}</bdi> to{" "}
+                      <bdi>{selectedContent.title || "Untitled"}</bdi>
+                    </p>
+                  )}
+                  {hasChanges ? (
                   <pre
                     dir="auto"
                     style={{ unicodeBidi: "plaintext", textAlign: "start" }}
@@ -269,9 +297,12 @@ export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
                       </span>
                     ))}
                   </pre>
-                ) : (
-                  <p className="p-5 text-sm text-zinc-500">No content differences.</p>
-                )
+                  ) : (
+                    <p className="p-5 text-sm text-zinc-500">
+                      {hasTitleChange ? "No content differences." : "No content or title differences."}
+                    </p>
+                  )}
+                </>
               ) : (
                 <p className="p-5 text-sm text-zinc-500">
                   {versions.length ? "Select a version to view its content diff." : "Commit a card version to start its history."}

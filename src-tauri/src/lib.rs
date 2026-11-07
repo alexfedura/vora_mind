@@ -108,6 +108,7 @@ pub struct CardDto {
 struct CardVersionSummary {
     id: String,
     version: String,
+    title: Option<String>,
     reason: Option<String>,
     created_at: i64,
 }
@@ -752,15 +753,17 @@ fn commit_card_version(
         rusqlite::params![&id, &board_id, now],
     )
     .map_err(|error| error.to_string())?;
-    let belongs_to_board: bool = tx
+    let stored_object_id: String = tx
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM objects WHERE id = ?1 AND board_id = ?2 AND type = 'card')",
+            "SELECT id FROM objects WHERE id = ?1 AND board_id = ?2 AND type = 'card'",
             rusqlite::params![&id, &board_id],
-            |row| row.get(0),
+            |row| row.get::<_, String>(0),
         )
-        .map_err(|error| error.to_string())?;
-    if !belongs_to_board {
-        return Err("Card does not belong to the requested Board".to_string());
+        .optional()
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "Card does not belong to the requested Board".to_string())?;
+    if stored_object_id != id {
+        return Err("Card identity cannot be changed".to_string());
     }
 
     let has_versions = has_committed_card_versions(&tx, &id)?;
@@ -853,6 +856,7 @@ fn get_card_versions(state: State<AppState>, id: String) -> Result<Vec<CardVersi
             "SELECT id,
                     COALESCE(json_extract(content, '$.version'),
                              printf('v%d.%d.%d', version_major, version_minor, version_patch)),
+                    json_extract(content, '$.title'),
                     reason,
                     created_at
              FROM object_versions
@@ -865,8 +869,9 @@ fn get_card_versions(state: State<AppState>, id: String) -> Result<Vec<CardVersi
             Ok(CardVersionSummary {
                 id: row.get(0)?,
                 version: row.get(1)?,
-                reason: row.get(2)?,
-                created_at: row.get(3)?,
+                title: row.get(2)?,
+                reason: row.get(3)?,
+                created_at: row.get(4)?,
             })
         })
         .map_err(|error| error.to_string())?;
