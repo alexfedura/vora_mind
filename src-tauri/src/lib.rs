@@ -746,24 +746,27 @@ fn commit_card_version(
         return Err("Board does not exist".to_string());
     }
 
-    tx.execute(
-        "INSERT INTO objects (id, type, board_id, created_at, updated_at)
-         VALUES (?1, 'card', ?2, ?3, ?3)
-         ON CONFLICT(id) DO NOTHING",
-        rusqlite::params![&id, &board_id, now],
-    )
-    .map_err(|error| error.to_string())?;
     let stored_object_id: String = tx
         .query_row(
-            "SELECT id FROM objects WHERE id = ?1 AND board_id = ?2 AND type = 'card'",
-            rusqlite::params![&id, &board_id],
+            "SELECT id FROM objects WHERE id = ?1",
+            rusqlite::params![&id],
             |row| row.get::<_, String>(0),
         )
         .optional()
         .map_err(|error| error.to_string())?
-        .ok_or_else(|| "Card does not belong to the requested Board".to_string())?;
+        .ok_or_else(|| "Card does not exist; its identity cannot be changed".to_string())?;
     if stored_object_id != id {
         return Err("Card identity cannot be changed".to_string());
+    }
+    let belongs_to_board: bool = tx
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM objects WHERE id = ?1 AND board_id = ?2 AND type = 'card')",
+            rusqlite::params![&id, &board_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !belongs_to_board {
+        return Err("Card does not belong to the requested Board".to_string());
     }
 
     let has_versions = has_committed_card_versions(&tx, &id)?;
