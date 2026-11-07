@@ -115,17 +115,7 @@ export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
     try {
       const document = useDocumentStore.getState();
       if (document.currentDocId === cardId) await document.saveDoc();
-      const restored = await dbService.restoreCardVersion(cardId, version.id);
-      const appState = useAppStore.getState();
-      const card = appState.cards[cardId];
-      if (!card) throw new Error("The card is no longer available.");
-      const updatedCard = {
-        ...card,
-        title: restored.title,
-        content: restored.content,
-        version: restored.version,
-      };
-      appState.setCards({ ...appState.cards, [cardId]: updatedCard });
+      const restored = await useAppStore.getState().restoreCardVersion(cardId, version.id);
       if (useDocumentStore.getState().currentDocId === cardId) {
         useDocumentStore.setState({
           currentTitle: restored.title,

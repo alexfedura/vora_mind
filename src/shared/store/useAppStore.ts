@@ -1,7 +1,7 @@
 ﻿import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { setSetting } from "@/shared/store/useSettingsStore";
-import { VoraCard } from "@/mind/types";
+import type { CardVersionContent, VoraCard } from "@/mind/types";
 import { createTextChangeSet, dbService } from "@/mind/services/dbService";
 import type {
   ChildHypothesisInput,
@@ -76,6 +76,14 @@ interface AppState {
   addCard: (title?: string, content?: string, librarySourceCardId?: string) => string;
   updateCardContent: (id: string, title: string, content: string) => void;
   updateCardVersion: (id: string, version: string) => void;
+  commitCardVersion: (
+    id: string,
+    title: string,
+    content: string,
+    version: string,
+    reason: string,
+  ) => Promise<void>;
+  restoreCardVersion: (id: string, versionId: string) => Promise<CardVersionContent>;
   moveToBin: (id: string) => void;
   restoreFromBin: (id: string) => void;
   toggleRightDrawer: () => void;
@@ -273,6 +281,47 @@ export const useAppStore = create<AppState>()(
           }
           return { cards: { ...state.cards, [id]: updatedCard } };
         }),
+
+      commitCardVersion: async (id, title, content, version, reason) => {
+        const state = get();
+        const card = state.cards[id];
+        if (!card) throw new Error("The card is no longer available.");
+        const boardId = card.boardId ?? state.activeBoardId;
+        if (!boardId) throw new Error("Select a Board before committing a card version.");
+
+        await dbService.commitCardVersion(id, boardId, title, content, version, reason);
+        set((current) => {
+          const currentCard = current.cards[id];
+          if (!currentCard) return current;
+          return {
+            cards: {
+              ...current.cards,
+              [id]: { ...currentCard, title, content, version },
+            },
+          };
+        });
+      },
+
+      restoreCardVersion: async (id, versionId) => {
+        if (!get().cards[id]) throw new Error("The card is no longer available.");
+        const restored = await dbService.restoreCardVersion(id, versionId);
+        set((state) => {
+          const card = state.cards[id];
+          if (!card) return state;
+          return {
+            cards: {
+              ...state.cards,
+              [id]: {
+                ...card,
+                title: restored.title,
+                content: restored.content,
+                version: restored.version,
+              },
+            },
+          };
+        });
+        return restored;
+      },
 
       moveToBin: (id) =>
         set((state) => {
