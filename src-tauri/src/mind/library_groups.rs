@@ -261,6 +261,7 @@ pub(crate) fn create_item_group_in_transaction(
         nodes: snapshot.nodes.clone(),
         edges: snapshot.edges.clone(),
         cards: snapshot.cards.clone(),
+        reason: None,
     };
     let board_snapshot_json = serde_json::to_string(&board_snapshot)
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
@@ -368,6 +369,7 @@ pub(crate) fn commit_item_group_version_in_transaction(
         nodes: snapshot.nodes.clone(),
         edges: snapshot.edges.clone(),
         cards: snapshot.cards.clone(),
+        reason: None,
     };
     let board_snapshot_json = serde_json::to_string(&board_snapshot)
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;

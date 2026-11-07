@@ -930,6 +930,7 @@ fn snapshot_current_board(conn: &Connection, board_id: &str) -> Result<BoardVers
         nodes,
         edges,
         cards,
+        reason: None,
     })
 }
 
@@ -1594,6 +1595,7 @@ mod board_version_tests {
                 version: "v0.1.0".to_string(),
                 deleted_at: None,
             }],
+            reason: None,
         }
     }
 
@@ -1774,10 +1776,24 @@ mod board_version_tests {
         assert_eq!(boards[0].active_version, "0.1.0");
         let baseline_id = boards[0].active_version_id.clone();
         let v0_2 =
-            create_board_version(&mut conn, "board-1", "minor", board_snapshot("v0.2.0")).unwrap();
+            create_board_version(
+                &mut conn,
+                "board-1",
+                "minor",
+                "Add first milestone",
+                board_snapshot("v0.2.0"),
+            )
+            .unwrap();
         assert_eq!(v0_2.version, "0.2.0");
         let v0_3 =
-            create_board_version(&mut conn, "board-1", "minor", board_snapshot("v0.3.0")).unwrap();
+            create_board_version(
+                &mut conn,
+                "board-1",
+                "minor",
+                "Add second milestone",
+                board_snapshot("v0.3.0"),
+            )
+            .unwrap();
         assert_eq!(v0_3.version, "0.3.0");
 
         let restored = checkout_board_version(&mut conn, "board-1", &v0_2.id).unwrap();
@@ -1789,7 +1805,14 @@ mod board_version_tests {
             "0.2.0 - 0.3.0"
         );
 
-        let branch = create_board_version(&mut conn, "board-1", "patch", restored).unwrap();
+        let branch = create_board_version(
+            &mut conn,
+            "board-1",
+            "patch",
+            "Fix checked-out Board",
+            restored,
+        )
+        .unwrap();
         assert_eq!(branch.version, "0.2.1");
         assert_eq!(branch.parent_version_id.as_deref(), Some(v0_2.id.as_str()));
         assert_eq!(branch.forked_from_version.as_deref(), Some("0.3.0"));
