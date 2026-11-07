@@ -639,6 +639,14 @@ fn commit_card_version(
         .map_err(|error| error.to_string())?
         .as_millis() as i64;
     let tx = conn.transaction().map_err(|error| error.to_string())?;
+    let latest_version_timestamp: i64 = tx
+        .query_row(
+            "SELECT COALESCE(MAX(created_at), 0) FROM object_versions WHERE object_id = ?1",
+            rusqlite::params![&id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    let now = now.max(latest_version_timestamp.saturating_add(1));
 
     let board_exists: bool = tx
         .query_row(
@@ -780,6 +788,14 @@ fn restore_card_version(
         .map_err(|error| error.to_string())?
         .as_millis() as i64;
     let tx = conn.transaction().map_err(|error| error.to_string())?;
+    let latest_version_timestamp: i64 = tx
+        .query_row(
+            "SELECT COALESCE(MAX(created_at), 0) FROM object_versions WHERE object_id = ?1",
+            rusqlite::params![&id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    let now = now.max(latest_version_timestamp.saturating_add(1));
 
     let object_exists: bool = tx
         .query_row(
