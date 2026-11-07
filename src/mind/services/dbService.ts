@@ -75,6 +75,7 @@ export interface BoardVersionSnapshot {
   nodes: NodePayload[];
   edges: EdgePayload[];
   cards: BoardVersionCard[];
+  reason?: string | null;
 }
 
 export interface BoardVersionSummary {
@@ -87,6 +88,7 @@ export interface BoardVersionSummary {
   parent_version_id: string | null;
   forked_from_version_id: string | null;
   forked_from_version: string | null;
+  reason?: string | null;
   created_at: number;
   is_active: boolean;
 }
@@ -402,6 +404,7 @@ export const dbService = {
   async createBoardVersion(
     boardId: string,
     increment: BoardVersionIncrement,
+    reason: string,
     nodes: Node[],
     edges: Edge[],
     cards: Record<string, { id: string; title: string; content: string; version?: string; deleted_at?: number | null }>,
@@ -409,6 +412,7 @@ export const dbService = {
     const snapshot: BoardVersionSnapshot = {
       nodes: toNodePayloads(nodes, cards),
       edges: toEdgePayloads(edges),
+      reason,
       cards: Object.values(cards).map((card) => ({
         id: card.id,
         title: card.title,
@@ -420,8 +424,13 @@ export const dbService = {
     return await invoke<BoardVersionSummary>("create_board_version", {
       boardId,
       increment,
+      reason,
       snapshot,
     });
+  },
+
+  async getBoardVersionSnapshot(versionId: string): Promise<BoardVersionSnapshot> {
+    return await invoke<BoardVersionSnapshot>("get_board_version_snapshot", { versionId });
   },
 
   async checkoutBoardVersion(boardId: string, versionId: string): Promise<BoardVersionSnapshot> {
