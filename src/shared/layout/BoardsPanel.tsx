@@ -8,6 +8,7 @@ import type {
 } from "@/mind/services/dbService";
 import { BoardDiffModal } from "@/shared/modals/BoardDiffModal";
 import { CommitBoardModal } from "@/shared/modals/CommitBoardModal";
+import { ForkBoardModal } from "@/shared/modals/ForkBoardModal";
 import { WorkspaceMenuFooter } from "@/shared/layout/WorkspaceMenuFooter";
 
 interface BoardsPanelProps {
@@ -20,6 +21,11 @@ interface BoardsPanelProps {
   activeBoardId: string;
   onSelectBoard: (boardId: string) => Promise<void>;
   onCreateBoard: (title: string) => Promise<void>;
+  onForkBoardFromVersion: (
+    sourceBoardId: string,
+    versionId: string,
+    newBoardTitle: string,
+  ) => Promise<void>;
   onRenameBoard: (boardId: string, title: string) => Promise<void>;
   onDeleteBoard: (boardId: string) => Promise<void>;
   onGetBoardVersions: (boardId: string) => Promise<BoardVersionSummary[]>;
@@ -42,6 +48,7 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
   activeBoardId,
   onSelectBoard,
   onCreateBoard,
+  onForkBoardFromVersion,
   onRenameBoard,
   onDeleteBoard,
   onGetBoardVersions,
@@ -60,6 +67,10 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
     increment: BoardVersionIncrement;
   } | null>(null);
   const [diffBoardId, setDiffBoardId] = useState<string | null>(null);
+  const [forkTarget, setForkTarget] = useState<{
+    board: BoardItem;
+    version: BoardVersionSummary;
+  } | null>(null);
 
   React.useEffect(() => {
     if (!shouldStartCreatingBoard) return;
@@ -247,7 +258,7 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
             const isActive = board.id === activeBoardId;
             const isBusy = busyBoardId === board.id;
             return (
-              <div key={board.id} className="mb-1">
+              <div key={board.id} className={`mb-1 ${board.parent_board_id ? "ml-3" : ""}`}>
                 <div
                   className={`group flex items-center rounded-lg transition ${
                     isActive ? "bg-[#202430] text-violet-300" : "text-zinc-400 hover:bg-[#191c24] hover:text-zinc-100"
@@ -263,6 +274,9 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
                     className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-xs"
                   >
                     <Folder size={15} className="flex-shrink-0" />
+                    {board.parent_board_id && (
+                      <span aria-label="Branch" title="Branch" className="flex-shrink-0 text-[11px] text-violet-300">↳</span>
+                    )}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate">{board.title}</span>
                       <span className="block truncate text-[9px] opacity-70">{board.active_version}</span>
@@ -318,29 +332,43 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
                     {!isActive && <p className="pb-1 text-[9px] text-zinc-500">Select this Board to create a version.</p>}
                     <div className="max-h-40 overflow-y-auto pb-1">
                       {(versionsByBoard[board.id] ?? []).slice().reverse().map((version) => (
-                        <button
+                        <div
                           key={version.id}
-                          type="button"
-                          disabled={isBusy || version.is_active}
-                          onClick={() => void checkoutVersion(board, version)}
-                          className={`flex w-full items-center justify-between gap-1 rounded px-2 py-1.5 text-left text-[10px] ${
+                          className={`flex w-full items-center gap-1 rounded px-1 ${
                             version.is_active ? "bg-[#202430] text-violet-300" : "text-zinc-400 hover:bg-[#191c24] hover:text-zinc-100"
-                          } disabled:cursor-default`}
+                          }`}
                         >
-                          <span className="min-w-0 flex-1 truncate">
-                            <span className="block truncate">
-                              {version.version}{version.forked_from_version ? ` - ${version.forked_from_version}` : ""}
-                            </span>
-                            {version.reason && <span className="block truncate text-[9px] opacity-70">{version.reason}</span>}
-                          </span>
-                          <time
-                            className="shrink-0 text-[8px] opacity-60"
-                            dateTime={new Date(version.created_at).toISOString()}
-                            title={new Date(version.created_at).toLocaleString()}
+                          <button
+                            type="button"
+                            disabled={isBusy || version.is_active}
+                            onClick={() => void checkoutVersion(board, version)}
+                            className="flex min-w-0 flex-1 items-center justify-between gap-1 py-1.5 text-left text-[10px] disabled:cursor-default"
                           >
-                            {new Date(version.created_at).toLocaleString()}
-                          </time>
-                        </button>
+                            <span className="min-w-0 flex-1 truncate">
+                              <span className="block truncate">
+                                {version.version}{version.forked_from_version ? ` - ${version.forked_from_version}` : ""}
+                              </span>
+                              {version.reason && <span className="block truncate text-[9px] opacity-70">{version.reason}</span>}
+                            </span>
+                            <time
+                              className="shrink-0 text-[8px] opacity-60"
+                              dateTime={new Date(version.created_at).toISOString()}
+                              title={new Date(version.created_at).toLocaleString()}
+                            >
+                              {new Date(version.created_at).toLocaleString()}
+                            </time>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => setForkTarget({ board, version })}
+                            aria-label={`Create branch from version ${version.version} of ${board.title}`}
+                            title="Create Branch"
+                            className="rounded p-1 text-zinc-500 hover:bg-[#303543] hover:text-violet-300 disabled:opacity-40"
+                          >
+                            <GitBranch size={12} />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -363,6 +391,16 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
       increment={commitTarget?.increment ?? "patch"}
       onClose={() => setCommitTarget(null)}
       onCommit={commitVersion}
+    />
+    <ForkBoardModal
+      isOpen={forkTarget !== null}
+      boardTitle={forkTarget?.board.title ?? ""}
+      version={forkTarget?.version ?? null}
+      onClose={() => setForkTarget(null)}
+      onFork={(newBoardTitle) => {
+        if (!forkTarget) return Promise.resolve();
+        return onForkBoardFromVersion(forkTarget.board.id, forkTarget.version.id, newBoardTitle);
+      }}
     />
     <BoardDiffModal
       isOpen={diffBoardId !== null}
