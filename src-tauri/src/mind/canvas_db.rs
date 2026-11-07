@@ -71,6 +71,8 @@ pub struct BoardVersionSnapshot {
     pub nodes: Vec<NodeInput>,
     pub edges: Vec<EdgeInput>,
     pub cards: Vec<BoardVersionCard>,
+    #[serde(default)]
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +86,7 @@ pub struct BoardVersionSummary {
     pub parent_version_id: Option<String>,
     pub forked_from_version_id: Option<String>,
     pub forked_from_version: Option<String>,
+    pub reason: Option<String>,
     pub created_at: i64,
     pub is_active: bool,
 }
@@ -170,6 +173,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             parent_version_id TEXT,
             forked_from_version_id TEXT,
             snapshot_json TEXT NOT NULL,
+            reason TEXT,
             created_at INTEGER NOT NULL,
             FOREIGN KEY(board_id) REFERENCES mind_boards(id),
             FOREIGN KEY(parent_version_id) REFERENCES mind_board_versions(id),
@@ -706,6 +710,12 @@ fn ensure_board_version_columns(conn: &Connection) -> Result<()> {
             [],
         )?;
     }
+    let mut statement = conn.prepare("PRAGMA table_info(mind_board_versions)")?;
+    let version_columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+    let version_columns = version_columns.collect::<Result<Vec<_>>>()?;
+    if !version_columns.iter().any(|column| column == "reason") {
+        conn.execute("ALTER TABLE mind_board_versions ADD COLUMN reason TEXT", [])?;
+    }
     Ok(())
 }
 
@@ -942,7 +952,7 @@ fn load_board_version_summary(
 ) -> Result<BoardVersionSummary> {
     conn.query_row(
         "SELECT v.id, v.board_id, v.version_major, v.version_minor, v.version_patch,
-                v.parent_version_id, v.forked_from_version_id, v.created_at,
+                v.parent_version_id, v.forked_from_version_id, v.created_at, v.reason,
                 origin.version_major || '.' || origin.version_minor || '.' || origin.version_patch
          FROM mind_board_versions v
          LEFT JOIN mind_board_versions origin ON origin.id = v.forked_from_version_id
@@ -962,7 +972,8 @@ fn load_board_version_summary(
                 parent_version_id: row.get(5)?,
                 forked_from_version_id: row.get(6)?,
                 created_at: row.get(7)?,
-                forked_from_version: row.get(8)?,
+                reason: row.get(8)?,
+                forked_from_version: row.get(9)?,
                 is_active: row.get::<_, String>(0)? == active_version_id,
             })
         },
@@ -1073,8 +1084,13 @@ pub fn create_board_version(
     conn: &mut Connection,
     board_id: &str,
     increment: &str,
+    reason: &str,
     snapshot: BoardVersionSnapshot,
 ) -> Result<BoardVersionSummary> {
+    let reason = reason.trim();
+    if reason.is_empty() {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
     let tx = conn.transaction()?;
     let (active_version_id, forked_from_version_id): (String, Option<String>) = tx.query_row(
         "SELECT active_version_id, branch_origin_version_id FROM mind_boards WHERE id = ?1",
@@ -1113,13 +1129,15 @@ pub fn create_board_version(
     }
     let now = now_millis()?;
     let version_id = format!("board_version_{}", uuid::Uuid::now_v7());
+    let mut snapshot = snapshot;
+    snapshot.reason = Some(reason.to_string());
     let snapshot_json = serde_json::to_string(&snapshot)
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
     tx.execute(
         "INSERT INTO mind_board_versions
             (id, board_id, version_major, version_minor, version_patch,
-             parent_version_id, forked_from_version_id, snapshot_json, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             parent_version_id, forked_from_version_id, snapshot_json, reason, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             version_id,
             board_id,
@@ -1129,6 +1147,7 @@ pub fn create_board_version(
             active_version_id,
             forked_from_version_id,
             snapshot_json,
+            reason,
             now
         ],
     )?;
@@ -1138,6 +1157,26 @@ pub fn create_board_version(
     )?;
     tx.commit()?;
     load_board_version_summary(conn, board_id, &version_id, &version_id)
+}
+
+pub fn get_board_version_snapshot(
+    conn: &Connection,
+    version_id: &str,
+) -> Result<BoardVersionSnapshot> {
+    let (snapshot_json, reason): (String, Option<String>) = conn.query_row(
+        "SELECT snapshot_json, reason FROM mind_board_versions WHERE id = ?1",
+        [version_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let mut snapshot: BoardVersionSnapshot = serde_json::from_str(&snapshot_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Text,
+            Box::new(error),
+        )
+    })?;
+    snapshot.reason = reason.or(snapshot.reason);
+    Ok(snapshot)
 }
 
 pub fn checkout_board_version(
