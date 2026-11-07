@@ -33,6 +33,25 @@ export interface VoraCard {
   deleted_at?: number | null;
 }
 
+export interface ParsedCardVersion {
+  major: number;
+  minor: number;
+  patch: number;
+}
+
+export interface CardVersion {
+  id: string;
+  version: string;
+  reason: string | null;
+  created_at: number;
+}
+
+export interface CardVersionContent {
+  title: string;
+  content: string;
+  version: string;
+}
+
 export interface VoraBoardTransferNode {
   id: string;
   type: "voraCard" | "voraText" | "voraShape" | "forgeAst";
