@@ -354,7 +354,6 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
         <div className="flex items-center gap-1 text-gray-400">
           <button
             type="button"
-            type="button"
             onClick={(event) => {
               event.stopPropagation();
               window.dispatchEvent(new CustomEvent<string>("vora:open-card-history", {
