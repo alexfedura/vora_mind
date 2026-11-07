@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { diffLines } from "diff";
-import { History, RotateCcw, X } from "lucide-react";
+import { GitCommit, History, RotateCcw, X } from "lucide-react";
 import { useDocumentStore } from "@/features/file-store/useDocumentStore";
 import { dbService } from "@/mind/services/dbService";
 import type { CardVersion, CardVersionContent } from "@/mind/types";
@@ -10,6 +10,7 @@ interface CardHistoryModalProps {
   isOpen: boolean;
   cardId: string | null;
   onClose: () => void;
+  onOpenCommit: () => void;
 }
 
 interface DiffLine {
@@ -29,6 +30,7 @@ export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
   isOpen,
   cardId,
   onClose,
+  onOpenCommit,
 }) => {
   const [versions, setVersions] = useState<CardVersion[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState("");
@@ -144,13 +146,24 @@ export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="card-history-title"
+        dir="auto"
         className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[#303543] bg-[#171a22] text-zinc-200 shadow-2xl"
       >
         <header className="flex items-center justify-between border-b border-[#282d38] px-5 py-4">
-          <h2 id="card-history-title" className="flex items-center gap-2 text-sm font-semibold text-amber-100">
-            <History size={17} />
-            Card version history
-          </h2>
+          <div className="flex min-w-0 items-center gap-3">
+            <h2 id="card-history-title" className="flex items-center gap-2 text-sm font-semibold text-amber-100">
+              <History size={17} />
+              Card version history
+            </h2>
+            <button
+              type="button"
+              onClick={onOpenCommit}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-500/30"
+            >
+              <GitCommit size={14} />
+              + Commit New Version
+            </button>
+          </div>
           <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-zinc-400 hover:bg-[#282d38] hover:text-white">
             <X size={16} />
           </button>
@@ -175,13 +188,17 @@ export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
                       type="button"
                       aria-pressed={selectedVersionId === version.id}
                       onClick={() => setSelectedVersionId(version.id)}
-                      className="w-full text-left"
+                      className="w-full text-start"
                     >
                       <span className="font-mono text-xs font-semibold text-amber-200">{version.version}</span>
                       <time className="mt-1 block text-[10px] text-zinc-500" dateTime={new Date(version.created_at).toISOString()}>
                         {new Date(version.created_at).toLocaleString()}
                       </time>
-                      <span className="mt-2 block whitespace-pre-wrap text-xs text-zinc-300">
+                      <span
+                        dir="auto"
+                        style={{ unicodeBidi: "plaintext", textAlign: "start" }}
+                        className="mt-2 block whitespace-pre-wrap text-xs text-zinc-300"
+                      >
                         {version.reason || "No reason recorded"}
                       </span>
                     </button>
@@ -232,7 +249,11 @@ export const CardHistoryModal: React.FC<CardHistoryModalProps> = ({
             <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-[#292e39] bg-[#0e1014]">
               {selectedContent ? (
                 hasChanges ? (
-                  <pre className="min-w-max p-3 font-mono text-xs leading-5">
+                  <pre
+                    dir="auto"
+                    style={{ unicodeBidi: "plaintext", textAlign: "start" }}
+                    className="min-w-max p-3 font-mono text-xs leading-5"
+                  >
                     {diffLinesResult.map((line) => (
                       <span
                         key={line.key}

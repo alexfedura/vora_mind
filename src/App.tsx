@@ -3466,6 +3466,12 @@ function AppContent() {
         isOpen={cardVersionDialog?.mode === "history"}
         cardId={cardVersionDialog?.mode === "history" ? cardVersionDialog.cardId : null}
         onClose={() => setCardVersionDialog(null)}
+        onOpenCommit={() => {
+          if (cardVersionDialog?.mode !== "history") return;
+          window.dispatchEvent(new CustomEvent<string>("vora:open-card-commit", {
+            detail: cardVersionDialog.cardId,
+          }));
+        }}
       />
 
       {libraryBoardSession && isLibraryVersionDialogOpen && (

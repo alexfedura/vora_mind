@@ -325,13 +325,13 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              window.dispatchEvent(new CustomEvent<string>("vora:open-card-commit", {
+              window.dispatchEvent(new CustomEvent<string>("vora:open-card-history", {
                 detail: realCardId,
               }));
             }}
             style={{ fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace" }}
             className="nodrag rounded-lg border border-[#2c3140] bg-[#16181f] px-2 py-0.5 text-center text-[11px] font-medium tracking-tight text-gray-300 shadow-sm transition-colors hover:bg-[#222530] hover:text-white focus:bg-[#272b38] focus:text-white focus:outline-none"
-            title="Commit a new card version"
+            title="Card version history"
           >
             {card.version || "v0.1.0"}
           </button>
