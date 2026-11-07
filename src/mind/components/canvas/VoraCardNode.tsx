@@ -64,6 +64,27 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
   const [textLinks, setTextLinks] = useState<TextLink[]>([]);
   const [linkedTextById, setLinkedTextById] = useState<Record<string, string>>({});
   const [linkedSourceTitleById, setLinkedSourceTitleById] = useState<Record<string, string>>({});
+  const [hasCardVersions, setHasCardVersions] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void dbService.hasCardVersions(realCardId).then((hasVersions) => {
+      if (!cancelled) setHasCardVersions(hasVersions);
+    }).catch((error: unknown) => {
+      console.error("Could not check whether the card has a committed version:", error);
+    });
+
+    const handleCardVersionSaved = (event: Event): void => {
+      if (event instanceof CustomEvent && event.detail === realCardId) {
+        setHasCardVersions(true);
+      }
+    };
+    window.addEventListener("vora:card-version-saved", handleCardVersionSaved);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("vora:card-version-saved", handleCardVersionSaved);
+    };
+  }, [realCardId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -333,17 +354,25 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
         <div className="flex items-center gap-1 text-gray-400">
           <button
             type="button"
+            type="button"
             onClick={(event) => {
               event.stopPropagation();
               window.dispatchEvent(new CustomEvent<string>("vora:open-card-history", {
                 detail: realCardId,
               }));
             }}
-            className="nodrag p-1 hover:text-white hover:bg-[#252834] rounded transition"
-            title="Card version history"
-            aria-label="Card version history"
+            className="nodrag relative rounded p-1 transition hover:bg-[#252834] hover:text-white"
+            title={hasCardVersions === false
+              ? "Card version history — create the initial version"
+              : "Card version history"}
+            aria-label={hasCardVersions === false
+              ? "Card version history; initial version not created"
+              : "Card version history"}
           >
             <Clock size={14} />
+            {hasCardVersions === false && (
+              <span className="absolute right-0 top-0 h-1.5 w-1.5 rounded-full bg-amber-400" aria-hidden="true" />
+            )}
           </button>
           <button
             onClick={handleOpenFullscreen}

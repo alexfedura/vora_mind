@@ -488,7 +488,7 @@ function AppContent() {
   const [libraryBoardError, setLibraryBoardError] = useState<string | null>(null);
   const [isCreateItemGroupOpen, setIsCreateItemGroupOpen] = useState(false);
   const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
-  const [boardTransferError, setBoardTransferError] = useState<string | null>(null);
+  const [canvasOperationError, setCanvasOperationError] = useState<string | null>(null);
   const [mediaImportError, setMediaImportError] = useState<string | null>(null);
   const boardImportInputRef = React.useRef<HTMLInputElement>(null);
   const [canvasNodeContextMenu, setCanvasNodeContextMenu] = useState<CanvasNodeContextMenu | null>(null);
@@ -512,7 +512,7 @@ function AppContent() {
     const handleOpenCardCommit = (event: Event): void => {
       if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
       void dbService.hasCardVersions(event.detail).then((hasVersions) => {
-        setBoardTransferError(null);
+        setCanvasOperationError(null);
         setCardVersionDialog({
           mode: "commit",
           cardId: event.detail,
@@ -520,7 +520,7 @@ function AppContent() {
         });
       }).catch((error: unknown) => {
         console.error("Could not check card version history:", error);
-        setBoardTransferError(
+        setCanvasOperationError(
           `Could not check card version history: ${error instanceof Error ? error.message : String(error)}`,
         );
       });
@@ -2182,10 +2182,10 @@ function AppContent() {
       anchor.download = `vora-mind-${canvasBoardId}.json`;
       anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setBoardTransferError(null);
+      setCanvasOperationError(null);
     } catch (error) {
       console.error("Could not export the active Vora Mind Board:", error);
-      setBoardTransferError(error instanceof Error ? error.message : String(error));
+      setCanvasOperationError(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -2208,10 +2208,10 @@ function AppContent() {
         ...imported.edges,
       ]);
       setCards({ ...cards, ...imported.cards });
-      setBoardTransferError(null);
+      setCanvasOperationError(null);
     } catch (error) {
       console.error("Could not import Vora Mind Board file:", error);
-      setBoardTransferError(error instanceof Error ? error.message : String(error));
+      setCanvasOperationError(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -2821,13 +2821,13 @@ function AppContent() {
         )}
       </div>
       </div>}
-      {boardTransferError && (
+      {canvasOperationError && (
         <div
           role="alert"
           className="absolute left-16 top-[117.5px] z-50 flex max-w-[min(28rem,calc(100vw-5rem))] items-start gap-3 rounded-lg border border-rose-500/40 bg-[#21171b] px-3 py-2 text-xs text-rose-200 shadow-lg"
         >
-          <span>{boardTransferError}</span>
-          <button type="button" className="shrink-0 text-rose-100 underline" onClick={() => setBoardTransferError(null)}>Dismiss</button>
+          <span>{canvasOperationError}</span>
+          <button type="button" className="shrink-0 text-rose-100 underline" onClick={() => setCanvasOperationError(null)}>Dismiss</button>
         </div>
       )}
       {mediaImportError && (

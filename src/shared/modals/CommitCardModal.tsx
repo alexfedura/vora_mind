@@ -60,6 +60,7 @@ export const CommitCardModal: React.FC<CommitCardModalProps> = ({
         versionTag,
         changeReason,
       );
+      window.dispatchEvent(new CustomEvent<string>("vora:card-version-saved", { detail: cardId }));
 
       if (isCurrentDocument) {
         useDocumentStore.setState({
