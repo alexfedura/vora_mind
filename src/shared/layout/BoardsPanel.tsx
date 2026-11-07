@@ -177,6 +177,7 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
   };
 
   return (
+    <>
     <aside className="flex h-full w-56 flex-shrink-0 flex-col justify-between border-r border-[#2a2a2a] bg-background p-3 text-zinc-200">
       <div className="flex min-h-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-between border-b border-[#2a2a2a] px-4 pr-2">
@@ -305,6 +306,15 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
                         </button>
                       ))}
                     </div>
+                    <button
+                      type="button"
+                      disabled={(versionsByBoard[board.id]?.length ?? 0) < 2}
+                      onClick={() => setDiffBoardId(board.id)}
+                      className="mb-1 flex w-full items-center justify-center gap-1 rounded px-2 py-1.5 text-[10px] text-violet-300 hover:bg-[#252936] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <GitCompare size={12} />
+                      Compare versions
+                    </button>
                     {!isActive && <p className="pb-1 text-[9px] text-zinc-500">Select this Board to create a version.</p>}
                     <div className="max-h-40 overflow-y-auto pb-1">
                       {(versionsByBoard[board.id] ?? []).slice().reverse().map((version) => (
@@ -317,8 +327,11 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
                             version.is_active ? "bg-[#202430] text-violet-300" : "text-zinc-400 hover:bg-[#191c24] hover:text-zinc-100"
                           } disabled:cursor-default`}
                         >
-                          <span className="truncate">
-                            {version.version}{version.forked_from_version ? ` - ${version.forked_from_version}` : ""}
+                          <span className="min-w-0 flex-1 truncate">
+                            <span className="block truncate">
+                              {version.version}{version.forked_from_version ? ` - ${version.forked_from_version}` : ""}
+                            </span>
+                            {version.reason && <span className="block truncate text-[9px] opacity-70">{version.reason}</span>}
                           </span>
                           <time
                             className="shrink-0 text-[8px] opacity-60"
@@ -344,6 +357,21 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
       </div>
       <WorkspaceMenuFooter />
     </aside>
+    <CommitBoardModal
+      isOpen={commitTarget !== null}
+      boardTitle={commitTarget?.board.title ?? ""}
+      increment={commitTarget?.increment ?? "patch"}
+      onClose={() => setCommitTarget(null)}
+      onCommit={commitVersion}
+    />
+    <BoardDiffModal
+      isOpen={diffBoardId !== null}
+      boardTitle={boards.find((board) => board.id === diffBoardId)?.title ?? ""}
+      versions={diffBoardId ? versionsByBoard[diffBoardId] ?? [] : []}
+      onClose={() => setDiffBoardId(null)}
+      onGetSnapshot={onGetBoardVersionSnapshot}
+    />
+    </>
   );
 };
 
