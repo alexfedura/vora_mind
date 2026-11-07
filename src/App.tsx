@@ -1130,12 +1130,13 @@ function AppContent() {
   const handleCreateBoardVersion = async (
     boardId: string,
     increment: BoardVersionIncrement,
+    reason: string,
   ) => {
     if (boardId !== activeBoardId) {
       throw new Error("Select this Board before creating a version.");
     }
     await flow.flushCanvas();
-    await dbService.createBoardVersion(boardId, increment, flow.nodes, flow.edges, cards);
+    await dbService.createBoardVersion(boardId, increment, reason, flow.nodes, flow.edges, cards);
     const [updatedBoards, versions] = await Promise.all([
       dbService.getAllBoards(),
       dbService.getBoardVersions(boardId),
@@ -2938,6 +2939,7 @@ function AppContent() {
               onRenameBoard={handleRenameBoard}
               onDeleteBoard={handleDeleteBoard}
               onGetBoardVersions={handleGetBoardVersions}
+              onGetBoardVersionSnapshot={dbService.getBoardVersionSnapshot}
               onCreateBoardVersion={handleCreateBoardVersion}
               onCheckoutBoardVersion={handleCheckoutBoardVersion}
             />
