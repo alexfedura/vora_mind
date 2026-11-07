@@ -2334,6 +2334,7 @@ function AppContent() {
       setIsAiTasksOpen(false);
       setIsVoraTraceOpen(false);
       setIsJournalOpen(false);
+      setIsPlayerOpen(false);
     }
     setActiveOpenPanel(next);
     if (next !== "none") setLastActivePanel(next);
@@ -2679,6 +2680,7 @@ function AppContent() {
                 setIsAiTasksOpen(false);
                 setIsVoraTraceOpen(false);
                 setIsJournalOpen(false);
+                setIsPlayerOpen(false);
                 setIsTaskFlowOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
@@ -2687,6 +2689,7 @@ function AppContent() {
                 setIsTaskFlowOpen(false);
                 setIsVoraTraceOpen(false);
                 setIsJournalOpen(false);
+                setIsPlayerOpen(false);
                 setIsAiTasksOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
@@ -2695,6 +2698,7 @@ function AppContent() {
                 setIsTaskFlowOpen(false);
                 setIsAiTasksOpen(false);
                 setIsJournalOpen(false);
+                setIsPlayerOpen(false);
                 setIsVoraTraceOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
@@ -2703,6 +2707,7 @@ function AppContent() {
                 setIsTaskFlowOpen(false);
                 setIsAiTasksOpen(false);
                 setIsVoraTraceOpen(false);
+                setIsPlayerOpen(false);
                 setIsJournalOpen(true);
                 setLastActivePanel("sidebar");
                 setActiveOpenPanel("sidebar");
@@ -2712,6 +2717,7 @@ function AppContent() {
                 setIsAiTasksOpen(false);
                 setIsVoraTraceOpen(false);
                 setIsJournalOpen(false);
+                setIsPlayerOpen(false);
                 setLastActivePanel("boards");
                 setActiveOpenPanel("boards");
               }}
@@ -2749,13 +2755,18 @@ function AppContent() {
         onPointerUpCapture={isWorkspacePageOpen ? undefined : handleCanvasPointerUp}
         onDoubleClickCapture={isWorkspacePageOpen ? undefined : handleCanvasDoubleClick}
         onKeyDown={isWorkspacePageOpen ? undefined : handleCanvasKeyDown}
-        className={`w-full h-full relative bg-background flex-1 transition-all duration-300 ease-in-out ${
+        className={`w-full h-full relative ${isPlayerOpen ? "bg-transparent" : "bg-background"} flex-1 transition-all duration-300 ease-in-out ${
           isWorkspacePageOpen && activeOpenPanel === "sidebar" ? "ml-56" : "ml-0"
         } ${isSpacePanActive ? "space-pan-active" : ""} ${
           isTextToolActive ? "cursor-text" : activeShapeTool || isAddCardToolActive ? "cursor-crosshair" : ""
         }`}
       >
-        {isVoraTraceOpen ? (
+        <PlayerWorkspace
+          active={isPlayerOpen}
+          request={mediaPlayerRequest}
+          onReturnToBoard={() => setIsPlayerOpen(false)}
+        />
+        {isPlayerOpen ? null : isVoraTraceOpen ? (
           <div className="absolute inset-0 z-20 overflow-hidden">
             <VoraTraceApp />
           </div>
@@ -3144,18 +3155,18 @@ function AppContent() {
           <button
             type="button"
             onClick={() => setIsJournalMenuOpen((open) => !open)}
-            aria-label="Open Journal menu"
+            aria-label="Open workspace menu"
             aria-haspopup="menu"
             aria-expanded={isJournalMenuOpen}
-            title="Journal menu"
+            title="Workspace menu"
             className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_FLOATING_CONTROL_BORDER_CLASS} ${CANVAS_FLOATING_CONTROL_BACKGROUND_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
           >
             <Menu size={16} />
           </button>
           <div
             role="menu"
-            aria-label="Journal and chart navigation"
-            className={`absolute right-0 top-full z-50 mt-1 flex h-[4.5rem] w-9 flex-col items-center justify-center gap-0 overflow-hidden rounded-lg border border-[#2a2a2a] bg-[#181818]/90 p-0 shadow-lg backdrop-blur transition-all duration-200 ${
+            aria-label="Workspace navigation"
+            className={`absolute right-0 top-full z-50 mt-1 flex h-[6.75rem] w-9 flex-col items-center justify-center gap-0 overflow-hidden rounded-lg border border-[#2a2a2a] bg-[#181818]/90 p-0 shadow-lg backdrop-blur transition-all duration-200 ${
               isJournalMenuOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0"
             }`}
           >
@@ -3167,12 +3178,13 @@ function AppContent() {
                 setIsAiTasksOpen(false);
                 setIsVoraTraceOpen(false);
                 setIsJournalOpen(true);
+                setIsPlayerOpen(false);
                 setActiveOpenPanel("none");
                 setIsJournalMenuOpen(false);
               }}
               aria-label="Journal"
               title="Journal"
-              className="flex h-1/2 w-full shrink-0 items-center justify-center text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
+              className="flex h-1/3 w-full shrink-0 items-center justify-center text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
             >
               <BookOpen size={16} aria-hidden="true" />
             </button>
@@ -3181,11 +3193,32 @@ function AppContent() {
               role="menuitem"
               aria-label="Chart"
               title="Chart"
-              onClick={() => setIsJournalMenuOpen(false)}
-              className="flex h-1/2 w-full shrink-0 items-center justify-center text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
+              onClick={() => {
+                setIsPlayerOpen(false);
+                setIsJournalMenuOpen(false);
+              }}
+              className="flex h-1/3 w-full shrink-0 items-center justify-center text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
             >
               <CandlestickChart size={16} aria-hidden="true" />
             </Link>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setIsTaskFlowOpen(false);
+                setIsAiTasksOpen(false);
+                setIsVoraTraceOpen(false);
+                setIsJournalOpen(false);
+                setIsPlayerOpen(true);
+                setActiveOpenPanel("none");
+                setIsJournalMenuOpen(false);
+              }}
+              aria-label="Vora Player"
+              title="Vora Player"
+              className="flex h-1/3 w-full shrink-0 items-center justify-center text-zinc-400 transition hover:bg-[#1c202d] hover:text-violet-300"
+            >
+              <Film size={16} aria-hidden="true" />
+            </button>
           </div>
         </div>
       </div>}
