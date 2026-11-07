@@ -371,6 +371,10 @@ export function useMediaPlayer(
     if (!source) return;
     const markdown = createMediaMarkdownLink(slice, source);
     setLinkPreview(markdown);
+    await copyMarkdownLink(markdown);
+  };
+
+  const copyMarkdownLink = async (markdown: string): Promise<void> => {
     setError(null);
     try {
       await navigator.clipboard.writeText(markdown);
@@ -409,6 +413,7 @@ export function useMediaPlayer(
     saveReference,
     deleteReference,
     copyReferenceLink,
+    copyMarkdownLink,
     setDraft,
   };
 }
