@@ -1044,7 +1044,7 @@ fn save_card_direct(
         return Err("Board does not exist".to_string());
     }
 
-    let metadata = library_source_card_id.map(|source_card_id| {
+    let metadata = library_source_card_id.as_ref().map(|source_card_id| {
         serde_json::json!({ "librarySourceCardId": source_card_id }).to_string()
     });
     tx.execute(
