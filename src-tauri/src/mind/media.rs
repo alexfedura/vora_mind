@@ -494,4 +494,27 @@ mod tests {
         assert!(!valid_range(-1.0, 4.0));
         assert!(valid_range(0.0, 4.0));
     }
+
+    #[test]
+    fn media_schema_initializes_idempotently() {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        crate::mind::canvas_db::init_db(&connection).unwrap();
+        crate::mind::canvas_db::init_db(&connection).unwrap();
+        let source_table_exists: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'mind_media_sources')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let slice_table_exists: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'mind_media_slices')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(source_table_exists);
+        assert!(slice_table_exists);
+    }
 }
