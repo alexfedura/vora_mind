@@ -319,6 +319,30 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             CHECK(target_start >= 0 AND target_end > target_start)
         );
 
+        CREATE TABLE IF NOT EXISTS mind_media_sources (
+            id TEXT PRIMARY KEY,
+            path TEXT NOT NULL,
+            fingerprint_size INTEGER NOT NULL,
+            fingerprint_modified_ms INTEGER NOT NULL,
+            duration_seconds REAL,
+            last_position_seconds REAL NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            last_used_at INTEGER NOT NULL,
+            UNIQUE(path, fingerprint_size, fingerprint_modified_ms)
+        );
+
+        CREATE TABLE IF NOT EXISTS mind_media_slices (
+            id TEXT PRIMARY KEY,
+            source_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            start_seconds REAL NOT NULL CHECK(start_seconds >= 0),
+            end_seconds REAL NOT NULL CHECK(end_seconds > start_seconds),
+            note TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY(source_id) REFERENCES mind_media_sources(id) ON DELETE CASCADE
+        );
+
         CREATE INDEX IF NOT EXISTS idx_snapshots_parent ON mind_snapshots(parent_snapshot_id);
         CREATE INDEX IF NOT EXISTS idx_snapshots_checkpoint ON mind_snapshots(is_checkpoint);
         CREATE INDEX IF NOT EXISTS idx_snapshots_depth ON mind_snapshots(depth);
@@ -336,6 +360,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
              WHERE library_item_group_id IS NOT NULL;
          CREATE INDEX IF NOT EXISTS idx_library_item_groups_created ON library_item_groups(created_at, id);
          CREATE INDEX IF NOT EXISTS idx_library_item_group_versions_history ON library_item_group_versions(group_id, created_at, id);
+         CREATE INDEX IF NOT EXISTS idx_media_slices_source_time ON mind_media_slices(source_id, start_seconds, created_at);
          CREATE INDEX IF NOT EXISTS idx_text_links_source ON mind_text_links(source_board_id, source_card_id, source_field, source_start);
          CREATE INDEX IF NOT EXISTS idx_text_links_target ON mind_text_links(target_board_id, target_card_id, target_field, target_start);",
     )?;
