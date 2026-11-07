@@ -9,23 +9,27 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
   const source = data.filePath ? convertFileSrc(data.filePath) : null;
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-xl border border-white/10 bg-[#17191f] shadow-xl shadow-black/30">
+    <div className="relative h-full w-full rounded-xl border border-white/10 bg-[#17191f] shadow-xl shadow-black/30">
       <NodeResizer
         nodeId={id}
         isVisible={selected}
         minWidth={data.type === "image" ? 160 : 240}
         minHeight={data.type === "image" ? 120 : 96}
+        maxWidth={960}
+        maxHeight={720}
         keepAspectRatio={data.type === "image"}
         color="#a78bfa"
       />
       {data.type === "image" ? (
         source ? (
-          <img
-            src={source}
-            alt={data.fileName}
-            draggable={false}
-            className="h-full w-full select-none object-contain p-1"
-          />
+          <div className="h-full w-full overflow-hidden rounded-xl">
+            <img
+              src={source}
+              alt={data.fileName}
+              draggable={false}
+              className="h-full w-full select-none object-contain p-1"
+            />
+          </div>
         ) : (
           <div className="flex h-full items-center justify-center p-4 text-center text-xs text-rose-200">
             Image path is unavailable.
