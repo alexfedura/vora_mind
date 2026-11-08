@@ -1253,39 +1253,36 @@ pub fn checkout_board_version(
     )?;
     for card in &snapshot.cards {
         let changed = tx.execute(
-            "INSERT INTO objects (id, type, board_id, created_at, updated_at, deleted_at)
-             VALUES (?1, 'card', ?2, ?3, ?3, ?4)
-             ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
+            "INSERT INTO objects (id, type, board_id, created_at, updated_at, deleted_at, working_content)
+             VALUES (?1, 'card', ?2, ?3, ?3, ?4, ?5)
+             ON CONFLICT(id) DO UPDATE SET
+                 updated_at = excluded.updated_at,
+                 deleted_at = excluded.deleted_at,
+                 working_content = excluded.working_content
              WHERE objects.board_id = excluded.board_id",
-            params![card.id, board_id, now, card.deleted_at],
+            params![
+                card.id,
+                board_id,
+                now,
+                card.deleted_at,
+                serde_json::json!({
+                    "title": card.title,
+                    "content": card.content,
+                    "version": card.version,
+                    "node_type": "voraCard",
+                    "data": {
+                        "cardId": card.id,
+                        "title": card.title,
+                        "label": card.title,
+                        "content": card.content,
+                        "version": card.version
+                    }
+                }).to_string()
+            ],
         )?;
         if changed == 0 {
             return Err(rusqlite::Error::InvalidQuery);
         }
-        let content = serde_json::json!({
-            "title": card.title,
-            "content": card.content,
-            "version": card.version,
-            "node_type": "voraCard",
-            "data": {
-                "cardId": card.id,
-                "title": card.title,
-                "label": card.title,
-                "content": card.content,
-                "version": card.version
-            }
-        });
-        tx.execute(
-            "INSERT INTO object_versions
-                (id, object_id, version_major, version_minor, version_patch, reason, summary, content, created_at)
-             VALUES (?1, ?2, 0, 1, 0, 'board-version-checkout', NULL, ?3, ?4)",
-            params![
-                format!("card_version_{}", uuid::Uuid::now_v7()),
-                card.id,
-                content.to_string(),
-                now
-            ],
-        )?;
     }
     tx.execute(
         "UPDATE mind_boards SET active_version_id = ?1, branch_origin_version_id = ?2, updated_at = ?3
