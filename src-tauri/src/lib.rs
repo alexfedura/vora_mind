@@ -831,6 +831,36 @@ fn delete_board(state: State<AppState>, board_id: String) -> Result<(), String> 
 }
 
 #[tauri::command]
+fn search_library_objects(
+    state: State<AppState>,
+    query: String,
+    status_filter: Option<String>,
+) -> Result<Vec<mind::canvas_db::LibraryObjectResult>, String> {
+    if let Some(status) = status_filter.as_deref() {
+        if !matches!(status, "all" | "active" | "completed" | "not_needed") {
+            return Err("Unsupported Library review status filter".to_string());
+        }
+    }
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::canvas_db::search_library_objects(&conn, &query, status_filter.as_deref())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn update_object_review_status(
+    state: State<AppState>,
+    object_id: String,
+    status: String,
+) -> Result<(), String> {
+    if !matches!(status.as_str(), "active" | "completed" | "not_needed") {
+        return Err("Unsupported Library review status".to_string());
+    }
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::canvas_db::update_object_review_status(&conn, &object_id, &status)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn get_all_cards(state: State<AppState>, board_id: String) -> Result<Vec<CardDto>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
@@ -2032,6 +2062,8 @@ pub fn run() {
             resolve_snapshot,
             get_all_snapshots,
             get_all_cards,
+            search_library_objects,
+            update_object_review_status,
             commit_card_version,
             has_card_versions,
             get_card_versions,

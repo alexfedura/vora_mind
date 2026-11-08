@@ -467,6 +467,23 @@ export const dbService = {
     return await invoke<LibraryItemGroupDto[]>("get_library_item_groups");
   },
 
+  async searchLibraryObjects(
+    query: string,
+    statusFilter: LibraryObjectReviewStatus | "all" = "active",
+  ): Promise<LibraryObjectResult[]> {
+    return await invoke<LibraryObjectResult[]>("search_library_objects", {
+      query,
+      statusFilter,
+    });
+  },
+
+  async updateObjectReviewStatus(
+    objectId: string,
+    status: LibraryObjectReviewStatus,
+  ): Promise<void> {
+    await invoke("update_object_review_status", { objectId, status });
+  },
+
   async getLibraryItemGroupVersions(groupId: string): Promise<LibraryItemGroupVersion[]> {
     return await invoke<LibraryItemGroupVersion[]>("get_library_item_group_versions", { groupId });
   },

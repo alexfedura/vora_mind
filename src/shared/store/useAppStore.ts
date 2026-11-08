@@ -2,7 +2,12 @@
 import { persist } from "zustand/middleware";
 import { setSetting } from "@/shared/store/useSettingsStore";
 import type { CardVersionContent, VoraCard } from "@/mind/types";
-import { createTextChangeSet, dbService } from "@/mind/services/dbService";
+import {
+  createTextChangeSet,
+  dbService,
+  type LibraryObjectResult,
+  type LibraryObjectReviewStatus,
+} from "@/mind/services/dbService";
 import type {
   ChildHypothesisInput,
   ChecklistField,
@@ -50,6 +55,7 @@ const journalSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const journalSaveQueues = new Map<string, Promise<void>>();
 const questionSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const questionSaveQueues = new Map<string, Promise<void>>();
+let librarySearchRequestId = 0;
 
 function sortQuestions(questions: QuestionItem[]): QuestionItem[] {
   return [...questions].sort((left, right) =>
@@ -62,6 +68,17 @@ function sortQuestions(questions: QuestionItem[]): QuestionItem[] {
 interface AppState {
   // --- Mind & Canvas Existing State ---
   cards: Record<string, VoraCard>;
+  libraryObjects: LibraryObjectResult[];
+  isLibrarySearchLoading: boolean;
+  librarySearchError: string | null;
+  searchLibraryObjects: (
+    query: string,
+    statusFilter: LibraryObjectReviewStatus | "all",
+  ) => Promise<LibraryObjectResult[]>;
+  updateLibraryObjectReviewStatus: (
+    objectId: string,
+    status: LibraryObjectReviewStatus,
+  ) => Promise<void>;
   isLibraryBoardEditing: boolean;
   libraryBoardReturnCards: Record<string, VoraCard> | null;
   setLibraryBoardEditing: (editing: boolean, returnCards?: Record<string, VoraCard> | null) => void;
@@ -187,6 +204,36 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       // --- Mind Defaults ---
       cards: {},
+      libraryObjects: [],
+      isLibrarySearchLoading: false,
+      librarySearchError: null,
+      searchLibraryObjects: async (query, statusFilter) => {
+        const requestId = ++librarySearchRequestId;
+        set({ isLibrarySearchLoading: true, librarySearchError: null });
+        try {
+          const libraryObjects = await dbService.searchLibraryObjects(query, statusFilter);
+          if (requestId === librarySearchRequestId) {
+            set({ libraryObjects, isLibrarySearchLoading: false });
+          }
+          return libraryObjects;
+        } catch (cause) {
+          if (requestId === librarySearchRequestId) {
+            set({
+              isLibrarySearchLoading: false,
+              librarySearchError: cause instanceof Error ? cause.message : String(cause),
+            });
+          }
+          throw cause;
+        }
+      },
+      updateLibraryObjectReviewStatus: async (objectId, status) => {
+        await dbService.updateObjectReviewStatus(objectId, status);
+        set((state) => ({
+          libraryObjects: state.libraryObjects.map((item) =>
+            item.id === objectId ? { ...item, review_status: status } : item
+          ),
+        }));
+      },
       isLibraryBoardEditing: false,
       libraryBoardReturnCards: null,
       activeBoardId: "",
