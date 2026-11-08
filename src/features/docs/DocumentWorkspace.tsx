@@ -4,7 +4,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { dbService, type DocumentDto, type DocumentFileType } from "@/mind/services/dbService";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { PdfViewer } from "./PdfViewer";
-import { TextDocumentViewer } from "./TextDocumentViewer";
+import { DocxViewer } from "./DocxViewer";
+import { MarkdownViewer } from "./MarkdownViewer";
 
 interface DocumentWorkspaceProps {
   active: boolean;
@@ -161,8 +162,16 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             boardId={boardId}
             onSendToLibrary={sendHighlightToLibrary}
           />
+        ) : selectedDocument.file_type === "docx" ? (
+          <DocxViewer
+            key={selectedDocument.id}
+            document={selectedDocument}
+            jumpToHighlightId={jumpToHighlightId}
+            boardId={boardId}
+            onSendToLibrary={sendHighlightToLibrary}
+          />
         ) : (
-          <TextDocumentViewer
+          <MarkdownViewer
             key={selectedDocument.id}
             document={selectedDocument}
             jumpToHighlightId={jumpToHighlightId}
