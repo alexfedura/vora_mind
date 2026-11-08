@@ -39,7 +39,7 @@ import {
   CandlestickChart,
   Menu,
   Film,
-  ImagePlus,
+  Files,
 } from "lucide-react";
 
 import { ForgeAgentDrawer } from "./forge/components/agent/ForgeAgentDrawer";
@@ -2769,7 +2769,7 @@ function AppContent() {
           className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
           title="Import image, audio, or video"
         >
-          <ImagePlus size={16} />
+          <Files size={16} />
         </button>
         <button
           type="button"
