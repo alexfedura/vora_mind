@@ -2417,6 +2417,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             install_update,
             get_last_update_failure,
+            save_deepseek_key,
+            generate_board_from_prompt,
             get_all_boards,
             create_board,
             get_task_flow_items,
