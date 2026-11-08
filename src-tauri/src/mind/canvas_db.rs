@@ -47,6 +47,8 @@ pub struct LibraryObjectResult {
     pub board_id: String,
     pub is_placed: bool,
     pub review_status: String,
+    pub document_id: Option<String>,
+    pub highlight_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -859,6 +861,8 @@ pub fn search_library_objects(
         ),
         object_text AS (
             SELECT o.id, o.type, o.board_id, o.deleted_at, o.review_status,
+                   json_extract(o.metadata, '$.documentId') AS document_id,
+                   json_extract(o.metadata, '$.highlightId') AS highlight_id,
                    COALESCE(
                        json_extract(o.working_content, '$.title'),
                        json_extract(v.content, '$.title'),
@@ -889,7 +893,8 @@ pub fn search_library_objects(
                        THEN placement_changes.operation <> 'REMOVE'
                    ELSE checkpoint_placement.object_id IS NOT NULL
                END AS is_placed,
-               object_text.review_status
+               object_text.review_status, object_text.document_id,
+               object_text.highlight_id
         FROM object_text
         LEFT JOIN latest_checkpoint latest
           ON latest.board_id = object_text.board_id
@@ -918,6 +923,8 @@ pub fn search_library_objects(
             board_id: row.get(4)?,
             is_placed: row.get(5)?,
             review_status: row.get(6)?,
+            document_id: row.get(7)?,
+            highlight_id: row.get(8)?,
         })
     })?;
     rows.collect()

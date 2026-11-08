@@ -102,6 +102,8 @@ pub struct CardDto {
     pub version: String,
     pub deleted_at: Option<i64>,
     pub library_source_card_id: Option<String>,
+    pub document_id: Option<String>,
+    pub highlight_id: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -1160,7 +1162,9 @@ fn get_all_cards(state: State<AppState>, board_id: String) -> Result<Vec<CardDto
                             v.version_major || '.' || v.version_minor || '.' || v.version_patch,
                             'v0.1.0') as version,
                    o.deleted_at,
-                   json_extract(o.metadata, '$.librarySourceCardId')
+                   json_extract(o.metadata, '$.librarySourceCardId'),
+                   json_extract(o.metadata, '$.documentId'),
+                   json_extract(o.metadata, '$.highlightId')
             FROM objects o
             LEFT JOIN object_versions v ON v.id = (
                 SELECT id FROM object_versions
@@ -1184,6 +1188,8 @@ fn get_all_cards(state: State<AppState>, board_id: String) -> Result<Vec<CardDto
                 version: r.get(3)?,
                 deleted_at: r.get(4)?,
                 library_source_card_id: r.get(5)?,
+                document_id: r.get(6)?,
+                highlight_id: r.get(7)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -2350,6 +2356,12 @@ pub fn run() {
             get_all_cards,
             search_library_objects,
             update_object_review_status,
+            import_document,
+            get_documents,
+            get_document_content,
+            create_highlight,
+            get_highlights,
+            send_highlight_to_library,
             commit_card_version,
             has_card_versions,
             get_card_versions,
