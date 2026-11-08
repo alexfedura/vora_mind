@@ -812,7 +812,7 @@ pub fn search_library_objects(
                OR (snapshot.created_at = latest.created_at AND snapshot.rowid > latest.rowid)
         ),
         object_text AS (
-            SELECT o.id, o.type, o.board_id, o.review_status,
+            SELECT o.id, o.type, o.board_id, o.deleted_at, o.review_status,
                    COALESCE(
                        json_extract(o.working_content, '$.title'),
                        json_extract(v.content, '$.title'),
@@ -856,10 +856,7 @@ pub fn search_library_objects(
          AND placement_changes.object_id = object_text.id
          AND placement_changes.change_rank = 1
         WHERE object_text.type IN ('card', 'shape', 'text', 'media')
-          AND EXISTS (
-              SELECT 1 FROM objects live
-              WHERE live.id = object_text.id AND live.deleted_at IS NULL
-          )
+          AND object_text.deleted_at IS NULL
           AND (?1 = '' OR
                lower(object_text.title) LIKE '%' || lower(?1) || '%' OR
                lower(object_text.content) LIKE '%' || lower(?1) || '%')
