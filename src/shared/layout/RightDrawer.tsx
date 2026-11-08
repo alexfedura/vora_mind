@@ -1302,20 +1302,45 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
             </div>
 
             <div className="px-5 mb-4 relative z-10">
-              <div className="relative flex items-center w-full">
-                <Search size={16} className="absolute left-3.5 text-gray-500 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search library..."
-                  className="w-full bg-[#0f1115] border border-[#232733] focus:border-purple-500/60 rounded-xl py-2 pl-10 pr-3.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none transition"
-                />
+              <div className="flex items-center gap-2">
+                <div className="relative flex min-w-0 flex-1 items-center">
+                  <Search size={16} className="absolute left-3.5 text-gray-500 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search library..."
+                    className="w-full bg-[#0f1115] border border-[#232733] focus:border-purple-500/60 rounded-xl py-2 pl-10 pr-3.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none transition"
+                  />
+                </div>
+                {(currentFilter === "all" || currentFilter === "cards") && (
+                  <select
+                    aria-label="Filter Library review status"
+                    value={reviewStatusFilter}
+                    onChange={(event) => {
+                      const status = event.currentTarget.value;
+                      if (status === "all" || status === "active" || status === "completed" || status === "not_needed") {
+                        setReviewStatusFilter(status);
+                      }
+                    }}
+                    className="max-w-28 rounded-xl border border-[#232733] bg-[#0f1115] px-2 py-2 text-[10px] text-gray-300 outline-none focus:border-purple-500/60"
+                  >
+                    <option value="active">Active</option>
+                    <option value="all">Show archived</option>
+                    <option value="completed">Completed</option>
+                    <option value="not_needed">Not needed</option>
+                  </select>
+                )}
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto no-scrollbar px-5 pb-5 grid grid-cols-2 gap-3.5 content-start">
               {itemGroupError && <p role="alert" className="col-span-2 text-xs text-rose-300">{itemGroupError}</p>}
+              {librarySearchError && <p role="alert" className="col-span-2 text-xs text-rose-300">{librarySearchError}</p>}
+              {libraryActionError && <p role="alert" className="col-span-2 text-xs text-rose-300">{libraryActionError}</p>}
+              {isLibrarySearchLoading && (currentFilter === "all" || currentFilter === "cards") && (
+                <p className="col-span-2 py-4 text-center text-xs text-zinc-500">Searching canvas objects...</p>
+              )}
               {(currentFilter === "all" || currentFilter === "cards") && (
                 <button
                   onClick={onAddNewCard}
