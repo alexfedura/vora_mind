@@ -757,6 +757,120 @@ fn ensure_object_working_content_column(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn ensure_object_review_status_column(conn: &Connection) -> Result<()> {
+    let mut statement = conn.prepare("PRAGMA table_info(objects)")?;
+    let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+    if !columns
+        .collect::<Result<Vec<_>>>()?
+        .iter()
+        .any(|column| column == "review_status")
+    {
+        conn.execute(
+            "ALTER TABLE objects ADD COLUMN review_status TEXT NOT NULL DEFAULT 'active'
+             CHECK (review_status IN ('active', 'completed', 'not_needed'))",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
+pub fn search_library_objects(
+    conn: &Connection,
+    query: &str,
+    status_filter: Option<&str>,
+) -> Result<Vec<LibraryObjectResult>> {
+    let status_filter = status_filter.unwrap_or("active");
+    if !matches!(
+        status_filter,
+        "all" | "active" | "completed" | "not_needed"
+    ) {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let mut statement = conn.prepare(
+        "WITH object_text AS (
+            SELECT o.id, o.type, o.board_id, o.review_status,
+                   COALESCE(
+                       json_extract(o.working_content, '$.title'),
+                       json_extract(v.content, '$.title'),
+                       json_extract(v.content, '$.data.label'),
+                       json_extract(v.content, '$.data.text'),
+                       json_extract(o.metadata, '$.title'),
+                       'Untitled'
+                   ) AS title,
+                   COALESCE(
+                       json_extract(o.working_content, '$.content'),
+                       json_extract(v.content, '$.content'),
+                       json_extract(v.content, '$.data.content'),
+                       json_extract(v.content, '$.data.text'),
+                       ''
+                   ) AS content
+            FROM objects o
+            LEFT JOIN object_versions v ON v.id = (
+                SELECT id FROM object_versions
+                WHERE object_id = o.id
+                ORDER BY created_at DESC, rowid DESC
+                LIMIT 1
+            )
+        )
+        SELECT object_text.id, object_text.type, object_text.title,
+               object_text.content, object_text.board_id,
+               (placement.object_id IS NOT NULL) AS is_placed,
+               object_text.review_status
+        FROM object_text
+        LEFT JOIN checkpoint_placements placement
+          ON placement.object_id = object_text.id
+         AND placement.checkpoint_id = (
+             SELECT snapshot.id
+             FROM mind_snapshots snapshot
+             WHERE snapshot.board_id = object_text.board_id
+               AND snapshot.is_checkpoint = 1
+             ORDER BY snapshot.created_at DESC, snapshot.rowid DESC
+             LIMIT 1
+         )
+        WHERE object_text.type IN ('card', 'shape', 'text', 'media')
+          AND EXISTS (
+              SELECT 1 FROM objects live
+              WHERE live.id = object_text.id AND live.deleted_at IS NULL
+          )
+          AND (?1 = '' OR
+               lower(object_text.title) LIKE '%' || lower(?1) || '%' OR
+               lower(object_text.content) LIKE '%' || lower(?1) || '%')
+          AND (?2 = 'all' OR object_text.review_status = ?2)
+        ORDER BY object_text.title COLLATE NOCASE, object_text.id",
+    )?;
+    let rows = statement.query_map(params![query.trim(), status_filter], |row| {
+        Ok(LibraryObjectResult {
+            id: row.get(0)?,
+            object_type: row.get(1)?,
+            title: row.get(2)?,
+            content: row.get(3)?,
+            board_id: row.get(4)?,
+            is_placed: row.get(5)?,
+            review_status: row.get(6)?,
+        })
+    })?;
+    rows.collect()
+}
+
+pub fn update_object_review_status(
+    conn: &Connection,
+    object_id: &str,
+    status: &str,
+) -> Result<()> {
+    if !matches!(status, "active" | "completed" | "not_needed") {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let changed = conn.execute(
+        "UPDATE objects SET review_status = ?1, updated_at = ?2
+         WHERE id = ?3 AND deleted_at IS NULL",
+        params![status, now_millis()?, object_id],
+    )?;
+    if changed == 0 {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+    Ok(())
+}
+
 fn ensure_library_item_group_board_column(conn: &Connection) -> Result<()> {
     let mut statement = conn.prepare("PRAGMA table_info(mind_boards)")?;
     let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
