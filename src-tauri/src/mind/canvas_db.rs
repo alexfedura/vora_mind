@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, OptionalExtension, Result};
+use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -1858,6 +1858,44 @@ mod board_version_tests {
         let conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
         assert!(get_all_boards(&conn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn document_highlights_persist_and_cascade_with_their_document() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        init_db(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO documents (id, title, file_path, file_type, created_at, updated_at)
+             VALUES ('doc-1', 'Research', 'documents/doc-1.pdf', 'pdf', 1, 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO document_highlights
+                (id, document_id, content, page_number, position_data, color, created_at)
+             VALUES ('highlight-1', 'doc-1', 'Selected words', 2, '{\"rects\":[]}', 'yellow', 2)",
+            [],
+        )
+        .unwrap();
+
+        let saved_position: String = conn
+            .query_row(
+                "SELECT position_data FROM document_highlights WHERE id = 'highlight-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(saved_position, "{\"rects\":[]}");
+
+        conn.execute("DELETE FROM documents WHERE id = 'doc-1'", [])
+            .unwrap();
+        let remaining_highlights: i64 = conn
+            .query_row("SELECT COUNT(*) FROM document_highlights", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(remaining_highlights, 0);
     }
 
     #[test]
