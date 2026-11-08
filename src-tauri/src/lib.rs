@@ -154,16 +154,9 @@ fn has_committed_card_versions(conn: &Connection, id: &str) -> Result<bool, Stri
     .map_err(|error| error.to_string())
 }
 
-fn validate_initial_card_version(has_versions: bool, version: &str) -> Result<(), String> {
-    if !has_versions && version != "v0.1.0" {
-        return Err("The initial card version must be exactly v0.1.0.".to_string());
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod card_version_tests {
-    use super::{has_committed_card_versions, parse_card_version, validate_initial_card_version};
+    use super::{has_committed_card_versions, parse_card_version};
     use rusqlite::Connection;
 
     #[test]
@@ -209,11 +202,15 @@ mod card_version_tests {
     }
 
     #[test]
-    fn requires_exact_version_for_first_committed_version() {
-        assert!(validate_initial_card_version(false, "v0.1.0").is_ok());
-        assert!(validate_initial_card_version(false, "0.1.0").is_err());
-        assert!(validate_initial_card_version(false, "v0.1.1").is_err());
-        assert!(validate_initial_card_version(true, "v0.1.1").is_ok());
+    fn accepts_custom_semver_for_a_first_committed_version() {
+        assert_eq!(
+            parse_card_version("v0.9.0").unwrap(),
+            ("v0.9.0".to_string(), 0, 9, 0)
+        );
+        assert_eq!(
+            parse_card_version("2.0.0").unwrap(),
+            ("v2.0.0".to_string(), 2, 0, 0)
+        );
     }
 }
 
@@ -734,9 +731,9 @@ fn get_all_cards(state: State<AppState>, board_id: String) -> Result<Vec<CardDto
         .prepare(
             "
             SELECT o.id,
-                   COALESCE(json_extract(v.content, '$.title'), 'Untitled') as title,
-                   COALESCE(json_extract(v.content, '$.content'), '') as content,
-                   COALESCE(json_extract(v.content, '$.version'), v.version_major || '.' || v.version_minor || '.' || v.version_patch, '0.1.0') as version,
+                   COALESCE(json_extract(o.metadata, '$.title'), json_extract(v.content, '$.title'), 'Untitled') as title,
+                   COALESCE(json_extract(o.metadata, '$.content'), json_extract(v.content, '$.content'), '') as content,
+                   COALESCE(json_extract(o.metadata, '$.version'), json_extract(v.content, '$.version'), v.version_major || '.' || v.version_minor || '.' || v.version_patch, '0.1.0') as version,
                    o.deleted_at,
                    json_extract(o.metadata, '$.librarySourceCardId')
             FROM objects o
