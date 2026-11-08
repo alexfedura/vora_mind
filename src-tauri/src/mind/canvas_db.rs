@@ -1665,6 +1665,25 @@ mod board_version_tests {
     }
 
     #[test]
+    fn first_board_version_accepts_a_custom_semver_tag() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        create_board(&mut conn, "Custom version", 1, "board-custom-version").unwrap();
+
+        let version = create_board_version(
+            &mut conn,
+            "board-custom-version",
+            "patch",
+            "Set custom initial version",
+            Some("0.9.0"),
+            board_snapshot("v0.9.0"),
+        )
+        .unwrap();
+
+        assert_eq!(version.version, "0.9.0");
+    }
+
+    #[test]
     fn existing_board_version_table_migrates_reason_column() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
