@@ -156,7 +156,7 @@ fn emit_deepseek_delta(
         DeepSeekStreamLine::Done => return Ok(true),
         DeepSeekStreamLine::Delta(delta) => delta,
     };
-    full_response.push_str(delta);
+    full_response.push_str(&delta);
     app.emit("deepseek-chunk", delta)
         .map_err(|error| format!("Could not stream DeepSeek response to the canvas: {error}"))?;
     Ok(false)
