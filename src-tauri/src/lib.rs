@@ -6,6 +6,7 @@ pub mod vora_trace;
 
 use crate::mind::canvas_db::{AppState, BoardSummary, EdgeInput, NodeInput, SnapshotSummary};
 use crate::mind::resolver::{ResolvedSnapshot, SnapshotResolver};
+use futures::TryStreamExt;
 use rusqlite::{Connection, OptionalExtension};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -13,6 +14,138 @@ use std::process::Command;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_updater::UpdaterExt;
+
+const DEEPSEEK_API_KEY_SETTING: &str = "vora_deepseek_api_key";
+const DEEPSEEK_COMPLETION_URL: &str = "https://api.deepseek.com/v1/chat/completions";
+const MAX_DEEPSEEK_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
+
+fn process_deepseek_sse_line(
+    app: &tauri::AppHandle,
+    line: &[u8],
+    full_response: &mut String,
+) -> Result<bool, String> {
+    let line = std::str::from_utf8(line)
+        .map_err(|error| format!("DeepSeek returned an invalid UTF-8 stream line: {error}"))?
+        .trim_end_matches('\r')
+        .trim();
+    let Some(data) = line.strip_prefix("data:") else {
+        return Ok(false);
+    };
+    let data = data.trim();
+    if data == "[DONE]" {
+        return Ok(true);
+    }
+
+    let event: serde_json::Value = serde_json::from_str(data)
+        .map_err(|error| format!("Could not parse a DeepSeek stream event: {error}"))?;
+    let Some(delta) = event
+        .get("choices")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice.get("delta"))
+        .and_then(|delta| delta.get("content"))
+        .and_then(serde_json::Value::as_str)
+    else {
+        return Ok(false);
+    };
+
+    if full_response.len().saturating_add(delta.len()) > MAX_DEEPSEEK_RESPONSE_BYTES {
+        return Err("DeepSeek response exceeded the 2 MiB limit.".to_string());
+    }
+    full_response.push_str(delta);
+    app.emit("deepseek-chunk", delta.to_string())
+        .map_err(|error| format!("Could not forward DeepSeek response progress: {error}"))?;
+    Ok(false)
+}
+
+#[tauri::command]
+fn save_deepseek_key(state: State<AppState>, api_key: String) -> Result<(), String> {
+    let api_key = api_key.trim();
+    if api_key.is_empty() {
+        return Err("DeepSeek API key cannot be empty.".to_string());
+    }
+    mind::portable_db::save_setting(
+        state,
+        DEEPSEEK_API_KEY_SETTING.to_string(),
+        api_key.to_string(),
+    )
+}
+
+#[tauri::command]
+async fn generate_board_from_prompt(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    prompt: String,
+) -> Result<(), String> {
+    let prompt = prompt.trim();
+    if prompt.is_empty() {
+        return Err("Enter a prompt before generating a Board.".to_string());
+    }
+    let api_key = mind::portable_db::get_setting(state, DEEPSEEK_API_KEY_SETTING.to_string())?
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "Save a DeepSeek API key in the generator first.".to_string())?;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(DEEPSEEK_COMPLETION_URL)
+        .bearer_auth(api_key)
+        .json(&serde_json::json!({
+            "model": "deepseek-chat",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a graph generator. Return a JSON object with 'nodes' (array of {id, type, title, content}) and 'edges' (array of {source, target, label}). Node type must be 'voraCard' or 'voraText'."
+                },
+                { "role": "user", "content": prompt }
+            ],
+            "stream": true,
+            "response_format": { "type": "json_object" }
+        }))
+        .send()
+        .await
+        .map_err(|error| format!("Could not connect to DeepSeek: {error}"))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("DeepSeek returned HTTP {status}: {body}"));
+    }
+
+    let mut stream = response.bytes_stream();
+    let mut pending_line = Vec::new();
+    let mut full_response = String::new();
+    let mut stream_finished = false;
+    while let Some(chunk) = stream
+        .try_next()
+        .await
+        .map_err(|error| format!("DeepSeek response stream failed: {error}"))?
+    {
+        pending_line.extend_from_slice(&chunk);
+        while let Some(line_end) = pending_line.iter().position(|byte| *byte == b'\n') {
+            let line: Vec<u8> = pending_line.drain(..=line_end).collect();
+            if process_deepseek_sse_line(&app, &line, &mut full_response)? {
+                stream_finished = true;
+                break;
+            }
+        }
+        if stream_finished {
+            break;
+        }
+        if pending_line.len().saturating_add(full_response.len()) > MAX_DEEPSEEK_RESPONSE_BYTES {
+            return Err("DeepSeek response exceeded the 2 MiB limit.".to_string());
+        }
+    }
+
+    if !stream_finished && !pending_line.is_empty() {
+        process_deepseek_sse_line(&app, &pending_line, &mut full_response)?;
+    }
+    if full_response.trim().is_empty() {
+        return Err("DeepSeek completed without returning a generated graph.".to_string());
+    }
+    app.emit("deepseek-done", full_response)
+        .map_err(|error| format!("Could not deliver the generated Board: {error}"))?;
+    Ok(())
+}
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
