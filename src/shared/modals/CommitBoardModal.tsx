@@ -29,7 +29,7 @@ export const CommitBoardModal: React.FC<CommitBoardModalProps> = ({
     setReason("");
     setCustomVersion("0.1.0");
     setError(null);
-  }, [isOpen]);
+  }, [isFirstVersion, isOpen]);
 
   if (!isOpen) return null;
 
@@ -83,7 +83,7 @@ export const CommitBoardModal: React.FC<CommitBoardModalProps> = ({
           <label className="flex flex-col gap-2 text-xs text-zinc-300">
             <span>Initial version tag</span>
             <input
-              autoFocus
+              autoFocus={isFirstVersion}
               required
               value={customVersion}
               onChange={(event) => setCustomVersion(event.currentTarget.value)}
