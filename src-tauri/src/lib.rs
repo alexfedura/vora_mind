@@ -151,16 +151,44 @@ fn emit_deepseek_delta(
     line: &str,
     full_response: &mut String,
 ) -> Result<bool, String> {
-    let DeepSeekStreamLine::Delta(delta) = parse_deepseek_stream_line(line)? else {
-        return Ok(matches!(
-            parse_deepseek_stream_line(line)?,
-            DeepSeekStreamLine::Done
-        ));
+    let delta = match parse_deepseek_stream_line(line)? {
+        DeepSeekStreamLine::Ignore => return Ok(false),
+        DeepSeekStreamLine::Done => return Ok(true),
+        DeepSeekStreamLine::Delta(delta) => delta,
     };
     full_response.push_str(delta);
     app.emit("deepseek-chunk", delta)
         .map_err(|error| format!("Could not stream DeepSeek response to the canvas: {error}"))?;
     Ok(false)
+}
+
+#[cfg(test)]
+mod deepseek_stream_tests {
+    use super::{parse_deepseek_stream_line, DeepSeekStreamLine};
+
+    #[test]
+    fn parses_streamed_content_and_completion_marker() {
+        assert!(matches!(
+            parse_deepseek_stream_line(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"{\\\"nodes\\\":[\"}}]}"
+            )
+            .unwrap(),
+            DeepSeekStreamLine::Delta(content) if content == "{\"nodes\":["
+        ));
+        assert!(matches!(
+            parse_deepseek_stream_line("data: [DONE]").unwrap(),
+            DeepSeekStreamLine::Done
+        ));
+        assert!(matches!(
+            parse_deepseek_stream_line(": keep-alive").unwrap(),
+            DeepSeekStreamLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn rejects_malformed_stream_events() {
+        assert!(parse_deepseek_stream_line("data: {").is_err());
+    }
 }
 
 #[tauri::command]
