@@ -1745,6 +1745,26 @@ mod board_version_tests {
     }
 
     #[test]
+    fn first_board_version_defaults_to_zero_one_zero_when_no_custom_tag_is_given() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        create_board(&mut conn, "My desk", 1, "board-1").unwrap();
+
+        let first = create_board_version(
+            &mut conn,
+            "board-1",
+            "patch",
+            "First explicit commit",
+            board_snapshot("Initial state"),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(first.version, "0.1.0");
+        assert!(first.parent_version_id.is_none());
+    }
+
+    #[test]
     fn existing_board_version_table_migrates_reason_column() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
@@ -1992,6 +2012,10 @@ mod board_version_tests {
             get_all_boards(&conn).unwrap()[0].active_version,
             "0.2.0 - 0.3.0"
         );
+        let object_version_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM object_versions", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(object_version_count, 0);
 
         let branch = create_board_version(
             &mut conn,

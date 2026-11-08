@@ -97,7 +97,7 @@ export const CommitBoardModal: React.FC<CommitBoardModalProps> = ({
         <label className="flex flex-col gap-2 text-xs text-zinc-300">
           <span>Reason for change</span>
           <textarea
-            autoFocus
+            autoFocus={!isFirstVersion}
             required
             dir="auto"
             rows={4}
