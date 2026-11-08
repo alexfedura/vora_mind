@@ -415,7 +415,7 @@ fn card_field_text(
         "$.content"
     };
     let query = format!(
-        "SELECT COALESCE(json_extract(v.content, ?1), '')
+        "        SELECT COALESCE(json_extract(o.metadata, ?1), json_extract(v.content, ?1), '')
          FROM objects o
          LEFT JOIN object_versions v ON v.id = (
              SELECT id FROM object_versions WHERE object_id = o.id ORDER BY created_at DESC LIMIT 1
@@ -908,9 +908,9 @@ fn snapshot_current_board(conn: &Connection, board_id: &str) -> Result<BoardVers
 
     let mut statement = conn.prepare(
         "SELECT o.id,
-                COALESCE(json_extract(v.content, '$.title'), 'Untitled'),
-                COALESCE(json_extract(v.content, '$.content'), ''),
-                COALESCE(json_extract(v.content, '$.version'), 'v0.1.0'),
+                COALESCE(json_extract(o.metadata, '$.title'), json_extract(v.content, '$.title'), 'Untitled'),
+                COALESCE(json_extract(o.metadata, '$.content'), json_extract(v.content, '$.content'), ''),
+                COALESCE(json_extract(o.metadata, '$.version'), json_extract(v.content, '$.version'), 'v0.1.0'),
                 o.deleted_at
          FROM objects o
          LEFT JOIN object_versions v ON v.id = (
@@ -1031,13 +1031,20 @@ pub fn get_all_boards(conn: &Connection) -> Result<Vec<BoardSummary>> {
 
 pub(crate) fn parse_board_version(version: &str) -> Option<(i32, i32, i32)> {
     let mut parts = version.split('.');
-    let major = parts.next()?.parse().ok()?;
-    let minor = parts.next()?.parse().ok()?;
-    let patch = parts.next()?.parse().ok()?;
+    let parsed = [parts.next()?, parts.next()?, parts.next()?]
+        .map(|part| {
+            if part.is_empty()
+                || (part.len() > 1 && part.starts_with('0'))
+                || !part.bytes().all(|byte| byte.is_ascii_digit())
+            {
+                return None;
+            }
+            part.parse::<i32>().ok()
+        });
     if parts.next().is_some() {
         return None;
     }
-    Some((major, minor, patch))
+    Some((parsed[0]?, parsed[1]?, parsed[2]?))
 }
 
 pub fn create_board(
@@ -1339,12 +1346,21 @@ pub fn checkout_board_version(
         params![now, board_id],
     )?;
     for card in &snapshot.cards {
+        let metadata = serde_json::json!({
+            "title": card.title,
+            "content": card.content,
+            "version": card.version,
+        })
+        .to_string();
         let changed = tx.execute(
-            "INSERT INTO objects (id, type, board_id, created_at, updated_at, deleted_at)
-             VALUES (?1, 'card', ?2, ?3, ?3, ?4)
-             ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
+            "INSERT INTO objects (id, type, board_id, created_at, updated_at, deleted_at, metadata)
+             VALUES (?1, 'card', ?2, ?3, ?3, ?4, ?5)
+             ON CONFLICT(id) DO UPDATE SET
+                 updated_at = excluded.updated_at,
+                 deleted_at = excluded.deleted_at,
+                 metadata = json_patch(COALESCE(objects.metadata, '{}'), excluded.metadata)
              WHERE objects.board_id = excluded.board_id",
-            params![card.id, board_id, now, card.deleted_at],
+            params![card.id, board_id, now, card.deleted_at, metadata],
         )?;
         if changed == 0 {
             return Err(rusqlite::Error::InvalidQuery);
@@ -1362,17 +1378,6 @@ pub fn checkout_board_version(
                 "version": card.version
             }
         });
-        tx.execute(
-            "INSERT INTO object_versions
-                (id, object_id, version_major, version_minor, version_patch, reason, summary, content, created_at)
-             VALUES (?1, ?2, 0, 1, 0, 'board-version-checkout', NULL, ?3, ?4)",
-            params![
-                format!("card_version_{}", uuid::Uuid::now_v7()),
-                card.id,
-                content.to_string(),
-                now
-            ],
-        )?;
     }
     tx.execute(
         "UPDATE mind_boards SET active_version_id = ?1, branch_origin_version_id = ?2, updated_at = ?3
