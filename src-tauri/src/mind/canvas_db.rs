@@ -37,6 +37,18 @@ pub struct NodeInput {
     pub style: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LibraryObjectResult {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub object_type: String,
+    pub title: String,
+    pub content: String,
+    pub board_id: String,
+    pub is_placed: bool,
+    pub review_status: String,
+}
+
 fn default_node_type() -> String {
     "voraCard".to_string()
 }
@@ -210,7 +222,9 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             deleted_at INTEGER NULL,
-            metadata JSON
+            metadata JSON,
+            review_status TEXT NOT NULL DEFAULT 'active'
+                CHECK (review_status IN ('active', 'completed', 'not_needed'))
         );
 
         CREATE TABLE IF NOT EXISTS object_versions (
@@ -360,9 +374,11 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     ensure_board_column(conn, "mind_snapshots")?;
     ensure_board_version_columns(conn)?;
     ensure_object_working_content_column(conn)?;
+    ensure_object_review_status_column(conn)?;
     ensure_library_item_group_board_column(conn)?;
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_objects_board ON objects(board_id);
+        CREATE INDEX IF NOT EXISTS idx_objects_review_status ON objects(review_status);
          CREATE INDEX IF NOT EXISTS idx_snapshots_board ON mind_snapshots(board_id, created_at);
          CREATE INDEX IF NOT EXISTS idx_board_versions_history ON mind_board_versions(board_id, created_at, id);
          CREATE UNIQUE INDEX IF NOT EXISTS idx_mind_boards_library_group ON mind_boards(library_item_group_id)
