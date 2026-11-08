@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Check, Folder, FolderPlus, GitBranch, GitCompare, History, LayoutGrid, Pencil, Trash2, X } from "lucide-react";
 import type { BoardItem } from "@/mind/types";
 import type {
@@ -59,6 +59,9 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
 }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [newBoardTitle, setNewBoardTitle] = useState("");
+  const [renamingBoardId, setRenamingBoardId] = useState<string | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyBoardId, setBusyBoardId] = useState<string | null>(null);
   const [expandedBoardId, setExpandedBoardId] = useState<string | null>(null);
@@ -73,6 +76,12 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
     board: BoardItem;
     version: BoardVersionSummary;
   } | null>(null);
+
+  useEffect(() => {
+    if (!renamingBoardId) return;
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
+  }, [renamingBoardId]);
 
   React.useEffect(() => {
     if (!shouldStartCreatingBoard) return;
@@ -101,16 +110,30 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
     }
   };
 
+  const startRenamingBoard = (board: BoardItem): void => {
+    setError(null);
+    setRenameTitle(board.title);
+    setRenamingBoardId(board.id);
+  };
+
   const renameBoard = async (board: BoardItem): Promise<void> => {
-    const title = window.prompt("Rename Board", board.title)?.trim();
-    if (!title || title === board.title) return;
+    const title = renameTitle.trim();
+    if (!title) {
+      setError("Board name cannot be empty.");
+      return;
+    }
+    if (title === board.title) {
+      setRenamingBoardId(null);
+      return;
+    }
     setError(null);
     setBusyBoardId(board.id);
     try {
       await onRenameBoard(board.id, title);
+      setRenamingBoardId(null);
     } catch (cause) {
       console.error("Could not rename Board:", cause);
-      setError("Could not rename Board.");
+      setError(`Could not rename Board: ${errorText(cause)}`);
     } finally {
       setBusyBoardId(null);
     }
@@ -271,27 +294,69 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
                     isActive ? "bg-[#202430] text-violet-300" : "text-zinc-400 hover:bg-[#191c24] hover:text-zinc-100"
                   }`}
                 >
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => { void onSelectBoard(board.id).catch((cause: unknown) => {
-                      console.error("Could not switch Board:", cause);
-                      setError(`Could not open Board: ${errorText(cause)}`);
-                    }); }}
-                    className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-xs"
-                  >
-                    <Folder size={15} className="flex-shrink-0" />
-                    {board.parent_board_id && (
-                      <span aria-label="Branch" title="Branch" className="flex-shrink-0 text-[11px] text-violet-300">↳</span>
-                    )}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">{board.title}</span>
-                      <span className="block truncate text-[9px] opacity-70">
-                        {board.active_version || "No version yet"}
-                      </span>
-                    </span>
-                  </button>
-                  <div className="mr-1 flex items-center">
+                  {renamingBoardId === board.id ? (
+                    <form
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void renameBoard(board);
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5"
+                    >
+                      <Folder size={15} className="flex-shrink-0" />
+                      <input
+                        ref={renameInputRef}
+                        aria-label={`Board name for ${board.title}`}
+                        value={renameTitle}
+                        onChange={(event) => setRenameTitle(event.currentTarget.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") setRenamingBoardId(null);
+                        }}
+                        disabled={isBusy}
+                        className="min-w-0 flex-1 rounded border border-violet-500 bg-[#111318] px-1.5 py-1 text-xs text-zinc-100 outline-none"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isBusy || !renameTitle.trim()}
+                        aria-label="Save Board name"
+                        title="Save"
+                        className="rounded p-1 text-emerald-300 hover:bg-[#303543] disabled:opacity-50"
+                      >
+                        <Check size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => setRenamingBoardId(null)}
+                        aria-label="Cancel Board rename"
+                        title="Cancel"
+                        className="rounded p-1 text-zinc-400 hover:bg-[#303543] hover:text-white"
+                      >
+                        <X size={13} />
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => { void onSelectBoard(board.id).catch((cause: unknown) => {
+                          console.error("Could not switch Board:", cause);
+                          setError(`Could not open Board: ${errorText(cause)}`);
+                        }); }}
+                        className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-xs"
+                      >
+                        <Folder size={15} className="flex-shrink-0" />
+                        {board.parent_board_id && (
+                          <span aria-label="Branch" title="Branch" className="flex-shrink-0 text-[11px] text-violet-300">↳</span>
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{board.title}</span>
+                          <span className="block truncate text-[9px] opacity-70">
+                            {board.active_version || "No version yet"}
+                          </span>
+                        </span>
+                      </button>
+                      <div className="mr-1 flex items-center">
                     <button
                       type="button"
                       disabled={isBusy}
@@ -303,13 +368,15 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
                     >
                       <History size={13} />
                     </button>
-                    <button type="button" aria-label={`Rename ${board.title}`} title="Rename Board" onClick={() => void renameBoard(board)} className="hidden rounded p-1 hover:bg-[#303543] hover:text-white group-hover:inline-flex">
+                    <button type="button" aria-label={`Rename ${board.title}`} title="Rename Board" onClick={() => startRenamingBoard(board)} className="hidden rounded p-1 hover:bg-[#303543] hover:text-white group-hover:inline-flex">
                       <Pencil size={13} />
                     </button>
                     <button type="button" aria-label={`Delete ${board.title}`} title="Delete Board" onClick={() => void deleteBoard(board)} className="hidden rounded p-1 hover:bg-rose-500/15 hover:text-rose-300 group-hover:inline-flex">
                       <Trash2 size={13} />
                     </button>
                   </div>
+                    </>
+                  )}
                 </div>
                 {expandedBoardId === board.id && (
                   <div className="ml-2 border-l border-[#303543] pl-2">
