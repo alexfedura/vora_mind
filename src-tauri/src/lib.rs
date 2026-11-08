@@ -97,132 +97,131 @@ fn get_last_update_failure(app: tauri::AppHandle) -> Result<Option<UpdaterFailur
 
 #[tauri::command]
 fn save_deepseek_key(state: State<AppState>, api_key: String) -> Result<(), String> {
-        let api_key = api_key.trim();
-        if api_key.is_empty()
-            || api_key.len() > 4096
-            || api_key.contains('\r')
-            || api_key.contains('\n')
-        {
-            return Err("Enter a valid DeepSeek API key.".to_string());
-}
-        let database_path = state
-            .db_path
-            .lock()
-            .map_err(|error| error.to_string())?
-            .clone()
-            .ok_or_else(|| "Active database path is unavailable".to_string())?;
-        mind::portable_db::save_setting_for_database(
-            Path::new(&database_path),
-            "vora_deepseek_api_key",
-            api_key,
-        )
+    let api_key = api_key.trim();
+    if api_key.is_empty()
+        || api_key.len() > 4096
+        || api_key.contains('\r')
+        || api_key.contains('\n')
+    {
+        return Err("Enter a valid DeepSeek API key.".to_string());
     }
+    let database_path = state
+        .db_path
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone()
+        .ok_or_else(|| "Active database path is unavailable".to_string())?;
+    mind::portable_db::save_setting_for_database(
+        Path::new(&database_path),
+        "vora_deepseek_api_key",
+        api_key,
+    )
+}
 
 fn emit_deepseek_delta(
-        app: &tauri::AppHandle,
-        line: &str,
-        full_response: &mut String,
-    ) -> Result<bool, String> {
-        let Some(data) = line.strip_prefix("data:") else {
-            return Ok(false);
-        };
-        let data = data.trim();
-        if data == "[DONE]" {
-            return Ok(true);
-        }
-        let payload: serde_json::Value =
-            serde_json::from_str(data).map_err(|error| format!("Invalid DeepSeek stream event: {error}"))?;
-        let Some(delta) = payload
-            .pointer("/choices/0/delta/content")
-            .and_then(serde_json::Value::as_str)
-        else {
-            return Ok(false);
-        };
-        if delta.is_empty() {
-            return Ok(false);
-        }
-        full_response.push_str(delta);
-        app.emit("deepseek-chunk", delta.to_string())
-            .map_err(|error| format!("Could not stream DeepSeek response to the canvas: {error}"))?;
-        Ok(false)
+    app: &tauri::AppHandle,
+    line: &str,
+    full_response: &mut String,
+) -> Result<bool, String> {
+    let Some(data) = line.strip_prefix("data:") else {
+        return Ok(false);
+    };
+    let data = data.trim();
+    if data == "[DONE]" {
+        return Ok(true);
+    }
+    let payload: serde_json::Value = serde_json::from_str(data)
+        .map_err(|error| format!("Invalid DeepSeek stream event: {error}"))?;
+    let Some(delta) = payload
+        .pointer("/choices/0/delta/content")
+        .and_then(serde_json::Value::as_str)
+    else {
+        return Ok(false);
+    };
+    if delta.is_empty() {
+        return Ok(false);
+    }
+    full_response.push_str(delta);
+    app.emit("deepseek-chunk", delta.to_string())
+        .map_err(|error| format!("Could not stream DeepSeek response to the canvas: {error}"))?;
+    Ok(false)
 }
 
 #[tauri::command]
 async fn generate_board_from_prompt(
-        app: tauri::AppHandle,
-        state: State<'_, AppState>,
-        prompt: String,
-    ) -> Result<(), String> {
-        let prompt = prompt.trim();
-        if prompt.is_empty() || prompt.len() > 20_000 {
-            return Err("Enter a prompt of 1 to 20,000 characters.".to_string());
-        }
-        let database_path = state
-            .db_path
-            .lock()
-            .map_err(|error| error.to_string())?
-            .clone()
-            .ok_or_else(|| "Active database path is unavailable".to_string())?;
-        let settings = mind::portable_db::read_settings_for_database(Path::new(&database_path))?;
-        let api_key = settings
-            .get("vora_deepseek_api_key")
-            .map(String::as_str)
-            .filter(|key| !key.trim().is_empty())
-            .ok_or_else(|| "Save a DeepSeek API key before generating a Board.".to_string())?;
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    prompt: String,
+) -> Result<(), String> {
+    let prompt = prompt.trim();
+    if prompt.is_empty() || prompt.len() > 20_000 {
+        return Err("Enter a prompt of 1 to 20,000 characters.".to_string());
+    }
+    let database_path = state
+        .db_path
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone()
+        .ok_or_else(|| "Active database path is unavailable".to_string())?;
+    let settings = mind::portable_db::read_settings_for_database(Path::new(&database_path))?;
+    let api_key = settings
+        .get("vora_deepseek_api_key")
+        .map(String::as_str)
+        .filter(|key| !key.trim().is_empty())
+        .ok_or_else(|| "Save a DeepSeek API key before generating a Board.".to_string())?;
 
-        let client = reqwest::Client::new();
-        let response = client
-            .post("https://api.deepseek.com/v1/chat/completions")
-            .bearer_auth(api_key)
-            .json(&serde_json::json!({
-                "model": "deepseek-chat",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are a graph generator. Return only a JSON object with 'nodes' (array of {id, type, title, content}) and 'edges' (array of {source, target, label}). Node type must be either 'voraCard' or 'voraText'. Every edge endpoint must match a node id. Generate valid JSON with no markdown."
-                    },
-                    { "role": "user", "content": prompt }
-                ],
-                "stream": true,
-                "response_format": { "type": "json_object" }
-            }))
-            .send()
-            .await
-            .map_err(|error| format!("Could not connect to DeepSeek: {error}"))?;
-        if !response.status().is_success() {
-            return Err(format!("DeepSeek API returned HTTP {}.", response.status()));
-        }
+    let response = reqwest::Client::new()
+        .post("https://api.deepseek.com/v1/chat/completions")
+        .bearer_auth(api_key)
+        .json(&serde_json::json!({
+            "model": "deepseek-chat",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a graph generator. Return only a JSON object with 'nodes' (array of {id, type, title, content}) and 'edges' (array of {source, target, label}). Node type must be either 'voraCard' or 'voraText'. Every edge endpoint must match a node id. Generate valid JSON with no markdown."
+                },
+                { "role": "user", "content": prompt }
+            ],
+            "stream": true,
+            "response_format": { "type": "json_object" }
+        }))
+        .send()
+        .await
+        .map_err(|error| format!("Could not connect to DeepSeek: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("DeepSeek API returned HTTP {}.", response.status()));
+    }
 
-        let mut stream = response.bytes_stream();
-        let mut buffer = Vec::new();
-        let mut full_response = String::new();
-        let mut stream_finished = false;
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|error| format!("Could not read DeepSeek stream: {error}"))?;
-            buffer.extend_from_slice(&chunk);
-            while let Some(newline) = buffer.iter().position(|byte| *byte == b'\n') {
-                let line = String::from_utf8(buffer.drain(..=newline).collect())
-                    .map_err(|error| format!("DeepSeek returned invalid UTF-8: {error}"))?;
-                if emit_deepseek_delta(&app, line.trim_end_matches(['\r', '\n']), &mut full_response)? {
-                    stream_finished = true;
-                    break;
-            }
-            if stream_finished {
+    let mut stream = response.bytes_stream();
+    let mut buffer = Vec::new();
+    let mut full_response = String::new();
+    let mut stream_finished = false;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|error| format!("Could not read DeepSeek stream: {error}"))?;
+        buffer.extend_from_slice(&chunk);
+        while let Some(newline) = buffer.iter().position(|byte| *byte == b'\n') {
+            let line = String::from_utf8(buffer.drain(..=newline).collect())
+                .map_err(|error| format!("DeepSeek returned invalid UTF-8: {error}"))?;
+            if emit_deepseek_delta(&app, line.trim_end_matches(['\r', '\n']), &mut full_response)? {
+                stream_finished = true;
                 break;
             }
         }
-        if !stream_finished && !buffer.is_empty() {
-            let line = String::from_utf8(buffer)
-                .map_err(|error| format!("DeepSeek returned invalid UTF-8: {error}"))?;
-            emit_deepseek_delta(&app, line.trim_end_matches(['\r', '\n']), &mut full_response)?;
+        if stream_finished {
+            break;
         }
-        if full_response.trim().is_empty() {
-            return Err("DeepSeek completed without generating a Board graph.".to_string());
-        }
-        app.emit("deepseek-done", full_response)
-            .map_err(|error| format!("Could not deliver the generated Board: {error}"))?;
-        Ok(())
     }
+    if !stream_finished && !buffer.is_empty() {
+        let line = String::from_utf8(buffer)
+            .map_err(|error| format!("DeepSeek returned invalid UTF-8: {error}"))?;
+        emit_deepseek_delta(&app, line.trim_end_matches(['\r', '\n']), &mut full_response)?;
+    }
+    if full_response.trim().is_empty() {
+        return Err("DeepSeek completed without generating a Board graph.".to_string());
+    }
+    app.emit("deepseek-done", full_response)
+        .map_err(|error| format!("Could not deliver the generated Board: {error}"))?;
+    Ok(())
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
