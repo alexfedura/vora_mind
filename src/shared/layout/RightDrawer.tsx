@@ -1355,7 +1355,83 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                 </button>
               )}
 
-              {filteredCards.map((c) => {
+              {libraryObjectsForView.map((item) => {
+                const itemTitleDir = resolveTextDirection(item.title || "", isMajorRtl);
+                const ObjectTypeIcon = item.type === "card"
+                  ? FileText
+                  : item.type === "shape"
+                    ? Square
+                    : item.type === "text"
+                      ? Type
+                      : Film;
+                return (
+                  <article
+                    key={`object-${item.id}`}
+                    onMouseEnter={() => {
+                      window.dispatchEvent(new CustomEvent<string>(
+                        "vora:highlight-canvas-node",
+                        { detail: item.id },
+                      ));
+                    }}
+                    className="group relative flex h-52 flex-col rounded-2xl border border-[#262b37] bg-[#191c24] p-3.5 shadow-sm transition hover:border-purple-500/50 hover:bg-[#20242f]"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => void handleLibraryObjectClick(item.id)}
+                      title={item.is_placed ? "Open or locate on board" : "Open owning Board"}
+                      className="flex min-h-0 flex-1 flex-col text-left"
+                    >
+                      <div className="flex w-full items-center gap-2 border-b border-[#232836]/60 pb-2">
+                        <ObjectTypeIcon size={14} className="shrink-0 text-purple-300" />
+                        <span className="text-[9px] uppercase tracking-wide text-zinc-500">{item.type}</span>
+                        <span className="ml-auto flex items-center gap-1 text-[9px]">
+                          {item.is_placed ? (
+                            <span className="text-emerald-300">On Board</span>
+                          ) : (
+                            <>
+                              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+                              <span className="text-rose-300">Not on Board</span>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      <span
+                        dir={itemTitleDir.isRtl ? "rtl" : "ltr"}
+                        className={`mt-2 w-full truncate text-sm font-bold text-gray-100 ${
+                          itemTitleDir.isRtl ? "text-right" : "text-left"
+                        } ${item.review_status === "completed" ? "line-through opacity-60" : ""}`}
+                      >
+                        {itemTitleDir.cleanText || "Untitled"}
+                      </span>
+                      <p className="mt-1 flex-1 overflow-hidden whitespace-pre-wrap break-words text-xs leading-relaxed text-gray-400">
+                        {item.content || "No content"}
+                      </p>
+                    </button>
+                    <div className="mt-2 flex items-center justify-between border-t border-[#232836]/60 pt-2">
+                      <span className="truncate text-[9px] text-zinc-500">
+                        {item.review_status === "not_needed" ? "Not needed" : item.review_status}
+                      </span>
+                      <select
+                        aria-label={`Review status for ${item.title || item.type}`}
+                        value={item.review_status}
+                        onChange={(event) => {
+                          const status = event.currentTarget.value;
+                          if (status === "active" || status === "completed" || status === "not_needed") {
+                            void handleLibraryReviewStatusChange(item.id, status);
+                          }
+                        }}
+                        className="max-w-28 rounded border border-[#303543] bg-[#111318] px-1.5 py-1 text-[9px] text-zinc-300 outline-none focus:border-purple-500/60"
+                      >
+                        <option value="active">Active</option>
+                        <option value="completed">Completed</option>
+                        <option value="not_needed">Not needed</option>
+                      </select>
+                    </div>
+                  </article>
+                );
+              })}
+
+              {currentFilter === "trash" && filteredCards.map((c) => {
                 const itemTitleDir = resolveTextDirection(c.title || "", isMajorRtl);
                 const mediaPreview = resolveLibraryMediaPreview(c.content);
                 return (

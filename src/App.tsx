@@ -3596,6 +3596,7 @@ function AppContent() {
         onGetItemGroupVersions={handleGetLibraryItemGroupVersions}
         onGetItemGroupUsages={dbService.getLibraryItemGroupUsages}
         onOpenLibraryBoard={handleOpenLibraryBoard}
+        onSelectBoard={handleSelectBoard}
       />}
 
       {/* سایدبار تحلیل هوشمند کد (Forge AI Agent) */}
