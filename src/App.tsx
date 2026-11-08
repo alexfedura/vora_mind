@@ -3630,6 +3630,17 @@ function AppContent() {
       </main>
 
       {!isWorkspacePageOpen && <div className="absolute top-3.5 right-3.5 z-40 flex flex-row-reverse gap-2">
+        {!libraryBoardSession && canvasBoardId && (
+          <button
+            type="button"
+            onClick={() => setIsGenerateBoardModalOpen(true)}
+            aria-label="Generate Board with AI"
+            title="Generate Board with DeepSeek"
+            className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_FLOATING_CONTROL_BORDER_CLASS} ${CANVAS_FLOATING_CONTROL_BACKGROUND_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
+          >
+            <Sparkles size={16} />
+          </button>
+        )}
         <button
           type="button"
           onClick={toggleRightDrawer}
@@ -3749,6 +3760,11 @@ function AppContent() {
           flow.setEdges((eds) => eds.concat(edges));
         }}
       />}
+
+      <GenerateBoardModal
+        isOpen={isGenerateBoardModalOpen}
+        onClose={() => setIsGenerateBoardModalOpen(false)}
+      />
 
       <CommitModal
         isOpen={!libraryBoardSession && flow.isCommitModalOpen}
