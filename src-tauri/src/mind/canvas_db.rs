@@ -397,6 +397,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             [],
         )?;
     }
+    ensure_board_version_baselines(conn)?;
     Ok(())
 }
 
@@ -415,7 +416,7 @@ fn card_field_text(
         "$.content"
     };
     let query = format!(
-        "        SELECT COALESCE(json_extract(o.metadata, ?1), json_extract(v.content, ?1), '')
+        "SELECT COALESCE(json_extract(v.content, ?1), '')
          FROM objects o
          LEFT JOIN object_versions v ON v.id = (
              SELECT id FROM object_versions WHERE object_id = o.id ORDER BY created_at DESC LIMIT 1
@@ -908,9 +909,9 @@ fn snapshot_current_board(conn: &Connection, board_id: &str) -> Result<BoardVers
 
     let mut statement = conn.prepare(
         "SELECT o.id,
-                COALESCE(json_extract(o.metadata, '$.title'), json_extract(v.content, '$.title'), 'Untitled'),
-                COALESCE(json_extract(o.metadata, '$.content'), json_extract(v.content, '$.content'), ''),
-                COALESCE(json_extract(o.metadata, '$.version'), json_extract(v.content, '$.version'), 'v0.1.0'),
+                COALESCE(json_extract(v.content, '$.title'), 'Untitled'),
+                COALESCE(json_extract(v.content, '$.content'), ''),
+                COALESCE(json_extract(v.content, '$.version'), 'v0.1.0'),
                 o.deleted_at
          FROM objects o
          LEFT JOIN object_versions v ON v.id = (
@@ -1031,20 +1032,13 @@ pub fn get_all_boards(conn: &Connection) -> Result<Vec<BoardSummary>> {
 
 pub(crate) fn parse_board_version(version: &str) -> Option<(i32, i32, i32)> {
     let mut parts = version.split('.');
-    let parsed = [parts.next()?, parts.next()?, parts.next()?]
-        .map(|part| {
-            if part.is_empty()
-                || (part.len() > 1 && part.starts_with('0'))
-                || !part.bytes().all(|byte| byte.is_ascii_digit())
-            {
-                return None;
-            }
-            part.parse::<i32>().ok()
-        });
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next()?.parse().ok()?;
     if parts.next().is_some() {
         return None;
     }
-    Some((parsed[0]?, parsed[1]?, parsed[2]?))
+    Some((major, minor, patch))
 }
 
 pub fn create_board(
@@ -1057,6 +1051,19 @@ pub fn create_board(
     tx.execute(
         "INSERT INTO mind_boards (id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
         params![id, title, now],
+    )?;
+    let version_id = format!("board_version_{}", uuid::Uuid::now_v7());
+    let payload = serde_json::to_string(&BoardVersionSnapshot::default())
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    tx.execute(
+        "INSERT INTO mind_board_versions
+            (id, board_id, version_major, version_minor, version_patch, snapshot_json, created_at)
+         VALUES (?1, ?2, 0, 1, 0, ?3, ?4)",
+        params![version_id, id, payload, now],
+    )?;
+    tx.execute(
+        "UPDATE mind_boards SET active_version_id = ?1 WHERE id = ?2",
+        params![version_id, id],
     )?;
     tx.commit()?;
     get_all_boards(conn)?
@@ -1175,7 +1182,7 @@ pub fn fork_board_from_version(
 }
 
 pub fn get_board_versions(conn: &Connection, board_id: &str) -> Result<Vec<BoardVersionSummary>> {
-    let active_version_id: Option<String> = conn.query_row(
+    let active_version_id: String = conn.query_row(
         "SELECT active_version_id FROM mind_boards WHERE id = ?1",
         [board_id],
         |row| row.get(0),
@@ -1189,12 +1196,7 @@ pub fn get_board_versions(conn: &Connection, board_id: &str) -> Result<Vec<Board
     version_ids
         .iter()
         .map(|version_id| {
-            load_board_version_summary(
-                conn,
-                board_id,
-                version_id,
-                active_version_id.as_deref().unwrap_or_default(),
-            )
+            load_board_version_summary(conn, board_id, version_id, &active_version_id)
         })
         .collect()
 }
@@ -1205,40 +1207,28 @@ pub fn create_board_version(
     increment: &str,
     reason: &str,
     snapshot: BoardVersionSnapshot,
-    custom_version: Option<&str>,
 ) -> Result<BoardVersionSummary> {
     let reason = reason.trim();
     if reason.is_empty() {
         return Err(rusqlite::Error::InvalidQuery);
     }
     let tx = conn.transaction()?;
-    let (active_version_id, forked_from_version_id): (Option<String>, Option<String>) = tx.query_row(
+    let (active_version_id, forked_from_version_id): (String, Option<String>) = tx.query_row(
         "SELECT active_version_id, branch_origin_version_id FROM mind_boards WHERE id = ?1",
         [board_id],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    let version_count: i64 = tx.query_row(
-        "SELECT COUNT(*) FROM mind_board_versions WHERE board_id = ?1",
-        [board_id],
-        |row| row.get(0),
+    let (major, minor, patch): (i32, i32, i32) = tx.query_row(
+        "SELECT version_major, version_minor, version_patch
+         FROM mind_board_versions WHERE id = ?1 AND board_id = ?2",
+        params![active_version_id, board_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )?;
-    let (next_major, next_minor, next_patch) = if version_count == 0 {
-        let version = custom_version.unwrap_or("0.1.0");
-        parse_board_version(version).ok_or(rusqlite::Error::InvalidQuery)?
-    } else {
-        let active_version_id = active_version_id.ok_or(rusqlite::Error::InvalidQuery)?;
-        let (major, minor, patch): (i32, i32, i32) = tx.query_row(
-            "SELECT version_major, version_minor, version_patch
-             FROM mind_board_versions WHERE id = ?1 AND board_id = ?2",
-            params![active_version_id, board_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )?;
-        match increment {
-            "major" => (major.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?, 0, 0),
-            "minor" => (major, minor.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?, 0),
-            "patch" => (major, minor, patch.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?),
-            _ => return Err(rusqlite::Error::InvalidQuery),
-        }
+    let (next_major, next_minor, next_patch) = match increment {
+        "major" => (major + 1, 0, 0),
+        "minor" => (major, minor + 1, 0),
+        "patch" => (major, minor, patch + 1),
+        _ => return Err(rusqlite::Error::InvalidQuery),
     };
     let version_exists: bool = tx.query_row(
         "SELECT EXISTS(
@@ -1346,25 +1336,40 @@ pub fn checkout_board_version(
         params![now, board_id],
     )?;
     for card in &snapshot.cards {
-        let metadata = serde_json::json!({
-            "title": card.title,
-            "content": card.content,
-            "version": card.version,
-        })
-        .to_string();
         let changed = tx.execute(
-            "INSERT INTO objects (id, type, board_id, created_at, updated_at, deleted_at, metadata)
-             VALUES (?1, 'card', ?2, ?3, ?3, ?4, ?5)
-             ON CONFLICT(id) DO UPDATE SET
-                 updated_at = excluded.updated_at,
-                 deleted_at = excluded.deleted_at,
-                 metadata = json_patch(COALESCE(objects.metadata, '{}'), excluded.metadata)
+            "INSERT INTO objects (id, type, board_id, created_at, updated_at, deleted_at)
+             VALUES (?1, 'card', ?2, ?3, ?3, ?4)
+             ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
              WHERE objects.board_id = excluded.board_id",
-            params![card.id, board_id, now, card.deleted_at, metadata],
+            params![card.id, board_id, now, card.deleted_at],
         )?;
         if changed == 0 {
             return Err(rusqlite::Error::InvalidQuery);
         }
+        let content = serde_json::json!({
+            "title": card.title,
+            "content": card.content,
+            "version": card.version,
+            "node_type": "voraCard",
+            "data": {
+                "cardId": card.id,
+                "title": card.title,
+                "label": card.title,
+                "content": card.content,
+                "version": card.version
+            }
+        });
+        tx.execute(
+            "INSERT INTO object_versions
+                (id, object_id, version_major, version_minor, version_patch, reason, summary, content, created_at)
+             VALUES (?1, ?2, 0, 1, 0, 'board-version-checkout', NULL, ?3, ?4)",
+            params![
+                format!("card_version_{}", uuid::Uuid::now_v7()),
+                card.id,
+                content.to_string(),
+                now
+            ],
+        )?;
     }
     tx.execute(
         "UPDATE mind_boards SET active_version_id = ?1, branch_origin_version_id = ?2, updated_at = ?3
@@ -1734,37 +1739,6 @@ mod board_version_tests {
     }
 
     #[test]
-    fn new_board_starts_with_an_empty_version_history() {
-        let mut conn = Connection::open_in_memory().unwrap();
-        init_db(&conn).unwrap();
-        let board = create_board(&mut conn, "My desk", 1, "board-1").unwrap();
-
-        assert!(board.active_version.is_empty());
-        assert!(board.active_version_id.is_empty());
-        assert!(get_board_versions(&conn, "board-1").unwrap().is_empty());
-    }
-
-    #[test]
-    fn first_board_version_defaults_to_zero_one_zero_when_no_custom_tag_is_given() {
-        let mut conn = Connection::open_in_memory().unwrap();
-        init_db(&conn).unwrap();
-        create_board(&mut conn, "My desk", 1, "board-1").unwrap();
-
-        let first = create_board_version(
-            &mut conn,
-            "board-1",
-            "patch",
-            "First explicit commit",
-            board_snapshot("Initial state"),
-            None,
-        )
-        .unwrap();
-
-        assert_eq!(first.version, "0.1.0");
-        assert!(first.parent_version_id.is_none());
-    }
-
-    #[test]
     fn existing_board_version_table_migrates_reason_column() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
@@ -1963,14 +1937,14 @@ mod board_version_tests {
     }
 
     #[test]
-    fn board_versions_support_custom_first_version_branch_origin_and_checkout_state() {
+    fn board_versions_capture_baseline_branch_origin_and_checkout_state() {
         let mut conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
         create_board(&mut conn, "My desk", 1, "board-1").unwrap();
 
         let boards = get_all_boards(&conn).unwrap();
-        assert!(boards[0].active_version.is_empty());
-        assert!(get_board_versions(&conn, "board-1").unwrap().is_empty());
+        assert_eq!(boards[0].active_version, "0.1.0");
+        let baseline_id = boards[0].active_version_id.clone();
         let v0_2 =
             create_board_version(
                 &mut conn,
@@ -1978,7 +1952,6 @@ mod board_version_tests {
                 "minor",
                 "Add first milestone",
                 board_snapshot("v0.2.0"),
-                Some("0.2.0"),
             )
             .unwrap();
         assert_eq!(v0_2.version, "0.2.0");
@@ -1989,7 +1962,6 @@ mod board_version_tests {
                 "minor",
                 "Add second milestone",
                 board_snapshot("v0.3.0"),
-                None,
             )
             .unwrap();
         assert_eq!(v0_3.version, "0.3.0");
@@ -2012,10 +1984,6 @@ mod board_version_tests {
             get_all_boards(&conn).unwrap()[0].active_version,
             "0.2.0 - 0.3.0"
         );
-        let object_version_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM object_versions", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(object_version_count, 0);
 
         let branch = create_board_version(
             &mut conn,
@@ -2023,17 +1991,19 @@ mod board_version_tests {
             "patch",
             "Fix checked-out Board",
             restored,
-            None,
         )
         .unwrap();
         assert_eq!(branch.version, "0.2.1");
         assert_eq!(branch.reason.as_deref(), Some("Fix checked-out Board"));
         assert_eq!(branch.parent_version_id.as_deref(), Some(v0_2.id.as_str()));
         assert_eq!(branch.forked_from_version.as_deref(), Some("0.3.0"));
-        assert_eq!(branch.parent_version_id.as_deref(), Some(v0_2.id.as_str()));
+        assert_ne!(
+            branch.parent_version_id.as_deref(),
+            Some(baseline_id.as_str())
+        );
 
         let history = get_board_versions(&conn, "board-1").unwrap();
-        assert_eq!(history.len(), 3);
+        assert_eq!(history.len(), 4);
         assert!(history.last().is_some_and(|version| version.is_active));
         assert!(checkout_board_version(&mut conn, "board-2", &branch.id).is_err());
     }
@@ -2049,7 +2019,6 @@ mod board_version_tests {
             "minor",
             "A saved version",
             board_snapshot("Saved content"),
-            Some("0.2.0"),
         )
         .unwrap();
 

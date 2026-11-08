@@ -109,6 +109,7 @@ export const CommitCardModal: React.FC<CommitCardModalProps> = ({
           required
           value={version}
           onChange={(event) => setVersion(event.target.value)}
+          disabled={isFirstVersion}
           placeholder="v0.1.1"
           pattern="v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
           title="Use a three-part numeric version, such as v0.1.1"
