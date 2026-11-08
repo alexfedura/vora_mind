@@ -1182,26 +1182,20 @@ fn save_card_direct(
     let metadata = library_source_card_id.as_ref().map(|source_card_id| {
         serde_json::json!({ "librarySourceCardId": source_card_id }).to_string()
     });
-    let content_json = serde_json::json!({
-        "title": title,
-        "content": content,
-        "version": version,
-    })
-    .to_string();
-    tx.execute(
-        "INSERT INTO objects
-            (id, type, board_id, created_at, updated_at, deleted_at, metadata, working_content)
-         VALUES (?1, 'card', ?2, ?3, ?3, NULL, ?4, ?5)
-         ON CONFLICT(id) DO UPDATE SET
-             updated_at = excluded.updated_at,
-             working_content = excluded.working_content,
-             metadata = CASE
-                 WHEN excluded.metadata IS NULL THEN objects.metadata
-                 ELSE json_patch(COALESCE(objects.metadata, '{}'), excluded.metadata)
-             END
-         WHERE objects.board_id = excluded.board_id",
-        rusqlite::params![&id, &board_id, now, metadata, content_json],
-    ).map_err(|e| e.to_string())?;
+    let rows_updated = store_card_working_content(
+        &tx,
+        &board_id,
+        &id,
+        &title,
+        &content,
+        &version,
+        now,
+        metadata,
+    )
+    .map_err(|error| error.to_string())?;
+    if rows_updated == 0 {
+        return Err("Card does not belong to the active Board".to_string());
+    }
     let belongs_to_board: bool = tx
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM objects WHERE id = ?1 AND board_id = ?2)",
