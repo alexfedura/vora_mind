@@ -312,14 +312,23 @@ pub fn init_vora_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
 
 #[tauri::command]
 pub fn save_setting(state: State<AppState>, key: String, value: String) -> Result<(), String> {
+    let path = active_settings_path(&state)?;
+    save_setting_at_path(&path, key, value)
+}
+
+pub fn save_setting_for_database(database_path: &Path, key: &str, value: &str) -> Result<(), String> {
+    let path = settings_path_for_database(database_path)?;
+    save_setting_at_path(&path, key.to_string(), value.to_string())
+}
+
+fn save_setting_at_path(path: &Path, key: String, value: String) -> Result<(), String> {
     if key.trim().is_empty() {
         return Err("Setting key cannot be empty".to_string());
     }
-    let path = active_settings_path(&state)?;
-    let mut settings = read_settings_file(&path)?
-        .ok_or_else(|| format!("Settings file {} is missing", path.display()))?;
+    let mut settings =
+        read_settings_file(path)?.ok_or_else(|| format!("Settings file {} is missing", path.display()))?;
     settings.insert(key, value);
-    write_settings_file(&path, &settings)
+    write_settings_file(path, &settings)
 }
 
 #[tauri::command]
