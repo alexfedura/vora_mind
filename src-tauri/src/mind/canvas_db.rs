@@ -787,7 +787,31 @@ pub fn search_library_objects(
         return Err(rusqlite::Error::InvalidQuery);
     }
     let mut statement = conn.prepare(
-        "WITH object_text AS (
+        "WITH latest_checkpoint AS (
+            SELECT snapshot.id, snapshot.board_id, snapshot.created_at, snapshot.rowid,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY snapshot.board_id
+                       ORDER BY snapshot.created_at DESC, snapshot.rowid DESC
+                   ) AS checkpoint_rank
+            FROM mind_snapshots snapshot
+            WHERE snapshot.is_checkpoint = 1
+        ),
+        placement_changes AS (
+            SELECT snapshot.board_id, placement.object_id, placement.operation,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY snapshot.board_id, placement.object_id
+                       ORDER BY snapshot.created_at DESC, snapshot.rowid DESC
+                   ) AS change_rank
+            FROM snapshot_placement_changes placement
+            JOIN mind_snapshots snapshot ON snapshot.id = placement.snapshot_id
+            LEFT JOIN latest_checkpoint latest
+              ON latest.board_id = snapshot.board_id
+             AND latest.checkpoint_rank = 1
+            WHERE latest.id IS NULL
+               OR snapshot.created_at > latest.created_at
+               OR (snapshot.created_at = latest.created_at AND snapshot.rowid > latest.rowid)
+        ),
+        object_text AS (
             SELECT o.id, o.type, o.board_id, o.review_status,
                    COALESCE(
                        json_extract(o.working_content, '$.title'),
@@ -814,19 +838,23 @@ pub fn search_library_objects(
         )
         SELECT object_text.id, object_text.type, object_text.title,
                object_text.content, object_text.board_id,
-               (placement.object_id IS NOT NULL) AS is_placed,
+               CASE
+                   WHEN placement_changes.operation IS NOT NULL
+                       THEN placement_changes.operation <> 'REMOVE'
+                   ELSE checkpoint_placement.object_id IS NOT NULL
+               END AS is_placed,
                object_text.review_status
         FROM object_text
-        LEFT JOIN checkpoint_placements placement
-          ON placement.object_id = object_text.id
-         AND placement.checkpoint_id = (
-             SELECT snapshot.id
-             FROM mind_snapshots snapshot
-             WHERE snapshot.board_id = object_text.board_id
-               AND snapshot.is_checkpoint = 1
-             ORDER BY snapshot.created_at DESC, snapshot.rowid DESC
-             LIMIT 1
-         )
+        LEFT JOIN latest_checkpoint latest
+          ON latest.board_id = object_text.board_id
+         AND latest.checkpoint_rank = 1
+        LEFT JOIN checkpoint_placements checkpoint_placement
+          ON checkpoint_placement.object_id = object_text.id
+         AND checkpoint_placement.checkpoint_id = latest.id
+        LEFT JOIN placement_changes
+          ON placement_changes.board_id = object_text.board_id
+         AND placement_changes.object_id = object_text.id
+         AND placement_changes.change_rank = 1
         WHERE object_text.type IN ('card', 'shape', 'text', 'media')
           AND EXISTS (
               SELECT 1 FROM objects live
