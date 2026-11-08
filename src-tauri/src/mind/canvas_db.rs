@@ -1736,8 +1736,9 @@ pub fn save_semantic_snapshot(
 mod board_version_tests {
     use super::{
         checkout_board_version, create_board, create_board_version, get_all_boards,
-        get_board_version_snapshot, get_board_versions, init_db, BoardVersionCard,
-        BoardVersionSnapshot, EdgeInput, NodeInput,
+        get_board_version_snapshot, get_board_versions, init_db, search_library_objects,
+        update_object_review_status, BoardVersionCard, BoardVersionSnapshot, EdgeInput,
+        NodeInput,
     };
     use rusqlite::Connection;
     use serde_json::json;
@@ -2186,5 +2187,107 @@ mod board_version_tests {
         let board = get_all_boards(&conn).unwrap().remove(0);
         assert!(board.active_version.is_empty());
         assert!(get_board_versions(&conn, "board-1").unwrap().is_empty());
+    }
+
+    #[test]
+    fn existing_object_tables_migrate_review_status_with_active_default() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE objects (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                deleted_at INTEGER,
+                metadata JSON
+             );",
+        )
+        .unwrap();
+
+        init_db(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO objects (id, type, board_id, created_at, updated_at)
+             VALUES ('legacy-card', 'card', 'board-legacy', 1, 1)",
+            [],
+        )
+        .unwrap();
+        let review_status: String = conn
+            .query_row(
+                "SELECT review_status FROM objects WHERE id = 'legacy-card'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(review_status, "active");
+        assert!(super::ensure_object_review_status_column(&conn).is_ok());
+    }
+
+    #[test]
+    fn unified_library_search_includes_canvas_types_and_latest_checkpoint_state() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        create_board(&mut conn, "Library index", 1, "board-library-index").unwrap();
+        conn.execute_batch(
+            "INSERT INTO mind_snapshots (id, name, board_id, depth, is_checkpoint, created_at)
+             VALUES
+                ('old-checkpoint', 'Old', 'board-library-index', 0, 1, 10),
+                ('latest-checkpoint', 'Latest', 'board-library-index', 0, 1, 20);
+             INSERT INTO objects (id, type, board_id, created_at, updated_at, working_content)
+             VALUES
+                ('card-result', 'card', 'board-library-index', 1, 1,
+                 '{\"title\":\"Working card title\",\"content\":\"searchable needle\"}'),
+                ('shape-result', 'shape', 'board-library-index', 1, 1, NULL),
+                ('text-result', 'text', 'board-library-index', 1, 1, NULL),
+                ('media-result', 'media', 'board-library-index', 1, 1, NULL);
+             INSERT INTO object_versions
+                (id, object_id, version_major, version_minor, version_patch, content, created_at)
+             VALUES
+                ('shape-v1', 'shape-result', 0, 1, 0,
+                 '{\"title\":\"Old shape\",\"content\":\"old\"}', 1),
+                ('shape-v2', 'shape-result', 0, 2, 0,
+                 '{\"title\":\"Shape from latest version\",\"content\":\"shape needle\"}', 2),
+                ('text-v1', 'text-result', 0, 1, 0,
+                 '{\"title\":\"Text node\",\"content\":\"text needle\"}', 2),
+                ('media-v1', 'media-result', 0, 1, 0,
+                 '{\"title\":\"Media item\",\"content\":\"media content\"}', 2);
+             INSERT INTO checkpoint_placements
+                (checkpoint_id, object_id, x, y, width, height)
+             VALUES
+                ('old-checkpoint', 'card-result', 0, 0, 100, 100),
+                ('latest-checkpoint', 'shape-result', 0, 0, 100, 100);",
+        )
+        .unwrap();
+
+        let matching_objects = search_library_objects(&conn, "needle", None).unwrap();
+        assert_eq!(matching_objects.len(), 3);
+        let card = matching_objects
+            .iter()
+            .find(|item| item.id == "card-result")
+            .unwrap();
+        assert_eq!(card.title, "Working card title");
+        assert!(!card.is_placed);
+        let shape = matching_objects
+            .iter()
+            .find(|item| item.id == "shape-result")
+            .unwrap();
+        assert_eq!(shape.title, "Shape from latest version");
+        assert!(shape.is_placed);
+        assert_eq!(shape.object_type, "shape");
+
+        let shape_search = search_library_objects(&conn, "Shape from latest", None).unwrap();
+        assert_eq!(shape_search.len(), 1);
+        assert_eq!(shape_search[0].object_type, "shape");
+        assert_eq!(
+            search_library_objects(&conn, "Text node", None).unwrap()[0].object_type,
+            "text"
+        );
+
+        update_object_review_status(&conn, "shape-result", "completed").unwrap();
+        assert!(search_library_objects(&conn, "shape", None).unwrap().is_empty());
+        let archived = search_library_objects(&conn, "shape", Some("all")).unwrap();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(archived[0].review_status, "completed");
+        assert!(search_library_objects(&conn, "", Some("unknown")).is_err());
+        assert!(update_object_review_status(&conn, "shape-result", "unknown").is_err());
     }
 }
