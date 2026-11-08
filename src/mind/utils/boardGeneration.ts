@@ -105,11 +105,13 @@ export function applyDagreLayout(
   dagre.layout(graph);
 
   const dimensions = graph.graph();
+  const graphWidth = dimensions.width ?? 0;
+  const graphHeight = dimensions.height ?? 0;
   const nodes: Node[] = generatedNodes.map((generated) => {
     const positioned = graph.node(generated.id) as { x: number; y: number; width: number; height: number };
     const position = {
-      x: origin.x + positioned.x - dimensions.width / 2,
-      y: origin.y + positioned.y - dimensions.height / 2,
+      x: origin.x + positioned.x - graphWidth / 2,
+      y: origin.y + positioned.y - graphHeight / 2,
     };
     return generated.type === "voraCard"
       ? {
