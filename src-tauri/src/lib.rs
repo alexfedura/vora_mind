@@ -336,7 +336,6 @@ mod media_import_tests {
 #[tauri::command]
 fn get_all_boards(state: State<AppState>) -> Result<Vec<BoardSummary>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    mind::canvas_db::ensure_board_version_baselines(&conn).map_err(|e| e.to_string())?;
     mind::canvas_db::get_all_boards(&conn).map_err(|e| e.to_string())
 }
 
@@ -591,6 +590,7 @@ fn create_board_version(
     increment: String,
     reason: String,
     snapshot: mind::canvas_db::BoardVersionSnapshot,
+    custom_version: Option<String>,
 ) -> Result<mind::canvas_db::BoardVersionSummary, String> {
     if !matches!(increment.as_str(), "major" | "minor" | "patch") {
         return Err("Choose a Major, Minor, or Patch version increment.".to_string());
@@ -598,8 +598,21 @@ fn create_board_version(
     if reason.trim().is_empty() {
         return Err("Enter a reason for this Board version.".to_string());
     }
+    let custom_version = custom_version.as_deref().map(str::trim);
+    if let Some(version) = custom_version {
+        if mind::canvas_db::parse_board_version(version).is_none() {
+            return Err("Board version must use three numeric components, such as 0.9.0".to_string());
+        }
+    }
     let mut conn = state.db.lock().map_err(|e| e.to_string())?;
-    mind::canvas_db::create_board_version(&mut conn, &board_id, &increment, &reason, snapshot)
+    mind::canvas_db::create_board_version(
+        &mut conn,
+        &board_id,
+        &increment,
+        &reason,
+        snapshot,
+        custom_version,
+    )
         .map_err(|error| match error {
             rusqlite::Error::InvalidQuery => {
                 "That version label already exists on this Board. Choose another increment."
@@ -830,7 +843,6 @@ fn commit_card_version(
     }
 
     let has_versions = has_committed_card_versions(&tx, &id)?;
-    validate_initial_card_version(has_versions, &version)?;
     let (version, version_major, version_minor, version_patch) = parse_card_version(&version)?;
     let reason = if has_versions {
         reason.trim()
@@ -877,8 +889,16 @@ fn commit_card_version(
     )
     .map_err(|error| error.to_string())?;
     tx.execute(
-        "UPDATE objects SET updated_at = ?1 WHERE id = ?2 AND board_id = ?3",
-        rusqlite::params![now, &id, &board_id],
+        "UPDATE objects
+         SET updated_at = ?1,
+             metadata = json_patch(COALESCE(metadata, '{}'), ?2)
+         WHERE id = ?3 AND board_id = ?4",
+        rusqlite::params![
+            now,
+            serde_json::json!({ "title": title, "content": content, "version": version }).to_string(),
+            &id,
+            &board_id
+        ],
     )
     .map_err(|error| error.to_string())?;
     tx.commit().map_err(|error| error.to_string())
