@@ -79,6 +79,13 @@ interface AppState {
     objectId: string,
     status: LibraryObjectReviewStatus,
   ) => Promise<void>;
+  addHighlightToLibrary: (input: {
+    boardId: string;
+    documentId: string;
+    documentTitle: string;
+    highlightId: string;
+    content: string;
+  }) => Promise<string>;
   isLibraryBoardEditing: boolean;
   libraryBoardReturnCards: Record<string, VoraCard> | null;
   setLibraryBoardEditing: (editing: boolean, returnCards?: Record<string, VoraCard> | null) => void;
@@ -233,6 +240,43 @@ export const useAppStore = create<AppState>()(
             item.id === objectId ? { ...item, review_status: status } : item
           ),
         }));
+      },
+      addHighlightToLibrary: async ({ boardId, documentId, documentTitle, highlightId, content }) => {
+        const cardId = await dbService.sendHighlightToLibrary(highlightId, boardId);
+        const title = content.slice(0, 80).trim();
+        const card: VoraCard = {
+          id: cardId,
+          title: title || "Document highlight",
+          content,
+          boardId,
+          version: "v0.1.0",
+          sourceDocumentId: documentId,
+          sourceHighlightId: highlightId,
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        };
+        const libraryObject: LibraryObjectResult = {
+          id: cardId,
+          type: "card",
+          title: card.title,
+          content,
+          board_id: boardId,
+          is_placed: false,
+          review_status: "active",
+          document_id: documentId,
+          highlight_id: highlightId,
+        };
+        set((state) => ({
+          cards: { ...state.cards, [cardId]: card },
+          libraryObjects: [
+            libraryObject,
+            ...state.libraryObjects.filter((item) => item.id !== cardId),
+          ],
+        }));
+        window.dispatchEvent(new CustomEvent("vora:document-highlight-sent", {
+          detail: { documentId, documentTitle, cardId },
+        }));
+        return cardId;
       },
       isLibraryBoardEditing: false,
       libraryBoardReturnCards: null,
