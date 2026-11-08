@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -56,6 +57,7 @@ import {
 } from "./mind/services/dbService";
 import { createBoardTransfer, parseBoardTransfer, remapBoardTransfer } from "./mind/utils/boardTransfer";
 import { createFlowchartTemplate, FLOWCHART_TEMPLATES, type FlowchartTemplateId } from "./mind/utils/diagramTemplates";
+import { applyDagreLayout, parseGeneratedBoard } from "./mind/utils/boardGeneration";
 import { getSetting, setSetting } from "./shared/store/useSettingsStore";
 import {
   type BoardItem,
@@ -66,6 +68,7 @@ import {
   type VoraDiagramShape,
   VORA_DIAGRAM_SHAPE_LABELS,
   type VoraMediaData,
+  type VoraCard,
 } from "./mind/types";
 import { VoraCardNode } from "./mind/components/canvas/VoraCardNode";
 import { VoraTextNode } from "./mind/components/canvas/VoraTextNode";
@@ -99,6 +102,7 @@ import { CommitModal } from "./shared/modals/CommitModal";
 import { CommitCardModal } from "./shared/modals/CommitCardModal";
 import { CardHistoryModal } from "./shared/modals/CardHistoryModal";
 import { FullscreenDocModal } from "./shared/modals/FullscreenDocModal";
+import { GenerateBoardModal } from "./shared/modals/GenerateBoardModal";
 import { OpenPanel } from "./mind/types";
 
 type ShapeTool = VoraDiagramShape | null;
@@ -423,6 +427,7 @@ function AppContent() {
   const [isJournalOpen, setIsJournalOpen] = useState(false);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [isDocumentWorkspaceOpen, setIsDocumentWorkspaceOpen] = useState(false);
+  const [isGenerateBoardModalOpen, setIsGenerateBoardModalOpen] = useState(false);
   const [documentWorkspaceRequest, setDocumentWorkspaceRequest] = useState<{
     documentId: string | null;
     highlightId: string | null;
@@ -611,6 +616,109 @@ function AppContent() {
     [activeCanvasGroupId, selectedNodes]
   );
   const { screenToFlowPosition, getViewport, setViewport, setCenter, getNodes, fitView } = useReactFlow();
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<string>("deepseek-done", (event) => {
+      try {
+        if (!canvasBoardId || libraryBoardSession) {
+          throw new Error("Open a regular Board before inserting generated content.");
+        }
+        const generated = parseGeneratedBoard(event.payload);
+        const currentCards = useAppStore.getState().cards;
+        const usedIds = new Set([
+          ...flow.nodes.map((node) => node.id),
+          ...Object.keys(currentCards),
+        ]);
+        const idMap = new Map<string, string>();
+        for (const node of generated.nodes) {
+          let id = node.id;
+          while (usedIds.has(id)) id = `${node.id}-${crypto.randomUUID().slice(0, 8)}`;
+          usedIds.add(id);
+          idMap.set(node.id, id);
+        }
+        const remappedNodes = generated.nodes.map((node) => ({
+          ...node,
+          id: idMap.get(node.id) ?? node.id,
+        }));
+        const remappedEdges = generated.edges.map((edge) => ({
+          ...edge,
+          source: idMap.get(edge.source) ?? edge.source,
+          target: idMap.get(edge.target) ?? edge.target,
+        }));
+        const bounds = flow.reactFlowWrapper.current?.getBoundingClientRect();
+        const origin = bounds
+          ? screenToFlowPosition({
+            x: bounds.left + bounds.width / 2,
+            y: bounds.top + bounds.height / 2,
+          })
+          : { x: 0, y: 0 };
+        const layout = applyDagreLayout(remappedNodes, remappedEdges, origin);
+        const timestamp = Date.now();
+        const nextCards: Record<string, VoraCard> = { ...currentCards };
+        for (const node of remappedNodes) {
+          if (node.type !== "voraCard") continue;
+          nextCards[node.id] = {
+            id: node.id,
+            boardId: canvasBoardId,
+            title: node.title,
+            content: node.content,
+            version: "v0.1.0",
+            created_at: timestamp,
+            updated_at: timestamp,
+          };
+        }
+        flow.saveHistorySnapshot(true);
+        setCards(nextCards);
+        flow.setNodes((nodes) => [
+          ...nodes.map((node) => ({ ...node, selected: false })),
+          ...layout.nodes.map((node) => ({ ...node, selected: true })),
+        ]);
+        flow.setEdges((edges) => [
+          ...edges.map((edge) => ({ ...edge, selected: false })),
+          ...layout.edges.map((edge) => ({ ...edge, selected: true })),
+        ]);
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            void fitView({
+              nodes: layout.nodes.map((node) => ({ id: node.id })),
+              padding: 0.2,
+              duration: 350,
+            }).catch((error: unknown) => {
+              console.error("Could not frame the generated Board graph:", error);
+            });
+          });
+        });
+        setCanvasOperationError(null);
+        setIsGenerateBoardModalOpen(false);
+      } catch (error) {
+        console.error("Could not insert the generated Board graph:", error);
+        setCanvasOperationError(error instanceof Error ? error.message : String(error));
+      }
+    }).then((listener) => {
+      if (disposed) listener();
+      else unlisten = listener;
+    }).catch((error: unknown) => {
+      console.error("Could not listen for generated Board graphs:", error);
+      setCanvasOperationError(error instanceof Error ? error.message : String(error));
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [
+    canvasBoardId,
+    fitView,
+    flow.nodes,
+    flow.reactFlowWrapper,
+    flow.saveHistorySnapshot,
+    flow.setEdges,
+    flow.setNodes,
+    libraryBoardSession,
+    screenToFlowPosition,
+    setCards,
+  ]);
 
   useEffect(() => {
     const handleHighlightCanvasNode = (event: Event): void => {
