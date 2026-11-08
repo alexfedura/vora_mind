@@ -2256,7 +2256,8 @@ mod board_version_tests {
             "INSERT INTO mind_snapshots (id, name, board_id, depth, is_checkpoint, created_at)
              VALUES
                 ('old-checkpoint', 'Old', 'board-library-index', 0, 1, 10),
-                ('latest-checkpoint', 'Latest', 'board-library-index', 0, 1, 20);
+                ('latest-checkpoint', 'Latest', 'board-library-index', 0, 1, 20),
+                ('latest-delta', 'Delta', 'board-library-index', 1, 0, 30);
              INSERT INTO objects (id, type, board_id, created_at, updated_at, working_content)
              VALUES
                 ('card-result', 'card', 'board-library-index', 1, 1,
@@ -2279,7 +2280,10 @@ mod board_version_tests {
                 (checkpoint_id, object_id, x, y, width, height)
              VALUES
                 ('old-checkpoint', 'card-result', 0, 0, 100, 100),
-                ('latest-checkpoint', 'shape-result', 0, 0, 100, 100);",
+                ('latest-checkpoint', 'shape-result', 0, 0, 100, 100);
+             INSERT INTO snapshot_placement_changes
+                (snapshot_id, object_id, operation, x, y, width, height)
+             VALUES ('latest-delta', 'text-result', 'ADD', 0, 0, 100, 100);",
         )
         .unwrap();
 
@@ -2306,6 +2310,23 @@ mod board_version_tests {
             search_library_objects(&conn, "Text node", None).unwrap()[0].object_type,
             "text"
         );
+        let all_types = search_library_objects(&conn, "", Some("all"))
+            .unwrap()
+            .into_iter()
+            .map(|item| item.object_type)
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(
+            all_types,
+            ["card", "media", "shape", "text"]
+                .into_iter()
+                .map(str::to_string)
+                .collect()
+        );
+        assert!(matching_objects
+            .iter()
+            .find(|item| item.id == "text-result")
+            .unwrap()
+            .is_placed);
 
         update_object_review_status(&conn, "shape-result", "completed").unwrap();
         assert!(search_library_objects(&conn, "shape", None).unwrap().is_empty());
