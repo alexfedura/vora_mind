@@ -20,6 +20,7 @@ import {
   Square,
   Type,
   Film,
+  BookOpen,
 } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
 import type { LibraryObjectReviewStatus } from "@/mind/services/dbService";
@@ -326,6 +327,7 @@ interface RightDrawerProps {
     baseVersion: string,
   ) => Promise<void>;
   onSelectBoard: (boardId: string) => Promise<void>;
+  onOpenDocuments: (documentId?: string, highlightId?: string) => void;
 }
 
 export const RightDrawer: React.FC<RightDrawerProps> = ({
@@ -342,6 +344,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
   onGetItemGroupUsages,
   onOpenLibraryBoard,
   onSelectBoard,
+  onOpenDocuments,
 }) => {
   const {
     isRightDrawerOpen,
@@ -674,6 +677,10 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     if (!item) return;
     setLibraryActionError(null);
     try {
+      if (item.document_id) {
+        onOpenDocuments(item.document_id, item.highlight_id ?? undefined);
+        return;
+      }
       if (item.board_id !== activeBoardId) await onSelectBoard(item.board_id);
       if (!item.is_placed) return;
       if (item.type === "card") {
@@ -794,13 +801,24 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
           <span className="text-sm font-bold text-gray-200 tracking-wide">
             {activeCard ? "Card View" : activeGroup ? activeGroup.name : currentFilter === "trash" ? "Trash" : "Library"}
           </span>
-          <button
-            onClick={toggleRightDrawer}
-            className="p-2 rounded-lg bg-[#1a1d24] hover:bg-[#252934] text-gray-400 hover:text-purple-400 transition"
-            title="Close Panel"
-          >
-            <PanelRight size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onOpenDocuments()}
+              className="p-2 rounded-lg bg-[#1a1d24] hover:bg-[#252934] text-gray-400 hover:text-violet-300 transition"
+              title="Open Documents"
+              aria-label="Open Documents"
+            >
+              <BookOpen size={17} />
+            </button>
+            <button
+              onClick={toggleRightDrawer}
+              className="p-2 rounded-lg bg-[#1a1d24] hover:bg-[#252934] text-gray-400 hover:text-purple-400 transition"
+              title="Close Panel"
+            >
+              <PanelRight size={18} />
+            </button>
+          </div>
         </div>
 
         {activeCard ? (
