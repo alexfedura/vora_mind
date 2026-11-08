@@ -861,6 +861,292 @@ fn update_object_review_status(
 }
 
 #[tauri::command]
+fn import_document(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    file_path: String,
+    file_type: String,
+) -> Result<String, String> {
+    if !matches!(file_type.as_str(), "pdf" | "docx" | "md") {
+        return Err("Supported document types are PDF, DOCX, and Markdown.".to_string());
+    }
+    let source = Path::new(&file_path)
+        .canonicalize()
+        .map_err(|error| format!("Could not access the selected document: {error}"))?;
+    if !source.is_file() {
+        return Err("The selected document is not a file.".to_string());
+    }
+    let extension = source
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .ok_or_else(|| "The selected document has no supported extension.".to_string())?;
+    if extension != file_type {
+        return Err("The selected file extension does not match its document type.".to_string());
+    }
+    let title = source
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("Untitled document")
+        .to_string();
+    let documents_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve application data directory: {error}"))?
+        .join("documents");
+    fs::create_dir_all(&documents_dir)
+        .map_err(|error| format!("Could not create document storage: {error}"))?;
+    let document_id = format!("document_{}", uuid::Uuid::now_v7());
+    let destination = documents_dir.join(format!("{}.{}", document_id, extension));
+    fs::copy(&source, &destination).map_err(|error| {
+        format!("Could not copy document into application storage: {error}")
+    })?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis() as i64;
+    let insert_result = state
+        .db
+        .lock()
+        .map_err(|error| error.to_string())?
+        .execute(
+            "INSERT INTO documents (id, title, file_path, file_type, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+            rusqlite::params![
+                document_id,
+                title,
+                destination.to_string_lossy(),
+                file_type,
+                now
+            ],
+        );
+    if let Err(error) = insert_result {
+        if let Err(cleanup_error) = fs::remove_file(&destination) {
+            return Err(format!(
+                "Could not register imported document: {error}; could not remove copied file: {cleanup_error}"
+            ));
+        }
+        return Err(format!("Could not register imported document: {error}"));
+    }
+    Ok(document_id)
+}
+
+#[tauri::command]
+fn get_documents(state: State<AppState>) -> Result<Vec<mind::canvas_db::DocumentDto>, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    let mut statement = conn
+        .prepare(
+            "SELECT id, title, file_type, page_count, created_at, updated_at
+             FROM documents ORDER BY updated_at DESC, id",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(mind::canvas_db::DocumentDto {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                file_type: row.get(2)?,
+                page_count: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_document_content(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    document_id: String,
+) -> Result<Vec<u8>, String> {
+    let file_path: String = state
+        .db
+        .lock()
+        .map_err(|error| error.to_string())?
+        .query_row(
+            "SELECT file_path FROM documents WHERE id = ?1",
+            [&document_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("Could not find imported document: {error}"))?;
+    let path = PathBuf::from(file_path)
+        .canonicalize()
+        .map_err(|error| format!("Could not access imported document: {error}"))?;
+    let documents_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve application data directory: {error}"))?
+        .join("documents")
+        .canonicalize()
+        .map_err(|error| format!("Could not access document storage: {error}"))?;
+    if !path.starts_with(&documents_dir) {
+        return Err("Document path is outside application document storage.".to_string());
+    }
+    fs::read(&path).map_err(|error| format!("Could not read imported document: {error}"))
+}
+
+#[tauri::command]
+fn create_highlight(
+    state: State<AppState>,
+    document_id: String,
+    content: String,
+    page_number: Option<i32>,
+    position_data: String,
+    note: Option<String>,
+    color: Option<String>,
+) -> Result<String, String> {
+    if content.trim().is_empty() {
+        return Err("A highlight must contain selected text.".to_string());
+    }
+    let positions: serde_json::Value = serde_json::from_str(&position_data)
+        .map_err(|error| format!("Invalid highlight position data: {error}"))?;
+    if !positions.is_object() && !positions.is_array() {
+        return Err("Highlight position data must be a JSON object or array.".to_string());
+    }
+    if page_number.is_some_and(|page| page < 1) {
+        return Err("PDF page numbers start at 1.".to_string());
+    }
+    let color = color.unwrap_or_else(|| "yellow".to_string());
+    if !matches!(color.as_str(), "yellow" | "green" | "blue" | "pink") {
+        return Err("Unsupported highlight color.".to_string());
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis() as i64;
+    let highlight_id = format!("highlight_{}", uuid::Uuid::now_v7());
+    state
+        .db
+        .lock()
+        .map_err(|error| error.to_string())?
+        .execute(
+            "INSERT INTO document_highlights
+                (id, document_id, content, page_number, position_data, color, note, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                highlight_id,
+                document_id,
+                content,
+                page_number,
+                positions.to_string(),
+                color,
+                note,
+                now
+            ],
+        )
+        .map_err(|error| format!("Could not save document highlight: {error}"))?;
+    Ok(highlight_id)
+}
+
+#[tauri::command]
+fn get_highlights(
+    state: State<AppState>,
+    document_id: String,
+) -> Result<Vec<mind::canvas_db::HighlightDto>, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    let mut statement = conn
+        .prepare(
+            "SELECT id, document_id, content, page_number, position_data,
+                    color, note, library_card_id, created_at
+             FROM document_highlights WHERE document_id = ?1
+             ORDER BY created_at, id",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([document_id], |row| {
+            let position_json: String = row.get(4)?;
+            let position_data = serde_json::from_str(&position_json).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    4,
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })?;
+            Ok(mind::canvas_db::HighlightDto {
+                id: row.get(0)?,
+                document_id: row.get(1)?,
+                content: row.get(2)?,
+                page_number: row.get(3)?,
+                position_data,
+                color: row.get(5)?,
+                note: row.get(6)?,
+                library_card_id: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn send_highlight_to_library(
+    state: State<AppState>,
+    highlight_id: String,
+    board_id: String,
+) -> Result<String, String> {
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+    let (document_id, content, existing_card_id): (String, String, Option<String>) = tx
+        .query_row(
+            "SELECT document_id, content, library_card_id
+             FROM document_highlights WHERE id = ?1",
+            [&highlight_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|error| format!("Could not find document highlight: {error}"))?;
+    if let Some(card_id) = existing_card_id {
+        tx.commit().map_err(|error| error.to_string())?;
+        return Ok(card_id);
+    }
+    let board_exists: bool = tx
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM mind_boards WHERE id = ?1)",
+            [&board_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !board_exists {
+        return Err("Select or create a Board before sending a highlight to the Library.".to_string());
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis() as i64;
+    let card_id = format!("card_{}", uuid::Uuid::now_v7());
+    let title = content.chars().take(80).collect::<String>().trim().to_string();
+    let working_content = serde_json::json!({
+        "title": title,
+        "content": content,
+        "version": "v0.1.0"
+    })
+    .to_string();
+    let metadata = serde_json::json!({
+        "documentId": document_id,
+        "highlightId": highlight_id,
+    })
+    .to_string();
+    tx.execute(
+        "INSERT INTO objects
+            (id, type, board_id, created_at, updated_at, metadata, working_content)
+         VALUES (?1, 'card', ?2, ?3, ?3, ?4, ?5)",
+        rusqlite::params![card_id, board_id, now, metadata, working_content],
+    )
+    .map_err(|error| format!("Could not create Library card from highlight: {error}"))?;
+    tx.execute(
+        "UPDATE document_highlights SET library_card_id = ?1 WHERE id = ?2",
+        rusqlite::params![card_id, highlight_id],
+    )
+    .map_err(|error| format!("Could not link Library card to highlight: {error}"))?;
+    tx.commit().map_err(|error| error.to_string())?;
+    Ok(card_id)
+}
+
+#[tauri::command]
 fn get_all_cards(state: State<AppState>, board_id: String) -> Result<Vec<CardDto>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
