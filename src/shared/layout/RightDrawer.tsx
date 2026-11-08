@@ -648,11 +648,10 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
       return 0;
     });
 
-  const libraryObjectsForView = currentFilter === "all"
-    ? libraryObjects
-    : currentFilter === "cards"
-      ? libraryObjects.filter((item) => item.type === "card")
-      : [];
+  const libraryObjectsForView = libraryObjects.filter((item) =>
+    (currentFilter === "all" || (currentFilter === "cards" && item.type === "card"))
+    && (reviewStatusFilter === "all" || item.review_status === reviewStatusFilter)
+  );
   const filteredGroups = itemGroups
     .filter((group) => {
       const matchesSearch = `${group.name} ${group.version}`.toLowerCase().includes(searchQuery.toLowerCase());
@@ -667,7 +666,8 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     .sort((a, b) => b.created_at - a.created_at);
   const isLibraryEmpty = libraryObjectsForView.length === 0
     && filteredGroups.length === 0
-    && (currentFilter !== "trash" || filteredCards.length === 0);
+    && (currentFilter !== "trash" || filteredCards.length === 0)
+    && !(isLibrarySearchLoading && (currentFilter === "all" || currentFilter === "cards"));
 
   const handleLibraryObjectClick = async (itemId: string): Promise<void> => {
     const item = libraryObjectsForView.find((candidate) => candidate.id === itemId);
