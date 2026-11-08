@@ -38,8 +38,8 @@ export interface CardDto {
   version: string;
   deleted_at: number | null;
   library_source_card_id: string | null;
-  document_id: string | null;
-  highlight_id: string | null;
+  document_id?: string | null;
+  highlight_id?: string | null;
 }
 
 export type DocumentFileType = "pdf" | "docx" | "md";

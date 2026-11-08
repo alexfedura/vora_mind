@@ -108,7 +108,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
   useEffect(() => {
     if (!jumpToHighlightId) return;
-    const target = document.querySelector<HTMLElement>(`[data-highlight-id="${CSS.escape(jumpToHighlightId)}"]`);
+    const target = window.document.querySelector<HTMLElement>(`[data-highlight-id="${CSS.escape(jumpToHighlightId)}"]`);
     target?.scrollIntoView({ behavior: "smooth", block: "center" });
     target?.classList.add("ring-2", "ring-violet-400");
     const timeout = window.setTimeout(() => target?.classList.remove("ring-2", "ring-violet-400"), 2000);
@@ -121,7 +121,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     const range = selected.getRangeAt(0);
     const rects: PdfRect[] = [];
     for (const rect of Array.from(range.getClientRects())) {
-      const page = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      const page = window.document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
         ?.closest<HTMLElement>(".react-pdf__Page");
       const pageNumber = Number(page?.dataset.pageNumber);
       if (!page || !Number.isInteger(pageNumber) || pageNumber < 1) continue;

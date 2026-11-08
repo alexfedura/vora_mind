@@ -579,6 +579,8 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
             created_at: Date.now(),
             deleted_at: card.deleted_at ?? undefined,
             librarySourceCardId: card.library_source_card_id ?? undefined,
+            sourceDocumentId: card.document_id ?? undefined,
+            sourceHighlightId: card.highlight_id ?? undefined,
           };
         }
         latestCards.current = cardsMap;

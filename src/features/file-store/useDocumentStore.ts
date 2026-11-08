@@ -57,6 +57,8 @@ function toCard(boardId: string, card: CardDto, existing?: VoraCard): VoraCard {
     version: card.version,
     deleted_at: card.deleted_at ?? undefined,
     librarySourceCardId: card.library_source_card_id ?? existing?.librarySourceCardId,
+    sourceDocumentId: card.document_id ?? existing?.sourceDocumentId,
+    sourceHighlightId: card.highlight_id ?? existing?.sourceHighlightId,
   };
 }
 
