@@ -118,17 +118,19 @@ fn save_deepseek_key(state: State<AppState>, api_key: String) -> Result<(), Stri
     )
 }
 
-fn emit_deepseek_delta(
-    app: &tauri::AppHandle,
-    line: &str,
-    full_response: &mut String,
-) -> Result<bool, String> {
+enum DeepSeekStreamLine {
+    Ignore,
+    Delta(String),
+    Done,
+}
+
+fn parse_deepseek_stream_line(line: &str) -> Result<DeepSeekStreamLine, String> {
     let Some(data) = line.strip_prefix("data:") else {
-        return Ok(false);
+        return Ok(DeepSeekStreamLine::Ignore);
     };
     let data = data.trim();
     if data == "[DONE]" {
-        return Ok(true);
+        return Ok(DeepSeekStreamLine::Done);
     }
     let payload: serde_json::Value = serde_json::from_str(data)
         .map_err(|error| format!("Invalid DeepSeek stream event: {error}"))?;
@@ -136,13 +138,27 @@ fn emit_deepseek_delta(
         .pointer("/choices/0/delta/content")
         .and_then(serde_json::Value::as_str)
     else {
-        return Ok(false);
+        return Ok(DeepSeekStreamLine::Ignore);
     };
     if delta.is_empty() {
-        return Ok(false);
+        return Ok(DeepSeekStreamLine::Ignore);
     }
+    Ok(DeepSeekStreamLine::Delta(delta.to_string()))
+}
+
+fn emit_deepseek_delta(
+    app: &tauri::AppHandle,
+    line: &str,
+    full_response: &mut String,
+) -> Result<bool, String> {
+    let DeepSeekStreamLine::Delta(delta) = parse_deepseek_stream_line(line)? else {
+        return Ok(matches!(
+            parse_deepseek_stream_line(line)?,
+            DeepSeekStreamLine::Done
+        ));
+    };
     full_response.push_str(delta);
-    app.emit("deepseek-chunk", delta.to_string())
+    app.emit("deepseek-chunk", delta)
         .map_err(|error| format!("Could not stream DeepSeek response to the canvas: {error}"))?;
     Ok(false)
 }
