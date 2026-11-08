@@ -286,7 +286,9 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
                     )}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate">{board.title}</span>
-                      <span className="block truncate text-[9px] opacity-70">{board.active_version}</span>
+                      <span className="block truncate text-[9px] opacity-70">
+                        {board.active_version || "No version yet"}
+                      </span>
                     </span>
                   </button>
                   <div className="mr-1 flex items-center">

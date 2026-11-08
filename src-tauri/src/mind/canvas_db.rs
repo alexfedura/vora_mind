@@ -1095,7 +1095,7 @@ pub fn create_board_version(
     snapshot: BoardVersionSnapshot,
 ) -> Result<BoardVersionSummary> {
     let reason = reason.trim();
-    if reason.is_empty() {
+    if reason.is_empty() || !matches!(increment, "major" | "minor" | "patch") {
         return Err(rusqlite::Error::InvalidQuery);
     }
     let tx = conn.transaction()?;
