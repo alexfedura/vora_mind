@@ -93,9 +93,10 @@ fn get_last_update_failure(app: tauri::AppHandle) -> Result<Option<UpdaterFailur
             marker_path.display()
         )),
     }
+}
 
-    #[tauri::command]
-    fn save_deepseek_key(state: State<AppState>, api_key: String) -> Result<(), String> {
+#[tauri::command]
+fn save_deepseek_key(state: State<AppState>, api_key: String) -> Result<(), String> {
         let api_key = api_key.trim();
         if api_key.is_empty()
             || api_key.len() > 4096
@@ -103,7 +104,7 @@ fn get_last_update_failure(app: tauri::AppHandle) -> Result<Option<UpdaterFailur
             || api_key.contains('\n')
         {
             return Err("Enter a valid DeepSeek API key.".to_string());
-        }
+}
         let database_path = state
             .db_path
             .lock()
@@ -117,7 +118,7 @@ fn get_last_update_failure(app: tauri::AppHandle) -> Result<Option<UpdaterFailur
         )
     }
 
-    fn emit_deepseek_delta(
+fn emit_deepseek_delta(
         app: &tauri::AppHandle,
         line: &str,
         full_response: &mut String,
@@ -144,10 +145,10 @@ fn get_last_update_failure(app: tauri::AppHandle) -> Result<Option<UpdaterFailur
         app.emit("deepseek-chunk", delta.to_string())
             .map_err(|error| format!("Could not stream DeepSeek response to the canvas: {error}"))?;
         Ok(false)
-    }
+}
 
-    #[tauri::command]
-    async fn generate_board_from_prompt(
+#[tauri::command]
+async fn generate_board_from_prompt(
         app: tauri::AppHandle,
         state: State<'_, AppState>,
         prompt: String,
@@ -205,7 +206,6 @@ fn get_last_update_failure(app: tauri::AppHandle) -> Result<Option<UpdaterFailur
                 if emit_deepseek_delta(&app, line.trim_end_matches(['\r', '\n']), &mut full_response)? {
                     stream_finished = true;
                     break;
-                }
             }
             if stream_finished {
                 break;
