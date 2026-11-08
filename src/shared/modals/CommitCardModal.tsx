@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { GitCommit, X } from "lucide-react";
-import { nextPatchVersion } from "@/mind/utils/cardVersion";
+import { nextPatchVersion, parseCardVersion } from "@/mind/utils/cardVersion";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { useDocumentStore } from "@/features/file-store/useDocumentStore";
 
@@ -35,6 +35,10 @@ export const CommitCardModal: React.FC<CommitCardModalProps> = ({
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const versionTag = version.trim();
+    if (!parseCardVersion(versionTag)) {
+      setError("Use a three-part semantic version tag, such as v0.9.0.");
+      return;
+    }
     const changeReason = isFirstVersion ? "Initial Version (Baseline)" : reason.trim();
     if (!changeReason) {
       setError("Enter a reason for this card version.");
@@ -109,11 +113,10 @@ export const CommitCardModal: React.FC<CommitCardModalProps> = ({
           required
           value={version}
           onChange={(event) => setVersion(event.target.value)}
-          disabled={isFirstVersion}
           placeholder="v0.1.1"
           pattern="v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
           title="Use a three-part numeric version, such as v0.1.1"
-          className="mt-2 w-full rounded-lg border border-[#363b47] bg-[#101217] px-3 py-2 font-mono text-sm text-white outline-none focus:border-amber-500/60 disabled:cursor-not-allowed disabled:opacity-70"
+          className="mt-2 w-full rounded-lg border border-[#363b47] bg-[#101217] px-3 py-2 font-mono text-sm text-white outline-none focus:border-amber-500/60"
         />
         <label htmlFor="card-version-reason" className="mt-4 block text-xs font-medium text-zinc-300">
           Reason for change
