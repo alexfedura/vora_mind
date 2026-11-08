@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS objects (
     type TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     deleted_at INTEGER NULL,
-    metadata JSON
+    metadata JSON,
+    review_status TEXT NOT NULL DEFAULT 'active'
+        CHECK (review_status IN ('active', 'completed', 'not_needed'))
 );
 
 -- ۲. نسخه‌های تغییرناپذیر محتوا

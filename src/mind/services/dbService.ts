@@ -40,6 +40,18 @@ export interface CardDto {
   library_source_card_id: string | null;
 }
 
+export type LibraryObjectReviewStatus = "active" | "completed" | "not_needed";
+
+export interface LibraryObjectResult {
+  id: string;
+  type: "card" | "shape" | "text" | "media";
+  title: string;
+  content: string;
+  board_id: string;
+  is_placed: boolean;
+  review_status: LibraryObjectReviewStatus;
+}
+
 export type BoardDto = BoardItem;
 
 export interface NodePayload {
