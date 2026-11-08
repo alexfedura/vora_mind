@@ -23,9 +23,9 @@ export const ForkBoardModal: React.FC<ForkBoardModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    setBranchName(`${boardTitle} Branch`);
+    setBranchName("");
     setError(null);
-  }, [boardTitle, isOpen]);
+  }, [isOpen]);
 
   if (!isOpen || !version) return null;
 
@@ -72,7 +72,7 @@ export const ForkBoardModal: React.FC<ForkBoardModalProps> = ({
           <span className="text-zinc-200">{version.version}</span>.
         </p>
         <label className="flex flex-col gap-2 text-xs text-zinc-300">
-          <span>Enter a name for the new branch:</span>
+          <span>Branch Name</span>
           <input
             autoFocus
             required
