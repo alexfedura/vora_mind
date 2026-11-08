@@ -488,9 +488,11 @@ function AppContent() {
   const [libraryBoardError, setLibraryBoardError] = useState<string | null>(null);
   const [isCreateItemGroupOpen, setIsCreateItemGroupOpen] = useState(false);
   const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
+  const [isBoardTransferMenuOpen, setIsBoardTransferMenuOpen] = useState(false);
   const [canvasOperationError, setCanvasOperationError] = useState<string | null>(null);
   const [mediaImportError, setMediaImportError] = useState<string | null>(null);
   const boardImportInputRef = React.useRef<HTMLInputElement>(null);
+  const boardTransferMenuRef = React.useRef<HTMLDivElement>(null);
   const [canvasNodeContextMenu, setCanvasNodeContextMenu] = useState<CanvasNodeContextMenu | null>(null);
   const [connectionCreateMenu, setConnectionCreateMenu] = useState<ConnectionCreateMenu | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
