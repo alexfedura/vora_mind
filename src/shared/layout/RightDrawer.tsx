@@ -17,8 +17,12 @@ import {
   Layers,
   History,
   Pencil,
+  Square,
+  Type,
+  Film,
 } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
+import type { LibraryObjectReviewStatus } from "@/mind/services/dbService";
 import type {
   LibraryItemGroup,
   LibraryItemGroupSnapshot,
@@ -321,6 +325,7 @@ interface RightDrawerProps {
     snapshot: LibraryItemGroupSnapshot,
     baseVersion: string,
   ) => Promise<void>;
+  onSelectBoard: (boardId: string) => Promise<void>;
 }
 
 export const RightDrawer: React.FC<RightDrawerProps> = ({
@@ -336,11 +341,18 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
   onGetItemGroupVersions,
   onGetItemGroupUsages,
   onOpenLibraryBoard,
+  onSelectBoard,
 }) => {
   const {
     isRightDrawerOpen,
     toggleRightDrawer,
+    activeBoardId,
     cards,
+    libraryObjects,
+    isLibrarySearchLoading,
+    librarySearchError,
+    searchLibraryObjects,
+    updateLibraryObjectReviewStatus,
     updateCardContent,
     updateCardVersion,
     moveToBin,
@@ -358,6 +370,8 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
   const [sortBy, setSortBy] = useState<SortBy>("alphabetical");
   const [sortOrder, setSortOrder] = useState<SortOrder>("oldest");
   const [searchQuery, setSearchQuery] = useState("");
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<LibraryObjectReviewStatus | "all">("active");
+  const [libraryActionError, setLibraryActionError] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [groupError, setGroupError] = useState<string | null>(null);
   const [groupVersions, setGroupVersions] = useState<LibraryItemGroupVersion[]>([]);
@@ -427,6 +441,28 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     void loadUsages();
     return () => { cancelled = true; };
   }, [activeGroup?.id, onGetItemGroupUsages]);
+
+  useEffect(() => {
+    if (!isRightDrawerOpen || activeCard || activeGroup || currentFilter === "trash") return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void searchLibraryObjects(searchQuery, reviewStatusFilter).catch((cause: unknown) => {
+        if (!cancelled) console.error("Could not search Library objects:", cause);
+      });
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    activeCard?.id,
+    activeGroup?.id,
+    currentFilter,
+    isRightDrawerOpen,
+    reviewStatusFilter,
+    searchLibraryObjects,
+    searchQuery,
+  ]);
 
   useLayoutEffect(() => {
     if (sidebarTitleRef.current) {
@@ -590,9 +626,6 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     .filter((c) => {
       if (c.librarySourceCardId) return false;
       const matchesSearch = (c.title + " " + c.content).toLowerCase().includes(searchQuery.toLowerCase());
-      if (currentFilter === "all" || currentFilter === "cards") {
-        return matchesSearch && !c.deleted_at && matchesRefinement(c.created_at, c.tags);
-      }
       if (currentFilter === "trash") {
         return matchesSearch && Boolean(c.deleted_at) && matchesRefinement(c.created_at, c.tags);
       }
@@ -615,6 +648,11 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
       return 0;
     });
 
+  const libraryObjectsForView = currentFilter === "all"
+    ? libraryObjects
+    : currentFilter === "cards"
+      ? libraryObjects.filter((item) => item.type === "card")
+      : [];
   const filteredGroups = itemGroups
     .filter((group) => {
       const matchesSearch = `${group.name} ${group.version}`.toLowerCase().includes(searchQuery.toLowerCase());
@@ -627,7 +665,40 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
       return false;
     })
     .sort((a, b) => b.created_at - a.created_at);
-  const isLibraryEmpty = filteredCards.length === 0 && filteredGroups.length === 0;
+  const isLibraryEmpty = libraryObjectsForView.length === 0
+    && filteredGroups.length === 0
+    && (currentFilter !== "trash" || filteredCards.length === 0);
+
+  const handleLibraryObjectClick = async (itemId: string): Promise<void> => {
+    const item = libraryObjectsForView.find((candidate) => candidate.id === itemId);
+    if (!item) return;
+    setLibraryActionError(null);
+    try {
+      if (item.board_id !== activeBoardId) await onSelectBoard(item.board_id);
+      if (!item.is_placed) return;
+      if (item.type === "card") {
+        setSelectedCardId(item.id);
+      } else {
+        window.dispatchEvent(new CustomEvent<string>("vora:highlight-canvas-node", { detail: item.id }));
+      }
+    } catch (cause) {
+      console.error("Could not open Library object:", cause);
+      setLibraryActionError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const handleLibraryReviewStatusChange = async (
+    objectId: string,
+    status: LibraryObjectReviewStatus,
+  ): Promise<void> => {
+    setLibraryActionError(null);
+    try {
+      await updateLibraryObjectReviewStatus(objectId, status);
+    } catch (cause) {
+      console.error("Could not update Library review status:", cause);
+      setLibraryActionError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
 
   const handleInsertGroup = (group: LibraryItemGroup): void => {
     try {
