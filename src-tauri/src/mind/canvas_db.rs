@@ -397,7 +397,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             [],
         )?;
     }
-    ensure_board_version_baselines(conn)?;
     Ok(())
 }
 
@@ -1052,19 +1051,6 @@ pub fn create_board(
         "INSERT INTO mind_boards (id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
         params![id, title, now],
     )?;
-    let version_id = format!("board_version_{}", uuid::Uuid::now_v7());
-    let payload = serde_json::to_string(&BoardVersionSnapshot::default())
-        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
-    tx.execute(
-        "INSERT INTO mind_board_versions
-            (id, board_id, version_major, version_minor, version_patch, snapshot_json, created_at)
-         VALUES (?1, ?2, 0, 1, 0, ?3, ?4)",
-        params![version_id, id, payload, now],
-    )?;
-    tx.execute(
-        "UPDATE mind_boards SET active_version_id = ?1 WHERE id = ?2",
-        params![version_id, id],
-    )?;
     tx.commit()?;
     get_all_boards(conn)?
         .into_iter()
@@ -1182,7 +1168,7 @@ pub fn fork_board_from_version(
 }
 
 pub fn get_board_versions(conn: &Connection, board_id: &str) -> Result<Vec<BoardVersionSummary>> {
-    let active_version_id: String = conn.query_row(
+    let active_version_id: Option<String> = conn.query_row(
         "SELECT active_version_id FROM mind_boards WHERE id = ?1",
         [board_id],
         |row| row.get(0),
@@ -1196,7 +1182,12 @@ pub fn get_board_versions(conn: &Connection, board_id: &str) -> Result<Vec<Board
     version_ids
         .iter()
         .map(|version_id| {
-            load_board_version_summary(conn, board_id, version_id, &active_version_id)
+            load_board_version_summary(
+                conn,
+                board_id,
+                version_id,
+                active_version_id.as_deref().unwrap_or_default(),
+            )
         })
         .collect()
 }
@@ -1207,28 +1198,40 @@ pub fn create_board_version(
     increment: &str,
     reason: &str,
     snapshot: BoardVersionSnapshot,
+    custom_version: Option<&str>,
 ) -> Result<BoardVersionSummary> {
     let reason = reason.trim();
     if reason.is_empty() {
         return Err(rusqlite::Error::InvalidQuery);
     }
     let tx = conn.transaction()?;
-    let (active_version_id, forked_from_version_id): (String, Option<String>) = tx.query_row(
+    let (active_version_id, forked_from_version_id): (Option<String>, Option<String>) = tx.query_row(
         "SELECT active_version_id, branch_origin_version_id FROM mind_boards WHERE id = ?1",
         [board_id],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    let (major, minor, patch): (i32, i32, i32) = tx.query_row(
-        "SELECT version_major, version_minor, version_patch
-         FROM mind_board_versions WHERE id = ?1 AND board_id = ?2",
-        params![active_version_id, board_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    let version_count: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM mind_board_versions WHERE board_id = ?1",
+        [board_id],
+        |row| row.get(0),
     )?;
-    let (next_major, next_minor, next_patch) = match increment {
-        "major" => (major + 1, 0, 0),
-        "minor" => (major, minor + 1, 0),
-        "patch" => (major, minor, patch + 1),
-        _ => return Err(rusqlite::Error::InvalidQuery),
+    let (next_major, next_minor, next_patch) = if version_count == 0 {
+        let version = custom_version.unwrap_or("0.1.0");
+        parse_board_version(version).ok_or(rusqlite::Error::InvalidQuery)?
+    } else {
+        let active_version_id = active_version_id.ok_or(rusqlite::Error::InvalidQuery)?;
+        let (major, minor, patch): (i32, i32, i32) = tx.query_row(
+            "SELECT version_major, version_minor, version_patch
+             FROM mind_board_versions WHERE id = ?1 AND board_id = ?2",
+            params![active_version_id, board_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        match increment {
+            "major" => (major.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?, 0, 0),
+            "minor" => (major, minor.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?, 0),
+            "patch" => (major, minor, patch.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?),
+            _ => return Err(rusqlite::Error::InvalidQuery),
+        }
     };
     let version_exists: bool = tx.query_row(
         "SELECT EXISTS(
