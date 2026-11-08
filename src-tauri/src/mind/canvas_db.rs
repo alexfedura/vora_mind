@@ -359,6 +359,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     ensure_board_column(conn, "objects")?;
     ensure_board_column(conn, "mind_snapshots")?;
     ensure_board_version_columns(conn)?;
+    ensure_object_working_content_column(conn)?;
     ensure_library_item_group_board_column(conn)?;
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_objects_board ON objects(board_id);
@@ -397,7 +398,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             [],
         )?;
     }
-    ensure_board_version_baselines(conn)?;
     Ok(())
 }
 
@@ -728,6 +728,19 @@ fn ensure_board_version_columns(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn ensure_object_working_content_column(conn: &Connection) -> Result<()> {
+    let mut statement = conn.prepare("PRAGMA table_info(objects)")?;
+    let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+    if !columns
+        .collect::<Result<Vec<_>>>()?
+        .iter()
+        .any(|column| column == "working_content")
+    {
+        conn.execute("ALTER TABLE objects ADD COLUMN working_content JSON", [])?;
+    }
+    Ok(())
+}
+
 fn ensure_library_item_group_board_column(conn: &Connection) -> Result<()> {
     let mut statement = conn.prepare("PRAGMA table_info(mind_boards)")?;
     let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
@@ -815,132 +828,6 @@ fn ensure_board_column(conn: &Connection, table: &str) -> Result<()> {
         )?;
     }
     Ok(())
-}
-
-pub fn ensure_board_version_baselines(conn: &Connection) -> Result<()> {
-    let mut statement = conn.prepare(
-        "SELECT id FROM mind_boards WHERE active_version_id IS NULL ORDER BY created_at ASC, id ASC",
-    )?;
-    let board_ids = statement
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<Result<Vec<_>>>()?;
-    for board_id in board_ids {
-        let payload = snapshot_current_board(conn, &board_id)?;
-        let snapshot_json = serde_json::to_string(&payload)
-            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
-        let now = now_millis()?;
-        let version_id = format!("board_version_{}", uuid::Uuid::now_v7());
-        conn.execute(
-            "INSERT INTO mind_board_versions
-                (id, board_id, version_major, version_minor, version_patch, snapshot_json, created_at)
-             VALUES (?1, ?2, 0, 1, 0, ?3, ?4)",
-            params![version_id, board_id, snapshot_json, now],
-        )?;
-        conn.execute(
-            "UPDATE mind_boards SET active_version_id = ?1 WHERE id = ?2",
-            params![version_id, board_id],
-        )?;
-    }
-    Ok(())
-}
-
-fn snapshot_current_board(conn: &Connection, board_id: &str) -> Result<BoardVersionSnapshot> {
-    let latest_snapshot_id = conn
-        .query_row(
-            "SELECT id FROM mind_snapshots WHERE board_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1",
-            [board_id],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()?;
-    let resolved = latest_snapshot_id
-        .map(|snapshot_id| {
-            crate::mind::resolver::SnapshotResolver::resolve(conn, board_id, &snapshot_id)
-        })
-        .transpose()?;
-
-    let nodes = resolved
-        .as_ref()
-        .map(|snapshot| {
-            snapshot
-                .placements
-                .iter()
-                .map(|(id, placement)| {
-                    let node = snapshot.node_data.get(id);
-                    NodeInput {
-                        id: id.clone(),
-                        node_type: node
-                            .map(|value| value.node_type.clone())
-                            .unwrap_or_else(default_node_type),
-                        title: node
-                            .and_then(|value| value.title.clone())
-                            .unwrap_or_else(|| "Untitled".to_string()),
-                        content: node
-                            .and_then(|value| value.content.clone())
-                            .unwrap_or_default(),
-                        version: node
-                            .and_then(|value| value.version.clone())
-                            .unwrap_or_else(|| "v0.1.0".to_string()),
-                        data: node.map(|value| value.data.clone()).unwrap_or(Value::Null),
-                        x: placement.x,
-                        y: placement.y,
-                        width: Some(placement.width),
-                        height: Some(placement.height),
-                        style: placement.style.clone(),
-                    }
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let edges = resolved
-        .as_ref()
-        .map(|snapshot| {
-            snapshot
-                .links
-                .iter()
-                .map(|(id, link)| EdgeInput {
-                    id: id.clone(),
-                    source: link.source_object_id.clone(),
-                    target: link.target_object_id.clone(),
-                    link_type: Some(link.link_type.clone()),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    let mut statement = conn.prepare(
-        "SELECT o.id,
-                COALESCE(json_extract(v.content, '$.title'), 'Untitled'),
-                COALESCE(json_extract(v.content, '$.content'), ''),
-                COALESCE(json_extract(v.content, '$.version'), 'v0.1.0'),
-                o.deleted_at
-         FROM objects o
-         LEFT JOIN object_versions v ON v.id = (
-             SELECT id FROM object_versions
-             WHERE object_id = o.id
-             ORDER BY created_at DESC, rowid DESC
-             LIMIT 1
-         )
-         WHERE o.type = 'card' AND o.board_id = ?1
-         ORDER BY o.created_at ASC, o.id ASC",
-    )?;
-    let cards = statement
-        .query_map([board_id], |row| {
-            Ok(BoardVersionCard {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                content: row.get(2)?,
-                version: row.get(3)?,
-                deleted_at: row.get(4)?,
-            })
-        })?
-        .collect::<Result<Vec<_>>>()?;
-
-    Ok(BoardVersionSnapshot {
-        nodes,
-        edges,
-        cards,
-        reason: None,
-    })
 }
 
 fn now_millis() -> Result<i64> {
