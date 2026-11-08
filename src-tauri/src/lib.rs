@@ -339,7 +339,6 @@ mod media_import_tests {
 #[tauri::command]
 fn get_all_boards(state: State<AppState>) -> Result<Vec<BoardSummary>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    mind::canvas_db::ensure_board_version_baselines(&conn).map_err(|e| e.to_string())?;
     mind::canvas_db::get_all_boards(&conn).map_err(|e| e.to_string())
 }
 

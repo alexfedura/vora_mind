@@ -1062,7 +1062,7 @@ pub fn fork_board_from_version(
 }
 
 pub fn get_board_versions(conn: &Connection, board_id: &str) -> Result<Vec<BoardVersionSummary>> {
-    let active_version_id: String = conn.query_row(
+    let active_version_id: Option<String> = conn.query_row(
         "SELECT active_version_id FROM mind_boards WHERE id = ?1",
         [board_id],
         |row| row.get(0),
@@ -1076,7 +1076,12 @@ pub fn get_board_versions(conn: &Connection, board_id: &str) -> Result<Vec<Board
     version_ids
         .iter()
         .map(|version_id| {
-            load_board_version_summary(conn, board_id, version_id, &active_version_id)
+            load_board_version_summary(
+                conn,
+                board_id,
+                version_id,
+                active_version_id.as_deref().unwrap_or_default(),
+            )
         })
         .collect()
 }
@@ -1086,6 +1091,7 @@ pub fn create_board_version(
     board_id: &str,
     increment: &str,
     reason: &str,
+    custom_version: Option<&str>,
     snapshot: BoardVersionSnapshot,
 ) -> Result<BoardVersionSummary> {
     let reason = reason.trim();
@@ -1093,22 +1099,52 @@ pub fn create_board_version(
         return Err(rusqlite::Error::InvalidQuery);
     }
     let tx = conn.transaction()?;
-    let (active_version_id, forked_from_version_id): (String, Option<String>) = tx.query_row(
+    let (active_version_id, forked_from_version_id): (Option<String>, Option<String>) = tx.query_row(
         "SELECT active_version_id, branch_origin_version_id FROM mind_boards WHERE id = ?1",
         [board_id],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    let (major, minor, patch): (i32, i32, i32) = tx.query_row(
-        "SELECT version_major, version_minor, version_patch
-         FROM mind_board_versions WHERE id = ?1 AND board_id = ?2",
-        params![active_version_id, board_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    let version_count: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM mind_board_versions WHERE board_id = ?1",
+        [board_id],
+        |row| row.get(0),
     )?;
-    let (next_major, next_minor, next_patch) = match increment {
-        "major" => (major + 1, 0, 0),
-        "minor" => (major, minor + 1, 0),
-        "patch" => (major, minor, patch + 1),
-        _ => return Err(rusqlite::Error::InvalidQuery),
+    let (next_major, next_minor, next_patch, parent_version_id) = if version_count == 0 {
+        let initial_version = custom_version.unwrap_or("0.1.0");
+        let (major, minor, patch) =
+            parse_board_version(initial_version).ok_or(rusqlite::Error::InvalidQuery)?;
+        (major, minor, patch, None)
+    } else {
+        if custom_version.is_some() {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        let active_version_id = match active_version_id {
+            Some(active_version_id) => active_version_id,
+            None => tx.query_row(
+                "SELECT id FROM mind_board_versions
+                 WHERE board_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1",
+                [board_id],
+                |row| row.get(0),
+            )?,
+        };
+        let (major, minor, patch): (i32, i32, i32) = tx.query_row(
+            "SELECT version_major, version_minor, version_patch
+             FROM mind_board_versions WHERE id = ?1 AND board_id = ?2",
+            params![active_version_id, board_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        let (next_major, next_minor, next_patch) = match increment {
+            "major" => (major.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?, 0, 0),
+            "minor" => (major, minor.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?, 0),
+            "patch" => (major, minor, patch.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?),
+            _ => return Err(rusqlite::Error::InvalidQuery),
+        };
+        (
+            next_major,
+            next_minor,
+            next_patch,
+            Some(active_version_id),
+        )
     };
     let version_exists: bool = tx.query_row(
         "SELECT EXISTS(
@@ -1145,7 +1181,7 @@ pub fn create_board_version(
             next_major,
             next_minor,
             next_patch,
-            active_version_id,
+            parent_version_id,
             forked_from_version_id,
             snapshot_json,
             reason,
