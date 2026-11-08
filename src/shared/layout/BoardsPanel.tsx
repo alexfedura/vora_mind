@@ -34,6 +34,7 @@ interface BoardsPanelProps {
     boardId: string,
     increment: BoardVersionIncrement,
     reason: string,
+    customVersion?: string,
   ) => Promise<BoardVersionSummary[]>;
   onCheckoutBoardVersion: (boardId: string, versionId: string) => Promise<void>;
 }
@@ -65,6 +66,7 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
   const [commitTarget, setCommitTarget] = useState<{
     board: BoardItem;
     increment: BoardVersionIncrement;
+    isFirstVersion: boolean;
   } | null>(null);
   const [diffBoardId, setDiffBoardId] = useState<string | null>(null);
   const [forkTarget, setForkTarget] = useState<{
@@ -151,10 +153,14 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
     board: BoardItem,
     increment: BoardVersionIncrement,
   ): Promise<void> => {
-    setCommitTarget({ board, increment });
+    setCommitTarget({
+      board,
+      increment,
+      isFirstVersion: (versionsByBoard[board.id]?.length ?? 0) === 0,
+    });
   };
 
-  const commitVersion = async (reason: string): Promise<void> => {
+  const commitVersion = async (reason: string, customVersion?: string): Promise<void> => {
     if (!commitTarget) return;
     setError(null);
     setBusyBoardId(commitTarget.board.id);
@@ -163,6 +169,7 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
         commitTarget.board.id,
         commitTarget.increment,
         reason,
+        customVersion,
       );
       setVersionsByBoard((current) => ({ ...current, [commitTarget.board.id]: versions }));
       setCommitTarget(null);
@@ -306,7 +313,16 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
                   <div className="ml-2 border-l border-[#303543] pl-2">
                     <div className="flex items-center gap-1 py-1">
                       <GitBranch size={12} className="mr-auto text-zinc-500" />
-                      {(["major", "minor", "patch"] as const).map((increment) => (
+                      {(versionsByBoard[board.id]?.length ?? 0) === 0 ? (
+                        <button
+                          type="button"
+                          disabled={!isActive || isBusy}
+                          onClick={() => void createVersion(board, "patch")}
+                          className="rounded px-1.5 py-1 text-[9px] text-violet-300 hover:bg-[#303543] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Commit first version
+                        </button>
+                      ) : (["major", "minor", "patch"] as const).map((increment) => (
                         <button
                           key={increment}
                           type="button"
@@ -320,6 +336,11 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
                         </button>
                       ))}
                     </div>
+                    {(versionsByBoard[board.id]?.length ?? 0) === 0 && (
+                      <p className="pb-2 text-[9px] text-zinc-500">
+                        No versions yet. Click below to commit the first version.
+                      </p>
+                    )}
                     <button
                       type="button"
                       disabled={(versionsByBoard[board.id]?.length ?? 0) < 2}
@@ -389,6 +410,7 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
       isOpen={commitTarget !== null}
       boardTitle={commitTarget?.board.title ?? ""}
       increment={commitTarget?.increment ?? "patch"}
+      isFirstVersion={commitTarget?.isFirstVersion ?? false}
       onClose={() => setCommitTarget(null)}
       onCommit={commitVersion}
     />

@@ -1178,12 +1178,21 @@ function AppContent() {
     boardId: string,
     increment: BoardVersionIncrement,
     reason: string,
+    customVersion?: string,
   ) => {
     if (boardId !== activeBoardId) {
       throw new Error("Select this Board before creating a version.");
     }
     await flow.flushCanvas();
-    await dbService.createBoardVersion(boardId, increment, reason, flow.nodes, flow.edges, cards);
+    await dbService.createBoardVersion(
+      boardId,
+      increment,
+      reason,
+      customVersion,
+      flow.nodes,
+      flow.edges,
+      cards,
+    );
     const [updatedBoards, versions] = await Promise.all([
       dbService.getAllBoards(),
       dbService.getBoardVersions(boardId),

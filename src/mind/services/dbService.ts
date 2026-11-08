@@ -417,6 +417,7 @@ export const dbService = {
     boardId: string,
     increment: BoardVersionIncrement,
     reason: string,
+    customVersion: string | undefined,
     nodes: Node[],
     edges: Edge[],
     cards: Record<string, { id: string; title: string; content: string; version?: string; deleted_at?: number | null }>,
@@ -437,6 +438,7 @@ export const dbService = {
       boardId,
       increment,
       reason,
+      customVersion,
       snapshot,
     });
   },
