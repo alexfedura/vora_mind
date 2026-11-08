@@ -363,7 +363,7 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
                             disabled={isBusy}
                             onClick={() => setForkTarget({ board, version })}
                             aria-label={`Create branch from version ${version.version} of ${board.title}`}
-                            title="Create Branch"
+                            title="Create Branch from this version"
                             className="rounded p-1 text-zinc-500 hover:bg-[#303543] hover:text-violet-300 disabled:opacity-40"
                           >
                             <GitBranch size={12} />
