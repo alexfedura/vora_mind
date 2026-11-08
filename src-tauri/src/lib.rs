@@ -942,7 +942,7 @@ fn get_card_versions(state: State<AppState>, id: String) -> Result<Vec<CardVersi
                     reason,
                     created_at
              FROM object_versions
-             WHERE object_id = ?1 AND COALESCE(reason, '') <> 'Auto Save'
+             WHERE object_id = ?1 AND summary = 'Card version commit'
              ORDER BY created_at DESC, rowid DESC",
         )
         .map_err(|error| error.to_string())?;
