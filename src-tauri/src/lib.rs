@@ -97,7 +97,11 @@ fn get_last_update_failure(app: tauri::AppHandle) -> Result<Option<UpdaterFailur
     #[tauri::command]
     fn save_deepseek_key(state: State<AppState>, api_key: String) -> Result<(), String> {
         let api_key = api_key.trim();
-        if api_key.is_empty() || api_key.len() > 4096 || api_key.contains(['\r', '\n']) {
+        if api_key.is_empty()
+            || api_key.len() > 4096
+            || api_key.contains('\r')
+            || api_key.contains('\n')
+        {
             return Err("Enter a valid DeepSeek API key.".to_string());
         }
         let database_path = state
@@ -2410,6 +2414,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             install_update,
+            save_deepseek_key,
+            generate_board_from_prompt,
             get_last_update_failure,
             get_all_boards,
             create_board,
