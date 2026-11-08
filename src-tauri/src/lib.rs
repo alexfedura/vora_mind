@@ -281,10 +281,7 @@ fn import_media_file(app: tauri::AppHandle, source_path: String) -> Result<Strin
         .and_then(|value| value.to_str())
         .map(str::to_ascii_lowercase)
         .ok_or_else(|| "Media file must have a supported file extension.".to_string())?;
-    if !matches!(
-        extension.as_str(),
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "mp3" | "wav" | "ogg"
-    ) {
+    if !is_supported_media_extension(&extension) {
         return Err(format!("Unsupported media file extension: .{extension}"));
     }
 
@@ -305,6 +302,38 @@ fn import_media_file(app: tauri::AppHandle, source_path: String) -> Result<Strin
         )
     })?;
     Ok(destination.to_string_lossy().into_owned())
+}
+
+fn is_supported_media_extension(extension: &str) -> bool {
+    matches!(
+        extension,
+        "png" | "jpg" | "jpeg" | "gif" | "webp"
+            | "mp3" | "wav" | "ogg" | "m4a" | "aac" | "flac"
+            | "mp4" | "webm" | "mov" | "m4v"
+    )
+}
+
+#[cfg(test)]
+mod media_import_tests {
+    use super::is_supported_media_extension;
+
+    #[test]
+    fn supports_image_audio_and_video_extensions() {
+        for extension in [
+            "png", "jpg", "jpeg", "gif", "webp",
+            "mp3", "wav", "ogg", "m4a", "aac", "flac",
+            "mp4", "webm", "mov", "m4v",
+        ] {
+            assert!(is_supported_media_extension(extension), "rejected {extension}");
+        }
+    }
+
+    #[test]
+    fn rejects_unsupported_media_extensions() {
+        for extension in ["", "pdf", "txt", "mpg", "avi", "mkv"] {
+            assert!(!is_supported_media_extension(extension), "accepted {extension}");
+        }
+    }
 }
 
 #[tauri::command]

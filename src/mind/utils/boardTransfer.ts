@@ -62,7 +62,7 @@ function isTransferNode(value: unknown): value is VoraBoardTransferNode {
 
   if (value.type === "voraMedia") {
     const data = value.data;
-    if ((data.type !== "image" && data.type !== "audio") ||
+    if ((data.type !== "image" && data.type !== "audio" && data.type !== "video") ||
       typeof data.filePath !== "string" ||
       data.filePath.length === 0 ||
       typeof data.fileName !== "string" ||

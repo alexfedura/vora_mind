@@ -13,11 +13,11 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
       <NodeResizer
         nodeId={id}
         isVisible={selected}
-        minWidth={data.type === "image" ? 160 : 240}
-        minHeight={data.type === "image" ? 120 : 96}
+        minWidth={data.type === "audio" ? 240 : 160}
+        minHeight={data.type === "audio" ? 96 : 120}
         maxWidth={960}
         maxHeight={720}
-        keepAspectRatio={data.type === "image"}
+        keepAspectRatio={data.type !== "audio"}
         color="#a78bfa"
       />
       {data.type === "image" ? (
@@ -30,6 +30,26 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
               className="h-full w-full select-none object-contain p-1"
             />
           </div>
+        ) : data.type === "video" ? (
+          source ? (
+            <div className="flex h-full w-full flex-col gap-1 overflow-hidden rounded-xl p-2">
+              <div className="truncate text-xs font-medium text-zinc-200" title={data.fileName}>
+                {data.fileName}
+              </div>
+              <video
+                controls
+                preload="metadata"
+                src={source}
+                className="min-h-0 w-full flex-1 object-contain"
+              >
+                Your browser does not support video playback.
+              </video>
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center p-4 text-center text-xs text-rose-200">
+              Video path is unavailable.
+            </div>
+          )
         ) : (
           <div className="flex h-full items-center justify-center p-4 text-center text-xs text-rose-200">
             Image path is unavailable.

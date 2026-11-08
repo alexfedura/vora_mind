@@ -260,12 +260,17 @@ function getCanvasGroupId(node: Node): string | null {
     : null;
 }
 
-const MEDIA_IMPORT_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "mp3", "wav", "ogg"];
+const MEDIA_IMPORT_EXTENSIONS = [
+  "png", "jpg", "jpeg", "gif", "webp",
+  "mp3", "wav", "ogg", "m4a", "aac", "flac",
+  "mp4", "webm", "mov", "m4v",
+];
 
 function getMediaTypeFromPath(path: string): VoraMediaData["type"] | null {
   const extension = path.split(/[\\/]/).pop()?.split(".").pop()?.toLowerCase();
   if (extension && ["png", "jpg", "jpeg", "gif", "webp"].includes(extension)) return "image";
-  if (extension && ["mp3", "wav", "ogg"].includes(extension)) return "audio";
+  if (extension && ["mp3", "wav", "ogg", "m4a", "aac", "flac"].includes(extension)) return "audio";
+  if (extension && ["mp4", "webm", "mov", "m4v"].includes(extension)) return "video";
   return null;
 }
 
@@ -668,7 +673,7 @@ function AppContent() {
     if (!canvasBoardId) throw new Error("Create or open a Board before importing media.");
     const type = getMediaTypeFromPath(sourcePath);
     if (!type) {
-      throw new Error(`${getFileNameFromPath(sourcePath)} is not a supported image or audio file.`);
+      throw new Error(`${getFileNameFromPath(sourcePath)} is not a supported image, audio, or video file.`);
     }
 
     const filePath = await dbService.importMediaFile(sourcePath);
@@ -680,8 +685,8 @@ function AppContent() {
       id: `media-${crypto.randomUUID()}`,
       type: "voraMedia",
       position,
-      width: type === "image" ? 420 : 360,
-      height: type === "image" ? 300 : 128,
+      width: type === "audio" ? 360 : 420,
+      height: type === "audio" ? 128 : 300,
       selected: true,
       data: { type, filePath, fileName: getFileNameFromPath(sourcePath) },
     };
@@ -704,7 +709,7 @@ function AppContent() {
     for (const [index, path] of paths.entries()) {
       const type = getMediaTypeFromPath(path);
       if (!type) {
-        errors.push(`${getFileNameFromPath(path)} is not a supported image or audio file.`);
+        errors.push(`${getFileNameFromPath(path)} is not a supported image, audio, or video file.`);
         continue;
       }
       try {
@@ -760,7 +765,7 @@ function AppContent() {
       const selectedPath = await open({
         multiple: false,
         directory: false,
-        filters: [{ name: "Image and audio files", extensions: MEDIA_IMPORT_EXTENSIONS }],
+        filters: [{ name: "Image, audio, and video files", extensions: MEDIA_IMPORT_EXTENSIONS }],
       });
       if (typeof selectedPath !== "string") return;
       const bounds = flow.reactFlowWrapper.current?.getBoundingClientRect();
@@ -2759,10 +2764,10 @@ function AppContent() {
         </button>
         <button
           type="button"
-          aria-label="Import Media"
+          aria-label="Import multimedia"
           onClick={() => { void handleImportMedia(); }}
           className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
-          title="Import image or audio"
+          title="Import image, audio, or video"
         >
           <ImagePlus size={16} />
         </button>
