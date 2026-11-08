@@ -34,6 +34,8 @@ export interface VoraCard {
   content: string;
   boardId?: string;
   librarySourceCardId?: string;
+  sourceDocumentId?: string;
+  sourceHighlightId?: string;
   version?: string;
   tags?: string[];
   created_at?: number;

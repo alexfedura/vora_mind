@@ -38,6 +38,31 @@ export interface CardDto {
   version: string;
   deleted_at: number | null;
   library_source_card_id: string | null;
+  document_id: string | null;
+  highlight_id: string | null;
+}
+
+export type DocumentFileType = "pdf" | "docx" | "md";
+
+export interface DocumentDto {
+  id: string;
+  title: string;
+  file_type: DocumentFileType;
+  page_count: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface DocumentHighlightDto {
+  id: string;
+  document_id: string;
+  content: string;
+  page_number: number | null;
+  position_data: unknown;
+  color: string;
+  note: string | null;
+  library_card_id: string | null;
+  created_at: number;
 }
 
 export type LibraryObjectReviewStatus = "active" | "completed" | "not_needed";
@@ -50,6 +75,8 @@ export interface LibraryObjectResult {
   board_id: string;
   is_placed: boolean;
   review_status: LibraryObjectReviewStatus;
+  document_id: string | null;
+  highlight_id: string | null;
 }
 
 export type BoardDto = BoardItem;
@@ -185,6 +212,45 @@ export function createLibraryItemGroupSnapshot(
 }
 
 export const dbService = {
+  async importDocument(filePath: string, fileType: DocumentFileType): Promise<string> {
+    return await invoke<string>("import_document", { filePath, fileType });
+  },
+
+  async getDocuments(): Promise<DocumentDto[]> {
+    return await invoke<DocumentDto[]>("get_documents");
+  },
+
+  async getDocumentContent(documentId: string): Promise<Uint8Array> {
+    const bytes = await invoke<number[]>("get_document_content", { documentId });
+    return Uint8Array.from(bytes);
+  },
+
+  async createHighlight(
+    documentId: string,
+    content: string,
+    pageNumber: number | null,
+    positionData: unknown,
+    note: string | null,
+    color: string,
+  ): Promise<string> {
+    return await invoke<string>("create_highlight", {
+      documentId,
+      content,
+      pageNumber,
+      positionData: JSON.stringify(positionData),
+      note,
+      color,
+    });
+  },
+
+  async getHighlights(documentId: string): Promise<DocumentHighlightDto[]> {
+    return await invoke<DocumentHighlightDto[]>("get_highlights", { documentId });
+  },
+
+  async sendHighlightToLibrary(highlightId: string, boardId: string): Promise<string> {
+    return await invoke<string>("send_highlight_to_library", { highlightId, boardId });
+  },
+
   async getJournalEntries(startDate: string, endDate: string): Promise<JournalEntry[]> {
     return await invoke<JournalEntry[]>("get_journal_entries", { startDate, endDate });
   },
