@@ -49,6 +49,29 @@ pub struct LibraryObjectResult {
     pub review_status: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentDto {
+    pub id: String,
+    pub title: String,
+    pub file_type: String,
+    pub page_count: Option<i32>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HighlightDto {
+    pub id: String,
+    pub document_id: String,
+    pub content: String,
+    pub page_number: Option<i32>,
+    pub position_data: serde_json::Value,
+    pub color: String,
+    pub note: Option<String>,
+    pub library_card_id: Option<String>,
+    pub created_at: i64,
+}
+
 fn default_node_type() -> String {
     "voraCard".to_string()
 }
@@ -227,6 +250,28 @@ pub fn init_db(conn: &Connection) -> Result<()> {
                 CHECK (review_status IN ('active', 'completed', 'not_needed'))
         );
 
+        CREATE TABLE IF NOT EXISTS documents (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            file_path TEXT NOT NULL UNIQUE,
+            file_type TEXT NOT NULL CHECK(file_type IN ('pdf', 'docx', 'md')),
+            page_count INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS document_highlights (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+            content TEXT NOT NULL,
+            page_number INTEGER,
+            position_data JSON NOT NULL,
+            color TEXT NOT NULL DEFAULT 'yellow',
+            note TEXT,
+            library_card_id TEXT,
+            created_at INTEGER NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS object_versions (
             id TEXT PRIMARY KEY,
             object_id TEXT NOT NULL,
@@ -379,6 +424,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_objects_board ON objects(board_id);
         CREATE INDEX IF NOT EXISTS idx_objects_review_status ON objects(review_status);
+        CREATE INDEX IF NOT EXISTS idx_document_highlights_document ON document_highlights(document_id, created_at);
          CREATE INDEX IF NOT EXISTS idx_snapshots_board ON mind_snapshots(board_id, created_at);
          CREATE INDEX IF NOT EXISTS idx_board_versions_history ON mind_board_versions(board_id, created_at, id);
          CREATE UNIQUE INDEX IF NOT EXISTS idx_mind_boards_library_group ON mind_boards(library_item_group_id)

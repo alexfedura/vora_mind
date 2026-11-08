@@ -15,6 +15,28 @@ CREATE TABLE IF NOT EXISTS objects (
         CHECK (review_status IN ('active', 'completed', 'not_needed'))
 );
 
+CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    file_path TEXT NOT NULL UNIQUE,
+    file_type TEXT NOT NULL CHECK(file_type IN ('pdf', 'docx', 'md')),
+    page_count INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS document_highlights (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    page_number INTEGER,
+    position_data JSON NOT NULL,
+    color TEXT NOT NULL DEFAULT 'yellow',
+    note TEXT,
+    library_card_id TEXT,
+    created_at INTEGER NOT NULL
+);
+
 -- ۲. نسخه‌های تغییرناپذیر محتوا
 CREATE TABLE IF NOT EXISTS object_versions (
     id TEXT PRIMARY KEY,
