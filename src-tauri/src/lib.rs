@@ -592,6 +592,7 @@ fn create_board_version(
     board_id: String,
     increment: String,
     reason: String,
+    custom_version: Option<String>,
     snapshot: mind::canvas_db::BoardVersionSnapshot,
 ) -> Result<mind::canvas_db::BoardVersionSummary, String> {
     if !matches!(increment.as_str(), "major" | "minor" | "patch") {
@@ -600,8 +601,28 @@ fn create_board_version(
     if reason.trim().is_empty() {
         return Err("Enter a reason for this Board version.".to_string());
     }
+    if custom_version
+        .as_deref()
+        .is_some_and(|version| mind::canvas_db::parse_board_version(version).is_none())
+    {
+        return Err("Use a semantic version tag such as 0.1.0.".to_string());
+    }
     let mut conn = state.db.lock().map_err(|e| e.to_string())?;
-    mind::canvas_db::create_board_version(&mut conn, &board_id, &increment, &reason, snapshot)
+    if custom_version.is_some()
+        && !mind::canvas_db::get_board_versions(&conn, &board_id)
+            .map_err(|error| error.to_string())?
+            .is_empty()
+    {
+        return Err("A custom version tag can only be used for the first Board version.".to_string());
+    }
+    mind::canvas_db::create_board_version(
+        &mut conn,
+        &board_id,
+        &increment,
+        &reason,
+        custom_version.as_deref(),
+        snapshot,
+    )
         .map_err(|error| match error {
             rusqlite::Error::InvalidQuery => {
                 "That version label already exists on this Board. Choose another increment."
