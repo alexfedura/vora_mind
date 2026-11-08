@@ -2797,37 +2797,37 @@ function AppContent() {
           </button>
           {isBoardTransferMenuOpen && (
             <div
-              role="menu"
-              aria-label="Board JSON actions"
               className="absolute bottom-0 left-full ml-2 flex min-w-48 flex-col gap-1 rounded-xl border border-[#303543] bg-[#171a22] p-1.5 text-zinc-200 shadow-xl"
             >
               <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Board JSON</p>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={Boolean(libraryBoardSession)}
-                onClick={() => {
-                  setIsBoardTransferMenuOpen(false);
-                  boardImportInputRef.current?.click();
-                }}
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-zinc-300 hover:bg-[#282d3a] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Upload size={15} />
-                Import Board JSON
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={Boolean(libraryBoardSession)}
-                onClick={() => {
-                  setIsBoardTransferMenuOpen(false);
-                  handleExportBoard();
-                }}
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-zinc-300 hover:bg-[#282d3a] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Download size={15} />
-                Export Board JSON
-              </button>
+              <div role="menu" aria-label="Board JSON actions" className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={Boolean(libraryBoardSession)}
+                  onClick={() => {
+                    setIsBoardTransferMenuOpen(false);
+                    boardImportInputRef.current?.click();
+                  }}
+                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-zinc-300 hover:bg-[#282d3a] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Upload size={15} />
+                  Import Board JSON
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={Boolean(libraryBoardSession)}
+                  onClick={() => {
+                    setIsBoardTransferMenuOpen(false);
+                    handleExportBoard();
+                  }}
+                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-zinc-300 hover:bg-[#282d3a] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Download size={15} />
+                  Export Board JSON
+                </button>
+              </div>
             </div>
           )}
           <input
