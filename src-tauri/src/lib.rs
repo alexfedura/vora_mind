@@ -142,6 +142,38 @@ fn parse_card_version(version: &str) -> Result<(String, i32, i32, i32), String> 
     ))
 }
 
+fn store_card_working_content(
+    conn: &Connection,
+    board_id: &str,
+    id: &str,
+    title: &str,
+    content: &str,
+    version: &str,
+    now: i64,
+    metadata: Option<String>,
+) -> Result<usize, rusqlite::Error> {
+    let working_content = serde_json::json!({
+        "title": title,
+        "content": content,
+        "version": version,
+    })
+    .to_string();
+    conn.execute(
+        "INSERT INTO objects
+            (id, type, board_id, created_at, updated_at, deleted_at, metadata, working_content)
+         VALUES (?1, 'card', ?2, ?3, ?3, NULL, ?4, ?5)
+         ON CONFLICT(id) DO UPDATE SET
+             updated_at = excluded.updated_at,
+             working_content = excluded.working_content,
+             metadata = CASE
+                 WHEN excluded.metadata IS NULL THEN objects.metadata
+                 ELSE json_patch(COALESCE(objects.metadata, '{}'), excluded.metadata)
+             END
+         WHERE objects.board_id = excluded.board_id",
+        rusqlite::params![id, board_id, now, metadata, working_content],
+    )
+}
+
 fn has_committed_card_versions(conn: &Connection, id: &str) -> Result<bool, String> {
     conn.query_row(
         "SELECT EXISTS(
@@ -156,7 +188,7 @@ fn has_committed_card_versions(conn: &Connection, id: &str) -> Result<bool, Stri
 
 #[cfg(test)]
 mod card_version_tests {
-    use super::{has_committed_card_versions, parse_card_version};
+    use super::{has_committed_card_versions, parse_card_version, store_card_working_content};
     use rusqlite::Connection;
 
     #[test]
@@ -208,6 +240,63 @@ mod card_version_tests {
         )
         .expect("insert committed version");
         assert!(has_committed_card_versions(&conn, "card-1").expect("check committed history"));
+    }
+
+    #[test]
+    fn saving_card_working_content_does_not_create_version_history() {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        conn.execute_batch(
+            "CREATE TABLE objects (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                board_id TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                deleted_at INTEGER,
+                metadata JSON,
+                working_content JSON
+             );
+             CREATE TABLE object_versions (
+                id TEXT PRIMARY KEY,
+                object_id TEXT NOT NULL
+             );",
+        )
+        .expect("create card tables");
+
+        store_card_working_content(
+            &conn,
+            "board-1",
+            "card-1",
+            "Draft title",
+            "Draft content",
+            "v0.1.0",
+            1,
+            None,
+        )
+        .expect("save initial working content");
+        store_card_working_content(
+            &conn,
+            "board-1",
+            "card-1",
+            "Updated title",
+            "Updated content",
+            "v0.1.0",
+            2,
+            None,
+        )
+        .expect("update working content");
+
+        let (version_count, title): (i64, String) = conn
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM object_versions),
+                        json_extract(working_content, '$.title')
+                 FROM objects WHERE id = 'card-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read working card state");
+        assert_eq!(version_count, 0);
+        assert_eq!(title, "Updated title");
     }
 }
 
