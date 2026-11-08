@@ -1024,37 +1024,17 @@ fn restore_card_version(
         .and_then(serde_json::Value::as_str)
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| format!("v{version_major}.{version_minor}.{version_patch}"));
-    let parent_version_id: Option<String> = tx
-        .query_row(
-            "SELECT id FROM object_versions
-             WHERE object_id = ?1 AND COALESCE(reason, '') <> 'Auto Save'
-             ORDER BY created_at DESC, rowid DESC LIMIT 1",
-            rusqlite::params![&id],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(|error| error.to_string())?;
-    let restored_version_id = format!("ver_{}_{}_{}", id, now, uuid::Uuid::now_v7());
+    let restored_metadata = serde_json::json!({
+        "title": restored_content.get("title").cloned().unwrap_or(serde_json::Value::Null),
+        "content": restored_content.get("content").cloned().unwrap_or(serde_json::Value::Null),
+        "version": version,
+    })
+    .to_string();
     tx.execute(
-        "INSERT INTO object_versions
-         (id, object_id, version_major, version_minor, version_patch, parent_version_id, reason, summary, content, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'Card version restore', ?8, ?9)",
-        rusqlite::params![
-            &restored_version_id,
-            &id,
-            version_major,
-            version_minor,
-            version_patch,
-            parent_version_id,
-            format!("Restored from {version}"),
-            content,
-            now
-        ],
-    )
-    .map_err(|error| error.to_string())?;
-    tx.execute(
-        "UPDATE objects SET updated_at = ?1 WHERE id = ?2 AND type = 'card'",
-        rusqlite::params![now, &id],
+        "UPDATE objects
+         SET updated_at = ?1, metadata = json_patch(COALESCE(metadata, '{}'), ?2)
+         WHERE id = ?3 AND type = 'card'",
+        rusqlite::params![now, restored_metadata, &id],
     )
     .map_err(|error| error.to_string())?;
     tx.commit().map_err(|error| error.to_string())?;
