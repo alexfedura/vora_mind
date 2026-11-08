@@ -1365,19 +1365,6 @@ pub fn checkout_board_version(
         if changed == 0 {
             return Err(rusqlite::Error::InvalidQuery);
         }
-        let content = serde_json::json!({
-            "title": card.title,
-            "content": card.content,
-            "version": card.version,
-            "node_type": "voraCard",
-            "data": {
-                "cardId": card.id,
-                "title": card.title,
-                "label": card.title,
-                "content": card.content,
-                "version": card.version
-            }
-        });
     }
     tx.execute(
         "UPDATE mind_boards SET active_version_id = ?1, branch_origin_version_id = ?2, updated_at = ?3
@@ -1747,6 +1734,17 @@ mod board_version_tests {
     }
 
     #[test]
+    fn new_board_starts_with_an_empty_version_history() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        let board = create_board(&mut conn, "My desk", 1, "board-1").unwrap();
+
+        assert!(board.active_version.is_empty());
+        assert!(board.active_version_id.is_empty());
+        assert!(get_board_versions(&conn, "board-1").unwrap().is_empty());
+    }
+
+    #[test]
     fn existing_board_version_table_migrates_reason_column() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
@@ -1945,14 +1943,14 @@ mod board_version_tests {
     }
 
     #[test]
-    fn board_versions_capture_baseline_branch_origin_and_checkout_state() {
+    fn board_versions_support_custom_first_version_branch_origin_and_checkout_state() {
         let mut conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
         create_board(&mut conn, "My desk", 1, "board-1").unwrap();
 
         let boards = get_all_boards(&conn).unwrap();
-        assert_eq!(boards[0].active_version, "0.1.0");
-        let baseline_id = boards[0].active_version_id.clone();
+        assert!(boards[0].active_version.is_empty());
+        assert!(get_board_versions(&conn, "board-1").unwrap().is_empty());
         let v0_2 =
             create_board_version(
                 &mut conn,
@@ -1960,6 +1958,7 @@ mod board_version_tests {
                 "minor",
                 "Add first milestone",
                 board_snapshot("v0.2.0"),
+                Some("0.2.0"),
             )
             .unwrap();
         assert_eq!(v0_2.version, "0.2.0");
@@ -1970,6 +1969,7 @@ mod board_version_tests {
                 "minor",
                 "Add second milestone",
                 board_snapshot("v0.3.0"),
+                None,
             )
             .unwrap();
         assert_eq!(v0_3.version, "0.3.0");
@@ -1999,19 +1999,17 @@ mod board_version_tests {
             "patch",
             "Fix checked-out Board",
             restored,
+            None,
         )
         .unwrap();
         assert_eq!(branch.version, "0.2.1");
         assert_eq!(branch.reason.as_deref(), Some("Fix checked-out Board"));
         assert_eq!(branch.parent_version_id.as_deref(), Some(v0_2.id.as_str()));
         assert_eq!(branch.forked_from_version.as_deref(), Some("0.3.0"));
-        assert_ne!(
-            branch.parent_version_id.as_deref(),
-            Some(baseline_id.as_str())
-        );
+        assert_eq!(branch.parent_version_id.as_deref(), Some(v0_2.id.as_str()));
 
         let history = get_board_versions(&conn, "board-1").unwrap();
-        assert_eq!(history.len(), 4);
+        assert_eq!(history.len(), 3);
         assert!(history.last().is_some_and(|version| version.is_active));
         assert!(checkout_board_version(&mut conn, "board-2", &branch.id).is_err());
     }
@@ -2027,6 +2025,7 @@ mod board_version_tests {
             "minor",
             "A saved version",
             board_snapshot("Saved content"),
+            Some("0.2.0"),
         )
         .unwrap();
 
