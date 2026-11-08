@@ -1652,6 +1652,19 @@ mod board_version_tests {
     }
 
     #[test]
+    fn new_board_starts_with_an_empty_version_history() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        let board = create_board(&mut conn, "Unversioned", 1, "board-empty").unwrap();
+
+        assert!(board.active_version_id.is_empty());
+        assert!(board.active_version.is_empty());
+        assert!(get_board_versions(&conn, "board-empty").unwrap().is_empty());
+        init_db(&conn).unwrap();
+        assert!(get_board_versions(&conn, "board-empty").unwrap().is_empty());
+    }
+
+    #[test]
     fn existing_board_version_table_migrates_reason_column() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
@@ -1856,14 +1869,25 @@ mod board_version_tests {
         create_board(&mut conn, "My desk", 1, "board-1").unwrap();
 
         let boards = get_all_boards(&conn).unwrap();
-        assert_eq!(boards[0].active_version, "0.1.0");
-        let baseline_id = boards[0].active_version_id.clone();
+        assert!(boards[0].active_version.is_empty());
+        assert!(get_board_versions(&conn, "board-1").unwrap().is_empty());
+        let v0_1 = create_board_version(
+            &mut conn,
+            "board-1",
+            "patch",
+            "Start version history",
+            Some("0.1.0"),
+            board_snapshot("v0.1.0"),
+        )
+        .unwrap();
+        assert_eq!(v0_1.version, "0.1.0");
         let v0_2 =
             create_board_version(
                 &mut conn,
                 "board-1",
                 "minor",
                 "Add first milestone",
+                None,
                 board_snapshot("v0.2.0"),
             )
             .unwrap();
@@ -1874,6 +1898,7 @@ mod board_version_tests {
                 "board-1",
                 "minor",
                 "Add second milestone",
+                None,
                 board_snapshot("v0.3.0"),
             )
             .unwrap();
@@ -1903,6 +1928,7 @@ mod board_version_tests {
             "board-1",
             "patch",
             "Fix checked-out Board",
+            None,
             restored,
         )
         .unwrap();
@@ -1912,7 +1938,7 @@ mod board_version_tests {
         assert_eq!(branch.forked_from_version.as_deref(), Some("0.3.0"));
         assert_ne!(
             branch.parent_version_id.as_deref(),
-            Some(baseline_id.as_str())
+            Some(v0_1.id.as_str())
         );
 
         let history = get_board_versions(&conn, "board-1").unwrap();
@@ -1931,6 +1957,7 @@ mod board_version_tests {
             "source-board",
             "minor",
             "A saved version",
+            Some("0.2.0"),
             board_snapshot("Saved content"),
         )
         .unwrap();
@@ -1972,7 +1999,7 @@ mod board_version_tests {
     }
 
     #[test]
-    fn existing_board_baseline_captures_its_current_canvas() {
+    fn uncommitted_board_remains_without_history_after_reinitialization() {
         let mut conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
         create_board(&mut conn, "My desk", 1, "board-1").unwrap();
@@ -2006,13 +2033,9 @@ mod board_version_tests {
         )
         .unwrap();
 
-        super::ensure_board_version_baselines(&conn).unwrap();
+        init_db(&conn).unwrap();
         let board = get_all_boards(&conn).unwrap().remove(0);
-        assert_eq!(board.active_version, "0.1.0");
-        let baseline = get_board_versions(&conn, "board-1").unwrap().remove(0);
-        let snapshot = checkout_board_version(&mut conn, "board-1", &baseline.id).unwrap();
-        assert_eq!(snapshot.nodes[0].title, "Existing card");
-        assert_eq!(snapshot.nodes[0].x, 25.0);
-        assert_eq!(snapshot.cards[0].content, "Existing content");
+        assert!(board.active_version.is_empty());
+        assert!(get_board_versions(&conn, "board-1").unwrap().is_empty());
     }
 }
