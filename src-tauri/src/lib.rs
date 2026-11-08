@@ -146,7 +146,7 @@ fn has_committed_card_versions(conn: &Connection, id: &str) -> Result<bool, Stri
     conn.query_row(
         "SELECT EXISTS(
             SELECT 1 FROM object_versions
-            WHERE object_id = ?1 AND COALESCE(reason, '') <> 'Auto Save'
+            WHERE object_id = ?1 AND summary = 'Card version commit'
         )",
         rusqlite::params![id],
         |row| row.get(0),
@@ -154,16 +154,9 @@ fn has_committed_card_versions(conn: &Connection, id: &str) -> Result<bool, Stri
     .map_err(|error| error.to_string())
 }
 
-fn validate_initial_card_version(has_versions: bool, version: &str) -> Result<(), String> {
-    if !has_versions && version != "v0.1.0" {
-        return Err("The initial card version must be exactly v0.1.0.".to_string());
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod card_version_tests {
-    use super::{has_committed_card_versions, parse_card_version, validate_initial_card_version};
+    use super::{has_committed_card_versions, parse_card_version};
     use rusqlite::Connection;
 
     #[test]
@@ -189,31 +182,32 @@ mod card_version_tests {
     fn automatic_saves_do_not_count_as_committed_card_versions() {
         let conn = Connection::open_in_memory().expect("open in-memory database");
         conn.execute_batch(
-            "CREATE TABLE object_versions (object_id TEXT NOT NULL, reason TEXT);",
+            "CREATE TABLE object_versions (object_id TEXT NOT NULL, reason TEXT, summary TEXT);",
         )
         .expect("create object_versions table");
 
         assert!(!has_committed_card_versions(&conn, "card-1").expect("check empty history"));
         conn.execute(
-            "INSERT INTO object_versions (object_id, reason) VALUES ('card-1', 'Auto Save')",
+            "INSERT INTO object_versions (object_id, reason, summary)
+             VALUES ('card-1', 'Auto Save', 'Direct edit')",
             [],
         )
         .expect("insert automatic save");
         assert!(!has_committed_card_versions(&conn, "card-1").expect("check autosave history"));
         conn.execute(
-            "INSERT INTO object_versions (object_id, reason) VALUES ('card-1', 'Initial Version (Baseline)')",
+            "INSERT INTO object_versions (object_id, reason, summary)
+             VALUES ('card-1', 'Restored from v0.1.0', 'Card version restore')",
+            [],
+        )
+        .expect("insert automatic restore");
+        assert!(!has_committed_card_versions(&conn, "card-1").expect("check restore history"));
+        conn.execute(
+            "INSERT INTO object_versions (object_id, reason, summary)
+             VALUES ('card-1', 'Initial Version (Baseline)', 'Card version commit')",
             [],
         )
         .expect("insert committed version");
         assert!(has_committed_card_versions(&conn, "card-1").expect("check committed history"));
-    }
-
-    #[test]
-    fn requires_exact_version_for_first_committed_version() {
-        assert!(validate_initial_card_version(false, "v0.1.0").is_ok());
-        assert!(validate_initial_card_version(false, "0.1.0").is_err());
-        assert!(validate_initial_card_version(false, "v0.1.1").is_err());
-        assert!(validate_initial_card_version(true, "v0.1.1").is_ok());
     }
 }
 
@@ -754,9 +748,12 @@ fn get_all_cards(state: State<AppState>, board_id: String) -> Result<Vec<CardDto
         .prepare(
             "
             SELECT o.id,
-                   COALESCE(json_extract(v.content, '$.title'), 'Untitled') as title,
-                   COALESCE(json_extract(v.content, '$.content'), '') as content,
-                   COALESCE(json_extract(v.content, '$.version'), v.version_major || '.' || v.version_minor || '.' || v.version_patch, '0.1.0') as version,
+                   COALESCE(json_extract(o.working_content, '$.title'), json_extract(v.content, '$.title'), 'Untitled') as title,
+                   COALESCE(json_extract(o.working_content, '$.content'), json_extract(v.content, '$.content'), '') as content,
+                   COALESCE(json_extract(o.working_content, '$.version'),
+                            json_extract(v.content, '$.version'),
+                            v.version_major || '.' || v.version_minor || '.' || v.version_patch,
+                            'v0.1.0') as version,
                    o.deleted_at,
                    json_extract(o.metadata, '$.librarySourceCardId')
             FROM objects o
@@ -853,7 +850,6 @@ fn commit_card_version(
     }
 
     let has_versions = has_committed_card_versions(&tx, &id)?;
-    validate_initial_card_version(has_versions, &version)?;
     let (version, version_major, version_minor, version_patch) = parse_card_version(&version)?;
     let reason = if has_versions {
         reason.trim()
@@ -867,7 +863,7 @@ fn commit_card_version(
     let parent_version_id: Option<String> = tx
         .query_row(
             "SELECT id FROM object_versions
-             WHERE object_id = ?1 AND COALESCE(reason, '') <> 'Auto Save'
+             WHERE object_id = ?1 AND summary = 'Card version commit'
              ORDER BY created_at DESC, rowid DESC LIMIT 1",
             rusqlite::params![&id],
             |row| row.get(0),
@@ -900,8 +896,8 @@ fn commit_card_version(
     )
     .map_err(|error| error.to_string())?;
     tx.execute(
-        "UPDATE objects SET updated_at = ?1 WHERE id = ?2 AND board_id = ?3",
-        rusqlite::params![now, &id, &board_id],
+        "UPDATE objects SET working_content = ?1, updated_at = ?2 WHERE id = ?3 AND board_id = ?4",
+        rusqlite::params![content_json, now, &id, &board_id],
     )
     .map_err(|error| error.to_string())?;
     tx.commit().map_err(|error| error.to_string())
