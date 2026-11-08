@@ -989,14 +989,6 @@ fn restore_card_version(
         .map_err(|error| error.to_string())?
         .as_millis() as i64;
     let tx = conn.transaction().map_err(|error| error.to_string())?;
-    let latest_version_timestamp: i64 = tx
-        .query_row(
-            "SELECT COALESCE(MAX(created_at), 0) FROM object_versions WHERE object_id = ?1",
-            rusqlite::params![&id],
-            |row| row.get(0),
-        )
-        .map_err(|error| error.to_string())?;
-    let now = now.max(latest_version_timestamp.saturating_add(1));
 
     let object_exists: bool = tx
         .query_row(
@@ -1016,44 +1008,19 @@ fn restore_card_version(
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .map_err(|error| error.to_string())?;
-    let restored_content: serde_json::Value =
+    let mut restored_content: serde_json::Value =
         serde_json::from_str(&content).map_err(|error| error.to_string())?;
     let version = restored_content
         .get("version")
         .and_then(serde_json::Value::as_str)
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| format!("v{version_major}.{version_minor}.{version_patch}"));
-    let parent_version_id: Option<String> = tx
-        .query_row(
-            "SELECT id FROM object_versions
-             WHERE object_id = ?1 AND COALESCE(reason, '') <> 'Auto Save'
-             ORDER BY created_at DESC, rowid DESC LIMIT 1",
-            rusqlite::params![&id],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(|error| error.to_string())?;
-    let restored_version_id = format!("ver_{}_{}_{}", id, now, uuid::Uuid::now_v7());
+    if let Some(content) = restored_content.as_object_mut() {
+        content.insert("version".to_string(), serde_json::Value::String(version));
+    }
     tx.execute(
-        "INSERT INTO object_versions
-         (id, object_id, version_major, version_minor, version_patch, parent_version_id, reason, summary, content, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'Card version restore', ?8, ?9)",
-        rusqlite::params![
-            &restored_version_id,
-            &id,
-            version_major,
-            version_minor,
-            version_patch,
-            parent_version_id,
-            format!("Restored from {version}"),
-            content,
-            now
-        ],
-    )
-    .map_err(|error| error.to_string())?;
-    tx.execute(
-        "UPDATE objects SET updated_at = ?1 WHERE id = ?2 AND type = 'card'",
-        rusqlite::params![now, &id],
+        "UPDATE objects SET working_content = ?1, updated_at = ?2 WHERE id = ?3 AND type = 'card'",
+        rusqlite::params![restored_content.to_string(), now, &id],
     )
     .map_err(|error| error.to_string())?;
     tx.commit().map_err(|error| error.to_string())?;
@@ -1126,16 +1093,25 @@ fn save_card_direct(
     let metadata = library_source_card_id.as_ref().map(|source_card_id| {
         serde_json::json!({ "librarySourceCardId": source_card_id }).to_string()
     });
+    let content_json = serde_json::json!({
+        "title": title,
+        "content": content,
+        "version": version,
+    })
+    .to_string();
     tx.execute(
-        "INSERT INTO objects (id, type, board_id, created_at, updated_at, deleted_at, metadata) VALUES (?1, 'card', ?2, ?3, ?3, NULL, ?4)
+        "INSERT INTO objects
+            (id, type, board_id, created_at, updated_at, deleted_at, metadata, working_content)
+         VALUES (?1, 'card', ?2, ?3, ?3, NULL, ?4, ?5)
          ON CONFLICT(id) DO UPDATE SET
              updated_at = excluded.updated_at,
+             working_content = excluded.working_content,
              metadata = CASE
                  WHEN excluded.metadata IS NULL THEN objects.metadata
                  ELSE json_patch(COALESCE(objects.metadata, '{}'), excluded.metadata)
              END
          WHERE objects.board_id = excluded.board_id",
-        rusqlite::params![&id, &board_id, now, metadata],
+        rusqlite::params![&id, &board_id, now, metadata, content_json],
     ).map_err(|e| e.to_string())?;
     let belongs_to_board: bool = tx
         .query_row(
@@ -1146,37 +1122,6 @@ fn save_card_direct(
         .map_err(|e| e.to_string())?;
     if !belongs_to_board {
         return Err("Card does not belong to the active Board".to_string());
-    }
-
-    let ver_id = format!("ver_{}_{}_{}", id, now, uuid::Uuid::now_v7());
-    let content_json = serde_json::json!({
-        "title": title,
-        "content": content,
-        "version": version,
-    })
-    .to_string();
-
-    let draft_version_id: Option<String> = tx
-        .query_row(
-            "SELECT id FROM object_versions WHERE object_id = ?1 AND reason = 'Auto Save' AND summary = 'Direct edit'
-             ORDER BY created_at DESC LIMIT 1",
-            rusqlite::params![&id],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(|e| e.to_string())?;
-    if let Some(existing_version_id) = draft_version_id {
-        tx.execute(
-            "UPDATE object_versions SET content = ?1, created_at = ?2 WHERE id = ?3",
-            rusqlite::params![content_json, now, existing_version_id],
-        )
-        .map_err(|e| e.to_string())?;
-    } else {
-        tx.execute(
-            "INSERT INTO object_versions (id, object_id, version_major, version_minor, version_patch, reason, summary, content, created_at)
-             VALUES (?1, ?2, 0, 1, 0, 'Auto Save', 'Direct edit', ?3, ?4)",
-            rusqlite::params![&ver_id, &id, content_json, now],
-        ).map_err(|e| e.to_string())?;
     }
 
     if let Some(source_card_id) = library_source_card_id {
@@ -1194,12 +1139,16 @@ fn save_card_direct(
 
             let source_version: Option<String> = tx
                 .query_row(
-                    "SELECT COALESCE(json_extract(content, '$.version'),
-                                     printf('v%d.%d.%d', version_major, version_minor, version_patch))
-                     FROM object_versions
-                     WHERE object_id = ?1
-                     ORDER BY created_at DESC
-                     LIMIT 1",
+                    "SELECT COALESCE(
+                         json_extract(objects.working_content, '$.version'),
+                         (SELECT COALESCE(json_extract(content, '$.version'),
+                                          printf('v%d.%d.%d', version_major, version_minor, version_patch))
+                          FROM object_versions
+                          WHERE object_id = objects.id
+                          ORDER BY created_at DESC, rowid DESC
+                          LIMIT 1)
+                     )
+                     FROM objects WHERE id = ?1",
                     rusqlite::params![&source_card_id],
                     |row| row.get(0),
                 )
@@ -1211,34 +1160,12 @@ fn save_card_direct(
                 "version": source_version.unwrap_or_else(|| version.clone()),
             })
             .to_string();
-            let source_draft_version_id: Option<String> = tx
-                .query_row(
-                    "SELECT id FROM object_versions
-                     WHERE object_id = ?1 AND reason = 'Auto Save' AND summary = 'Direct edit'
-                     ORDER BY created_at DESC
-                     LIMIT 1",
-                    rusqlite::params![&source_card_id],
-                    |row| row.get(0),
-                )
-                .optional()
-                .map_err(|e| e.to_string())?;
-            if let Some(existing_version_id) = source_draft_version_id {
-                tx.execute(
-                    "UPDATE object_versions SET content = ?1, created_at = ?2 WHERE id = ?3",
-                    rusqlite::params![source_content_json, now, existing_version_id],
-                )
-                .map_err(|e| e.to_string())?;
-            } else {
-                let source_ver_id =
-                    format!("ver_{}_{}_{}", source_card_id, now, uuid::Uuid::now_v7());
-                tx.execute(
-                    "INSERT INTO object_versions
-                        (id, object_id, version_major, version_minor, version_patch, reason, summary, content, created_at)
-                     VALUES (?1, ?2, 0, 1, 0, 'Auto Save', 'Direct edit', ?3, ?4)",
-                    rusqlite::params![source_ver_id, &source_card_id, source_content_json, now],
-                )
-                .map_err(|e| e.to_string())?;
-            }
+            tx.execute(
+                "UPDATE objects SET working_content = ?1
+                 WHERE id = ?2 AND board_id = ?3 AND type = 'card'",
+                rusqlite::params![source_content_json, &source_card_id, &board_id],
+            )
+            .map_err(|e| e.to_string())?;
         }
     }
 
