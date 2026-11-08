@@ -202,7 +202,11 @@ async fn generate_board_from_prompt(
         while let Some(newline) = buffer.iter().position(|byte| *byte == b'\n') {
             let line = String::from_utf8(buffer.drain(..=newline).collect())
                 .map_err(|error| format!("DeepSeek returned invalid UTF-8: {error}"))?;
-            if emit_deepseek_delta(&app, line.trim_end_matches(['\r', '\n']), &mut full_response)? {
+            if emit_deepseek_delta(
+                &app,
+                line.trim_end_matches(['\r', '\n']),
+                &mut full_response,
+            )? {
                 stream_finished = true;
                 break;
             }
@@ -214,7 +218,11 @@ async fn generate_board_from_prompt(
     if !stream_finished && !buffer.is_empty() {
         let line = String::from_utf8(buffer)
             .map_err(|error| format!("DeepSeek returned invalid UTF-8: {error}"))?;
-        emit_deepseek_delta(&app, line.trim_end_matches(['\r', '\n']), &mut full_response)?;
+        emit_deepseek_delta(
+            &app,
+            line.trim_end_matches(['\r', '\n']),
+            &mut full_response,
+        )?;
     }
     if full_response.trim().is_empty() {
         return Err("DeepSeek completed without generating a Board graph.".to_string());
@@ -259,7 +267,9 @@ fn parse_card_version(version: &str) -> Result<(String, i32, i32, i32), String> 
             || (part.len() > 1 && part.starts_with('0'))
             || !part.bytes().all(|byte| byte.is_ascii_digit())
         {
-            return Err("Card version must use three numeric components, such as v0.1.1".to_string());
+            return Err(
+                "Card version must use three numeric components, such as v0.1.1".to_string(),
+            );
         }
         parsed[index] = part
             .parse::<i32>()
@@ -522,9 +532,21 @@ fn import_media_file(app: tauri::AppHandle, source_path: String) -> Result<Strin
 fn is_supported_media_extension(extension: &str) -> bool {
     matches!(
         extension,
-        "png" | "jpg" | "jpeg" | "gif" | "webp"
-            | "mp3" | "wav" | "ogg" | "m4a" | "aac" | "flac"
-            | "mp4" | "webm" | "mov" | "m4v"
+        "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "webp"
+            | "mp3"
+            | "wav"
+            | "ogg"
+            | "m4a"
+            | "aac"
+            | "flac"
+            | "mp4"
+            | "webm"
+            | "mov"
+            | "m4v"
     )
 }
 
@@ -535,18 +557,23 @@ mod media_import_tests {
     #[test]
     fn supports_image_audio_and_video_extensions() {
         for extension in [
-            "png", "jpg", "jpeg", "gif", "webp",
-            "mp3", "wav", "ogg", "m4a", "aac", "flac",
-            "mp4", "webm", "mov", "m4v",
+            "png", "jpg", "jpeg", "gif", "webp", "mp3", "wav", "ogg", "m4a", "aac", "flac", "mp4",
+            "webm", "mov", "m4v",
         ] {
-            assert!(is_supported_media_extension(extension), "rejected {extension}");
+            assert!(
+                is_supported_media_extension(extension),
+                "rejected {extension}"
+            );
         }
     }
 
     #[test]
     fn rejects_unsupported_media_extensions() {
         for extension in ["", "pdf", "txt", "mpg", "avi", "mkv"] {
-            assert!(!is_supported_media_extension(extension), "accepted {extension}");
+            assert!(
+                !is_supported_media_extension(extension),
+                "accepted {extension}"
+            );
         }
     }
 }
@@ -584,13 +611,8 @@ fn fork_board_from_version(
         return Err("Board title must contain between 1 and 80 characters".to_string());
     }
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
-    mind::canvas_db::fork_board_from_version(
-        &mut conn,
-        &source_board_id,
-        &version_id,
-        title,
-    )
-    .map_err(|error| error.to_string())
+    mind::canvas_db::fork_board_from_version(&mut conn, &source_board_id, &version_id, title)
+        .map_err(|error| error.to_string())
 }
 
 fn task_flow_now() -> Result<i64, String> {
@@ -828,7 +850,9 @@ fn create_board_version(
             .map_err(|error| error.to_string())?
             .is_empty()
     {
-        return Err("A custom version tag can only be used for the first Board version.".to_string());
+        return Err(
+            "A custom version tag can only be used for the first Board version.".to_string(),
+        );
     }
     mind::canvas_db::create_board_version(
         &mut conn,
@@ -838,13 +862,12 @@ fn create_board_version(
         custom_version.as_deref(),
         snapshot,
     )
-        .map_err(|error| match error {
-            rusqlite::Error::InvalidQuery => {
-                "That version label already exists on this Board. Choose another increment."
-                    .to_string()
-            }
-            other => other.to_string(),
-        })
+    .map_err(|error| match error {
+        rusqlite::Error::InvalidQuery => {
+            "That version label already exists on this Board. Choose another increment.".to_string()
+        }
+        other => other.to_string(),
+    })
 }
 
 #[tauri::command]
@@ -1031,28 +1054,23 @@ fn import_document(
         .map_err(|error| format!("Could not create document storage: {error}"))?;
     let document_id = format!("document_{}", uuid::Uuid::now_v7());
     let destination = documents_dir.join(format!("{}.{}", document_id, extension));
-    fs::copy(&source, &destination).map_err(|error| {
-        format!("Could not copy document into application storage: {error}")
-    })?;
+    fs::copy(&source, &destination)
+        .map_err(|error| format!("Could not copy document into application storage: {error}"))?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|error| error.to_string())?
         .as_millis() as i64;
-    let insert_result = state
-        .db
-        .lock()
-        .map_err(|error| error.to_string())?
-        .execute(
-            "INSERT INTO documents (id, title, file_path, file_type, created_at, updated_at)
+    let insert_result = state.db.lock().map_err(|error| error.to_string())?.execute(
+        "INSERT INTO documents (id, title, file_path, file_type, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-            rusqlite::params![
-                document_id,
-                title,
-                destination.to_string_lossy(),
-                file_type,
-                now
-            ],
-        );
+        rusqlite::params![
+            document_id,
+            title,
+            destination.to_string_lossy(),
+            file_type,
+            now
+        ],
+    );
     if let Err(error) = insert_result {
         if let Err(cleanup_error) = fs::remove_file(&destination) {
             return Err(format!(
@@ -1243,14 +1261,21 @@ fn send_highlight_to_library(
         )
         .map_err(|error| error.to_string())?;
     if !board_exists {
-        return Err("Select or create a Board before sending a highlight to the Library.".to_string());
+        return Err(
+            "Select or create a Board before sending a highlight to the Library.".to_string(),
+        );
     }
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|error| error.to_string())?
         .as_millis() as i64;
     let card_id = format!("card_{}", uuid::Uuid::now_v7());
-    let title = content.chars().take(80).collect::<String>().trim().to_string();
+    let title = content
+        .chars()
+        .take(80)
+        .collect::<String>()
+        .trim()
+        .to_string();
     let working_content = serde_json::json!({
         "title": title,
         "content": content,
@@ -1461,7 +1486,10 @@ fn has_card_versions(state: State<AppState>, id: String) -> Result<bool, String>
 }
 
 #[tauri::command]
-fn get_card_versions(state: State<AppState>, id: String) -> Result<Vec<CardVersionSummary>, String> {
+fn get_card_versions(
+    state: State<AppState>,
+    id: String,
+) -> Result<Vec<CardVersionSummary>, String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;
     let is_card: bool = conn
         .query_row(
@@ -1635,14 +1663,7 @@ fn save_card_direct(
         serde_json::json!({ "librarySourceCardId": source_card_id }).to_string()
     });
     let rows_updated = store_card_working_content(
-        &tx,
-        &board_id,
-        &id,
-        &title,
-        &content,
-        &version,
-        now,
-        metadata,
+        &tx, &board_id, &id, &title, &content, &version, now, metadata,
     )
     .map_err(|error| error.to_string())?;
     if rows_updated == 0 {

@@ -828,10 +828,7 @@ pub fn search_library_objects(
     status_filter: Option<&str>,
 ) -> Result<Vec<LibraryObjectResult>> {
     let status_filter = status_filter.unwrap_or("active");
-    if !matches!(
-        status_filter,
-        "all" | "active" | "completed" | "not_needed"
-    ) {
+    if !matches!(status_filter, "all" | "active" | "completed" | "not_needed") {
         return Err(rusqlite::Error::InvalidQuery);
     }
     let mut statement = conn.prepare(
@@ -930,11 +927,7 @@ pub fn search_library_objects(
     rows.collect()
 }
 
-pub fn update_object_review_status(
-    conn: &Connection,
-    object_id: &str,
-    status: &str,
-) -> Result<()> {
+pub fn update_object_review_status(conn: &Connection, object_id: &str, status: &str) -> Result<()> {
     if !matches!(status, "active" | "completed" | "not_needed") {
         return Err(rusqlite::Error::InvalidQuery);
     }
@@ -1307,11 +1300,12 @@ pub fn create_board_version(
         return Err(rusqlite::Error::InvalidQuery);
     }
     let tx = conn.transaction()?;
-    let (active_version_id, forked_from_version_id): (Option<String>, Option<String>) = tx.query_row(
-        "SELECT active_version_id, branch_origin_version_id FROM mind_boards WHERE id = ?1",
-        [board_id],
-        |row| Ok((row.get(0)?, row.get(1)?)),
-    )?;
+    let (active_version_id, forked_from_version_id): (Option<String>, Option<String>) = tx
+        .query_row(
+            "SELECT active_version_id, branch_origin_version_id FROM mind_boards WHERE id = ?1",
+            [board_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
     let version_count: i64 = tx.query_row(
         "SELECT COUNT(*) FROM mind_board_versions WHERE board_id = ?1",
         [board_id],
@@ -1342,17 +1336,24 @@ pub fn create_board_version(
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
         let (next_major, next_minor, next_patch) = match increment {
-            "major" => (major.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?, 0, 0),
-            "minor" => (major, minor.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?, 0),
-            "patch" => (major, minor, patch.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?),
+            "major" => (
+                major.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?,
+                0,
+                0,
+            ),
+            "minor" => (
+                major,
+                minor.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?,
+                0,
+            ),
+            "patch" => (
+                major,
+                minor,
+                patch.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?,
+            ),
             _ => return Err(rusqlite::Error::InvalidQuery),
         };
-        (
-            next_major,
-            next_minor,
-            next_patch,
-            Some(active_version_id),
-        )
+        (next_major, next_minor, next_patch, Some(active_version_id))
     };
     let version_exists: bool = tx.query_row(
         "SELECT EXISTS(
@@ -1413,13 +1414,14 @@ pub fn get_board_version_snapshot(
         [version_id],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    let mut snapshot: BoardVersionSnapshot = serde_json::from_str(&snapshot_json).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(
-            0,
-            rusqlite::types::Type::Text,
-            Box::new(error),
-        )
-    })?;
+    let mut snapshot: BoardVersionSnapshot =
+        serde_json::from_str(&snapshot_json).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                0,
+                rusqlite::types::Type::Text,
+                Box::new(error),
+            )
+        })?;
     snapshot.reason = reason.or(snapshot.reason);
     Ok(snapshot)
 }
@@ -1815,8 +1817,7 @@ mod board_version_tests {
     use super::{
         checkout_board_version, create_board, create_board_version, get_all_boards,
         get_board_version_snapshot, get_board_versions, init_db, search_library_objects,
-        update_object_review_status, BoardVersionCard, BoardVersionSnapshot, EdgeInput,
-        NodeInput,
+        update_object_review_status, BoardVersionCard, BoardVersionSnapshot, EdgeInput, NodeInput,
     };
     use rusqlite::Connection;
     use serde_json::json;
@@ -1965,7 +1966,9 @@ mod board_version_tests {
             .unwrap()
             .collect::<rusqlite::Result<Vec<_>>>()
             .unwrap();
-        assert!(board_columns.iter().any(|column| column == "parent_board_id"));
+        assert!(board_columns
+            .iter()
+            .any(|column| column == "parent_board_id"));
     }
 
     #[cfg(test)]
@@ -2147,34 +2150,36 @@ mod board_version_tests {
         )
         .unwrap();
         assert_eq!(v0_1.version, "0.1.0");
-        let v0_2 =
-            create_board_version(
-                &mut conn,
-                "board-1",
-                "minor",
-                "Add first milestone",
-                None,
-                board_snapshot("v0.2.0"),
-            )
-            .unwrap();
+        let v0_2 = create_board_version(
+            &mut conn,
+            "board-1",
+            "minor",
+            "Add first milestone",
+            None,
+            board_snapshot("v0.2.0"),
+        )
+        .unwrap();
         assert_eq!(v0_2.version, "0.2.0");
-        let v0_3 =
-            create_board_version(
-                &mut conn,
-                "board-1",
-                "minor",
-                "Add second milestone",
-                None,
-                board_snapshot("v0.3.0"),
-            )
-            .unwrap();
+        let v0_3 = create_board_version(
+            &mut conn,
+            "board-1",
+            "minor",
+            "Add second milestone",
+            None,
+            board_snapshot("v0.3.0"),
+        )
+        .unwrap();
         assert_eq!(v0_3.version, "0.3.0");
         assert_eq!(v0_2.reason.as_deref(), Some("Add first milestone"));
 
-        let active_version_before_read = get_all_boards(&conn).unwrap()[0].active_version_id.clone();
+        let active_version_before_read =
+            get_all_boards(&conn).unwrap()[0].active_version_id.clone();
         let fetched_snapshot = get_board_version_snapshot(&conn, &v0_2.id).unwrap();
         assert_eq!(fetched_snapshot.nodes[0].title, "v0.2.0");
-        assert_eq!(fetched_snapshot.reason.as_deref(), Some("Add first milestone"));
+        assert_eq!(
+            fetched_snapshot.reason.as_deref(),
+            Some("Add first milestone")
+        );
         assert_eq!(
             get_all_boards(&conn).unwrap()[0].active_version_id,
             active_version_before_read
@@ -2202,10 +2207,7 @@ mod board_version_tests {
         assert_eq!(branch.reason.as_deref(), Some("Fix checked-out Board"));
         assert_eq!(branch.parent_version_id.as_deref(), Some(v0_2.id.as_str()));
         assert_eq!(branch.forked_from_version.as_deref(), Some("0.3.0"));
-        assert_ne!(
-            branch.parent_version_id.as_deref(),
-            Some(v0_1.id.as_str())
-        );
+        assert_ne!(branch.parent_version_id.as_deref(), Some(v0_1.id.as_str()));
 
         let history = get_board_versions(&conn, "board-1").unwrap();
         assert_eq!(history.len(), 4);
@@ -2248,11 +2250,16 @@ mod board_version_tests {
             Some(source_version.id.as_str())
         );
         assert_eq!(branch_history[0].version, "0.1.0");
-        let forked_snapshot =
-            get_board_version_snapshot(&conn, &branch_history[0].id).unwrap();
+        let forked_snapshot = get_board_version_snapshot(&conn, &branch_history[0].id).unwrap();
         let source_snapshot = get_board_version_snapshot(&conn, &source_version.id).unwrap();
-        assert_eq!(forked_snapshot.nodes[0].title, source_snapshot.nodes[0].title);
-        assert_eq!(forked_snapshot.cards[0].content, source_snapshot.cards[0].content);
+        assert_eq!(
+            forked_snapshot.nodes[0].title,
+            source_snapshot.nodes[0].title
+        );
+        assert_eq!(
+            forked_snapshot.cards[0].content,
+            source_snapshot.cards[0].content
+        );
         assert_eq!(forked_snapshot.nodes[0].x, source_snapshot.nodes[0].x);
         assert_ne!(forked_snapshot.nodes[0].id, source_snapshot.nodes[0].id);
         assert_ne!(forked_snapshot.cards[0].id, source_snapshot.cards[0].id);
@@ -2413,14 +2420,18 @@ mod board_version_tests {
                 .map(str::to_string)
                 .collect()
         );
-        assert!(matching_objects
-            .iter()
-            .find(|item| item.id == "text-result")
-            .unwrap()
-            .is_placed);
+        assert!(
+            matching_objects
+                .iter()
+                .find(|item| item.id == "text-result")
+                .unwrap()
+                .is_placed
+        );
 
         update_object_review_status(&conn, "shape-result", "completed").unwrap();
-        assert!(search_library_objects(&conn, "shape", None).unwrap().is_empty());
+        assert!(search_library_objects(&conn, "shape", None)
+            .unwrap()
+            .is_empty());
         let archived = search_library_objects(&conn, "shape", Some("all")).unwrap();
         assert_eq!(archived.len(), 1);
         assert_eq!(archived[0].review_status, "completed");

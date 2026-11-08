@@ -22,11 +22,12 @@ fn mpv_exe_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .path()
         .resolve("binaries/mpv/mpv.exe", tauri::path::BaseDirectory::Resource)
         .ok();
-    let nested_bundled_path = app
-        .path()
-        .resource_dir()
-        .ok()
-        .map(|path| path.join("resources").join("binaries").join("mpv").join("mpv.exe"));
+    let nested_bundled_path = app.path().resource_dir().ok().map(|path| {
+        path.join("resources")
+            .join("binaries")
+            .join("mpv")
+            .join("mpv.exe")
+    });
     let development_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("resources")
         .join("binaries")
@@ -44,7 +45,10 @@ fn mpv_exe_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         }
     }
 
-    Err("The bundled MPV runtime is missing. Reinstall Vora Mind or restore its player resources.".to_string())
+    Err(
+        "The bundled MPV runtime is missing. Reinstall Vora Mind or restore its player resources."
+            .to_string(),
+    )
 }
 
 #[tauri::command]
@@ -130,7 +134,9 @@ fn open_pipe() -> Result<std::fs::File, String> {
             }
         }
     }
-    Err(format!("MPV is not responding on its local control pipe: {last_error}"))
+    Err(format!(
+        "MPV is not responding on its local control pipe: {last_error}"
+    ))
 }
 
 fn send_command(command: Vec<Value>) -> Result<Value, String> {
@@ -224,12 +230,7 @@ pub fn player_seek(seconds: f64) -> Result<(), String> {
     if !seconds.is_finite() || seconds < 0.0 {
         return Err("Seek position must be finite and non-negative.".to_string());
     }
-    send_command(vec![
-        json!("seek"),
-        json!(seconds),
-        json!("absolute+exact"),
-    ])
-    .map(|_| ())
+    send_command(vec![json!("seek"), json!(seconds), json!("absolute+exact")]).map(|_| ())
 }
 
 #[tauri::command]

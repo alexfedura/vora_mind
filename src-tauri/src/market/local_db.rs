@@ -142,12 +142,7 @@ pub fn fetch_local_candles(
         .map_err(|error| format!("Could not prepare local candle query: {error}"))?;
     let rows = statement
         .query_map(
-            params![
-                parquet_glob_str,
-                start_ts,
-                end_ts,
-                limit as i64
-            ],
+            params![parquet_glob_str, start_ts, end_ts, limit as i64],
             |row| {
                 Ok(CandleDto {
                     ts: row.get(0)?,

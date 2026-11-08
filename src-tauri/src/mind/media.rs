@@ -63,7 +63,10 @@ fn valid_range(start_seconds: f64, end_seconds: f64) -> bool {
 
 fn fingerprint(path: &Path) -> Result<(i64, i64), String> {
     let metadata = fs::metadata(path).map_err(|error| {
-        format!("Cannot read media source metadata for {}: {error}", path.display())
+        format!(
+            "Cannot read media source metadata for {}: {error}",
+            path.display()
+        )
     })?;
     if !metadata.is_file() {
         return Err(format!("Media source is not a file: {}", path.display()));
@@ -74,8 +77,7 @@ fn fingerprint(path: &Path) -> Result<(i64, i64), String> {
         .map_err(|error| format!("Cannot read media source modification time: {error}"))?
         .duration_since(UNIX_EPOCH)
         .map_err(|error| format!("Media source modification time is invalid: {error}"))?;
-    let modified_ms =
-        i64::try_from(modified.as_millis()).map_err(|error| error.to_string())?;
+    let modified_ms = i64::try_from(modified.as_millis()).map_err(|error| error.to_string())?;
     Ok((size, modified_ms))
 }
 
@@ -131,11 +133,17 @@ fn lock_database<'a>(
 }
 
 #[tauri::command]
-pub fn register_media_source(state: State<'_, AppState>, path: String) -> Result<MediaSource, String> {
+pub fn register_media_source(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<MediaSource, String> {
     let selected_path = Path::new(&path);
-    let canonical_path = selected_path
-        .canonicalize()
-        .map_err(|error| format!("Cannot open media source {}: {error}", selected_path.display()))?;
+    let canonical_path = selected_path.canonicalize().map_err(|error| {
+        format!(
+            "Cannot open media source {}: {error}",
+            selected_path.display()
+        )
+    })?;
     let canonical_path = canonical_path
         .to_str()
         .ok_or_else(|| "Media source path cannot be represented as Unicode.".to_string())?
@@ -218,7 +226,10 @@ pub fn get_last_media_source(state: State<'_, AppState>) -> Result<Option<MediaS
 }
 
 #[tauri::command]
-pub fn validate_media_source(state: State<'_, AppState>, source_id: String) -> Result<MediaSource, String> {
+pub fn validate_media_source(
+    state: State<'_, AppState>,
+    source_id: String,
+) -> Result<MediaSource, String> {
     let conn = lock_database(&state)?;
     let source = get_source(&conn, &source_id)
         .map_err(|error| error.to_string())?
@@ -244,7 +255,9 @@ pub fn update_media_source_duration(
         )
         .map_err(|error| error.to_string())?;
     if updated == 0 {
-        return Err(format!("Media source {source_id} was not found in this workspace."));
+        return Err(format!(
+            "Media source {source_id} was not found in this workspace."
+        ));
     }
     Ok(())
 }
@@ -267,7 +280,9 @@ pub fn save_media_source_position(
         )
         .map_err(|error| error.to_string())?;
     if updated == 0 {
-        return Err(format!("Media source {source_id} was not found in this workspace."));
+        return Err(format!(
+            "Media source {source_id} was not found in this workspace."
+        ));
     }
     Ok(())
 }
@@ -308,7 +323,9 @@ pub fn save_media_slice(
     input: MediaSliceInput,
 ) -> Result<MediaSlice, String> {
     if !valid_range(input.start_seconds, input.end_seconds) {
-        return Err("The media reference requires finite times with end greater than start.".to_string());
+        return Err(
+            "The media reference requires finite times with end greater than start.".to_string(),
+        );
     }
     let title = input.title.trim();
     if title.is_empty() {
@@ -318,7 +335,12 @@ pub fn save_media_slice(
     let mut conn = lock_database(&state)?;
     let source = get_source(&conn, &input.source_id)
         .map_err(|error| error.to_string())?
-        .ok_or_else(|| format!("Media source {} was not found in this workspace.", input.source_id))?;
+        .ok_or_else(|| {
+            format!(
+                "Media source {} was not found in this workspace.",
+                input.source_id
+            )
+        })?;
     verify_source(&source)?;
     if source
         .duration_seconds
@@ -441,7 +463,12 @@ pub fn get_media_slice(
         .ok_or_else(|| format!("Media reference {slice_id} was not found in this workspace."))?;
     let source = get_source(&conn, &slice.source_id)
         .map_err(|error| error.to_string())?
-        .ok_or_else(|| format!("Media source {} was not found in this workspace.", slice.source_id))?;
+        .ok_or_else(|| {
+            format!(
+                "Media source {} was not found in this workspace.",
+                slice.source_id
+            )
+        })?;
     Ok(MediaSliceWithSource { slice, source })
 }
 
