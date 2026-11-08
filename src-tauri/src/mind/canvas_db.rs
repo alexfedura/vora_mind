@@ -416,7 +416,7 @@ fn card_field_text(
         "$.content"
     };
     let query = format!(
-        "SELECT COALESCE(json_extract(v.content, ?1), '')
+        "SELECT COALESCE(json_extract(o.working_content, ?1), json_extract(v.content, ?1), '')
          FROM objects o
          LEFT JOIN object_versions v ON v.id = (
              SELECT id FROM object_versions WHERE object_id = o.id ORDER BY created_at DESC LIMIT 1
@@ -918,11 +918,17 @@ pub fn get_all_boards(conn: &Connection) -> Result<Vec<BoardSummary>> {
 }
 
 pub(crate) fn parse_board_version(version: &str) -> Option<(i32, i32, i32)> {
+    let version = version.trim().strip_prefix('v').unwrap_or(version.trim());
     let mut parts = version.split('.');
     let major = parts.next()?.parse().ok()?;
     let minor = parts.next()?.parse().ok()?;
     let patch = parts.next()?.parse().ok()?;
-    if parts.next().is_some() {
+    if parts.next().is_some()
+        || major < 0
+        || minor < 0
+        || patch < 0
+        || format!("{major}.{minor}.{patch}") != version
+    {
         return None;
     }
     Some((major, minor, patch))
@@ -938,19 +944,6 @@ pub fn create_board(
     tx.execute(
         "INSERT INTO mind_boards (id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
         params![id, title, now],
-    )?;
-    let version_id = format!("board_version_{}", uuid::Uuid::now_v7());
-    let payload = serde_json::to_string(&BoardVersionSnapshot::default())
-        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
-    tx.execute(
-        "INSERT INTO mind_board_versions
-            (id, board_id, version_major, version_minor, version_patch, snapshot_json, created_at)
-         VALUES (?1, ?2, 0, 1, 0, ?3, ?4)",
-        params![version_id, id, payload, now],
-    )?;
-    tx.execute(
-        "UPDATE mind_boards SET active_version_id = ?1 WHERE id = ?2",
-        params![version_id, id],
     )?;
     tx.commit()?;
     get_all_boards(conn)?
