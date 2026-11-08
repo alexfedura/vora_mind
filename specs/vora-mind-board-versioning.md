@@ -9,9 +9,12 @@ Give every Board an immutable, Git-like history that a user explicitly creates a
 
 ## Confirmed behavior
 
-- Every newly created Board starts at version `0.1.0`.
+- A newly created Board starts with an empty version history. Its first version
+  is created only by an explicit commit and defaults to `0.1.0`; the user may
+  provide another semantic version tag.
 - Release numbers stay three-part semantic versions. Branch ancestry is shown as a second three-part version after a dash (for example, `0.2.1 - 0.3.0`), not as a fourth dot-separated numeric component.
-- Existing Boards receive one baseline version `0.1.0` containing their current state.
+- Existing version history is preserved. Unversioned Boards remain unversioned
+  until the user explicitly commits a first version.
 - A version is a full Board snapshot: cards and their content, canvas nodes and shapes, positions, and connections.
 - Every explicitly created version records a non-empty reason for the change. The reason is shown in version history and is part of the stored snapshot metadata.
 - Creating a version is an explicit user action. Ordinary edits and autosaves do not add version-history entries.
@@ -34,8 +37,8 @@ Give every Board an immutable, Git-like history that a user explicitly creates a
 - Add a Board-version table in SQLite with a stable ID, `board_id`, semantic version components, content-parent ID, fork-point ID, full snapshot payload, and creation timestamp.
 - Enforce uniqueness of a displayed semantic version within a Board; reject conflicting version creation with an explicit error.
 - Store snapshots in SQLite, not in frontend storage.
-- Create initial version records transactionally when a Board is created.
-- Migrate existing Boards by taking a consistent full-state baseline snapshot at `0.1.0`. Preserve existing Board IDs and current Board content.
+- Create the first version transactionally only when the user explicitly commits it.
+- Do not create baseline versions automatically for new or existing Boards.
 - Keep the complete snapshot payload self-contained so restore does not depend on a later working state.
 - Provide a read-only API to fetch any version's complete snapshot without changing the active version or working Board state.
 
@@ -53,7 +56,7 @@ Give every Board an immutable, Git-like history that a user explicitly creates a
 
 ## Validation
 
-- Rust tests cover baseline versions, version increments, branch ancestry/fork-point metadata, full snapshot restoration, Board isolation, and Board deletion cleanup.
+- Rust tests cover empty initial history, custom first versions, version increments, branch ancestry/fork-point metadata, full snapshot restoration, Board isolation, and Board deletion cleanup.
 - Rust tests cover creating an independent Board from a selected version, including remapped snapshot identities and parent-board metadata.
 - Frontend checks: `pnpm tsc --noEmit`, `pnpm build`.
 - Backend check: `cargo check --manifest-path src-tauri/Cargo.toml`.

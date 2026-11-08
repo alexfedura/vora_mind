@@ -11,16 +11,15 @@ state and do not create user-visible history entries.
 
 ## Data and persistence
 
-- Reuse `object_versions`, which stores card content as JSON containing
-  `title`, `content`, and `version`.
+- Reuse `object_versions` for explicitly committed card history. Current
+  working content is stored on the owning `objects` row separately.
 - Parse three-part semantic version tags with an optional leading `v` into the
   existing `version_major`, `version_minor`, and `version_patch` columns.
 - Explicit commits insert a new version row with a reason and timestamp.
-- Auto-save rows may continue to be updated in place by `save_card_direct`, but
-  they are excluded from card history.
-- Restore copies the selected immutable version into a new `object_versions`
-  row and updates the owning object's `updated_at`. The `objects` table does
-  not store card title or content.
+- `save_card_direct` updates working content without inserting an
+  `object_versions` row.
+- Restore copies the selected immutable version into working content without
+  creating another history entry.
 - Card version reads are scoped by card ID. Writes and restores verify that
   the object is a card and belongs to the supplied board where applicable.
 
@@ -28,14 +27,14 @@ state and do not create user-visible history entries.
 
 - Clicking the card version badge opens a commit dialog with a suggested patch
   increment and a required change reason.
-- A card with no committed history starts at exactly `v0.1.0`; its initial
-  commit reason is fixed to `Initial Version (Baseline)`.
-- Routine `Auto Save` working copies do not count as committed history or
-  prevent the first-version baseline.
+- A card with no committed history defaults to `v0.1.0`; its first commit
+  allows a custom semantic version tag. Its initial reason is fixed to
+  `Initial Version (Baseline)`.
+- Routine working-content saves do not create or count as committed history.
 - Later commits suggest a patch increment from the card's current version and
   allow the user to enter a reason.
-- The backend independently enforces the exact initial version and baseline
-  reason so clients cannot bypass the initial-version rule.
+- The backend validates semantic version tags and enforces the baseline reason
+  so clients cannot bypass the initial-version rule.
 - The card history action shows an indicator until the first explicit version
   is committed.
 - The History action opens a per-card history modal showing version, date, and
@@ -44,7 +43,7 @@ state and do not create user-visible history entries.
   working content or another historical version using an additions/deletions
   diff view.
 - Restoring a historical version updates the working card and any open document
-  editor while preserving the previous version rows.
+  editor while preserving the immutable version rows.
 
 ## Validation
 
