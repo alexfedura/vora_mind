@@ -18,10 +18,6 @@ interface PdfRect {
   height: number;
 }
 
-interface PdfPositionData {
-  rects: PdfRect[];
-}
-
 interface PdfViewerProps {
   document: DocumentDto;
   jumpToHighlightId: string | null;

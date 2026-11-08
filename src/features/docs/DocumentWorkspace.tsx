@@ -15,7 +15,8 @@ interface DocumentWorkspaceProps {
 }
 
 function getFileType(path: string): DocumentFileType | null {
-  const extension = path.split(".").at(-1)?.toLowerCase();
+  const parts = path.split(".");
+  const extension = parts[parts.length - 1]?.toLowerCase();
   return extension === "pdf" || extension === "docx" || extension === "md" ? extension : null;
 }
 

@@ -101,7 +101,7 @@ export const TextDocumentViewer: React.FC<TextDocumentViewerProps> = ({
 
   useEffect(() => {
     if (!jumpToHighlightId) return;
-    const target = rootRef.current?.querySelector<HTMLElement>(`[data-highlight-id="${CSS.escape(jumpToHighlightId)}"]`);
+    const target = window.document.querySelector<HTMLElement>(`[data-highlight-id="${CSS.escape(jumpToHighlightId)}"]`);
     target?.scrollIntoView({ behavior: "smooth", block: "center" });
     target?.classList.add("ring-2", "ring-violet-400");
     const timeout = window.setTimeout(() => target?.classList.remove("ring-2", "ring-violet-400"), 2000);
