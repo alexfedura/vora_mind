@@ -531,6 +531,12 @@ function AppContent() {
   const [isSpacePanActive, setIsSpacePanActive] = useState(false);
   const isSpacePanActiveRef = React.useRef(false);
   const lastPointerPositionRef = React.useRef<{ x: number; y: number } | null>(null);
+  const libraryHighlightTimerRef = React.useRef<number | null>(null);
+  const highlightedLibraryNodeRef = React.useRef<{
+    element: HTMLElement;
+    boxShadow: string;
+    transition: string;
+  } | null>(null);
 
   useEffect(() => {
     const handleOpenCardCommit = (event: Event): void => {
@@ -1288,6 +1294,55 @@ function AppContent() {
       setSelectedCardId(e.detail.cardId);
     };
 
+    const handleHighlightCanvasNode = (event: Event): void => {
+      if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
+      const node = flow.nodes.find((candidate) =>
+        candidate.id === event.detail
+        || (isRecord(candidate.data) && candidate.data.cardId === event.detail)
+      );
+      if (!node) return;
+
+      const width = node.measured?.width ?? node.width ?? 200;
+      const height = node.measured?.height ?? node.height ?? 120;
+      setCenter(
+        node.position.x + width / 2,
+        node.position.y + height / 2,
+        { zoom: 1.15, duration: 350 },
+      );
+
+      if (libraryHighlightTimerRef.current !== null) {
+        window.clearTimeout(libraryHighlightTimerRef.current);
+      }
+      const previousHighlight = highlightedLibraryNodeRef.current;
+      if (previousHighlight) {
+        previousHighlight.element.style.boxShadow = previousHighlight.boxShadow;
+        previousHighlight.element.style.transition = previousHighlight.transition;
+      }
+      const element = Array.from(document.querySelectorAll<HTMLElement>(".react-flow__node"))
+        .find((candidate) => candidate.dataset.id === node.id);
+      if (!element) {
+        highlightedLibraryNodeRef.current = null;
+        libraryHighlightTimerRef.current = null;
+        return;
+      }
+      highlightedLibraryNodeRef.current = {
+        element,
+        boxShadow: element.style.boxShadow,
+        transition: element.style.transition,
+      };
+      element.style.transition = "box-shadow 180ms ease";
+      element.style.boxShadow = "0 0 0 3px rgba(251, 191, 36, 0.9), 0 0 24px rgba(251, 191, 36, 0.65)";
+      libraryHighlightTimerRef.current = window.setTimeout(() => {
+        const highlighted = highlightedLibraryNodeRef.current;
+        if (highlighted) {
+          highlighted.element.style.boxShadow = highlighted.boxShadow;
+          highlighted.element.style.transition = highlighted.transition;
+        }
+        highlightedLibraryNodeRef.current = null;
+        libraryHighlightTimerRef.current = null;
+      }, 2000);
+    };
+
     const handleRemoveFromCanvas = (event: Event) => {
       if (!(event instanceof CustomEvent) || !isRecord(event.detail)) return;
       const requestedIds = getNodeIds(event.detail);
@@ -1681,6 +1736,7 @@ function AppContent() {
     const handleSaveHistorySnapshot = (): void => flow.saveHistorySnapshot();
 
     window.addEventListener("vora:select-card", handleSelectCard);
+    window.addEventListener("vora:highlight-canvas-node", handleHighlightCanvasNode);
     window.addEventListener("vora:remove-from-canvas", handleRemoveFromCanvas);
     window.addEventListener("vora:duplicate-shape", handleDuplicateShape);
     window.addEventListener("vora:toggle-shape-lock", handleToggleShapeLock);
@@ -1702,6 +1758,17 @@ function AppContent() {
 
     return () => {
       window.removeEventListener("vora:select-card", handleSelectCard);
+      window.removeEventListener("vora:highlight-canvas-node", handleHighlightCanvasNode);
+      if (libraryHighlightTimerRef.current !== null) {
+        window.clearTimeout(libraryHighlightTimerRef.current);
+        libraryHighlightTimerRef.current = null;
+      }
+      const highlighted = highlightedLibraryNodeRef.current;
+      if (highlighted) {
+        highlighted.element.style.boxShadow = highlighted.boxShadow;
+        highlighted.element.style.transition = highlighted.transition;
+        highlightedLibraryNodeRef.current = null;
+      }
       window.removeEventListener("vora:remove-from-canvas", handleRemoveFromCanvas);
       window.removeEventListener("vora:duplicate-shape", handleDuplicateShape);
       window.removeEventListener("vora:toggle-shape-lock", handleToggleShapeLock);
@@ -1723,6 +1790,7 @@ function AppContent() {
     };
   }, [
     flow,
+    setCenter,
     selectedCardId,
     cards,
     screenToFlowPosition,
