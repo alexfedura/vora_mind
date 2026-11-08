@@ -1133,6 +1133,28 @@ fn save_card_direct(
 
     if let Some(source_card_id) = library_source_card_id {
         if source_card_id != id {
+            let source_version: Option<String> = tx
+                .query_row(
+                    "SELECT COALESCE(
+                         json_extract(o.metadata, '$.version'),
+                         (SELECT COALESCE(
+                              json_extract(v.content, '$.version'),
+                              printf('v%d.%d.%d', v.version_major, v.version_minor, v.version_patch)
+                          )
+                          FROM object_versions v
+                          WHERE v.object_id = o.id
+                          ORDER BY v.created_at DESC
+                          LIMIT 1),
+                         ?1
+                     )
+                     FROM objects o
+                     WHERE o.id = ?2 AND o.board_id = ?3 AND o.type = 'card'",
+                    rusqlite::params![&version, &source_card_id, &board_id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| e.to_string())?;
+            let source_version = source_version.unwrap_or_else(|| version.clone());
             let source_updated = tx
                 .execute(
                     "UPDATE objects
@@ -1144,7 +1166,7 @@ fn save_card_direct(
                         serde_json::json!({
                             "title": &title,
                             "content": &content,
-                            "version": &version,
+                            "version": &source_version,
                         })
                         .to_string(),
                         &source_card_id,
