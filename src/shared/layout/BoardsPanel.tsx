@@ -83,7 +83,7 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
     renameInputRef.current?.select();
   }, [renamingBoardId]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!shouldStartCreatingBoard) return;
     setError(null);
     setNewBoardTitle("");
@@ -357,24 +357,36 @@ export const BoardsPanel: React.FC<BoardsPanelProps> = ({
                         </span>
                       </button>
                       <div className="mr-1 flex items-center">
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      aria-label={`Version history for ${board.title}`}
-                      title="Version history"
-                      aria-expanded={expandedBoardId === board.id}
-                      onClick={() => void toggleVersionHistory(board)}
-                      className="rounded p-1 hover:bg-[#303543] hover:text-white disabled:opacity-50"
-                    >
-                      <History size={13} />
-                    </button>
-                    <button type="button" aria-label={`Rename ${board.title}`} title="Rename Board" onClick={() => startRenamingBoard(board)} className="hidden rounded p-1 hover:bg-[#303543] hover:text-white group-hover:inline-flex">
-                      <Pencil size={13} />
-                    </button>
-                    <button type="button" aria-label={`Delete ${board.title}`} title="Delete Board" onClick={() => void deleteBoard(board)} className="hidden rounded p-1 hover:bg-rose-500/15 hover:text-rose-300 group-hover:inline-flex">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          aria-label={`Version history for ${board.title}`}
+                          title="Version history"
+                          aria-expanded={expandedBoardId === board.id}
+                          onClick={() => void toggleVersionHistory(board)}
+                          className="rounded p-1 hover:bg-[#303543] hover:text-white disabled:opacity-50"
+                        >
+                          <History size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Rename ${board.title}`}
+                          title="Rename Board"
+                          onClick={() => startRenamingBoard(board)}
+                          className="hidden rounded p-1 hover:bg-[#303543] hover:text-white group-hover:inline-flex"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${board.title}`}
+                          title="Delete Board"
+                          onClick={() => void deleteBoard(board)}
+                          className="hidden rounded p-1 hover:bg-rose-500/15 hover:text-rose-300 group-hover:inline-flex"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </>
                   )}
                 </div>
