@@ -493,6 +493,23 @@ function AppContent() {
   const [mediaImportError, setMediaImportError] = useState<string | null>(null);
   const boardImportInputRef = React.useRef<HTMLInputElement>(null);
   const boardTransferMenuRef = React.useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isBoardTransferMenuOpen) return;
+    const closeOnPointerDown = (event: PointerEvent): void => {
+      if (event.target instanceof Node && !boardTransferMenuRef.current?.contains(event.target)) {
+        setIsBoardTransferMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setIsBoardTransferMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isBoardTransferMenuOpen]);
   const [canvasNodeContextMenu, setCanvasNodeContextMenu] = useState<CanvasNodeContextMenu | null>(null);
   const [connectionCreateMenu, setConnectionCreateMenu] = useState<ConnectionCreateMenu | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -2762,34 +2779,66 @@ function AppContent() {
         >
           <BookOpen size={16} />
         </button>
-        <button
-          type="button"
-          aria-label="Import Board JSON"
-          disabled={Boolean(libraryBoardSession)}
-          onClick={() => boardImportInputRef.current?.click()}
-          className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS} disabled:cursor-not-allowed disabled:opacity-40`}
-          title="Import Board JSON"
-        >
-          <Upload size={16} />
-        </button>
-        <input
-          ref={boardImportInputRef}
-          type="file"
-          accept="application/json,.json"
-          className="hidden"
-          aria-label="Choose a Vora Mind Board export"
-          onChange={(event) => { void handleImportBoardFile(event); }}
-        />
-        <button
-          type="button"
-          aria-label="Export Board JSON"
-          disabled={Boolean(libraryBoardSession)}
-          onClick={handleExportBoard}
-          className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS} disabled:cursor-not-allowed disabled:opacity-40`}
-          title="Export Board JSON"
-        >
-          <Download size={16} />
-        </button>
+        <div ref={boardTransferMenuRef} className="relative">
+          <button
+            type="button"
+            aria-label="Board JSON actions"
+            aria-haspopup="menu"
+            aria-expanded={isBoardTransferMenuOpen}
+            onClick={() => {
+              setIsDiagramPaletteOpen(false);
+              setIsTemplateGalleryOpen(false);
+              setIsBoardTransferMenuOpen((open) => !open);
+            }}
+            className={`${CANVAS_TOOL_BUTTON_CLASS} ${isBoardTransferMenuOpen ? CANVAS_TOOL_BUTTON_ACTIVE_CLASS : CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
+            title="Board JSON"
+          >
+            <Menu size={16} />
+          </button>
+          {isBoardTransferMenuOpen && (
+            <div
+              role="menu"
+              aria-label="Board JSON actions"
+              className="absolute bottom-0 left-full ml-2 flex min-w-48 flex-col gap-1 rounded-xl border border-[#303543] bg-[#171a22] p-1.5 text-zinc-200 shadow-xl"
+            >
+              <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Board JSON</p>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={Boolean(libraryBoardSession)}
+                onClick={() => {
+                  setIsBoardTransferMenuOpen(false);
+                  boardImportInputRef.current?.click();
+                }}
+                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-zinc-300 hover:bg-[#282d3a] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Upload size={15} />
+                Import Board JSON
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={Boolean(libraryBoardSession)}
+                onClick={() => {
+                  setIsBoardTransferMenuOpen(false);
+                  handleExportBoard();
+                }}
+                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-zinc-300 hover:bg-[#282d3a] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Download size={15} />
+                Export Board JSON
+              </button>
+            </div>
+          )}
+          <input
+            ref={boardImportInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            aria-label="Choose a Vora Mind Board export"
+            onChange={(event) => { void handleImportBoardFile(event); }}
+          />
+        </div>
         {isDiagramPaletteOpen && (
           <div
             role="menu"
