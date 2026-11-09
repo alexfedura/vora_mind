@@ -1,51 +1,56 @@
-# Vora Mind Canvas Media Assets
+# Vora Mind File References and Annotations
 
 > **Status**: Approved for implementation
 > **Scope**: `mind | canvas | tauri | db`
 
 ## Goal
 
-Import local image, audio, and video files as durable, movable, resizable nodes on a
-Vora Mind Board. Imported files are copied into Vora Mind's application data
-directory so canvas nodes do not depend on the original file remaining in
-place. This feature is separate from Vora Player's path-based audio/video
-source references.
+Use immutable file UUIDs as the shared identity for canvas media, player
+references, document sources, and timestamped annotations. Imported files stay
+at their original paths; Vora Mind stores metadata and annotations only.
+
+## Persistence
+
+- `vora_files` stores a UUID, original name, cached current path, file type,
+  SHA-256, byte size, modified time, and creation time. Playback duration,
+  last position, and last-used time remain file metadata.
+- `mind_media_slices.file_id` references `vora_files.id` and retains its title,
+  start/end seconds, note, and timestamps.
+- `documents.file_id` references `vora_files.id`. Existing document IDs and
+  highlight relationships remain stable.
+- Startup migrates old media sources and slices, and adds file references for
+  existing document copies without deleting any existing files or annotations.
+- New imports deduplicate the same canonical path and content. They do not
+  copy files into application data.
+
+## File identity and relocation
+
+- `import_file_reference(path)` validates and fingerprints a regular supported
+  file, stores its original path and returns its UUID.
+- SHA-256 is calculated from file bytes. Recursive relocation checks candidate
+  byte size before hashing and updates the cached path only on an exact hash
+  match. Legacy entries without a readable source hash may use size plus
+  modified time.
+- `resolve_missing_file(file_id, search_dir)` returns a clear error if there
+  is no match; it never silently chooses a same-name file.
+- Current file types include image, audio, video, PDF, DOCX, and Markdown.
 
 ## Behavior
 
-- The canvas toolbar offers a multimedia file picker. Supported extensions
-  are PNG, JPG, JPEG, GIF, WEBP, MP3, WAV, OGG, M4A, AAC, FLAC, MP4, WEBM,
-  MOV, and M4V.
-- Dropping a supported desktop file onto the canvas imports it and places a
-  node at the drop point. Unsupported file types are ignored with an explicit
-  user-visible error.
-- The Rust import command validates a regular file and supported extension,
-  copies it to a collision-resistant filename under
-  `<app_data_dir>/assets/`, and returns its absolute destination path.
-- Image nodes render the copied local asset using Tauri's asset protocol,
-  preserve their aspect ratio, and can be resized. Audio nodes show browser
-  media controls in styled, resizable nodes. Video nodes hide native controls;
-  left-click toggles playback and double-click opens the source in Vora Player.
-- Media node type and data are saved by the existing canvas snapshot path.
-  Board export/import retains media data and node geometry.
-- Video double-click sends the node's stored file path to the existing
-  path-based media player; it does not create or modify a media file.
-
-## Persistence and local access
-
-- `VoraMediaData` stores the media kind, copied absolute path, original
-  filename, and optional dimensions in the ReactFlow node's `data`.
-- Snapshot version content remains the durable source of canvas node data;
-  no new database table is introduced.
-- Tauri's asset protocol is enabled only for the app-data assets directory.
-  The frontend uses `convertFileSrc` to generate WebView-readable URLs.
-- Import errors are surfaced in the canvas UI; source files are never modified.
+- Canvas media imports store `file_id` and the current original path in node
+  data. They render the referenced file directly. A note indicator reflects
+  saved time slices; double-click opens the player by UUID.
+- The player saves and loads timestamped notes by `file_id`. Missing files can
+  be located recursively from a user-selected directory.
+- The Library's Media & Files view lists references and their slices, reports
+  unavailable paths, and opens a slice at its saved start time.
+- PDF, DOCX, and Markdown imports reference the original file. Existing
+  document/highlight IDs and viewing behavior are preserved.
 
 ## Verification
 
 - `pnpm tsc --noEmit`
-- `pnpm build`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
-- Confirm media nodes autosave/restore and survive board export/import.
-- Confirm supported toolbar import and native desktop drop create nodes at the
-  requested canvas positions; unsupported extensions report an error.
+- Targeted Rust tests cover fingerprinting, relocation, and migration.
+- Confirm imports retain original paths, annotations round-trip by file UUID,
+  and relocating a renamed file updates its cached path.
