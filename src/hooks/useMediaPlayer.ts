@@ -478,6 +478,12 @@ export function useMediaPlayer(
         source_id: source.id,
       } satisfies MediaSliceInput);
       setSlices(await dbService.listMediaSlices(source.id));
+      const savedRange = {
+        startSeconds: saved.start_seconds,
+        endSeconds: saved.end_seconds,
+      };
+      setPlaybackRange(savedRange);
+      await seekTo(saved.start_seconds, savedRange);
       setDraft(null);
       setStatus(`Saved ${saved.title}. The original media file was not changed.`);
     } catch (saveError: unknown) {
@@ -538,6 +544,7 @@ export function useMediaPlayer(
     resumeLastSource,
     togglePlayback,
     seekTo,
+    selectReference,
     seekBy,
     changeSpeed,
     changeVolume,
