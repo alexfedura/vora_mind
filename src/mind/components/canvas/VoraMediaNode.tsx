@@ -1,12 +1,33 @@
-import { memo } from "react";
+import { memo, useRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { NodeResizer, type Node, type NodeProps } from "@xyflow/react";
+import { Play } from "lucide-react";
 import type { VoraMediaData } from "@/mind/types";
 
 type VoraMediaNodeModel = Node<VoraMediaData, "voraMedia">;
 
 export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNodeModel>) => {
   const source = data.filePath ? convertFileSrc(data.filePath) : null;
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const handleVideoClick = (): void => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      void video.play().catch((playError: unknown) => {
+        console.error("Could not play canvas video:", playError);
+      });
+    } else {
+      video.pause();
+    }
+  };
+
+  const handleVideoDoubleClick = (event: React.MouseEvent<HTMLVideoElement>): void => {
+    event.stopPropagation();
+    window.dispatchEvent(new CustomEvent("vora:open-player-with-media", {
+      detail: { filePath: data.filePath, mediaType: data.type },
+    }));
+  };
 
   return (
     <div className="relative h-full w-full rounded-xl border border-white/10 bg-[#17191f] shadow-xl shadow-black/30">
@@ -41,14 +62,23 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
             <div className="truncate text-xs font-medium text-zinc-200" title={data.fileName}>
               {data.fileName}
             </div>
-            <video
-              controls
-              preload="metadata"
-              src={source}
-              className="min-h-0 w-full flex-1 object-contain"
-            >
-              Your browser does not support video playback.
-            </video>
+            <div className="group relative min-h-0 flex-1">
+              <video
+                ref={videoRef}
+                preload="metadata"
+                src={source}
+                onClick={handleVideoClick}
+                onDoubleClick={handleVideoDoubleClick}
+                className="nodrag nowheel h-full w-full object-contain"
+              >
+                Your browser does not support video playback.
+              </video>
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="rounded-full bg-black/45 p-3 text-white/80">
+                  <Play size={24} fill="currentColor" aria-hidden="true" />
+                </span>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="flex h-full items-center justify-center p-4 text-center text-xs text-rose-200">
