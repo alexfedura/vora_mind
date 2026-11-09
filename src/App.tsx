@@ -2802,7 +2802,12 @@ function AppContent() {
   };
 
   const handleCanvasDoubleClick = (event: React.MouseEvent<HTMLDivElement>): void => {
-    if (activeShapeTool !== "path" || !(event.target instanceof Element) || !event.target.closest(".react-flow__pane")) return;
+    if (
+      activeShapeTool !== "path" ||
+      !(event.target instanceof Element) ||
+      !event.target.closest(".react-flow__pane") ||
+      event.target.closest(".react-flow__node, .react-flow__edge, .react-flow__controls, .react-flow__minimap")
+    ) return;
     event.preventDefault();
     event.stopPropagation();
     finishPath();
