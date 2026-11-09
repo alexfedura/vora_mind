@@ -1363,6 +1363,19 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
               </div>
             </div>
 
+            {currentFilter === "media" ? (
+              <div className="mx-5 mb-4 flex items-center gap-2 rounded-lg border border-[#272b36] bg-[#14171d] px-3 py-2 text-xs text-zinc-400">
+                <span className="min-w-0 flex-1">Files stay at their original paths. Search notes, then open a timestamp or locate a missing file.</span>
+                <button
+                  type="button"
+                  onClick={() => void mediaFiles.refresh()}
+                  disabled={mediaFiles.isLoading}
+                  className="shrink-0 rounded px-2 py-1 text-zinc-200 transition hover:bg-white/10 disabled:opacity-50"
+                >
+                  Refresh
+                </button>
+              </div>
+            ) : (
             <div className="px-5 mb-4 relative z-10">
               <div className="flex items-center gap-2">
                 <div className="relative flex min-w-0 flex-1 items-center">
@@ -1395,7 +1408,117 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                 )}
               </div>
             </div>
+            )}
 
+            {currentFilter === "media" ? (
+              <div className="flex-1 overflow-y-auto no-scrollbar space-y-3 px-4 pb-5">
+                <div className="relative flex items-center">
+                  <Search size={15} className="absolute left-3 text-gray-500 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                    placeholder="Search files and notes..."
+                    className="w-full rounded-lg border border-[#232733] bg-[#0f1115] py-2 pl-9 pr-3 text-xs text-gray-100 placeholder-gray-500 outline-none focus:border-purple-500/60"
+                  />
+                </div>
+                {mediaFiles.error && <p role="alert" className="text-xs text-rose-300">{mediaFiles.error}</p>}
+                {libraryActionError && <p role="alert" className="text-xs text-rose-300">{libraryActionError}</p>}
+                {mediaFiles.isLoading && <p className="py-4 text-center text-xs text-zinc-500">Loading files...</p>}
+                {!mediaFiles.isLoading && mediaFilesForView.length === 0 && (
+                  <p className="py-8 text-center text-xs text-zinc-500">
+                    {mediaFiles.files.length === 0 ? "No files have been referenced yet." : "No files match your search."}
+                  </p>
+                )}
+                {mediaFilesForView.map((entry) => {
+                  const FileTypeIcon = entry.file.file_type === "image"
+                    ? Image
+                    : entry.file.file_type === "audio"
+                      ? Music
+                      : entry.file.file_type === "video"
+                        ? Film
+                        : FileText;
+                  const mediaType = entry.file.file_type === "audio" || entry.file.file_type === "video"
+                    ? entry.file.file_type
+                    : null;
+                  return (
+                    <article
+                      key={entry.file.id}
+                      className="rounded-xl border border-[#292e38] bg-[#151820] p-3"
+                    >
+                      <div className="flex items-start gap-2">
+                        <FileTypeIcon size={16} className="mt-0.5 shrink-0 text-violet-300" aria-hidden="true" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-100" title={entry.file.current_path}>
+                              {entry.file.original_name}
+                            </span>
+                            <span className="shrink-0 rounded bg-white/5 px-1.5 py-0.5 text-[9px] uppercase text-zinc-400">
+                              {entry.file.file_type}
+                            </span>
+                            {mediaType && (
+                              <button
+                                type="button"
+                                onClick={() => openMediaFileAt(entry.file.id, mediaType, 0)}
+                                title="Open in Vora Player"
+                                aria-label={`Open ${entry.file.original_name} in Vora Player`}
+                                className="rounded p-1 text-zinc-400 transition hover:bg-violet-500/20 hover:text-violet-200"
+                              >
+                                <Play size={14} fill="currentColor" aria-hidden="true" />
+                              </button>
+                            )}
+                          </div>
+                          <p className="mt-1 truncate text-[10px] text-zinc-500" title={entry.file.current_path}>
+                            {entry.file.current_path}
+                          </p>
+                        </div>
+                      </div>
+                      {!entry.file.is_available && (
+                        <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-400/20 bg-amber-400/5 px-2 py-1.5">
+                          <AlertTriangle size={13} className="shrink-0 text-amber-300" aria-hidden="true" />
+                          <span className="min-w-0 flex-1 text-[10px] text-amber-200">File is unavailable at this path.</span>
+                          <button
+                            type="button"
+                            onClick={() => void handleLocateMediaFile(entry.file.id)}
+                            disabled={mediaFiles.locatingFileId === entry.file.id}
+                            className="flex shrink-0 items-center gap-1 rounded px-2 py-1 text-[10px] text-amber-100 transition hover:bg-amber-400/15 disabled:opacity-50"
+                          >
+                            <FolderOpen size={12} aria-hidden="true" />
+                            {mediaFiles.locatingFileId === entry.file.id ? "Searching..." : "Locate it"}
+                          </button>
+                        </div>
+                      )}
+                      {entry.slices.length > 0 && (
+                        <div className="mt-3 space-y-1.5 border-t border-white/5 pt-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-200">
+                            {entry.slices.length} annotation{entry.slices.length === 1 ? "" : "s"}
+                          </p>
+                          {entry.slices.map((slice) => (
+                            <button
+                              key={slice.id}
+                              type="button"
+                              disabled={!mediaType}
+                              onClick={() => {
+                                if (mediaType) openMediaFileAt(entry.file.id, mediaType, slice.start_seconds);
+                              }}
+                              className="block w-full rounded-md px-2 py-1.5 text-left transition hover:bg-white/5 disabled:cursor-default"
+                            >
+                              <span className="flex items-center justify-between gap-2">
+                                <span className="min-w-0 truncate text-xs font-medium text-zinc-200">{slice.title}</span>
+                                <span className="shrink-0 font-mono text-[10px] text-violet-200">
+                                  {formatMediaTime(slice.start_seconds)}
+                                </span>
+                              </span>
+                              {slice.note && <span className="mt-1 block whitespace-pre-wrap text-[10px] leading-relaxed text-zinc-400">{slice.note}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
             <div className="flex-1 overflow-y-auto no-scrollbar px-5 pb-5 grid grid-cols-2 gap-3.5 content-start">
               {itemGroupError && <p role="alert" className="col-span-2 text-xs text-rose-300">{itemGroupError}</p>}
               {librarySearchError && <p role="alert" className="col-span-2 text-xs text-rose-300">{librarySearchError}</p>}
@@ -1413,6 +1536,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                   <div className="p-3 rounded-2xl bg-[#222733] group-hover:scale-110 transition-transform">
                     <Plus size={22} className="text-purple-400" />
                   </div>
+                  )}
                   <span className="text-sm font-semibold tracking-wide">New card</span>
                 </button>
               )}
