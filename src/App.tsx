@@ -934,7 +934,7 @@ function AppContent() {
     }
 
     flow.saveHistorySnapshot();
-    const copiedCardId = addCard(title, content, id);
+    const copiedCardId = addCard(title, content, id, sourceCard?.mediaLineage);
     const copiedVersion = sourceCard?.version || "v0.1.0";
     updateCardVersion(copiedCardId, copiedVersion);
 

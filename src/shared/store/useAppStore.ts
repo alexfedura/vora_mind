@@ -97,7 +97,12 @@ interface AppState {
   setTextDirection: (direction: "rtl" | "ltr") => void;
   toggleTextDirection: () => void;
   setCards: (cards: Record<string, VoraCard>) => void;
-  addCard: (title?: string, content?: string, librarySourceCardId?: string) => string;
+  addCard: (
+    title?: string,
+    content?: string,
+    librarySourceCardId?: string,
+    mediaLineage?: MediaCardLineage,
+  ) => string;
   createCardFromMediaSlice: (
     title: string,
     content: string,
@@ -305,7 +310,7 @@ export const useAppStore = create<AppState>()(
       setLibraryBoardEditing: (editing, returnCards = null) =>
         set({ isLibraryBoardEditing: editing, libraryBoardReturnCards: editing ? returnCards : null }),
 
-      addCard: (title = "New card", content = "", librarySourceCardId) => {
+      addCard: (title = "New card", content = "", librarySourceCardId, mediaLineage) => {
         const boardId = get().activeBoardId;
         const id = crypto.randomUUID();
         const newCard: VoraCard = {
@@ -314,6 +319,7 @@ export const useAppStore = create<AppState>()(
           content,
           boardId,
           librarySourceCardId,
+          mediaLineage,
           version: "v0.1.0",
           created_at: Date.now(),
         };
@@ -330,6 +336,7 @@ export const useAppStore = create<AppState>()(
               newCard.version ?? "v0.1.0",
               [],
               librarySourceCardId,
+              mediaLineage,
             )
             .catch((error: unknown) => console.error("Failed to save new card:", error));
         }

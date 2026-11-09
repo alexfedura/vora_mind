@@ -272,7 +272,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
           (typeof data.title === "string" ? data.title : typeof data.label === "string" ? data.label : "New card");
         const content = originalCard?.content ?? (typeof data.content === "string" ? data.content : "");
         const version = originalCard?.version ?? (typeof data.version === "string" ? data.version : "v0.1.0");
-        const cardId = addCard(title, content);
+        const cardId = addCard(title, content, undefined, originalCard?.mediaLineage);
         updateCardVersion(cardId, version);
         data.cardId = cardId;
         data.title = title;
