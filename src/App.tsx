@@ -482,7 +482,7 @@ function AppContent() {
       const resolvedFileId = typeof file_id === "string"
         ? file_id
         : typeof fileId === "string" ? fileId : null;
-      const resolvedMediaType = mediaType === "audio" || mediaType === "video"
+      const resolvedMediaType = mediaType === "audio" || mediaType === "video" || mediaType === "image"
         ? mediaType
         : null;
       if (
