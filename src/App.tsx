@@ -62,6 +62,7 @@ import {
   type BoardItem,
   type CanvasGroupMembership,
   type LibraryItemGroup,
+  type LibraryItemType,
   type TextLinkSelection,
   type VoraPathSegment,
   type VoraDiagramShape,
@@ -555,6 +556,11 @@ function AppContent() {
   const [libraryVersionInput, setLibraryVersionInput] = useState("");
   const [libraryBoardError, setLibraryBoardError] = useState<string | null>(null);
   const [isCreateItemGroupOpen, setIsCreateItemGroupOpen] = useState(false);
+  const [librarySaveTarget, setLibrarySaveTarget] = useState<{
+    itemType: LibraryItemType;
+    nodes: Node[];
+    edges: Edge[];
+  } | null>(null);
   const [isGenerateBoardModalOpen, setIsGenerateBoardModalOpen] = useState(false);
   const [isBoardTransferMenuOpen, setIsBoardTransferMenuOpen] = useState(false);
   const [canvasOperationError, setCanvasOperationError] = useState<string | null>(null);
@@ -1197,19 +1203,22 @@ function AppContent() {
     if (!canvasBoardId) {
       throw new Error("Create a Board before adding items to the Library.");
     }
-    if (selectedNodes.length < 1) {
+    const saveTarget = librarySaveTarget;
+    if (!saveTarget || saveTarget.nodes.length < 1) {
       throw new Error("Select at least one canvas item to create an item group.");
     }
     const group = await dbService.createLibraryItemGroup(
       name,
       version,
-      selectedNodes,
-      flow.edges,
+      saveTarget.itemType,
+      saveTarget.nodes,
+      saveTarget.edges,
       cards,
     );
     setItemGroups((current) => [group, ...current.filter((item) => item.id !== group.id)]);
     setItemGroupError(null);
     setIsCreateItemGroupOpen(false);
+    setLibrarySaveTarget(null);
   };
 
   const handleMoveLibraryItemGroupToTrash = async (groupId: string): Promise<void> => {
@@ -1321,7 +1330,12 @@ function AppContent() {
     if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
       throw new Error("Enter a version in three-part numeric format, such as 1.2.3.");
     }
-    const snapshot = createLibraryItemGroupSnapshot(flow.nodes, flow.edges, cards);
+    const snapshot = createLibraryItemGroupSnapshot(
+      flow.nodes,
+      flow.edges,
+      cards,
+      session.group.item_type,
+    );
     const updated = await dbService.commitLibraryItemGroupVersion(session.group.id, version, snapshot);
     setItemGroups((current) => current.map((group) => group.id === updated.id ? updated : group));
     setItemGroupError(null);
@@ -1783,6 +1797,7 @@ function AppContent() {
         const group = await dbService.createLibraryItemGroup(
           segment.name.trim() || "Path section",
           "0.1.0",
+          "item",
           [savedNode],
           [],
           cards,
@@ -2250,6 +2265,28 @@ function AppContent() {
   };
 
   const handleAddCanvasSelectionToLibrary = (): void => {
+    const selected = flow.nodes.filter((node) => node.selected);
+    if (selected.length === 0) return;
+
+    let nodesToSave = selected;
+    let itemType: LibraryItemType = "group";
+    if (selected.length === 1) {
+      const node = selected[0];
+      if (!node) return;
+      const groupId = getCanvasGroupId(node);
+      if (groupId) {
+        nodesToSave = flow.nodes.filter((candidate) => getCanvasGroupId(candidate) === groupId);
+      } else {
+        nodesToSave = [node];
+        itemType = "item";
+      }
+    }
+
+    const nodeIds = new Set(nodesToSave.map((node) => node.id));
+    const edgesToSave = flow.edges.filter((edge) =>
+      nodeIds.has(edge.source) && nodeIds.has(edge.target)
+    );
+    setLibrarySaveTarget({ itemType, nodes: nodesToSave, edges: edgesToSave });
     setCanvasNodeContextMenu(null);
     setIsCreateItemGroupOpen(true);
   };
@@ -2932,7 +2969,7 @@ function AppContent() {
         e.preventDefault();
         e.stopPropagation();
         setCanvasNodeContextMenu(null);
-        setIsCreateItemGroupOpen(true);
+        handleAddCanvasSelectionToLibrary();
         return;
       }
 
@@ -2960,7 +2997,15 @@ function AppContent() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeBoardId, activeCanvasGroupId, flow, lastActivePanel, libraryBoardSession, selectedNodes.length]);
+  }, [
+    activeBoardId,
+    activeCanvasGroupId,
+    flow,
+    handleAddCanvasSelectionToLibrary,
+    lastActivePanel,
+    libraryBoardSession,
+    selectedNodes.length,
+  ]);
 
   const previewSettings = shapePreview ? shapeDefaults[shapePreview.shape] : null;
   const previewDashArray = previewSettings?.lineStyle === "dashed"
@@ -3428,12 +3473,14 @@ function AppContent() {
             </div>
           </div>
         )}
-        {isCreateItemGroupOpen && selectedNodes.length >= 1 && (
+        {isCreateItemGroupOpen && librarySaveTarget && (
           <CreateItemGroupPanel
-            selectedCount={selectedNodes.length}
+            selectedCount={librarySaveTarget.nodes.length}
+            itemType={librarySaveTarget.itemType}
             onCreate={handleCreateLibraryItemGroup}
             onClose={() => {
               setIsCreateItemGroupOpen(false);
+              setLibrarySaveTarget(null);
               setCanvasNodeContextMenu(null);
             }}
           />
