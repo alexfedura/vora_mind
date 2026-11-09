@@ -334,6 +334,27 @@ mod tests {
             "endArrow": true
         });
 
+        let layered_node = NodeInput {
+            id: "path-1".to_string(),
+            node_type: "voraShape".to_string(),
+            title: "Path".to_string(),
+            content: String::new(),
+            version: "v1".to_string(),
+            data: shape_data.clone(),
+            x: 42.0,
+            y: 84.0,
+            width: Some(240.0),
+            height: Some(160.0),
+            z_index: Some(7),
+            style: None,
+        };
+        let payload = serde_json::to_value(&layered_node).unwrap();
+        assert_eq!(payload["zIndex"], 7);
+        assert_eq!(
+            serde_json::from_value::<NodeInput>(payload).unwrap().z_index,
+            Some(7)
+        );
+
         let snapshot_id = save_semantic_snapshot(
             &mut connection,
             "board-1".to_string(),
@@ -341,20 +362,7 @@ mod tests {
             None,
             None,
             None,
-            vec![NodeInput {
-                id: "path-1".to_string(),
-                node_type: "voraShape".to_string(),
-                title: "Path".to_string(),
-                content: String::new(),
-                version: "v1".to_string(),
-                data: shape_data.clone(),
-                x: 42.0,
-                y: 84.0,
-                width: Some(240.0),
-                height: Some(160.0),
-                z_index: Some(7),
-                style: None,
-            }],
+            vec![layered_node],
             Vec::<EdgeInput>::new(),
         )
         .unwrap();
