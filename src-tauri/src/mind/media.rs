@@ -982,23 +982,8 @@ mod tests {
                 [now],
             )
             .unwrap();
-        connection
-            .execute_batch(
-                "CREATE TABLE vora_files (
-                    id TEXT PRIMARY KEY, original_name TEXT NOT NULL, current_path TEXT NOT NULL,
-                    file_type TEXT NOT NULL, file_hash TEXT NOT NULL, size_bytes INTEGER NOT NULL,
-                    modified_time_ms INTEGER NOT NULL, created_at INTEGER NOT NULL,
-                    duration_seconds REAL, last_position_seconds REAL NOT NULL DEFAULT 0,
-                    last_used_at INTEGER NOT NULL DEFAULT 0);
-                 CREATE TABLE mind_media_slices_new (
-                    id TEXT PRIMARY KEY, file_id TEXT NOT NULL REFERENCES vora_files(id),
-                    title TEXT NOT NULL, start_seconds REAL NOT NULL, end_seconds REAL NOT NULL,
-                    note TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
-                 DROP TABLE mind_media_slices_new;",
-            )
-            .unwrap();
         crate::mind::canvas_db::init_db(&connection).unwrap();
-        migrate_file_references(&connection).unwrap();
+        crate::mind::canvas_db::init_db(&connection).unwrap();
         let file_hash: String = connection
             .query_row(
                 "SELECT file_hash FROM vora_files WHERE id = 'file-1'",

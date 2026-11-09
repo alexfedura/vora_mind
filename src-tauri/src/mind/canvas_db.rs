@@ -1874,8 +1874,16 @@ mod board_version_tests {
         init_db(&conn).unwrap();
         init_db(&conn).unwrap();
         conn.execute(
-            "INSERT INTO documents (id, title, file_path, file_type, created_at, updated_at)
-             VALUES ('doc-1', 'Research', 'documents/doc-1.pdf', 'pdf', 1, 1)",
+            "INSERT INTO vora_files
+                (id, original_name, current_path, file_type, file_hash, size_bytes,
+                 modified_time_ms, created_at)
+             VALUES ('file-1', 'doc-1.pdf', 'documents/doc-1.pdf', 'pdf', 'hash', 0, 0, 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO documents (id, title, file_path, file_id, file_type, created_at, updated_at)
+             VALUES ('doc-1', 'Research', 'documents/doc-1.pdf', 'file-1', 'pdf', 1, 1)",
             [],
         )
         .unwrap();
