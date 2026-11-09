@@ -1819,4 +1819,4 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
       </aside>
     </>
   );
-};  
+};
