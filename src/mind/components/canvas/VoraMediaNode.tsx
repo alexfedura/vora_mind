@@ -24,6 +24,7 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
 
   const handleVideoDoubleClick = (event: React.MouseEvent<HTMLVideoElement>): void => {
     event.stopPropagation();
+    videoRef.current?.pause();
     window.dispatchEvent(new CustomEvent("vora:open-player-with-media", {
       detail: { filePath: data.filePath, mediaType: data.type },
     }));
