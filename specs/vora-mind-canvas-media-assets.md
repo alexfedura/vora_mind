@@ -42,6 +42,8 @@ at their original paths; Vora Mind stores metadata and annotations only.
   saved time slices; double-click opens the player by UUID.
 - The player saves and loads timestamped notes by `file_id`. Missing files can
   be located recursively from a user-selected directory.
+- Canvas file access is scoped to the explicitly referenced path rather than
+  granting the WebView unrestricted filesystem access.
 - The Library's Media & Files view lists references and their slices, reports
   unavailable paths, and opens a slice at its saved start time.
 - PDF, DOCX, and Markdown imports reference the original file. Existing

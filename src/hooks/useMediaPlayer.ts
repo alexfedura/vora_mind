@@ -247,6 +247,7 @@ export function useMediaPlayer(
           const startSeconds = request.startSeconds ?? 0;
           await dbService.playerLoadAt(verifiedSource.path, startSeconds);
           if (latestRequestId.current !== request.requestId) return;
+          await dbService.saveMediaSourcePosition(verifiedSource.id, startSeconds);
           setSource(verifiedSource);
           setLastSource(verifiedSource);
           setSlices(await dbService.listMediaSlices(verifiedSource.id));
