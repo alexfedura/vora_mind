@@ -231,10 +231,31 @@ export function useMediaPlayer(
       if (latestRequestId.current !== request.requestId) return;
       setError(request.error);
       setStatus(null);
-      if (request.error || !request.payload) return;
+      if (request.error) return;
 
       setIsBusy(true);
       try {
+        if (request.filePath) {
+          if (request.mediaType !== "audio" && request.mediaType !== "video") {
+            throw new Error("Vora Player supports audio and video sources, not image media.");
+          }
+          const registeredSource = await dbService.registerMediaSource(request.filePath);
+          if (latestRequestId.current !== request.requestId) return;
+          const verifiedSource = await dbService.validateMediaSource(registeredSource.id);
+          if (latestRequestId.current !== request.requestId) return;
+          await dbService.playerLoadAt(verifiedSource.path, 0);
+          if (latestRequestId.current !== request.requestId) return;
+          setSource(verifiedSource);
+          setLastSource(verifiedSource);
+          setSlices(await dbService.listMediaSlices(verifiedSource.id));
+          setDuration(verifiedSource.duration_seconds ?? 0);
+          setPosition(0);
+          setPlaybackRange(null);
+          setIsPlaying(false);
+          setStatus(`Opened ${sourceName(verifiedSource.path)}.`);
+          return;
+        }
+        if (!request.payload) return;
         const media = await dbService.getMediaSlice(request.payload.sliceId);
         if (!matchesMediaLink(request.payload, media.slice, media.source)) {
           throw new Error("The media link no longer matches its saved source fingerprint or time range.");
@@ -248,6 +269,10 @@ export function useMediaPlayer(
         setSlices(await dbService.listMediaSlices(verifiedSource.id));
         setDuration(verifiedSource.duration_seconds ?? 0);
         setPosition(media.slice.start_seconds);
+        setPlaybackRange({
+          startSeconds: media.slice.start_seconds,
+          endSeconds: media.slice.end_seconds,
+        });
         setIsPlaying(false);
         setStatus(`Opened ${media.slice.title} at ${formatMediaTime(media.slice.start_seconds)}.`);
       } catch (openError: unknown) {
@@ -293,6 +318,7 @@ export function useMediaPlayer(
     setSlices(await dbService.listMediaSlices(verifiedSource.id));
     setPosition(startSeconds);
     setDuration(verifiedSource.duration_seconds ?? 0);
+    setPlaybackRange(null);
     setIsPlaying(false);
   };
 
