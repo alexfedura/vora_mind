@@ -6,9 +6,10 @@ import { LoaderCircle, Sparkles, X } from "lucide-react";
 interface GenerateBoardModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onGenerated: (graphJson: string) => void;
 }
 
-export const GenerateBoardModal: React.FC<GenerateBoardModalProps> = ({ isOpen, onClose }) => {
+export const GenerateBoardModal: React.FC<GenerateBoardModalProps> = ({ isOpen, onClose, onGenerated }) => {
   const [prompt, setPrompt] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [streamPreview, setStreamPreview] = useState("");
@@ -22,23 +23,36 @@ export const GenerateBoardModal: React.FC<GenerateBoardModalProps> = ({ isOpen, 
     setError(null);
     setStreamPreview("");
     setIsGenerating(true);
-    let unlisten: (() => void) | null = null;
+    let unlistenChunk: (() => void) | null = null;
+    let unlistenDone: (() => void) | null = null;
     try {
       if (apiKey.trim()) {
         await invoke("save_deepseek_key", { apiKey: apiKey.trim() });
         setApiKey("");
       }
-      unlisten = await listen<string>("deepseek-chunk", (event) => {
-        setStreamPreview((current) => `${current}${event.payload}`.slice(-4_000));
+      let resolveGenerated: ((value: string) => void) | null = null;
+      const generated = new Promise<string>((resolve) => {
+        resolveGenerated = resolve;
       });
+      [unlistenChunk, unlistenDone] = await Promise.all([
+        listen<string>("deepseek-chunk", (event) => {
+          setStreamPreview((current) => `${current}${event.payload}`.slice(-4_000));
+        }),
+        listen<string>("deepseek-done", (event) => {
+          resolveGenerated?.(event.payload);
+        }),
+      ]);
       await invoke("generate_board_from_prompt", { prompt: prompt.trim() });
+      const graphJson = await generated;
+      onGenerated(graphJson);
       setPrompt("");
       onClose();
     } catch (cause) {
       console.error("Could not generate Board with DeepSeek:", cause);
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      unlisten?.();
+      unlistenChunk?.();
+      unlistenDone?.();
       setIsGenerating(false);
     }
   };

@@ -19,43 +19,88 @@ const DEEPSEEK_API_KEY_SETTING: &str = "vora_deepseek_api_key";
 const DEEPSEEK_COMPLETION_URL: &str = "https://api.deepseek.com/v1/chat/completions";
 const MAX_DEEPSEEK_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
 
-fn process_deepseek_sse_line(
-    app: &tauri::AppHandle,
-    line: &[u8],
-    full_response: &mut String,
-) -> Result<bool, String> {
+enum DeepSeekStreamLine {
+    Ignore,
+    Done,
+    Delta(String),
+}
+
+fn parse_deepseek_sse_line(line: &[u8]) -> Result<DeepSeekStreamLine, String> {
     let line = std::str::from_utf8(line)
         .map_err(|error| format!("DeepSeek returned an invalid UTF-8 stream line: {error}"))?
         .trim_end_matches('\r')
         .trim();
     let Some(data) = line.strip_prefix("data:") else {
-        return Ok(false);
+        return Ok(DeepSeekStreamLine::Ignore);
     };
     let data = data.trim();
     if data == "[DONE]" {
-        return Ok(true);
+        return Ok(DeepSeekStreamLine::Done);
     }
 
     let event: serde_json::Value = serde_json::from_str(data)
         .map_err(|error| format!("Could not parse a DeepSeek stream event: {error}"))?;
-    let Some(delta) = event
+    let delta = event
         .get("choices")
         .and_then(serde_json::Value::as_array)
         .and_then(|choices| choices.first())
         .and_then(|choice| choice.get("delta"))
         .and_then(|delta| delta.get("content"))
-        .and_then(serde_json::Value::as_str)
-    else {
-        return Ok(false);
+        .and_then(serde_json::Value::as_str);
+    Ok(delta.map_or(DeepSeekStreamLine::Ignore, |value| {
+        DeepSeekStreamLine::Delta(value.to_string())
+    }))
+}
+
+fn process_deepseek_sse_line(
+    app: &tauri::AppHandle,
+    line: &[u8],
+    full_response: &mut String,
+) -> Result<bool, String> {
+    let delta = match parse_deepseek_sse_line(line)? {
+        DeepSeekStreamLine::Ignore => return Ok(false),
+        DeepSeekStreamLine::Done => return Ok(true),
+        DeepSeekStreamLine::Delta(delta) => delta,
     };
 
     if full_response.len().saturating_add(delta.len()) > MAX_DEEPSEEK_RESPONSE_BYTES {
         return Err("DeepSeek response exceeded the 2 MiB limit.".to_string());
     }
-    full_response.push_str(delta);
-    app.emit("deepseek-chunk", delta.to_string())
+    full_response.push_str(&delta);
+    app.emit("deepseek-chunk", delta)
         .map_err(|error| format!("Could not forward DeepSeek response progress: {error}"))?;
     Ok(false)
+}
+
+#[cfg(test)]
+mod deepseek_stream_tests {
+    use super::{parse_deepseek_sse_line, DeepSeekStreamLine};
+
+    #[test]
+    fn parses_deepseek_content_deltas() {
+        let line = br#"data: {"choices":[{"delta":{"content":"{\"nodes\":"}}]}"#;
+        match parse_deepseek_sse_line(line).unwrap() {
+            DeepSeekStreamLine::Delta(delta) => assert_eq!(delta, "{\"nodes\":"),
+            _ => panic!("expected a content delta"),
+        }
+    }
+
+    #[test]
+    fn recognizes_stream_completion_and_ignores_metadata_lines() {
+        assert!(matches!(
+            parse_deepseek_sse_line(b"data: [DONE]").unwrap(),
+            DeepSeekStreamLine::Done
+        ));
+        assert!(matches!(
+            parse_deepseek_sse_line(b": keep-alive").unwrap(),
+            DeepSeekStreamLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn rejects_malformed_stream_events() {
+        assert!(parse_deepseek_sse_line(b"data: {not-json}").is_err());
+    }
 }
 
 #[tauri::command]

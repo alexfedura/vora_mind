@@ -99,6 +99,8 @@ import { CommitModal } from "./shared/modals/CommitModal";
 import { CommitCardModal } from "./shared/modals/CommitCardModal";
 import { CardHistoryModal } from "./shared/modals/CardHistoryModal";
 import { FullscreenDocModal } from "./shared/modals/FullscreenDocModal";
+import { GenerateBoardModal } from "./shared/modals/GenerateBoardModal";
+import { applyDagreLayout } from "./mind/utils/generatedBoardLayout";
 import { OpenPanel } from "./mind/types";
 
 type ShapeTool = VoraDiagramShape | null;
@@ -499,6 +501,7 @@ function AppContent() {
   const [libraryBoardError, setLibraryBoardError] = useState<string | null>(null);
   const [isCreateItemGroupOpen, setIsCreateItemGroupOpen] = useState(false);
   const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
+  const [isGenerateBoardModalOpen, setIsGenerateBoardModalOpen] = useState(false);
   const [isBoardTransferMenuOpen, setIsBoardTransferMenuOpen] = useState(false);
   const [canvasOperationError, setCanvasOperationError] = useState<string | null>(null);
   const [mediaImportError, setMediaImportError] = useState<string | null>(null);
@@ -611,6 +614,65 @@ function AppContent() {
     [activeCanvasGroupId, selectedNodes]
   );
   const { screenToFlowPosition, getViewport, setViewport, setCenter, getNodes, fitView } = useReactFlow();
+
+  const handleGeneratedBoard = (graphJson: string): void => {
+    if (!canvasBoardId || libraryBoardSession) {
+      setCanvasOperationError("AI generation is available only on a regular Board.");
+      return;
+    }
+    try {
+      flow.saveHistorySnapshot();
+      const graph = applyDagreLayout(graphJson, (title, content) => addCard(title, content));
+      const currentNodes = flow.nodes;
+      const minGeneratedX = Math.min(...graph.nodes.map((node) => node.position.x));
+      const maxGeneratedX = Math.max(...graph.nodes.map(
+        (node) => node.position.x + (node.width ?? 320),
+      ));
+      const minGeneratedY = Math.min(...graph.nodes.map((node) => node.position.y));
+      const maxGeneratedY = Math.max(...graph.nodes.map(
+        (node) => node.position.y + (node.height ?? 220),
+      ));
+      const existingRight = currentNodes.length
+        ? Math.max(...currentNodes.map((node) => node.position.x + (node.measured?.width ?? node.width ?? 320)))
+        : null;
+      const viewportCenter = screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      const offsetX = existingRight === null
+        ? viewportCenter.x - (minGeneratedX + maxGeneratedX) / 2
+        : existingRight + 120 - minGeneratedX;
+      const offsetY = viewportCenter.y - (minGeneratedY + maxGeneratedY) / 2;
+      const positionedNodes = graph.nodes.map((node) => ({
+        ...node,
+        position: {
+          x: node.position.x + offsetX,
+          y: node.position.y + offsetY,
+        },
+      }));
+      flow.setNodes((currentNodes) => [
+        ...currentNodes.map((node) => ({ ...node, selected: false })),
+        ...positionedNodes,
+      ]);
+      flow.setEdges((currentEdges) => [
+        ...currentEdges.map((edge) => ({ ...edge, selected: false })),
+        ...graph.edges,
+      ]);
+      setCanvasOperationError(null);
+      window.requestAnimationFrame(() => {
+        void fitView({
+          nodes: positionedNodes.map((node) => ({ id: node.id })),
+          padding: 0.18,
+          duration: 350,
+        });
+      });
+    } catch (error) {
+      console.error("Could not add generated graph to the canvas:", error);
+      setCanvasOperationError(
+        `Could not add generated graph: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  };
 
   useEffect(() => {
     const handleHighlightCanvasNode = (event: Event): void => {
@@ -2785,6 +2847,19 @@ function AppContent() {
       <div className="relative flex flex-col gap-1 rounded-xl border border-[#2a2a2a] bg-[#181818]/90 p-1 shadow-lg backdrop-blur">
       <button
           type="button"
+          aria-label="Generate Board with AI"
+          onClick={() => {
+            setIsDiagramPaletteOpen(false);
+            setIsTemplateGalleryOpen(false);
+            setIsGenerateBoardModalOpen(true);
+          }}
+          className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
+          title="AI Generate Board"
+        >
+          <Sparkles size={16} />
+        </button>
+        <button
+          type="button"
           aria-label="Add New Card"
           aria-pressed={isAddCardToolActive}
           onClick={() => {
@@ -3733,6 +3808,11 @@ function AppContent() {
           onClose={() => setFullscreenCardId(null)}
         />
       )}
+      <GenerateBoardModal
+        isOpen={isGenerateBoardModalOpen}
+        onClose={() => setIsGenerateBoardModalOpen(false)}
+        onGenerated={handleGeneratedBoard}
+      />
     </div>
   );
 }
