@@ -638,37 +638,6 @@ function AppContent() {
   );
   const canvasBoardId = libraryBoardSession?.boardId ?? activeBoardId;
   const flow = useVoraFlow(canvasBoardId, zoomScale, zoomScale, libraryBoardSession === null);
-  const handleDropCard = useCallback((id: string, clientX: number, clientY: number): void => {
-    if (!canvasBoardId) return;
-    const sourceCard = cards[id];
-    const libraryObject = libraryObjects.find((item) => item.id === id && item.type === "card");
-    const title = sourceCard?.title ?? libraryObject?.title;
-    const content = sourceCard?.content ?? libraryObject?.content;
-    if (typeof title !== "string" || typeof content !== "string") {
-      console.error("Could not copy Library card to canvas: the source card is no longer available.");
-      return;
-    }
-
-    flow.saveHistorySnapshot();
-    const copiedCardId = addCard(title, content, id);
-    const copiedVersion = sourceCard?.version || "v0.1.0";
-    updateCardVersion(copiedCardId, copiedVersion);
-
-    flow.setNodes((nodes) =>
-      nodes.concat({
-        id: `node-${crypto.randomUUID()}`,
-        type: "voraCard",
-        position: toCanvasFlowPosition({ x: clientX, y: clientY }),
-        data: {
-          label: title,
-          title,
-          content,
-          cardId: copiedCardId,
-          version: copiedVersion,
-        },
-      })
-    );
-  }, [addCard, canvasBoardId, cards, flow, libraryObjects, updateCardVersion]);
   const selectedNodes = useMemo(() => flow.nodes.filter((node) => node.selected), [flow.nodes]);
   const selectedGroupIds = useMemo(
     () => new Set([
@@ -866,6 +835,38 @@ function AppContent() {
       y: bounds.top + (point.y - bounds.top) / zoomScale,
     });
   }, [flow.reactFlowWrapper, screenToFlowPosition, zoomScale]);
+
+  const handleDropCard = useCallback((id: string, clientX: number, clientY: number): void => {
+    if (!canvasBoardId) return;
+    const sourceCard = cards[id];
+    const libraryObject = libraryObjects.find((item) => item.id === id && item.type === "card");
+    const title = sourceCard?.title ?? libraryObject?.title;
+    const content = sourceCard?.content ?? libraryObject?.content;
+    if (typeof title !== "string" || typeof content !== "string") {
+      console.error("Could not copy Library card to canvas: the source card is no longer available.");
+      return;
+    }
+
+    flow.saveHistorySnapshot();
+    const copiedCardId = addCard(title, content, id);
+    const copiedVersion = sourceCard?.version || "v0.1.0";
+    updateCardVersion(copiedCardId, copiedVersion);
+
+    flow.setNodes((nodes) =>
+      nodes.concat({
+        id: `node-${crypto.randomUUID()}`,
+        type: "voraCard",
+        position: toCanvasFlowPosition({ x: clientX, y: clientY }),
+        data: {
+          label: title,
+          title,
+          content,
+          cardId: copiedCardId,
+          version: copiedVersion,
+        },
+      })
+    );
+  }, [addCard, canvasBoardId, cards, flow, libraryObjects, toCanvasFlowPosition, updateCardVersion]);
 
   const saveCanvasHistorySnapshotRef = React.useRef(flow.saveHistorySnapshot);
   saveCanvasHistorySnapshotRef.current = flow.saveHistorySnapshot;
