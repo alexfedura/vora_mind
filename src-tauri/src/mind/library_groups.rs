@@ -8,9 +8,15 @@ use super::canvas_db::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LibraryItemGroupSnapshot {
+    #[serde(default = "default_library_item_type")]
+    pub item_type: String,
     pub nodes: Vec<NodeInput>,
     pub edges: Vec<EdgeInput>,
     pub cards: Vec<BoardVersionCard>,
+}
+
+fn default_library_item_type() -> String {
+    "group".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,6 +25,7 @@ pub struct LibraryItemGroup {
     pub board_id: String,
     pub name: String,
     pub version: String,
+    pub item_type: String,
     pub snapshot: LibraryItemGroupSnapshot,
     pub created_at: i64,
     pub updated_at: i64,
@@ -58,7 +65,7 @@ pub struct LibraryItemGroupUsage {
 
 pub fn list_item_groups(conn: &Connection) -> Result<Vec<LibraryItemGroup>> {
     let mut statement = conn.prepare(
-        "SELECT groups.id, groups.name, groups.version, groups.snapshot_json,
+        "SELECT groups.id, groups.name, groups.version, groups.snapshot_json, groups.item_type,
                 groups.created_at, groups.updated_at, groups.deleted_at, boards.id
          FROM library_item_groups groups
          JOIN mind_boards boards ON boards.library_item_group_id = groups.id
@@ -200,11 +207,13 @@ pub fn create_item_group(
     conn: &mut Connection,
     name: &str,
     version: &str,
+    item_type: &str,
     snapshot: LibraryItemGroupSnapshot,
 ) -> Result<LibraryItemGroup> {
     let now = now_millis()?;
     let transaction = conn.transaction()?;
-    let group = create_item_group_in_transaction(&transaction, name, version, snapshot, now)?;
+    let group =
+        create_item_group_in_transaction(&transaction, name, version, item_type, snapshot, now)?;
     transaction.commit()?;
     Ok(group)
 }
@@ -213,7 +222,8 @@ pub(crate) fn create_item_group_in_transaction(
     transaction: &Transaction<'_>,
     name: &str,
     version: &str,
-    snapshot: LibraryItemGroupSnapshot,
+    item_type: &str,
+    mut snapshot: LibraryItemGroupSnapshot,
     now: i64,
 ) -> Result<LibraryItemGroup> {
     let name = name.trim();
@@ -227,20 +237,26 @@ pub(crate) fn create_item_group_in_transaction(
             "Item group version must use the format 0.1.0".to_string(),
         ));
     }
+    if item_type != "item" && item_type != "group" {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "Library item type must be 'item' or 'group'".to_string(),
+        ));
+    }
     if snapshot.nodes.is_empty() {
         return Err(rusqlite::Error::InvalidParameterName(
             "Select at least one canvas item to create an item group".to_string(),
         ));
     }
 
+    snapshot.item_type = item_type.to_string();
     let id = format!("item_group_{}", uuid::Uuid::now_v7());
     let snapshot_json = serde_json::to_string(&snapshot)
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
     transaction.execute(
         "INSERT INTO library_item_groups
-            (id, name, version, snapshot_json, created_at, updated_at, deleted_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5, NULL)",
-        params![id, name, version, snapshot_json, now],
+            (id, name, version, snapshot_json, item_type, created_at, updated_at, deleted_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, NULL)",
+        params![id, name, version, snapshot_json, item_type, now],
     )?;
     transaction.execute(
         "INSERT INTO library_item_group_versions (id, group_id, version, snapshot_json, created_at)
@@ -320,6 +336,12 @@ pub(crate) fn commit_item_group_version_in_transaction(
             "An item group version must contain at least one canvas item".to_string(),
         ));
     }
+    if snapshot.item_type != "item" && snapshot.item_type != "group" {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "Library item type must be 'item' or 'group'".to_string(),
+        ));
+    }
+    let item_type = snapshot.item_type.clone();
     let snapshot_json = serde_json::to_string(&snapshot)
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
     let (board_id, active_board_version_id, name): (String, String, String) = transaction
@@ -332,9 +354,10 @@ pub(crate) fn commit_item_group_version_in_transaction(
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
     let changed = transaction.execute(
-        "UPDATE library_item_groups SET version = ?1, snapshot_json = ?2, updated_at = ?3
-         WHERE id = ?4 AND deleted_at IS NULL",
-        params![version, snapshot_json, now, group_id],
+        "UPDATE library_item_groups
+         SET item_type = ?1, version = ?2, snapshot_json = ?3, updated_at = ?4
+         WHERE id = ?5 AND deleted_at IS NULL",
+        params![item_type, version, snapshot_json, now, group_id],
     )?;
     if changed == 0 {
         return Err(rusqlite::Error::InvalidQuery);
@@ -425,7 +448,7 @@ pub fn restore_item_group(conn: &Connection, id: &str) -> Result<()> {
 
 fn get_item_group(conn: &Connection, id: &str) -> Result<Option<LibraryItemGroup>> {
     conn.query_row(
-        "SELECT groups.id, groups.name, groups.version, groups.snapshot_json,
+        "SELECT groups.id, groups.name, groups.version, groups.snapshot_json, groups.item_type,
                 groups.created_at, groups.updated_at, groups.deleted_at, boards.id
          FROM library_item_groups groups
          JOIN mind_boards boards ON boards.library_item_group_id = groups.id
@@ -445,11 +468,12 @@ fn read_group(row: &rusqlite::Row<'_>) -> Result<LibraryItemGroup> {
         id: row.get(0)?,
         name: row.get(1)?,
         version: row.get(2)?,
+        item_type: row.get(4)?,
         snapshot,
-        created_at: row.get(4)?,
-        updated_at: row.get(5)?,
-        deleted_at: row.get(6)?,
-        board_id: row.get(7)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+        deleted_at: row.get(7)?,
+        board_id: row.get(8)?,
     })
 }
 
