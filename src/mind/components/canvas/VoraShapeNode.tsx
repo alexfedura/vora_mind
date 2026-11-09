@@ -941,14 +941,14 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
           </>}
         </div>
       )}
-      <Handle type="target" position={Position.Top} id="target-top" className="!w-3 !h-3 !-top-1.5 !opacity-0" />
-      <Handle type="target" position={Position.Bottom} id="target-bottom" className="!w-3 !h-3 !-bottom-1.5 !opacity-0" />
-      <Handle type="target" position={Position.Left} id="target-left" className="!w-3 !h-3 !-left-1.5 !opacity-0" />
-      <Handle type="target" position={Position.Right} id="target-right" className="!w-3 !h-3 !-right-1.5 !opacity-0" />
-      <Handle type="source" position={Position.Top} id="source-top" className={`!w-3 !h-3 !bg-[#e8ad55] !border-2 !border-[#1e2025] !-top-1.5 transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`} />
-      <Handle type="source" position={Position.Bottom} id="source-bottom" className={`!w-3 !h-3 !bg-[#e8ad55] !border-2 !border-[#1e2025] !-bottom-1.5 transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`} />
-      <Handle type="source" position={Position.Left} id="source-left" className={`!w-3 !h-3 !bg-[#e8ad55] !border-2 !border-[#1e2025] !-left-1.5 transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`} />
-      <Handle type="source" position={Position.Right} id="source-right" className={`!w-3 !h-3 !bg-[#e8ad55] !border-2 !border-[#1e2025] !-right-1.5 transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`} />
+      <Handle type="target" position={Position.Top} id="target-top" className="!z-50 !w-3 !h-3 !-top-1.5 !opacity-0 !pointer-events-auto" />
+      <Handle type="target" position={Position.Bottom} id="target-bottom" className="!z-50 !w-3 !h-3 !-bottom-1.5 !opacity-0 !pointer-events-auto" />
+      <Handle type="target" position={Position.Left} id="target-left" className="!z-50 !w-3 !h-3 !-left-1.5 !opacity-0 !pointer-events-auto" />
+      <Handle type="target" position={Position.Right} id="target-right" className="!z-50 !w-3 !h-3 !-right-1.5 !opacity-0 !pointer-events-auto" />
+      <Handle type="source" position={Position.Top} id="source-top" className={`!z-50 !w-3 !h-3 !bg-[#e8ad55] !border-2 !border-[#1e2025] !-top-1.5 transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`} />
+      <Handle type="source" position={Position.Bottom} id="source-bottom" className={`!z-50 !w-3 !h-3 !bg-[#e8ad55] !border-2 !border-[#1e2025] !-bottom-1.5 transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`} />
+      <Handle type="source" position={Position.Left} id="source-left" className={`!z-50 !w-3 !h-3 !bg-[#e8ad55] !border-2 !border-[#1e2025] !-left-1.5 transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`} />
+      <Handle type="source" position={Position.Right} id="source-right" className={`!z-50 !w-3 !h-3 !bg-[#e8ad55] !border-2 !border-[#1e2025] !-right-1.5 transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`} />
       <svg
         ref={svgRef}
         width="100%"
