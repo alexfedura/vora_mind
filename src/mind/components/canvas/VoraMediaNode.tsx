@@ -1,6 +1,6 @@
 import { memo, useRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { NodeResizer, type Node, type NodeProps } from "@xyflow/react";
+import { Handle, NodeResizer, Position, type Node, type NodeProps } from "@xyflow/react";
 import { Play } from "lucide-react";
 import type { VoraMediaData } from "@/mind/types";
 
@@ -31,7 +31,55 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
   };
 
   return (
-    <div className="relative h-full w-full rounded-xl border border-white/10 bg-[#17191f] shadow-xl shadow-black/30">
+    <div className="group relative h-full w-full rounded-xl border border-white/10 bg-[#17191f] shadow-xl shadow-black/30">
+      <Handle
+        type="source"
+        position={Position.Left}
+        id="source-left"
+        className={`!w-3 !h-3 !bg-[#e8ad55] !border-2 !border-[#1e2025] !-left-1.5 transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none group-hover:!opacity-100 group-hover:!pointer-events-auto"}`}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="source-right"
+        className={`!w-3 !h-3 !bg-[#e8ad55] !border-2 !border-[#1e2025] !-right-1.5 transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none group-hover:!opacity-100 group-hover:!pointer-events-auto"}`}
+      />
+      <Handle
+        type="source"
+        position={Position.Top}
+        id="source-top"
+        className={`!w-3 !h-3 !bg-[#e8ad55] !border-2 !border-[#1e2025] !-top-1.5 transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none group-hover:!opacity-100 group-hover:!pointer-events-auto"}`}
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="source-bottom"
+        className={`!w-3 !h-3 !bg-[#e8ad55] !border-2 !border-[#1e2025] !-bottom-1.5 transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none group-hover:!opacity-100 group-hover:!pointer-events-auto"}`}
+      />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="target-left"
+        className="!w-3 !h-3 !-left-1.5 !opacity-0"
+      />
+      <Handle
+        type="target"
+        position={Position.Right}
+        id="target-right"
+        className="!w-3 !h-3 !-right-1.5 !opacity-0"
+      />
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="target-top"
+        className="!w-3 !h-3 !-top-1.5 !opacity-0"
+      />
+      <Handle
+        type="target"
+        position={Position.Bottom}
+        id="target-bottom"
+        className="!w-3 !h-3 !-bottom-1.5 !opacity-0"
+      />
       <NodeResizer
         nodeId={id}
         isVisible={selected}
