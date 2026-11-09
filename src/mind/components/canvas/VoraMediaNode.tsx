@@ -1,7 +1,7 @@
 import { memo, useRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from "@xyflow/react";
-import { MessageCircle, Play } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import { useMediaFileReference } from "@/hooks/useMediaFileReference";
 import type { VoraMediaData } from "@/mind/types";
 
@@ -97,7 +97,7 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
             <div className="truncate text-xs font-medium text-zinc-200" title={data.fileName}>
               {data.fileName}
             </div>
-            <div className="group relative min-h-0 flex-1">
+            <div className="relative min-h-0 flex-1">
               <video
                 ref={videoRef}
                 preload="metadata"
@@ -108,11 +108,6 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
               >
                 Your browser does not support video playback.
               </video>
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-                <span className="rounded-full bg-black/45 p-3 text-white/80">
-                  <Play size={24} fill="currentColor" aria-hidden="true" />
-                </span>
-              </div>
             </div>
           </div>
         ) : (
