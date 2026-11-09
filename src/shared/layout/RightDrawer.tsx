@@ -1536,7 +1536,6 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                   <div className="p-3 rounded-2xl bg-[#222733] group-hover:scale-110 transition-transform">
                     <Plus size={22} className="text-purple-400" />
                   </div>
-                  )}
                   <span className="text-sm font-semibold tracking-wide">New card</span>
                 </button>
               )}
