@@ -941,7 +941,7 @@ pub fn get_media_slice(
 
 #[cfg(test)]
 mod tests {
-    use super::{file_metadata, sha256_file, valid_range};
+    use super::{file_metadata, find_matching_file, sha256_file, valid_range, VoraFile};
     use std::fs;
     use std::io::Write;
     use std::path::PathBuf;
@@ -971,9 +971,46 @@ mod tests {
     }
 
     #[test]
+    fn locates_a_renamed_file_by_hash() {
+        let root = std::env::temp_dir().join(format!("vora-relocate-{}", Uuid::now_v7()));
+        let nested = root.join("nested");
+        fs::create_dir_all(&nested).unwrap();
+        let old_path = root.join("old-name.mp4");
+        fs::write(&old_path, b"unchanged video bytes").unwrap();
+        let (size_bytes, modified_time_ms) = file_metadata(&old_path).unwrap();
+        let file_hash = sha256_file(&old_path).unwrap();
+        let new_path = nested.join("renamed.mp4");
+        fs::rename(&old_path, &new_path).unwrap();
+        let file = VoraFile {
+            id: Uuid::now_v7().to_string(),
+            original_name: "old-name.mp4".to_string(),
+            current_path: old_path.to_string_lossy().into_owned(),
+            file_type: "video".to_string(),
+            file_hash,
+            size_bytes,
+            modified_time_ms,
+            created_at: 0,
+            duration_seconds: None,
+            last_position_seconds: 0.0,
+            last_used_at: 0,
+            is_available: false,
+        };
+        assert_eq!(
+            find_matching_file(&file, &root).unwrap(),
+            Some(new_path.canonicalize().unwrap())
+        );
+        fs::remove_file(new_path).unwrap();
+        fs::remove_dir(nested).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
     fn migrates_existing_player_sources_and_slices() {
         let path = std::env::temp_dir().join(format!("vora-legacy-{}.mp4", Uuid::now_v7()));
+        let document_path =
+            std::env::temp_dir().join(format!("vora-legacy-document-{}.pdf", Uuid::now_v7()));
         fs::write(&path, b"old media bytes").unwrap();
+        fs::write(&document_path, b"legacy document bytes").unwrap();
         let now = 1_700_000_000_000_i64;
         let connection = rusqlite::Connection::open_in_memory().unwrap();
         connection
@@ -1008,6 +1045,12 @@ mod tests {
                 [now],
             )
             .unwrap();
+        connection
+            .execute(
+                "INSERT INTO documents VALUES ('doc-1', 'Research', ?1, 'pdf', NULL, ?2, ?2)",
+                rusqlite::params![document_path.to_string_lossy(), now],
+            )
+            .unwrap();
         crate::mind::canvas_db::init_db(&connection).unwrap();
         crate::mind::canvas_db::init_db(&connection).unwrap();
         let file_hash: String = connection
@@ -1026,6 +1069,22 @@ mod tests {
             )
             .unwrap();
         assert_eq!(migrated_file_id, "file-1");
+        let migrated_document_file_id: String = connection
+            .query_row(
+                "SELECT file_id FROM documents WHERE id = 'doc-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let migrated_document_hash: String = connection
+            .query_row(
+                "SELECT file_hash FROM vora_files WHERE id = ?1",
+                [&migrated_document_file_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(migrated_document_hash, sha256_file(&document_path).unwrap());
         fs::remove_file(path).unwrap();
+        fs::remove_file(document_path).unwrap();
     }
 }
