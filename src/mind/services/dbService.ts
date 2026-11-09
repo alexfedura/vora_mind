@@ -92,6 +92,7 @@ export interface NodePayload {
   y: number;
   width?: number;
   height?: number;
+  zIndex?: number;
   style?: string;
 }
 
@@ -880,6 +881,7 @@ function toNodePayloads(
       y: node.position.y,
       width: node.measured?.width || node.width || 320,
       height: node.measured?.height || node.height || 180,
+      zIndex: node.zIndex,
       style: node.style ? JSON.stringify(node.style) : undefined,
     };
   });

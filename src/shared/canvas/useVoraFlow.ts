@@ -64,6 +64,7 @@ function getCanvasSignature(
     nodes: nodes.map((node) => ({
       id: node.id,
       type: node.type ?? "voraCard",
+      zIndex: node.zIndex,
       position: node.position,
       width: node.measured?.width || node.width || 320,
       height: node.measured?.height || node.height || 180,
@@ -488,6 +489,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
             id,
             type: nodeType,
             position: { x: placement.x, y: placement.y },
+            zIndex: placement.z_index,
             width: placement.width,
             height: placement.height,
             data: savedData ?? legacyCardData,

@@ -34,6 +34,8 @@ pub struct NodeInput {
     pub y: f64,
     pub width: Option<f64>,
     pub height: Option<f64>,
+    #[serde(rename = "zIndex", default)]
+    pub z_index: Option<i32>,
     pub style: Option<String>,
 }
 
@@ -1687,8 +1689,8 @@ pub fn save_semantic_snapshot(
             )?;
 
             tx.execute(
-                "INSERT INTO checkpoint_placements (checkpoint_id, object_id, x, y, width, height, style)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO checkpoint_placements (checkpoint_id, object_id, x, y, width, height, z_index, style)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     &new_snap_id,
                     &node.id,
@@ -1696,6 +1698,7 @@ pub fn save_semantic_snapshot(
                     node.y,
                     node.width.unwrap_or(280.0),
                     node.height.unwrap_or(160.0),
+                    node.z_index.unwrap_or(0),
                     &node.style
                 ],
             )?;
@@ -1723,8 +1726,8 @@ pub fn save_semantic_snapshot(
                 "ADD"
             };
             tx.execute(
-                "INSERT INTO snapshot_placement_changes (snapshot_id, object_id, operation, x, y, width, height, style)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO snapshot_placement_changes (snapshot_id, object_id, operation, x, y, width, height, z_index, style)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     &new_snap_id,
                     &node.id,
@@ -1733,6 +1736,7 @@ pub fn save_semantic_snapshot(
                     node.y,
                     node.width.unwrap_or(280.0),
                     node.height.unwrap_or(160.0),
+                    node.z_index.unwrap_or(0),
                     &node.style
                 ],
             )?;

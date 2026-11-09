@@ -35,6 +35,8 @@ import {
   Sparkles,
   Group,
   Ungroup,
+  ChevronsUp,
+  ChevronsDown,
   BookOpen,
   CandlestickChart,
   Menu,
@@ -138,6 +140,7 @@ interface ShapeResizeDimensions {
 interface CanvasNodeContextMenu {
   x: number;
   y: number;
+  nodeId?: string;
   textLinkSelection?: TextLinkSelection;
 }
 
@@ -2119,7 +2122,23 @@ function AppContent() {
       })));
       flow.setEdges((edges) => edges.map((edge) => ({ ...edge, selected: false })));
     }
-    setCanvasNodeContextMenu({ x: event.clientX, y: event.clientY });
+    setCanvasNodeContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id });
+  };
+
+  const handleCanvasNodeLayerChange = (direction: "front" | "back"): void => {
+    const nodeId = canvasNodeContextMenu?.nodeId;
+    if (!nodeId) return;
+
+    flow.saveHistorySnapshot();
+    flow.setNodes((nodes) => {
+      const currentLayer = direction === "front"
+        ? Math.max(...nodes.map((node) => node.zIndex ?? 0)) + 1
+        : Math.min(...nodes.map((node) => node.zIndex ?? 0)) - 1;
+      return nodes.map((node) => node.id === nodeId
+        ? { ...node, zIndex: currentLayer }
+        : node);
+    });
+    setCanvasNodeContextMenu(null);
   };
 
   const handleCanvasNodeClick = (_event: React.MouseEvent, node: Node): void => {
@@ -3391,6 +3410,28 @@ function AppContent() {
               className="fixed z-[61] min-w-40 rounded-lg border border-[#303543] bg-[#171a22] p-1.5 text-zinc-200 shadow-xl"
               style={{ left: canvasNodeContextMenu.x, top: canvasNodeContextMenu.y }}
             >
+              {canvasNodeContextMenu.nodeId && (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs hover:bg-[#282d3a]"
+                    onClick={() => handleCanvasNodeLayerChange("front")}
+                  >
+                    <ChevronsUp size={14} />
+                    Bring to Front
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs hover:bg-[#282d3a]"
+                    onClick={() => handleCanvasNodeLayerChange("back")}
+                  >
+                    <ChevronsDown size={14} />
+                    Send to Back
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 role="menuitem"
