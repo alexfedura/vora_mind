@@ -457,8 +457,10 @@ function AppContent() {
       setMediaPlayerRequest({
         requestId: mediaPlayerRequestId.current,
         payload,
+        fileId: null,
         filePath: null,
         mediaType: null,
+        startSeconds: null,
         error: payload ? null : "This Vora media link is malformed or unsupported.",
       });
       setIsTaskFlowOpen(false);
@@ -475,9 +477,9 @@ function AppContent() {
   useEffect(() => {
     const handleOpenPlayerWithMedia = (event: Event): void => {
       if (!(event instanceof CustomEvent) || !isRecord(event.detail)) return;
-      const { filePath, mediaType } = event.detail;
+      const { fileId, filePath, mediaType, startSeconds } = event.detail;
       if (
-        typeof filePath !== "string" ||
+        (typeof fileId !== "string" && typeof filePath !== "string") ||
         (mediaType !== "image" && mediaType !== "audio" && mediaType !== "video")
       ) return;
 
@@ -485,8 +487,12 @@ function AppContent() {
       setMediaPlayerRequest({
         requestId: mediaPlayerRequestId.current,
         payload: null,
-        filePath,
+        fileId: typeof fileId === "string" ? fileId : null,
+        filePath: typeof filePath === "string" ? filePath : null,
         mediaType,
+        startSeconds: typeof startSeconds === "number" && Number.isFinite(startSeconds) && startSeconds >= 0
+          ? startSeconds
+          : null,
         error: null,
       });
       setIsTaskFlowOpen(false);
@@ -884,7 +890,8 @@ function AppContent() {
       throw new Error(`${getFileNameFromPath(sourcePath)} is not a supported image, audio, or video file.`);
     }
 
-    const filePath = await dbService.importMediaFile(sourcePath);
+    const fileId = await dbService.importFileReference(sourcePath);
+    const file = await dbService.getVoraFile(fileId);
     setIsDiagramPaletteOpen(false);
     setIsAddCardToolActive(false);
     setIsTextToolActive(false);
@@ -896,7 +903,12 @@ function AppContent() {
       width: type === "audio" ? 360 : 420,
       height: type === "audio" ? 128 : 300,
       selected: true,
-      data: { type, filePath, fileName: getFileNameFromPath(sourcePath) },
+      data: {
+        type,
+        fileId,
+        filePath: file.current_path,
+        fileName: getFileNameFromPath(sourcePath),
+      },
     };
     saveCanvasHistorySnapshotRef.current();
     flow.setNodes((nodes) => [
