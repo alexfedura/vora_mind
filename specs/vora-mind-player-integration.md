@@ -30,9 +30,9 @@ from text on any Board.
   playback/pause, precise seeking, elapsed/duration display, playback speed,
   volume, fullscreen, keyboard controls, and the existing Vora Player slice
   list and editor.
-- Newly opened media starts paused. A single left-click on the video toggles
-  playback, and a double left-click toggles the Vora Mind window fullscreen;
-  playback state and fullscreen changes stay synchronized with the controls.
+- Newly opened media starts paused. A canvas video node hides native controls;
+  a single left-click toggles inline playback, and a double left-click opens
+  its original file in the Vora Player workspace.
 - Open media using a native file picker. Record its normalized absolute path,
   file size, modification time, and media duration for source provenance.
   Missing or changed sources are reported explicitly; they are never silently
@@ -42,8 +42,8 @@ from text on any Board.
   that any frames or bytes were cut.
 - Each saved slice offers a copyable Markdown link with a stable Vora media
   URI. Clicking the link from a card preview or Markdown editor on any Board
-  opens the exact source and seeks to the slice start. The displayed slice
-  end remains available as a reference and does not stop or alter playback.
+  opens the exact source, seeks to the slice start, and pauses at its end.
+  Selecting a saved slice also activates its start/end playback range.
 - Links preserve the full-precision time values, source path, and source
   fingerprint fields. The visible label includes the title and time range.
 - Slice metadata is stored through Vora Mind's SQLite-backed media service,
@@ -61,6 +61,9 @@ from text on any Board.
 - The integration must not call `slice_export`, `chapters_export`, or FFmpeg.
   No action in Vora Mind may alter, replace, trim, or rewrite the selected
   source media.
+- Slice playback uses the original source path and MPV seeking. End-time
+  enforcement pauses playback and seeks to the exact saved end position; no
+  derivative or rendered clip is created.
 
 ## Non-goals
 
@@ -95,5 +98,9 @@ from text on any Board.
   the original Board.
 - Verify newly opened media is paused, single-click toggles playback, and
   double-click enters/exits fullscreen.
+- Verify canvas video controls are hidden, single-click toggles inline
+  playback, and double-click opens the original path in Vora Player.
+- Verify slice playback stops at the stored end time and leaves source bytes
+  unchanged.
 - Verify by code path and test that no clip-export/FFmpeg command is
   registered or invoked from Vora Mind.

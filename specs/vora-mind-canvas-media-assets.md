@@ -23,12 +23,13 @@ source references.
   copies it to a collision-resistant filename under
   `<app_data_dir>/assets/`, and returns its absolute destination path.
 - Image nodes render the copied local asset using Tauri's asset protocol,
-  preserve their aspect ratio, and can be resized. Audio and video nodes show
-  browser media controls in styled, resizable nodes.
+  preserve their aspect ratio, and can be resized. Audio nodes show browser
+  media controls in styled, resizable nodes. Video nodes hide native controls;
+  left-click toggles playback and double-click opens the source in Vora Player.
 - Media node type and data are saved by the existing canvas snapshot path.
   Board export/import retains media data and node geometry.
-- The existing media player remains path-based and is not changed by this
-  canvas asset workflow.
+- Video double-click sends the node's stored file path to the existing
+  path-based media player; it does not create or modify a media file.
 
 ## Persistence and local access
 
