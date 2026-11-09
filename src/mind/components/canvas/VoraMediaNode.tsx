@@ -1,14 +1,27 @@
 import { memo, useRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from "@xyflow/react";
-import { Play } from "lucide-react";
+import { MessageCircle, Play } from "lucide-react";
+import { useMediaFileReference } from "@/hooks/useMediaFileReference";
 import type { VoraMediaData } from "@/mind/types";
 
 type VoraMediaNodeModel = Node<VoraMediaData, "voraMedia">;
 
 export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNodeModel>) => {
-  const source = data.filePath ? convertFileSrc(data.filePath) : null;
+  const file = useMediaFileReference(id, data.fileId, data.filePath);
+  const source = file.filePath ? convertFileSrc(file.filePath) : null;
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const openPlayer = (startSeconds: number | null = null): void => {
+    window.dispatchEvent(new CustomEvent("vora:open-player-with-media", {
+      detail: {
+        fileId: file.fileId,
+        filePath: file.filePath,
+        mediaType: data.type,
+        startSeconds,
+      },
+    }));
+  };
 
   const handleVideoClick = (): void => {
     const video = videoRef.current;
@@ -25,9 +38,7 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
   const handleVideoDoubleClick = (event: React.MouseEvent<HTMLVideoElement>): void => {
     event.stopPropagation();
     videoRef.current?.pause();
-    window.dispatchEvent(new CustomEvent("vora:open-player-with-media", {
-      detail: { filePath: data.filePath, mediaType: data.type },
-    }));
+    openPlayer();
   };
 
   return (
@@ -50,6 +61,21 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
       <Handle type="target" position={Position.Right} id="target-right" className="!w-3 !h-3 !-right-1.5 !opacity-0" />
       <Handle type="target" position={Position.Top} id="target-top" className="!w-3 !h-3 !-top-1.5 !opacity-0" />
       <Handle type="target" position={Position.Bottom} id="target-bottom" className="!w-3 !h-3 !-bottom-1.5 !opacity-0" />
+      {file.noteCount > 0 && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            openPlayer(0);
+          }}
+          title={`${file.noteCount} saved time ${file.noteCount === 1 ? "note" : "notes"}`}
+          aria-label={`Open Player with ${file.noteCount} saved time ${file.noteCount === 1 ? "note" : "notes"}`}
+          className="nodrag nowheel absolute right-2 top-2 z-20 flex items-center gap-1 rounded-full border border-violet-300/30 bg-[#171323]/90 px-2 py-1 text-[10px] font-medium text-violet-100 shadow-lg transition hover:bg-violet-600"
+        >
+          <MessageCircle size={12} aria-hidden="true" />
+          {file.noteCount}
+        </button>
+      )}
       {data.type === "image" ? (
         source ? (
           <div className="h-full w-full overflow-hidden rounded-xl">
