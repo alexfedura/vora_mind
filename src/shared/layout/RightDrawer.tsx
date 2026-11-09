@@ -1385,17 +1385,16 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                 return (
                   <article
                     key={`object-${item.id}`}
-                    draggable={item.type === "card"}
-                    onDragStart={(event) => {
-                      if (item.type !== "card") {
-                        event.preventDefault();
-                        return;
-                      }
-                      event.dataTransfer.setData(
-                        "application/vora-card",
-                        JSON.stringify({ id: item.id }),
-                      );
-                      event.dataTransfer.effectAllowed = "copy";
+                    onPointerDown={(event) => {
+                      if (item.type !== "card") return;
+                      const card = cards[item.id] ?? {
+                        id: item.id,
+                        title: item.title,
+                        content: item.content,
+                        boardId: item.board_id,
+                        version: "v0.1.0",
+                      };
+                      handleLibraryItemPointerDown(event, { kind: "card", card });
                     }}
                     onMouseEnter={() => {
                       window.dispatchEvent(new CustomEvent<string>(
