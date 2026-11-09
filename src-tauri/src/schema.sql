@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS vora_files (
 CREATE TABLE IF NOT EXISTS documents (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
+    file_path TEXT NOT NULL UNIQUE,
     file_id TEXT NOT NULL REFERENCES vora_files(id),
     file_type TEXT NOT NULL CHECK(file_type IN ('pdf', 'docx', 'md')),
     page_count INTEGER,
