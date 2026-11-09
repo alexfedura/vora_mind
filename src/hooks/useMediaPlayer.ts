@@ -8,13 +8,21 @@ import type {
   MediaSlice,
   MediaSliceInput,
   MediaSource,
+  VoraMediaData,
 } from "@/mind/types";
 import { createMediaMarkdownLink, formatMediaTime } from "@/mind/utils/mediaLinks";
 
 export interface MediaPlayerRequest {
   requestId: number;
   payload: MediaLinkPayload | null;
+  filePath: string | null;
+  mediaType: VoraMediaData["type"] | null;
   error: string | null;
+}
+
+interface MediaPlaybackRange {
+  startSeconds: number;
+  endSeconds: number;
 }
 
 export interface MediaPlayerDraft {
@@ -69,14 +77,69 @@ export function useMediaPlayer(
   const [status, setStatus] = useState<string | null>(null);
   const [draft, setDraft] = useState<MediaPlayerDraft | null>(null);
   const [linkPreview, setLinkPreview] = useState<string | null>(null);
+  const [playbackRange, setPlaybackRange] = useState<MediaPlaybackRange | null>(null);
+  const [rangeCheckVersion, setRangeCheckVersion] = useState(0);
   const sourceRef = useRef(source);
   const positionRef = useRef(position);
+  const playbackRangeRef = useRef(playbackRange);
+  const isPlayingRef = useRef(isPlaying);
+  const rangeCheckIntervalRef = useRef<number | null>(null);
   const latestRequestId = useRef(0);
   const processedRequestId = useRef(0);
   const openQueue = useRef<Promise<void>>(Promise.resolve());
 
   sourceRef.current = source;
   positionRef.current = position;
+  playbackRangeRef.current = playbackRange;
+  isPlayingRef.current = isPlaying;
+
+  useEffect(() => {
+    if (rangeCheckIntervalRef.current !== null) {
+      window.clearInterval(rangeCheckIntervalRef.current);
+      rangeCheckIntervalRef.current = null;
+    }
+    if (!active || !isPlaying || !playbackRange) return;
+
+    let cancelled = false;
+    let checking = false;
+    const endSeconds = playbackRange.endSeconds;
+    const intervalId = window.setInterval(async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const currentTime = await dbService.playerGetPosition();
+        if (
+          cancelled ||
+          rangeCheckIntervalRef.current !== intervalId ||
+          !isPlayingRef.current ||
+          playbackRangeRef.current?.endSeconds !== endSeconds
+        ) return;
+        if (currentTime < endSeconds) return;
+
+        window.clearInterval(intervalId);
+        rangeCheckIntervalRef.current = null;
+        await dbService.playerPause();
+        await dbService.playerSeek(endSeconds);
+        if (playbackRangeRef.current?.endSeconds === endSeconds) {
+          setPosition(endSeconds);
+          setIsPlaying(false);
+        }
+      } catch (rangeError: unknown) {
+        if (!cancelled) setError(`Could not enforce the media reference end time: ${errorMessage(rangeError)}`);
+        window.clearInterval(intervalId);
+        if (rangeCheckIntervalRef.current === intervalId) rangeCheckIntervalRef.current = null;
+      } finally {
+        checking = false;
+      }
+    }, 500);
+    rangeCheckIntervalRef.current = intervalId;
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      if (rangeCheckIntervalRef.current === intervalId) rangeCheckIntervalRef.current = null;
+    };
+  }, [active, isPlaying, playbackRange, rangeCheckVersion]);
 
   useEffect(() => {
     let cancelled = false;
