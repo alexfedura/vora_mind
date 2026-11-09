@@ -67,4 +67,4 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
-          args: '--bundles nsis -- --profile ci'
+          args: '--bundles msi -- --profile ci'
