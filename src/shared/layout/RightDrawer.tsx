@@ -21,8 +21,15 @@ import {
   Type,
   Film,
   BookOpen,
+  AlertTriangle,
+  FolderOpen,
+  Image,
+  Music,
+  Play,
 } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/shared/store/useAppStore";
+import { useMediaFiles } from "@/hooks/useMediaFiles";
 import type { LibraryObjectReviewStatus } from "@/mind/services/dbService";
 import type {
   LibraryItemGroup,
@@ -32,6 +39,7 @@ import type {
   VoraCard,
 } from "@/mind/types";
 import { getVoraShapePath, isVoraDiagramShape } from "@/mind/utils/shapeGeometry";
+import { formatMediaTime } from "@/mind/utils/mediaLinks";
 
 const resolveTextDirection = (text: string, defaultMajorRtl: boolean): { isRtl: boolean; cleanText: string } => {
   const trimmed = text.trim();
@@ -288,7 +296,7 @@ const GroupDragContentPreview: React.FC<{ snapshot: LibraryItemGroupSnapshot }> 
   );
 };
 
-type ViewFilter = "all" | "cards" | "item-groups" | "trash";
+type ViewFilter = "all" | "cards" | "item-groups" | "media" | "trash";
 type LibraryRefinementFilter =
   | { type: "all" }
   | { type: "today" }
@@ -380,6 +388,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
   const [groupVersions, setGroupVersions] = useState<LibraryItemGroupVersion[]>([]);
   const [groupUsages, setGroupUsages] = useState<LibraryItemGroupUsage[]>([]);
   const [selectedGroupVersionId, setSelectedGroupVersionId] = useState<string | null>(null);
+  const mediaFiles = useMediaFiles(isRightDrawerOpen && currentFilter === "media");
 
   const [draggingLibraryItem, setDraggingLibraryItem] = useState<LibraryDragPreview | null>(null);
   const [ghostPos, setGhostPos] = useState({ x: 0, y: 0 });
@@ -446,7 +455,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
   }, [activeGroup?.id, onGetItemGroupUsages]);
 
   useEffect(() => {
-    if (!isRightDrawerOpen || activeCard || activeGroup || currentFilter === "trash") return;
+    if (!isRightDrawerOpen || activeCard || activeGroup || currentFilter === "trash" || currentFilter === "media") return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void searchLibraryObjects(searchQuery, reviewStatusFilter).catch((cause: unknown) => {
