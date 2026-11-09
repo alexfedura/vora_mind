@@ -57,7 +57,6 @@ import {
   type BoardVersionSnapshot,
 } from "./mind/services/dbService";
 import { createBoardTransfer, parseBoardTransfer, remapBoardTransfer } from "./mind/utils/boardTransfer";
-import { createFlowchartTemplate, FLOWCHART_TEMPLATES, type FlowchartTemplateId } from "./mind/utils/diagramTemplates";
 import { getSetting, setSetting } from "./shared/store/useSettingsStore";
 import {
   type BoardItem,
@@ -542,7 +541,6 @@ function AppContent() {
   const [libraryVersionInput, setLibraryVersionInput] = useState("");
   const [libraryBoardError, setLibraryBoardError] = useState<string | null>(null);
   const [isCreateItemGroupOpen, setIsCreateItemGroupOpen] = useState(false);
-  const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
   const [isGenerateBoardModalOpen, setIsGenerateBoardModalOpen] = useState(false);
   const [isBoardTransferMenuOpen, setIsBoardTransferMenuOpen] = useState(false);
   const [canvasOperationError, setCanvasOperationError] = useState<string | null>(null);
@@ -2447,26 +2445,6 @@ function AppContent() {
     flow.setNodes((nodes) => [...nodes.map((item) => ({ ...item, selected: false })), node]);
   };
 
-  const handleInsertFlowchartTemplate = (templateId: FlowchartTemplateId): void => {
-    if (!canvasBoardId) return;
-    const center = toCanvasFlowPosition({
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-    });
-    const template = createFlowchartTemplate(templateId, canvasBoardId, center, shapeDefaults);
-    flow.saveHistorySnapshot();
-    flow.setNodes((nodes) => [
-      ...nodes.map((node) => ({ ...node, selected: false })),
-      ...template.nodes,
-    ]);
-    flow.setEdges((edges) => [
-      ...edges.map((edge) => ({ ...edge, selected: false })),
-      ...template.edges,
-    ]);
-    setActiveShapeTool(null);
-    setIsTemplateGalleryOpen(false);
-  };
-
   const handleExportBoard = (): void => {
     if (!canvasBoardId) return;
     try {
@@ -2949,7 +2927,6 @@ function AppContent() {
           aria-label="Generate Board with AI"
           onClick={() => {
             setIsDiagramPaletteOpen(false);
-            setIsTemplateGalleryOpen(false);
             setIsGenerateBoardModalOpen(true);
           }}
           className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
@@ -3046,19 +3023,6 @@ function AppContent() {
         >
           <Files size={16} />
         </button>
-        <button
-          type="button"
-          aria-label="Diagram templates"
-          aria-expanded={isTemplateGalleryOpen}
-          onClick={() => {
-            setIsDiagramPaletteOpen(false);
-            setIsTemplateGalleryOpen((open) => !open);
-          }}
-          className={`${CANVAS_TOOL_BUTTON_CLASS} ${isTemplateGalleryOpen ? CANVAS_TOOL_BUTTON_ACTIVE_CLASS : CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
-          title="Diagram templates"
-        >
-          <BookOpen size={16} />
-        </button>
         <div ref={boardTransferMenuRef} className="relative">
           <button
             type="button"
@@ -3067,7 +3031,6 @@ function AppContent() {
             aria-expanded={isBoardTransferMenuOpen}
             onClick={() => {
               setIsDiagramPaletteOpen(false);
-              setIsTemplateGalleryOpen(false);
               setIsBoardTransferMenuOpen((open) => !open);
             }}
             className={`${CANVAS_TOOL_BUTTON_CLASS} ${isBoardTransferMenuOpen ? CANVAS_TOOL_BUTTON_ACTIVE_CLASS : CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
@@ -3152,26 +3115,6 @@ function AppContent() {
               </button>
             ))}
             <p className="px-2 pt-1 text-[10px] leading-4 text-zinc-500">Click empty canvas to place; resize and label after selection.</p>
-          </div>
-        )}
-        {isTemplateGalleryOpen && (
-          <div
-            role="dialog"
-            aria-label="Diagram templates"
-            className="absolute left-full top-0 ml-2 flex w-64 flex-col gap-1 rounded-xl border border-[#303543] bg-[#171a22] p-2 text-zinc-200 shadow-xl"
-          >
-            <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Flowchart templates</p>
-            {FLOWCHART_TEMPLATES.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                className="flex flex-col gap-1 rounded-lg px-2.5 py-2 text-left hover:bg-[#282d3a]"
-                onClick={() => handleInsertFlowchartTemplate(template.id)}
-              >
-                <span className="text-xs font-medium text-zinc-100">{template.title}</span>
-                <span className="text-[11px] text-zinc-500">{template.description}</span>
-              </button>
-            ))}
           </div>
         )}
       </div>
