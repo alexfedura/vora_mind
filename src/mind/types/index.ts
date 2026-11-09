@@ -264,7 +264,10 @@ export interface LibraryItemGroupCard {
   deleted_at: number | null;
 }
 
+export type LibraryItemType = "item" | "group";
+
 export interface LibraryItemGroupSnapshot {
+  item_type: LibraryItemType;
   nodes: LibraryItemGroupNode[];
   edges: LibraryItemGroupEdge[];
   cards: LibraryItemGroupCard[];
@@ -275,6 +278,7 @@ export interface LibraryItemGroup {
   board_id: string;
   name: string;
   version: string;
+  item_type: LibraryItemType;
   snapshot: LibraryItemGroupSnapshot;
   created_at: number;
   updated_at: number;

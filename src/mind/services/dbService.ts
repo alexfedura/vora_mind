@@ -6,6 +6,7 @@ import type {
   CardVersionContent,
   LibraryItemGroup,
   LibraryItemGroupSnapshot,
+  LibraryItemType,
   LibraryItemGroupUsage,
   LibraryItemGroupVersion,
   MediaFileLibraryEntry,
@@ -196,6 +197,7 @@ export function createLibraryItemGroupSnapshot(
     deleted_at?: number | null;
     mediaLineage?: MediaCardLineage;
   }>,
+  itemType: LibraryItemType = "group",
 ): LibraryItemGroupSnapshot {
   if (nodes.length === 0) {
     throw new Error("A Library schematic must contain at least one canvas item.");
@@ -211,6 +213,7 @@ export function createLibraryItemGroupSnapshot(
       return typeof cardId === "string" ? cardId : node.id;
     }));
   return {
+    item_type: itemType,
     nodes: payloadNodes.map((node) => ({ ...node, x: node.x - minX, y: node.y - minY })),
     edges: toEdgePayloads(edges.filter((edge) =>
       selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target)
@@ -596,14 +599,16 @@ export const dbService = {
   async createLibraryItemGroup(
     name: string,
     version: string,
+    itemType: LibraryItemType,
     nodes: Node[],
     edges: Edge[],
     cards: Record<string, { id: string; title: string; content: string; version?: string; deleted_at?: number | null }>,
   ): Promise<LibraryItemGroupDto> {
-    const snapshot = createLibraryItemGroupSnapshot(nodes, edges, cards);
+    const snapshot = createLibraryItemGroupSnapshot(nodes, edges, cards, itemType);
     return await invoke<LibraryItemGroupDto>("create_library_item_group", {
       name,
       version,
+      itemType,
       snapshot,
     });
   },

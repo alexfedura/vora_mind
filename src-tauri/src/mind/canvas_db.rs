@@ -246,6 +246,8 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             name TEXT NOT NULL,
             version TEXT NOT NULL,
             snapshot_json TEXT NOT NULL,
+            item_type TEXT NOT NULL DEFAULT 'group'
+                CHECK (item_type IN ('item', 'group')),
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             deleted_at INTEGER
@@ -446,6 +448,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     ensure_object_working_content_column(conn)?;
     ensure_object_review_status_column(conn)?;
     ensure_library_item_group_board_column(conn)?;
+    ensure_library_item_group_type_column(conn)?;
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_objects_board ON objects(board_id);
         CREATE INDEX IF NOT EXISTS idx_objects_review_status ON objects(review_status);
@@ -1038,6 +1041,23 @@ fn ensure_library_item_group_board_column(conn: &Connection) -> Result<()> {
             Err(error)
         }
     }
+}
+
+fn ensure_library_item_group_type_column(conn: &Connection) -> Result<()> {
+    let mut statement = conn.prepare("PRAGMA table_info(library_item_groups)")?;
+    let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+    if !columns
+        .collect::<Result<Vec<_>>>()?
+        .iter()
+        .any(|column| column == "item_type")
+    {
+        conn.execute(
+            "ALTER TABLE library_item_groups ADD COLUMN item_type TEXT NOT NULL DEFAULT 'group'
+             CHECK (item_type IN ('item', 'group'))",
+            [],
+        )?;
+    }
+    Ok(())
 }
 
 fn ensure_board_column(conn: &Connection, table: &str) -> Result<()> {
