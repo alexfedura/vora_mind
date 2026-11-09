@@ -341,13 +341,14 @@ export const useAppStore = create<AppState>()(
         if (isLibraryBoardEditing) throw new Error("Media slice cards can only be created on a regular Board.");
 
         const id = crypto.randomUUID();
+        const version = "v0.1.0";
         const card: VoraCard = {
           id,
           title,
           content,
           boardId: activeBoardId,
           mediaLineage,
-          version: "v0.1.0",
+          version,
           created_at: Date.now(),
         };
         await dbService.saveCardDirect(
@@ -355,7 +356,7 @@ export const useAppStore = create<AppState>()(
           id,
           title,
           content,
-          card.version,
+          version,
           [],
           undefined,
           mediaLineage,
