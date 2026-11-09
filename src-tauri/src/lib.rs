@@ -1065,10 +1065,7 @@ fn get_documents(state: State<AppState>) -> Result<Vec<mind::canvas_db::Document
 }
 
 #[tauri::command]
-fn get_document_content(
-    state: State<AppState>,
-    document_id: String,
-) -> Result<Vec<u8>, String> {
+fn get_document_content(state: State<AppState>, document_id: String) -> Result<Vec<u8>, String> {
     let file_path: String = state
         .db
         .lock()

@@ -104,8 +104,12 @@ fn file_metadata(path: &Path) -> Result<(i64, i64), String> {
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
-    let mut file = File::open(path)
-        .map_err(|error| format!("Cannot open file {} to fingerprint it: {error}", path.display()))?;
+    let mut file = File::open(path).map_err(|error| {
+        format!(
+            "Cannot open file {} to fingerprint it: {error}",
+            path.display()
+        )
+    })?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 1024 * 1024];
     loop {
@@ -173,14 +177,17 @@ pub fn ensure_file_reference(
     path: &Path,
     requested_type: Option<&str>,
 ) -> Result<VoraFile, String> {
-    let canonical_path = path.canonicalize().map_err(|error| {
-        format!("Cannot access file {}: {error}", path.display())
-    })?;
+    let canonical_path = path
+        .canonicalize()
+        .map_err(|error| format!("Cannot access file {}: {error}", path.display()))?;
     let (size_bytes, modified_time_ms) = file_metadata(&canonical_path)?;
     let file_hash = sha256_file(&canonical_path)?;
     let file_type = match requested_type {
         Some(file_type) => {
-            if !matches!(file_type, "image" | "audio" | "video" | "pdf" | "docx" | "md") {
+            if !matches!(
+                file_type,
+                "image" | "audio" | "video" | "pdf" | "docx" | "md"
+            ) {
                 return Err(format!("Unsupported file type: {file_type}"));
             }
             file_type.to_string()
@@ -347,7 +354,8 @@ fn migrate_legacy_sources(conn: &Connection) -> Result<(), String> {
     drop(statement);
 
     for (id, path, size, modified, duration, position, created, last_used) in legacy_sources {
-        let file_type = file_type_for_path(Path::new(&path)).unwrap_or_else(|_| "video".to_string());
+        let file_type =
+            file_type_for_path(Path::new(&path)).unwrap_or_else(|_| "video".to_string());
         if Path::new(&path).is_file() {
             let (actual_size, actual_modified) = file_metadata(Path::new(&path))?;
             let hash = sha256_file(Path::new(&path))?;
@@ -608,7 +616,10 @@ pub fn resolve_missing_file(
         .canonicalize()
         .map_err(|error| format!("Cannot access search directory {search_dir}: {error}"))?;
     if !search_root.is_dir() {
-        return Err(format!("Search path is not a directory: {}", search_root.display()));
+        return Err(format!(
+            "Search path is not a directory: {}",
+            search_root.display()
+        ));
     }
     let conn = lock_database(&state)?;
     let file = get_file(&conn, &file_id)
@@ -641,13 +652,13 @@ pub fn resolve_missing_file(
 }
 
 #[tauri::command]
-pub fn list_media_files(
-    state: State<'_, AppState>,
-) -> Result<Vec<MediaFileLibraryEntry>, String> {
+pub fn list_media_files(state: State<'_, AppState>) -> Result<Vec<MediaFileLibraryEntry>, String> {
     let conn = lock_database(&state)?;
     let files = {
         let mut statement = conn
-            .prepare(&format!("SELECT {FILE_COLUMNS} FROM vora_files ORDER BY original_name COLLATE NOCASE, id"))
+            .prepare(&format!(
+                "SELECT {FILE_COLUMNS} FROM vora_files ORDER BY original_name COLLATE NOCASE, id"
+            ))
             .map_err(|error| error.to_string())?;
         let rows = statement
             .query_map([], file_from_row)
@@ -772,7 +783,9 @@ pub fn update_media_source_duration(
         )
         .map_err(|error| error.to_string())?;
     if updated == 0 {
-        return Err(format!("Media file {source_id} was not found in this workspace."));
+        return Err(format!(
+            "Media file {source_id} was not found in this workspace."
+        ));
     }
     Ok(())
 }
@@ -794,7 +807,9 @@ pub fn save_media_source_position(
         )
         .map_err(|error| error.to_string())?;
     if updated == 0 {
-        return Err(format!("Media file {source_id} was not found in this workspace."));
+        return Err(format!(
+            "Media file {source_id} was not found in this workspace."
+        ));
     }
     Ok(())
 }
