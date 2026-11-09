@@ -558,6 +558,39 @@ pub fn get_vora_file(
     Ok(file)
 }
 
+fn find_matching_file(file: &VoraFile, search_root: &Path) -> Result<Option<PathBuf>, String> {
+    for entry in WalkDir::new(search_root).follow_links(false) {
+        let entry = entry.map_err(|error| format!("Could not search files: {error}"))?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let candidate = entry.path();
+        let Ok((size, modified_time_ms)) = file_metadata(candidate) else {
+            continue;
+        };
+        if size != file.size_bytes {
+            continue;
+        }
+        let matches = if let Some((legacy_size, legacy_modified)) = file
+            .file_hash
+            .strip_prefix("legacy:")
+            .and_then(|value| value.split_once(':'))
+        {
+            legacy_size.parse::<i64>().ok() == Some(size)
+                && legacy_modified.parse::<i64>().ok() == Some(modified_time_ms)
+        } else {
+            sha256_file(candidate)? == file.file_hash
+        };
+        if matches {
+            return candidate
+                .canonicalize()
+                .map(Some)
+                .map_err(|error| format!("Could not resolve matched file path: {error}"));
+        }
+    }
+    Ok(None)
+}
+
 #[tauri::command]
 pub fn resolve_missing_file(
     app: tauri::AppHandle,
@@ -575,51 +608,30 @@ pub fn resolve_missing_file(
     let file = get_file(&conn, &file_id)
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("File {file_id} was not found in this workspace."))?;
-    for entry in WalkDir::new(&search_root).follow_links(false) {
-        let entry = entry.map_err(|error| format!("Could not search files: {error}"))?;
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        let candidate = entry.path();
-        let Ok((size, modified_time_ms)) = file_metadata(candidate) else {
-            continue;
-        };
-        if size != file.size_bytes {
-            continue;
-        }
-        let matches = if let Some((legacy_size, legacy_modified)) = file.file_hash
-            .strip_prefix("legacy:")
-            .and_then(|value| value.split_once(':'))
-        {
-            legacy_size.parse::<i64>().ok() == Some(size)
-                && legacy_modified.parse::<i64>().ok() == Some(modified_time_ms)
-        } else {
-            sha256_file(candidate)? == file.file_hash
-        };
-        if !matches {
-            continue;
-        }
-        let canonical_path = candidate
-            .canonicalize()
-            .map_err(|error| format!("Could not resolve matched file path: {error}"))?;
-        conn.execute(
-            "UPDATE vora_files SET current_path = ?1, modified_time_ms = ?2 WHERE id = ?3",
-            params![canonical_path.to_string_lossy(), modified_time_ms, file_id],
+    let canonical_path = find_matching_file(&file, &search_root)?.ok_or_else(|| {
+        format!(
+            "Could not locate {} in {}. No file with matching content was found.",
+            file.original_name,
+            search_root.display()
         )
-        .map_err(|error| error.to_string())?;
-        app.asset_protocol_scope()
-            .allow_file(&canonical_path)
-            .map_err(|error| format!("Could not authorize the relocated file: {error}"))?;
-        return canonical_path
-            .to_str()
-            .map(str::to_string)
-            .ok_or_else(|| "Matched file path cannot be represented as Unicode.".to_string());
-    }
-    Err(format!(
-        "Could not locate {} in {}. No file with matching content was found.",
-        file.original_name,
-        search_root.display()
-    ))
+    })?;
+    let (_, modified_time_ms) = file_metadata(&canonical_path)?;
+    conn.execute(
+        "UPDATE vora_files SET current_path = ?1, modified_time_ms = ?2 WHERE id = ?3",
+        params![
+            canonical_path.to_string_lossy().to_string(),
+            modified_time_ms,
+            file_id
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+    app.asset_protocol_scope()
+        .allow_file(&canonical_path)
+        .map_err(|error| format!("Could not authorize the relocated file: {error}"))?;
+    canonical_path
+        .to_str()
+        .map(str::to_string)
+        .ok_or_else(|| "Matched file path cannot be represented as Unicode.".to_string())
 }
 
 #[tauri::command]
