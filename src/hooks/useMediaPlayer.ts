@@ -15,8 +15,10 @@ import { createMediaMarkdownLink, formatMediaTime } from "@/mind/utils/mediaLink
 export interface MediaPlayerRequest {
   requestId: number;
   payload: MediaLinkPayload | null;
+  fileId: string | null;
   filePath: string | null;
   mediaType: VoraMediaData["type"] | null;
+  startSeconds: number | null;
   error: string | null;
 }
 
@@ -51,10 +53,7 @@ function matchesMediaLink(
     payload.sliceId === slice.id &&
     payload.startSeconds === slice.start_seconds &&
     payload.endSeconds === slice.end_seconds &&
-    payload.path === source.path &&
-    payload.fingerprintSize === source.fingerprint_size &&
-    payload.fingerprintModifiedMs === source.fingerprint_modified_ms &&
-    slice.source_id === source.id
+    slice.file_id === source.id
   );
 }
 
@@ -138,6 +137,31 @@ export function useMediaPlayer(
       cancelled = true;
       window.clearInterval(intervalId);
       if (rangeCheckIntervalRef.current === intervalId) rangeCheckIntervalRef.current = null;
+    };
+
+    const locateMissingFile = async (): Promise<void> => {
+      if (!source) return;
+      try {
+        const selected = await open({ directory: true, multiple: false });
+        if (typeof selected !== "string") return;
+        setIsBusy(true);
+        setError(null);
+        setStatus(null);
+        const resolvedPath = await dbService.resolveMissingFile(source.id, selected);
+        const resolvedSource = await dbService.validateMediaSource(source.id);
+        await dbService.playerLoadAt(resolvedPath, positionRef.current);
+        setSource(resolvedSource);
+        setLastSource(resolvedSource);
+        setSlices(await dbService.listMediaSlices(resolvedSource.id));
+        setStatus(`Located ${sourceName(resolvedPath)}.`);
+        window.dispatchEvent(new CustomEvent("vora:file-reference-updated", {
+          detail: { fileId: resolvedSource.id },
+        }));
+      } catch (locateError: unknown) {
+        setError(`Could not locate the media file: ${errorMessage(locateError)}`);
+      } finally {
+        setIsBusy(false);
+      }
     };
   }, [active, isPlaying, playbackRange, rangeCheckVersion]);
 
@@ -235,6 +259,28 @@ export function useMediaPlayer(
 
       setIsBusy(true);
       try {
+        if (request.fileId) {
+          if (request.mediaType !== "audio" && request.mediaType !== "video") {
+            throw new Error("Vora Player supports audio and video sources, not image media.");
+          }
+          const storedSource = await dbService.getMediaSource(request.fileId);
+          if (latestRequestId.current !== request.requestId) return;
+          setSource(storedSource);
+          const verifiedSource = await dbService.validateMediaSource(storedSource.id);
+          if (latestRequestId.current !== request.requestId) return;
+          const startSeconds = request.startSeconds ?? 0;
+          await dbService.playerLoadAt(verifiedSource.path, startSeconds);
+          if (latestRequestId.current !== request.requestId) return;
+          setSource(verifiedSource);
+          setLastSource(verifiedSource);
+          setSlices(await dbService.listMediaSlices(verifiedSource.id));
+          setDuration(verifiedSource.duration_seconds ?? 0);
+          setPosition(startSeconds);
+          setPlaybackRange(null);
+          setIsPlaying(false);
+          setStatus(`Opened ${sourceName(verifiedSource.path)}.`);
+          return;
+        }
         if (request.filePath) {
           if (request.mediaType !== "audio" && request.mediaType !== "video") {
             throw new Error("Vora Player supports audio and video sources, not image media.");
@@ -475,9 +521,12 @@ export function useMediaPlayer(
       const saved = await dbService.saveMediaSlice({
         ...draft,
         id: draft.id,
-        source_id: source.id,
+        file_id: source.id,
       } satisfies MediaSliceInput);
       setSlices(await dbService.listMediaSlices(source.id));
+      window.dispatchEvent(new CustomEvent("vora:media-slices-changed", {
+        detail: { fileId: source.id },
+      }));
       const savedRange = {
         startSeconds: saved.start_seconds,
         endSeconds: saved.end_seconds,
@@ -498,7 +547,12 @@ export function useMediaPlayer(
     setError(null);
     try {
       await dbService.deleteMediaSlice(sliceId);
-      if (source) setSlices(await dbService.listMediaSlices(source.id));
+      if (source) {
+        setSlices(await dbService.listMediaSlices(source.id));
+        window.dispatchEvent(new CustomEvent("vora:media-slices-changed", {
+          detail: { fileId: source.id },
+        }));
+      }
       setStatus("Time reference deleted. The media file was not changed.");
     } catch (deleteError: unknown) {
       setError(`Could not delete the time reference: ${errorMessage(deleteError)}`);
@@ -542,6 +596,7 @@ export function useMediaPlayer(
     linkPreview,
     openMediaFile,
     resumeLastSource,
+    locateMissingFile,
     togglePlayback,
     seekTo,
     selectReference,
