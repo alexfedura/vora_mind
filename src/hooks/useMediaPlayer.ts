@@ -192,10 +192,14 @@ export function useMediaPlayer(
       if (!cancelled) setError(`Could not receive player playback updates: ${errorMessage(listenError)}`);
     });
     void listen<boolean>("mind-player-fullscreen", (event) => {
-      setIsFullscreen(event.payload);
-      void getCurrentWindow().setFullscreen(event.payload).catch((fullscreenError: unknown) => {
-        setError(`Could not update the player window fullscreen state: ${errorMessage(fullscreenError)}`);
-      });
+      void (async () => {
+        try {
+          await getCurrentWindow().setFullscreen(event.payload);
+          setIsFullscreen(event.payload);
+        } catch (fullscreenError: unknown) {
+          console.error("Could not update the player window fullscreen state:", fullscreenError);
+        }
+      })();
     }).then((unlisten) => {
       if (cancelled) unlisten();
       else unlisteners.push(unlisten);
@@ -484,7 +488,12 @@ export function useMediaPlayer(
     await run(async () => {
       const fullscreen = !isFullscreen;
       await dbService.playerSetFullscreen(fullscreen);
-      await getCurrentWindow().setFullscreen(fullscreen);
+      try {
+        await getCurrentWindow().setFullscreen(fullscreen);
+      } catch (fullscreenError: unknown) {
+        console.error("Could not update the player window fullscreen state:", fullscreenError);
+        return;
+      }
       setIsFullscreen(fullscreen);
     });
   };
