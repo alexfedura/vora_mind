@@ -45,9 +45,9 @@ export interface CardDto {
   library_source_card_id: string | null;
   document_id?: string | null;
   highlight_id?: string | null;
-  source_file_id: string | null;
-  start_time: number | null;
-  end_time: number | null;
+  source_file_id?: string | null;
+  start_time?: number | null;
+  end_time?: number | null;
 }
 
 export type DocumentFileType = "pdf" | "docx" | "md";
@@ -195,7 +195,6 @@ export function createLibraryItemGroupSnapshot(
     content: string;
     version?: string;
     deleted_at?: number | null;
-    mediaLineage?: MediaCardLineage;
   }>,
   itemType: LibraryItemType = "group",
 ): LibraryItemGroupSnapshot {
@@ -517,7 +516,14 @@ export const dbService = {
     customVersion: string | undefined,
     nodes: Node[],
     edges: Edge[],
-    cards: Record<string, { id: string; title: string; content: string; version?: string; deleted_at?: number | null }>,
+    cards: Record<string, {
+      id: string;
+      title: string;
+      content: string;
+      version?: string;
+      deleted_at?: number | null;
+      mediaLineage?: MediaCardLineage;
+    }>,
   ): Promise<BoardVersionSummary> {
     const snapshot: BoardVersionSnapshot = {
       nodes: toNodePayloads(nodes, cards),

@@ -584,7 +584,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
             librarySourceCardId: card.library_source_card_id ?? undefined,
             sourceDocumentId: card.document_id ?? undefined,
             sourceHighlightId: card.highlight_id ?? undefined,
-            mediaLineage: card.source_file_id !== null &&
+            mediaLineage: typeof card.source_file_id === "string" &&
               typeof card.start_time === "number" &&
               typeof card.end_time === "number"
               ? {

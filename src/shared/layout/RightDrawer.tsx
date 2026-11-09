@@ -17,6 +17,7 @@ import {
   Layers,
   History,
   Pencil,
+  Folder,
   Square,
   Type,
   Film,
@@ -586,7 +587,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
   const handleLibraryItemPointerDown = (e: React.PointerEvent, item: LibraryDragPreview) => {
     if (e.button !== 0) return;
     const targetButton = e.target instanceof Element ? e.target.closest("button") : null;
-    if (targetButton && targetButton.getAttribute("aria-label")?.startsWith("Open item group") !== true) return;
+    if (targetButton && targetButton.getAttribute("aria-label")?.startsWith("Open Library ") !== true) return;
     dragStartPos.current = { x: e.clientX, y: e.clientY };
     currentDraggingItemRef.current = item;
   };
@@ -1103,7 +1104,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                     <span>
                       {currentFilter === "all" ? "All"
                         : currentFilter === "cards" ? "Cards"
-                          : currentFilter === "item-groups" ? "Item Groups"
+                          : currentFilter === "item-groups" ? "Items & Groups"
                             : currentFilter === "media" ? "Media Notes" : "Trash"}
                     </span>
                     <ChevronDown size={14} />
@@ -1141,7 +1142,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                           }`}
                         >
                           <Layers size={14} />
-                          <span>Item Groups</span>
+                          <span>Items & Groups</span>
                         </button>
                         <button
                           onClick={() => { setCurrentFilter("media"); setSelectedCardId(null); setSelectedGroupId(null); setIsFilterMenuOpen(false); }}
@@ -1737,8 +1738,8 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                         setGroupError(null);
                       }}
                       className="absolute inset-0 z-0 rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
-                      aria-label={`Open item group ${group.name}`}
-                      title="Open item group preview"
+                      aria-label={`Open Library ${group.item_type} ${group.name}`}
+                      title={`Open Library ${group.item_type} preview`}
                     />
                     <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-2 pointer-events-none">
                       <div className="flex items-center justify-between border-b border-[#302b24] pb-1.5">
@@ -1784,7 +1785,12 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                         }`}
                         dir={groupTitleDir.isRtl ? "rtl" : "ltr"}
                       >
-                        <Layers size={14} className="shrink-0 text-amber-300" />
+                        {group.item_type === "item"
+                          ? <FileText size={14} className="shrink-0 text-violet-300" />
+                          : <Folder size={14} className="shrink-0 text-amber-300" />}
+                        <span className="rounded bg-white/5 px-1 py-0.5 text-[8px] font-medium uppercase tracking-wide text-zinc-400">
+                          {group.item_type}
+                        </span>
                         <span className="truncate">{groupTitleDir.cleanText || "Untitled"}</span>
                       </div>
                       <div className="flex min-h-0 flex-1 flex-col justify-center gap-1.5 overflow-hidden border-t border-[#302b24] pt-1.5">
@@ -1802,7 +1808,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
               {isLibraryEmpty && (
                 <p className="col-span-2 py-8 text-center text-xs text-zinc-500">
                   {currentFilter === "cards" ? "No cards found."
-                    : currentFilter === "item-groups" ? "No item groups found."
+                    : currentFilter === "item-groups" ? "No Library items or groups found."
                       : currentFilter === "trash" ? "Trash is empty." : "Library is empty."}
                 </p>
               )}
@@ -1813,4 +1819,4 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
       </aside>
     </>
   );
-};
+};  
