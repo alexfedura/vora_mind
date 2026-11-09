@@ -440,7 +440,9 @@ pub fn init_db(conn: &Connection) -> Result<()> {
          CREATE INDEX IF NOT EXISTS idx_text_links_source ON mind_text_links(source_board_id, source_card_id, source_field, source_start);
          CREATE INDEX IF NOT EXISTS idx_text_links_target ON mind_text_links(target_board_id, target_card_id, target_field, target_start);",
     )?;
-    crate::mind::media::migrate_file_references(conn).map_err(anyhow::Error::msg)?;
+    crate::mind::media::migrate_file_references(conn).map_err(|error| {
+        rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(error)))
+    })?;
     conn.execute(
         "INSERT OR IGNORE INTO library_item_group_versions
             (id, group_id, version, snapshot_json, created_at)

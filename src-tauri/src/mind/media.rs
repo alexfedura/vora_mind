@@ -6,7 +6,7 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::State;
+use tauri::{Manager, State};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
