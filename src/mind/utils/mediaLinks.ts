@@ -35,7 +35,7 @@ function escapeMarkdownLabel(label: string): string {
 
 export function createMediaMarkdownLink(slice: MediaSlice, source: MediaSource): string {
   if (
-    slice.source_id !== source.id ||
+    slice.file_id !== source.id ||
     !Number.isFinite(slice.start_seconds) ||
     !Number.isFinite(slice.end_seconds) ||
     slice.start_seconds < 0 ||

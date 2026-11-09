@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Copy,
   Film,
+  FolderOpen,
   Maximize,
   Pause,
   Play,
@@ -314,12 +315,28 @@ export function PlayerWorkspace({
           </button>
         </div>
         {(player.error || player.status) && (
-          <p
-            role={player.error ? "alert" : "status"}
-            className={`mt-2 text-xs ${player.error ? "text-rose-300" : "text-emerald-300"}`}
-          >
-            {player.error || player.status}
-          </p>
+          <div className="mt-2 flex items-center gap-3">
+            <p
+              role={player.error ? "alert" : "status"}
+              className={`min-w-0 flex-1 text-xs ${player.error ? "text-rose-300" : "text-emerald-300"}`}
+            >
+              {player.error || player.status}
+            </p>
+            {player.source && (
+              !player.source.is_available ||
+              /missing|not found|cannot access|failed to load/i.test(player.error ?? "")
+            ) && (
+              <button
+                type="button"
+                onClick={() => void player.locateMissingFile()}
+                disabled={player.isBusy}
+                className="flex shrink-0 items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-200 transition hover:bg-white/10 disabled:opacity-50"
+              >
+                <FolderOpen size={13} aria-hidden="true" />
+                Locate File
+              </button>
+            )}
+          </div>
         )}
         {player.linkPreview && (
           <div className="mt-2 flex gap-2">
