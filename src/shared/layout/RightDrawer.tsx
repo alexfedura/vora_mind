@@ -680,6 +680,11 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     && filteredGroups.length === 0
     && (currentFilter !== "trash" || filteredCards.length === 0)
     && !(isLibrarySearchLoading && (currentFilter === "all" || currentFilter === "cards"));
+  const mediaFilesForView = mediaFiles.files.filter((entry) =>
+    `${entry.file.original_name} ${entry.file.current_path} ${entry.slices.map((slice) => `${slice.title} ${slice.note}`).join(" ")}`
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase())
+  );
 
   const handleLibraryObjectClick = async (itemId: string): Promise<void> => {
     const item = libraryObjectsForView.find((candidate) => candidate.id === itemId);
@@ -699,6 +704,26 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
       }
     } catch (cause) {
       console.error("Could not open Library object:", cause);
+      setLibraryActionError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const openMediaFileAt = (
+    fileId: string,
+    mediaType: "audio" | "video",
+    startSeconds: number,
+  ): void => {
+    window.dispatchEvent(new CustomEvent("vora:open-player-with-media", {
+      detail: { fileId, mediaType, startSeconds },
+    }));
+  };
+
+  const handleLocateMediaFile = async (fileId: string): Promise<void> => {
+    try {
+      const selected = await open({ directory: true, multiple: false });
+      if (typeof selected === "string") await mediaFiles.locateFile(fileId, selected);
+    } catch (cause: unknown) {
+      console.error("Could not choose a search folder for the missing file:", cause);
       setLibraryActionError(cause instanceof Error ? cause.message : String(cause));
     }
   };
@@ -808,7 +833,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
       <aside className="w-[26rem] flex-shrink-0 bg-background flex flex-col z-30 shadow-2xl transition-all border-l border-[#2a2a2a] select-none">
         <div className="h-14 px-5 flex items-center justify-between border-b border-[#20242f] bg-[#111317]">
           <span className="text-sm font-bold text-gray-200 tracking-wide">
-            {activeCard ? "Card View" : activeGroup ? activeGroup.name : currentFilter === "trash" ? "Trash" : "Library"}
+            {activeCard ? "Card View" : activeGroup ? activeGroup.name : currentFilter === "trash" ? "Trash" : currentFilter === "media" ? "Media & Files" : "Library"}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -1075,7 +1100,8 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                     <span>
                       {currentFilter === "all" ? "All"
                         : currentFilter === "cards" ? "Cards"
-                          : currentFilter === "item-groups" ? "Item Groups" : "Trash"}
+                          : currentFilter === "item-groups" ? "Item Groups"
+                            : currentFilter === "media" ? "Media & Files" : "Trash"}
                     </span>
                     <ChevronDown size={14} />
                   </button>
@@ -1086,7 +1112,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                         className="fixed inset-0 z-40"
                         onClick={() => setIsFilterMenuOpen(false)}
                       />
-                      <div className="absolute top-9 left-0 w-40 bg-[#181a22] border border-[#2b303c] rounded-xl shadow-2xl py-1.5 z-50 flex flex-col text-sm">
+                      <div className="absolute top-9 left-0 w-44 bg-[#181a22] border border-[#2b303c] rounded-xl shadow-2xl py-1.5 z-50 flex flex-col text-sm">
                         <button
                           onClick={() => { setCurrentFilter("all"); setSelectedCardId(null); setSelectedGroupId(null); setIsFilterMenuOpen(false); }}
                           className={`flex items-center gap-2.5 px-3.5 py-2 transition text-left font-medium ${
@@ -1113,6 +1139,15 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                         >
                           <Layers size={14} />
                           <span>Item Groups</span>
+                        </button>
+                        <button
+                          onClick={() => { setCurrentFilter("media"); setSelectedCardId(null); setSelectedGroupId(null); setIsFilterMenuOpen(false); }}
+                          className={`flex items-center gap-2.5 px-3.5 py-2 transition text-left font-medium ${
+                            currentFilter === "media" ? "bg-[#252a37] text-white" : "hover:bg-[#222734] text-gray-300 hover:text-white"
+                          }`}
+                        >
+                          <Film size={14} />
+                          <span>Media &amp; Files</span>
                         </button>
                         <button
                           onClick={() => { setCurrentFilter("trash"); setSelectedCardId(null); setSelectedGroupId(null); setIsFilterMenuOpen(false); }}
