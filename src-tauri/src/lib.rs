@@ -972,7 +972,6 @@ fn update_object_review_status(
 
 #[tauri::command]
 fn import_document(
-    app: tauri::AppHandle,
     state: State<AppState>,
     file_path: String,
     file_type: String,
@@ -1000,45 +999,19 @@ fn import_document(
         .filter(|value| !value.trim().is_empty())
         .unwrap_or("Untitled document")
         .to_string();
-    let documents_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Could not resolve application data directory: {error}"))?
-        .join("documents");
-    fs::create_dir_all(&documents_dir)
-        .map_err(|error| format!("Could not create document storage: {error}"))?;
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    let file = mind::media::ensure_file_reference(&conn, &source, Some(&file_type))?;
     let document_id = format!("document_{}", uuid::Uuid::now_v7());
-    let destination = documents_dir.join(format!("{}.{}", document_id, extension));
-    fs::copy(&source, &destination).map_err(|error| {
-        format!("Could not copy document into application storage: {error}")
-    })?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|error| error.to_string())?
         .as_millis() as i64;
-    let insert_result = state
-        .db
-        .lock()
-        .map_err(|error| error.to_string())?
-        .execute(
-            "INSERT INTO documents (id, title, file_path, file_type, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-            rusqlite::params![
-                document_id,
-                title,
-                destination.to_string_lossy(),
-                file_type,
-                now
-            ],
-        );
-    if let Err(error) = insert_result {
-        if let Err(cleanup_error) = fs::remove_file(&destination) {
-            return Err(format!(
-                "Could not register imported document: {error}; could not remove copied file: {cleanup_error}"
-            ));
-        }
-        return Err(format!("Could not register imported document: {error}"));
-    }
+    conn.execute(
+        "INSERT INTO documents (id, title, file_id, file_type, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+        rusqlite::params![document_id, title, file.id, file_type, now],
+    )
+    .map_err(|error| format!("Could not register imported document: {error}"))?;
     Ok(document_id)
 }
 
@@ -1069,7 +1042,6 @@ fn get_documents(state: State<AppState>) -> Result<Vec<mind::canvas_db::Document
 
 #[tauri::command]
 fn get_document_content(
-    app: tauri::AppHandle,
     state: State<AppState>,
     document_id: String,
 ) -> Result<Vec<u8>, String> {
@@ -1078,25 +1050,15 @@ fn get_document_content(
         .lock()
         .map_err(|error| error.to_string())?
         .query_row(
-            "SELECT file_path FROM documents WHERE id = ?1",
+            "SELECT files.current_path
+             FROM documents
+             JOIN vora_files AS files ON files.id = documents.file_id
+             WHERE documents.id = ?1",
             [&document_id],
             |row| row.get(0),
         )
         .map_err(|error| format!("Could not find imported document: {error}"))?;
-    let path = PathBuf::from(file_path)
-        .canonicalize()
-        .map_err(|error| format!("Could not access imported document: {error}"))?;
-    let documents_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Could not resolve application data directory: {error}"))?
-        .join("documents")
-        .canonicalize()
-        .map_err(|error| format!("Could not access document storage: {error}"))?;
-    if !path.starts_with(&documents_dir) {
-        return Err("Document path is outside application document storage.".to_string());
-    }
-    fs::read(&path).map_err(|error| format!("Could not read imported document: {error}"))
+    fs::read(&file_path).map_err(|error| format!("Could not read document {file_path}: {error}"))
 }
 
 #[tauri::command]
@@ -2481,7 +2443,6 @@ pub fn run() {
             create_text_link,
             delete_text_link,
             save_card_direct,
-            import_media_file,
             move_card_to_bin,
             restore_card_from_bin,
             parse_code_ast,
@@ -2555,6 +2516,10 @@ pub fn run() {
             crate::market::ipc::mkt_delete_drawing_alerts_for_drawings,
             crate::market::ipc::mkt_list_pivots,
             mind::media::register_media_source,
+            mind::media::import_file_reference,
+            mind::media::get_vora_file,
+            mind::media::resolve_missing_file,
+            mind::media::list_media_files,
             mind::media::get_media_source,
             mind::media::get_last_media_source,
             mind::media::validate_media_source,
