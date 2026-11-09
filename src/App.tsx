@@ -2239,11 +2239,19 @@ function AppContent() {
         start: detail.start,
         end: detail.end,
       };
-      setCanvasNodeContextMenu({ x: detail.x, y: detail.y, textLinkSelection: selection });
+      const canvasNode = getNodes().find((node) =>
+        node.id === detail.cardId || node.data.cardId === detail.cardId,
+      );
+      setCanvasNodeContextMenu({
+        x: detail.x,
+        y: detail.y,
+        nodeId: canvasNode?.id,
+        textLinkSelection: selection,
+      });
     };
     window.addEventListener("vora:open-text-context-menu", handleTextContextMenu);
     return () => window.removeEventListener("vora:open-text-context-menu", handleTextContextMenu);
-  }, [canvasBoardId, libraryBoardSession]);
+  }, [canvasBoardId, getNodes, libraryBoardSession]);
 
   const canvasShapePoint = (event: React.PointerEvent<HTMLDivElement>): CanvasShapePoint | null => {
     const bounds = flow.reactFlowWrapper.current?.getBoundingClientRect();

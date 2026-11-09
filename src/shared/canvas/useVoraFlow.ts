@@ -703,6 +703,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
       id: node.id,
       type: node.node_type,
       position: { x: node.x, y: node.y },
+      zIndex: node.zIndex,
       width: node.width,
       height: node.height,
       style: restoreNodeStyle(node.style),
