@@ -1006,10 +1006,34 @@ fn import_document(
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|error| error.to_string())?
         .as_millis() as i64;
+    let existing_document_id = conn
+        .query_row(
+            "SELECT id FROM documents WHERE file_path = ?1",
+            [&file.current_path],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    if let Some(document_id) = existing_document_id {
+        conn.execute(
+            "UPDATE documents SET title = ?1, file_id = ?2, file_type = ?3, updated_at = ?4
+             WHERE id = ?5",
+            rusqlite::params![title, file.id, file_type, now, document_id],
+        )
+        .map_err(|error| format!("Could not update imported document: {error}"))?;
+        return Ok(document_id);
+    }
     conn.execute(
-        "INSERT INTO documents (id, title, file_id, file_type, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-        rusqlite::params![document_id, title, file.id, file_type, now],
+        "INSERT INTO documents (id, title, file_path, file_id, file_type, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+        rusqlite::params![
+            document_id,
+            title,
+            file.current_path,
+            file.id,
+            file_type,
+            now
+        ],
     )
     .map_err(|error| format!("Could not register imported document: {error}"))?;
     Ok(document_id)
