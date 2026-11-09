@@ -380,6 +380,34 @@ mod tests {
             })
             .unwrap();
         assert_eq!(object_type, "shape");
+
+        let updated_snapshot_id = save_semantic_snapshot(
+            &mut connection,
+            "board-1".to_string(),
+            "updated layer".to_string(),
+            Some(snapshot_id),
+            None,
+            None,
+            vec![NodeInput {
+                id: "path-1".to_string(),
+                node_type: "voraShape".to_string(),
+                title: "Path".to_string(),
+                content: String::new(),
+                version: "v1".to_string(),
+                data: shape_data,
+                x: 42.0,
+                y: 84.0,
+                width: Some(240.0),
+                height: Some(160.0),
+                z_index: Some(12),
+                style: None,
+            }],
+            Vec::new(),
+        )
+        .unwrap();
+        let updated = SnapshotResolver::resolve(&connection, "board-1", &updated_snapshot_id)
+            .unwrap();
+        assert_eq!(updated.placements.get("path-1").unwrap().z_index, 12);
     }
 
     #[test]
