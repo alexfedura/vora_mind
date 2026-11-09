@@ -77,6 +77,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
       const fileType = getFileType(selected);
       if (!fileType) throw new Error("Choose a PDF, DOCX, or Markdown file.");
       const newDocumentId = await dbService.importDocument(selected, fileType);
+      window.dispatchEvent(new CustomEvent("vora:file-reference-updated"));
       await reloadDocuments();
       setSelectedDocumentId(newDocumentId);
       setJumpToHighlightId(null);

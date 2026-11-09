@@ -22,7 +22,17 @@ export function useMediaFiles(active: boolean) {
   }, []);
 
   useEffect(() => {
-    if (active) void refresh();
+    if (!active) return;
+    const handleFileUpdate = (): void => {
+      void refresh();
+    };
+    window.addEventListener("vora:file-reference-updated", handleFileUpdate);
+    window.addEventListener("vora:media-slices-changed", handleFileUpdate);
+    void refresh();
+    return () => {
+      window.removeEventListener("vora:file-reference-updated", handleFileUpdate);
+      window.removeEventListener("vora:media-slices-changed", handleFileUpdate);
+    };
   }, [active, refresh]);
 
   const locateFile = useCallback(async (fileId: string, searchDir: string): Promise<void> => {

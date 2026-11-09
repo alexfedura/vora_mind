@@ -908,6 +908,9 @@ function AppContent() {
 
     const fileId = await dbService.importFileReference(sourcePath);
     const file = await dbService.getVoraFile(fileId);
+    window.dispatchEvent(new CustomEvent("vora:file-reference-updated", {
+      detail: { fileId },
+    }));
     setIsDiagramPaletteOpen(false);
     setIsAddCardToolActive(false);
     setIsTextToolActive(false);

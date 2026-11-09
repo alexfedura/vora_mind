@@ -38,6 +38,9 @@ export function useMediaFileReference(
           window.dispatchEvent(new CustomEvent("vora:attach-media-file-reference", {
             detail: { nodeId, fileId },
           }));
+          window.dispatchEvent(new CustomEvent("vora:file-reference-updated", {
+            detail: { fileId },
+          }));
         }
         const [file, slices] = await Promise.all([
           dbService.getVoraFile(fileId),
