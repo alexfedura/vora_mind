@@ -93,22 +93,17 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
         )
       ) : data.type === "video" ? (
         source ? (
-          <div className="flex h-full w-full flex-col gap-1 overflow-hidden rounded-xl p-2">
-            <div className="truncate text-xs font-medium text-zinc-200" title={data.fileName}>
-              {data.fileName}
-            </div>
-            <div className="relative min-h-0 flex-1">
-              <video
-                ref={videoRef}
-                preload="metadata"
-                src={source}
-                onClick={handleVideoClick}
-                onDoubleClick={handleVideoDoubleClick}
-                className="nodrag nowheel h-full w-full object-contain"
-              >
-                Your browser does not support video playback.
-              </video>
-            </div>
+          <div className="h-full w-full overflow-hidden rounded-xl">
+            <video
+              ref={videoRef}
+              preload="metadata"
+              src={source}
+              onClick={handleVideoClick}
+              onDoubleClick={handleVideoDoubleClick}
+              className="nodrag nowheel h-full w-full object-contain"
+            >
+              Your browser does not support video playback.
+            </video>
           </div>
         ) : (
           <div className="flex h-full items-center justify-center p-4 text-center text-xs text-rose-200">
