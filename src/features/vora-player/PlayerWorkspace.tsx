@@ -22,6 +22,7 @@ interface PlayerWorkspaceProps {
   active: boolean;
   request: MediaPlayerRequest | null;
   onReturnToBoard: () => void;
+  onCreateCardFromSlice: (slice: MediaSlice, fileId: string) => Promise<void>;
 }
 
 function mediaFileName(path: string): string {
@@ -32,9 +33,12 @@ export function PlayerWorkspace({
   active,
   request,
   onReturnToBoard,
+  onCreateCardFromSlice,
 }: PlayerWorkspaceProps) {
   const player = useMediaPlayer(active, request);
   const [seekValue, setSeekValue] = useState(0);
+  const [sliceActionMessage, setSliceActionMessage] = useState<string | null>(null);
+  const [sliceActionError, setSliceActionError] = useState<string | null>(null);
   const seekingRef = useRef(false);
   const playerRef = useRef(player);
   playerRef.current = player;
@@ -91,6 +95,33 @@ export function PlayerWorkspace({
 
   const saveDraft = (): void => {
     void player.saveReference();
+  };
+
+  const copyLineage = async (slice: MediaSlice): Promise<void> => {
+    if (!player.source) return;
+    setSliceActionMessage(null);
+    setSliceActionError(null);
+    const link = `vora://media/${encodeURIComponent(player.source.id)}?t=${encodeURIComponent(String(slice.start_seconds))}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setSliceActionMessage("Lineage link copied.");
+    } catch (cause: unknown) {
+      console.error("Could not copy the media lineage link:", cause);
+      setSliceActionError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const createSliceCard = async (slice: MediaSlice): Promise<void> => {
+    if (!player.source) return;
+    setSliceActionMessage(null);
+    setSliceActionError(null);
+    try {
+      await onCreateCardFromSlice(slice, player.source.id);
+      setSliceActionMessage("Card added to the current Board.");
+    } catch (cause: unknown) {
+      console.error("Could not send media slice to the Library:", cause);
+      setSliceActionError(cause instanceof Error ? cause.message : String(cause));
+    }
   };
 
   return (
@@ -172,6 +203,14 @@ export function PlayerWorkspace({
             New reference
           </button>
         </div>
+        {(sliceActionMessage || sliceActionError) && (
+          <p
+            role={sliceActionError ? "alert" : "status"}
+            className={`border-b border-white/10 px-4 py-2 text-xs ${sliceActionError ? "text-rose-300" : "text-emerald-300"}`}
+          >
+            {sliceActionError || sliceActionMessage}
+          </p>
+        )}
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {player.slices.length === 0 ? (
             <p className="px-3 py-6 text-center text-sm text-zinc-400">
@@ -194,7 +233,7 @@ export function PlayerWorkspace({
                 </span>
               </button>
               {slice.note && <p className="mt-2 whitespace-pre-wrap text-xs text-zinc-300">{slice.note}</p>}
-              <div className="mt-2 flex gap-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => void player.copyReferenceLink(slice)}
@@ -202,6 +241,24 @@ export function PlayerWorkspace({
                 >
                   <Copy size={13} aria-hidden="true" />
                   Copy Markdown link
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyLineage(slice)}
+                  disabled={!player.source}
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-300 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+                  title="Copy a Vora deep link to this timestamp"
+                >
+                  <Copy size={13} aria-hidden="true" />
+                  Lineage
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void createSliceCard(slice)}
+                  disabled={!player.source || player.isBusy}
+                  className="rounded-md bg-violet-600/80 px-2 py-1 text-xs font-medium text-white transition hover:bg-violet-500 disabled:opacity-40"
+                >
+                  Send to Library
                 </button>
                 <button
                   type="button"

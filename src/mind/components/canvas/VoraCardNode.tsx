@@ -8,6 +8,7 @@ import {
   Tag,
   Info,
   Trash2,
+  Film,
 } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
 import { createTextChangeSet, dbService } from "@/mind/services/dbService";
@@ -16,6 +17,7 @@ import { renderMarkdown } from "@/features/markdown-editor/markdown/renderer";
 import { useDocumentStore } from "@/features/file-store/useDocumentStore";
 import { TextLinkPicker } from "./TextLinkPicker";
 import type { TextLink } from "@/mind/types";
+import { formatMediaTime } from "@/mind/utils/mediaLinks";
 
 const resolveTextDirection = (text: string, defaultMajorRtl: boolean): { isRtl: boolean; cleanText: string } => {
   const trimmed = text.trim();
@@ -323,6 +325,27 @@ export const VoraCardNode = memo(({ id, selected, data }: NodeProps) => {
       <Handle type="target" position={Position.Right} id="target-right" className="!w-3 !h-3 !-right-1.5 !opacity-0" />
       <Handle type="target" position={Position.Top} id="target-top" className="!w-3 !h-3 !-top-1.5 !opacity-0" />
       <Handle type="target" position={Position.Bottom} id="target-bottom" className="!w-3 !h-3 !-bottom-1.5 !opacity-0" />
+      {card.mediaLineage && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            window.dispatchEvent(new CustomEvent("vora:open-player-lab", {
+              detail: {
+                file_id: card.mediaLineage?.source_file_id,
+                mediaType: "video",
+                start_time: card.mediaLineage?.start_time,
+              },
+            }));
+          }}
+          title={`Open source video at ${formatMediaTime(card.mediaLineage.start_time)}`}
+          aria-label={`Open source video at ${formatMediaTime(card.mediaLineage.start_time)}`}
+          className="nodrag nowheel absolute right-4 top-4 z-20 flex items-center gap-1 rounded-full border border-violet-300/30 bg-[#171323]/90 px-2 py-1 text-[10px] font-medium text-violet-100 shadow-lg transition hover:bg-violet-600"
+        >
+          <Film size={12} aria-hidden="true" />
+          Video
+        </button>
+      )}
 
       {/* نوار ابزار بالای کارت */}
       <div className={`w-full min-h-[26px] flex items-center justify-between select-none transition-opacity ${selected ? "opacity-100" : "opacity-0 pointer-events-none"}`}>

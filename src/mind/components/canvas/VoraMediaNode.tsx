@@ -1,7 +1,7 @@
 import { memo, useRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from "@xyflow/react";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Play } from "lucide-react";
 import { useMediaFileReference } from "@/hooks/useMediaFileReference";
 import type { VoraMediaData } from "@/mind/types";
 
@@ -13,17 +13,18 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const openPlayer = (startSeconds: number | null = null): void => {
-    window.dispatchEvent(new CustomEvent("vora:open-player-with-media", {
+    window.dispatchEvent(new CustomEvent("vora:open-player-lab", {
       detail: {
-        fileId: file.fileId,
+        file_id: file.fileId,
         filePath: file.filePath,
         mediaType: data.type,
-        startSeconds,
+        start_time: startSeconds,
       },
     }));
   };
 
-  const handleVideoClick = (): void => {
+  const handleVideoClick = (event: React.MouseEvent<HTMLVideoElement>): void => {
+    if (event.detail !== 1) return;
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
@@ -42,7 +43,7 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
   };
 
   return (
-    <div className="relative h-full w-full rounded-xl border border-white/10 bg-[#17191f] shadow-xl shadow-black/30">
+    <div className="group relative h-full w-full rounded-xl border border-white/10 bg-[#17191f] shadow-xl shadow-black/30">
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -97,6 +98,7 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
             <video
               ref={videoRef}
               preload="metadata"
+              playsInline
               src={source}
               onClick={handleVideoClick}
               onDoubleClick={handleVideoDoubleClick}
@@ -104,6 +106,11 @@ export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNo
             >
               Your browser does not support video playback.
             </video>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/25 bg-black/55 text-white shadow-lg backdrop-blur-sm">
+                <Play size={20} fill="currentColor" aria-hidden="true" />
+              </span>
+            </div>
           </div>
         ) : (
           <div className="flex h-full items-center justify-center p-4 text-center text-xs text-rose-200">

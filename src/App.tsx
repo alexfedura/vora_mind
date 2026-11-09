@@ -65,6 +65,7 @@ import {
   type TextLinkSelection,
   type VoraPathSegment,
   type VoraDiagramShape,
+  type MediaSlice,
   VORA_DIAGRAM_SHAPE_LABELS,
   type VoraMediaData,
 } from "./mind/types";
@@ -410,6 +411,7 @@ function AppContent() {
     toggleRightDrawer,
     isRightDrawerOpen,
     addCard,
+    createCardFromMediaSlice,
     updateCardVersion,
     cards,
     libraryObjects,
@@ -474,24 +476,32 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    const handleOpenPlayerWithMedia = (event: Event): void => {
+    const handleOpenPlayer = (event: Event): void => {
       if (!(event instanceof CustomEvent) || !isRecord(event.detail)) return;
-      const { fileId, filePath, mediaType, startSeconds } = event.detail;
+      const { file_id, fileId, filePath, mediaType, start_time, startSeconds } = event.detail;
+      const resolvedFileId = typeof file_id === "string"
+        ? file_id
+        : typeof fileId === "string" ? fileId : null;
+      const resolvedMediaType = mediaType === "audio" || mediaType === "video"
+        ? mediaType
+        : null;
       if (
-        (typeof fileId !== "string" && typeof filePath !== "string") ||
-        (mediaType !== "image" && mediaType !== "audio" && mediaType !== "video")
+        (!resolvedFileId && typeof filePath !== "string") ||
+        !resolvedMediaType
       ) return;
 
       mediaPlayerRequestId.current += 1;
       setMediaPlayerRequest({
         requestId: mediaPlayerRequestId.current,
         payload: null,
-        fileId: typeof fileId === "string" ? fileId : null,
+        fileId: resolvedFileId,
         filePath: typeof filePath === "string" ? filePath : null,
-        mediaType,
-        startSeconds: typeof startSeconds === "number" && Number.isFinite(startSeconds) && startSeconds >= 0
-          ? startSeconds
-          : null,
+        mediaType: resolvedMediaType,
+        startSeconds: typeof start_time === "number" && Number.isFinite(start_time) && start_time >= 0
+          ? start_time
+          : typeof startSeconds === "number" && Number.isFinite(startSeconds) && startSeconds >= 0
+            ? startSeconds
+            : null,
         error: null,
       });
       setIsTaskFlowOpen(false);
@@ -503,8 +513,12 @@ function AppContent() {
       setActiveOpenPanel("none");
     };
 
-    window.addEventListener("vora:open-player-with-media", handleOpenPlayerWithMedia);
-    return () => window.removeEventListener("vora:open-player-with-media", handleOpenPlayerWithMedia);
+    window.addEventListener("vora:open-player-with-media", handleOpenPlayer);
+    window.addEventListener("vora:open-player-lab", handleOpenPlayer);
+    return () => {
+      window.removeEventListener("vora:open-player-with-media", handleOpenPlayer);
+      window.removeEventListener("vora:open-player-lab", handleOpenPlayer);
+    };
   }, []);
 
   useEffect(() => {
@@ -662,6 +676,10 @@ function AppContent() {
   }, [flow.saveHistorySnapshot, flow.setNodes]);
 
   const selectedNodes = useMemo(() => flow.nodes.filter((node) => node.selected), [flow.nodes]);
+  const activeBoardMediaFileIds = useMemo(() => [...new Set(flow.nodes.flatMap((node) => {
+    if (node.type !== "voraMedia" || !isRecord(node.data)) return [];
+    return typeof node.data.fileId === "string" ? [node.data.fileId] : [];
+  }))], [flow.nodes]);
   const selectedGroupIds = useMemo(
     () => new Set([
       ...selectedNodes.map(getCanvasGroupId).filter((groupId): groupId is string => groupId !== null),
@@ -670,6 +688,45 @@ function AppContent() {
     [activeCanvasGroupId, selectedNodes]
   );
   const { screenToFlowPosition, getViewport, setViewport, setCenter, getNodes, fitView } = useReactFlow();
+
+  const handleCreateMediaSliceCard = async (slice: MediaSlice, fileId: string): Promise<void> => {
+    if (!canvasBoardId || libraryBoardSession) {
+      throw new Error("Select a regular Board before sending a media slice to the Library.");
+    }
+
+    flow.saveHistorySnapshot(true);
+    const mediaLineage = {
+      source_file_id: fileId,
+      start_time: slice.start_seconds,
+      end_time: slice.end_seconds,
+    };
+    const { id, boardId } = await createCardFromMediaSlice(slice.title, slice.note, mediaLineage);
+    if (boardId !== canvasBoardId) {
+      throw new Error("The active Board changed before the media card could be placed.");
+    }
+
+    const position = screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    flow.setNodes((nodes) => [
+      ...nodes.map((node) => ({ ...node, selected: false })),
+      {
+        id,
+        type: "voraCard",
+        position: { x: position.x - 176, y: position.y },
+        width: 352,
+        selected: true,
+        data: {
+          cardId: id,
+          label: slice.title,
+          title: slice.title,
+          content: slice.note,
+          version: "v0.1.0",
+        },
+      },
+    ]);
+  };
 
   const handleGeneratedBoard = (graphJson: string): void => {
     if (!canvasBoardId || libraryBoardSession) {
@@ -3285,6 +3342,7 @@ function AppContent() {
           active={isPlayerOpen}
           request={mediaPlayerRequest}
           onReturnToBoard={() => setIsPlayerOpen(false)}
+          onCreateCardFromSlice={handleCreateMediaSliceCard}
         />
         {isPlayerOpen ? null : isDocumentWorkspaceOpen ? (
           <DocumentWorkspace
@@ -3790,6 +3848,7 @@ function AppContent() {
         onOpenLibraryBoard={handleOpenLibraryBoard}
         onSelectBoard={handleSelectBoard}
         onOpenDocuments={handleOpenDocuments}
+        mediaFileIds={activeBoardMediaFileIds}
       />}
 
       {/* سایدبار تحلیل هوشمند کد (Forge AI Agent) */}

@@ -336,6 +336,7 @@ interface RightDrawerProps {
   ) => Promise<void>;
   onSelectBoard: (boardId: string) => Promise<void>;
   onOpenDocuments: (documentId?: string, highlightId?: string) => void;
+  mediaFileIds: string[];
 }
 
 export const RightDrawer: React.FC<RightDrawerProps> = ({
@@ -353,6 +354,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
   onOpenLibraryBoard,
   onSelectBoard,
   onOpenDocuments,
+  mediaFileIds,
 }) => {
   const {
     isRightDrawerOpen,
@@ -681,6 +683,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     && (currentFilter !== "trash" || filteredCards.length === 0)
     && !(isLibrarySearchLoading && (currentFilter === "all" || currentFilter === "cards"));
   const mediaFilesForView = mediaFiles.files.filter((entry) =>
+    mediaFileIds.includes(entry.file.id) &&
     `${entry.file.original_name} ${entry.file.current_path} ${entry.slices.map((slice) => `${slice.title} ${slice.note}`).join(" ")}`
       .toLowerCase()
       .includes(searchQuery.toLowerCase())
@@ -713,8 +716,8 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     mediaType: "audio" | "video",
     startSeconds: number,
   ): void => {
-    window.dispatchEvent(new CustomEvent("vora:open-player-with-media", {
-      detail: { fileId, mediaType, startSeconds },
+    window.dispatchEvent(new CustomEvent("vora:open-player-lab", {
+      detail: { file_id: fileId, mediaType, start_time: startSeconds },
     }));
   };
 
@@ -833,7 +836,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
       <aside className="w-[26rem] flex-shrink-0 bg-background flex flex-col z-30 shadow-2xl transition-all border-l border-[#2a2a2a] select-none">
         <div className="h-14 px-5 flex items-center justify-between border-b border-[#20242f] bg-[#111317]">
           <span className="text-sm font-bold text-gray-200 tracking-wide">
-            {activeCard ? "Card View" : activeGroup ? activeGroup.name : currentFilter === "trash" ? "Trash" : currentFilter === "media" ? "Media & Files" : "Library"}
+            {activeCard ? "Card View" : activeGroup ? activeGroup.name : currentFilter === "trash" ? "Trash" : currentFilter === "media" ? "Media Notes" : "Library"}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -1101,7 +1104,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                       {currentFilter === "all" ? "All"
                         : currentFilter === "cards" ? "Cards"
                           : currentFilter === "item-groups" ? "Item Groups"
-                            : currentFilter === "media" ? "Media & Files" : "Trash"}
+                            : currentFilter === "media" ? "Media Notes" : "Trash"}
                     </span>
                     <ChevronDown size={14} />
                   </button>
@@ -1147,7 +1150,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                           }`}
                         >
                           <Film size={14} />
-                          <span>Media &amp; Files</span>
+                          <span>Media Notes</span>
                         </button>
                         <button
                           onClick={() => { setCurrentFilter("trash"); setSelectedCardId(null); setSelectedGroupId(null); setIsFilterMenuOpen(false); }}
@@ -1365,7 +1368,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
 
             {currentFilter === "media" ? (
               <div className="mx-5 mb-4 flex items-center gap-2 rounded-lg border border-[#272b36] bg-[#14171d] px-3 py-2 text-xs text-zinc-400">
-                <span className="min-w-0 flex-1">Files stay at their original paths. Search notes, then open a timestamp or locate a missing file.</span>
+                <span className="min-w-0 flex-1">Notes from media nodes on this Board. Open a timestamp or locate a missing file.</span>
                 <button
                   type="button"
                   onClick={() => void mediaFiles.refresh()}
@@ -1427,7 +1430,11 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                 {mediaFiles.isLoading && <p className="py-4 text-center text-xs text-zinc-500">Loading files...</p>}
                 {!mediaFiles.isLoading && mediaFilesForView.length === 0 && (
                   <p className="py-8 text-center text-xs text-zinc-500">
-                    {mediaFiles.files.length === 0 ? "No files have been referenced yet." : "No files match your search."}
+                    {mediaFileIds.length === 0
+                      ? "This Board has no media nodes."
+                      : mediaFiles.files.length === 0
+                        ? "No files have been referenced yet."
+                        : "No notes match your search."}
                   </p>
                 )}
                 {mediaFilesForView.map((entry) => {
@@ -1503,13 +1510,10 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                               }}
                               className="block w-full rounded-md px-2 py-1.5 text-left transition hover:bg-white/5 disabled:cursor-default"
                             >
-                              <span className="flex items-center justify-between gap-2">
-                                <span className="min-w-0 truncate text-xs font-medium text-zinc-200">{slice.title}</span>
-                                <span className="shrink-0 font-mono text-[10px] text-violet-200">
-                                  {formatMediaTime(slice.start_seconds)}
-                                </span>
+                              <span className="block truncate text-xs font-medium text-zinc-200">
+                                {entry.file.original_name} - {formatMediaTime(slice.start_seconds)} - {slice.note || slice.title}
                               </span>
-                              {slice.note && <span className="mt-1 block whitespace-pre-wrap text-[10px] leading-relaxed text-zinc-400">{slice.note}</span>}
+                              {slice.note && <span className="mt-1 block truncate text-[10px] leading-relaxed text-zinc-400">{slice.title}</span>}
                             </button>
                           ))}
                         </div>
