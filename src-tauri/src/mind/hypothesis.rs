@@ -544,7 +544,9 @@ fn graduate_to_library_in_db(
             &transaction,
             &name,
             "0.1.0",
+            "item",
             LibraryItemGroupSnapshot {
+                item_type: "item".to_string(),
                 nodes: vec![node],
                 edges: Vec::new(),
                 cards: Vec::new(),

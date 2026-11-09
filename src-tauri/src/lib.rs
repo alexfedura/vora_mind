@@ -888,10 +888,11 @@ fn create_library_item_group(
     state: State<AppState>,
     name: String,
     version: String,
+    item_type: String,
     snapshot: mind::library_groups::LibraryItemGroupSnapshot,
 ) -> Result<mind::library_groups::LibraryItemGroup, String> {
     let mut conn = state.db.lock().map_err(|e| e.to_string())?;
-    mind::library_groups::create_item_group(&mut conn, &name, &version, snapshot)
+    mind::library_groups::create_item_group(&mut conn, &name, &version, &item_type, snapshot)
         .map_err(|error| error.to_string())
 }
 

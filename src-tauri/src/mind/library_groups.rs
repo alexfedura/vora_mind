@@ -525,6 +525,7 @@ mod tests {
 
     fn sample_snapshot() -> super::LibraryItemGroupSnapshot {
         super::LibraryItemGroupSnapshot {
+            item_type: "group".to_string(),
             nodes: vec![NodeInput {
                 id: "node-a".to_string(),
                 node_type: "voraText".to_string(),
@@ -561,7 +562,8 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
         let created =
-            create_item_group(&mut conn, "Shared group", "0.1.0", sample_snapshot()).unwrap();
+            create_item_group(&mut conn, "Shared group", "0.1.0", "group", sample_snapshot())
+                .unwrap();
 
         let groups = list_item_groups(&conn).unwrap();
         assert_eq!(groups.len(), 1);
@@ -599,7 +601,8 @@ mod tests {
     fn definition_selection_lists_each_available_version_and_skips_trashed_groups() {
         let mut conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
-        let created = create_item_group(&mut conn, "Flag", "0.1.0", sample_snapshot()).unwrap();
+        let created =
+            create_item_group(&mut conn, "Flag", "0.1.0", "group", sample_snapshot()).unwrap();
         let versions = list_item_group_versions(&conn, &created.id).unwrap();
 
         let definitions = list_definitions_for_selection(&conn).unwrap();
@@ -617,8 +620,14 @@ mod tests {
     fn path_segment_usages_report_only_current_ordinary_board_locations() {
         let mut conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
-        let group =
-            create_item_group(&mut conn, "Path section", "0.1.0", sample_snapshot()).unwrap();
+        let group = create_item_group(
+            &mut conn,
+            "Path section",
+            "0.1.0",
+            "group",
+            sample_snapshot(),
+        )
+        .unwrap();
         let board = create_board(&mut conn, "Active Board", 1, "board-active").unwrap();
         let referenced_group_id = group.id.clone();
         let path_node = NodeInput {
@@ -682,8 +691,14 @@ mod tests {
     fn group_versions_are_immutable_and_version_labels_must_be_unique() {
         let mut conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
-        let created =
-            create_item_group(&mut conn, "Versioned group", "0.1.0", sample_snapshot()).unwrap();
+        let created = create_item_group(
+            &mut conn,
+            "Versioned group",
+            "0.1.0",
+            "group",
+            sample_snapshot(),
+        )
+        .unwrap();
         let mut next_snapshot = sample_snapshot();
         next_snapshot.nodes[0].data = json!({"text": "updated"});
         let updated =
@@ -741,8 +756,9 @@ mod tests {
     fn group_creation_rejects_invalid_version_and_empty_selection() {
         let mut conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
-        assert!(create_item_group(&mut conn, "Group", "0.1", sample_snapshot()).is_err());
+        assert!(create_item_group(&mut conn, "Group", "0.1", "group", sample_snapshot()).is_err());
         let empty = super::LibraryItemGroupSnapshot {
+            item_type: "group".to_string(),
             nodes: Vec::new(),
             edges: Vec::new(),
             cards: Vec::new(),
