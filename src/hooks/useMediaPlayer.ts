@@ -364,19 +364,52 @@ export function useMediaPlayer(
   const togglePlayback = async (): Promise<void> => {
     if (!source) return;
     await run(async () => {
-      if (isPlaying) await dbService.playerPause();
-      else await dbService.playerPlay();
-      setIsPlaying(!isPlaying);
+      if (isPlaying) {
+        if (rangeCheckIntervalRef.current !== null) {
+          window.clearInterval(rangeCheckIntervalRef.current);
+          rangeCheckIntervalRef.current = null;
+        }
+        try {
+          await dbService.playerPause();
+          setIsPlaying(false);
+        } finally {
+          setRangeCheckVersion((version) => version + 1);
+        }
+      } else {
+        await dbService.playerPlay();
+        setIsPlaying(true);
+      }
     });
   };
 
-  const seekTo = async (seconds: number): Promise<void> => {
+  const seekTo = async (seconds: number, rangeOverride?: MediaPlaybackRange): Promise<void> => {
     if (!source || !Number.isFinite(seconds)) return;
-    const bounded = Math.max(0, duration > 0 ? Math.min(seconds, duration) : seconds);
+    const range = rangeOverride ?? playbackRange;
+    const sourceBounded = Math.max(0, duration > 0 ? Math.min(seconds, duration) : seconds);
+    const bounded = range
+      ? Math.min(range.endSeconds, Math.max(range.startSeconds, sourceBounded))
+      : sourceBounded;
     await run(async () => {
-      await dbService.playerSeek(bounded);
-      setPosition(bounded);
+      if (rangeCheckIntervalRef.current !== null) {
+        window.clearInterval(rangeCheckIntervalRef.current);
+        rangeCheckIntervalRef.current = null;
+      }
+      try {
+        await dbService.playerSeek(bounded);
+        setPosition(bounded);
+      } finally {
+        setRangeCheckVersion((version) => version + 1);
+      }
     });
+  };
+
+  const selectReference = async (slice: MediaSlice): Promise<void> => {
+    const range = {
+      startSeconds: slice.start_seconds,
+      endSeconds: slice.end_seconds,
+    };
+    setPlaybackRange(range);
+    await seekTo(slice.start_seconds, range);
   };
 
   const seekBy = async (delta: number): Promise<void> => {
