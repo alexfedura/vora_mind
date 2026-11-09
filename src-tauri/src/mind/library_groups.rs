@@ -567,6 +567,8 @@ mod tests {
 
         let groups = list_item_groups(&conn).unwrap();
         assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].item_type, "group");
+        assert_eq!(groups[0].snapshot.item_type, "group");
         assert_eq!(groups[0].board_id, format!("library_board_{}", created.id));
         assert_eq!(groups[0].snapshot.cards[0].content, "Saved content");
         assert_eq!(groups[0].snapshot.edges[0].source, "node-a");
@@ -753,16 +755,66 @@ mod tests {
     }
 
     #[test]
+    fn existing_schema_records_default_to_groups_and_new_items_persist_their_type() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE library_item_groups (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                version TEXT NOT NULL,
+                snapshot_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                deleted_at INTEGER
+            );
+            INSERT INTO library_item_groups
+                (id, name, version, snapshot_json, created_at, updated_at)
+            VALUES ('legacy-group', 'Legacy group', '0.1.0', '{}', 1, 1);",
+        )
+        .unwrap();
+        init_db(&conn).unwrap();
+
+        let legacy_item_type: String = conn
+            .query_row(
+                "SELECT item_type FROM library_item_groups WHERE id = 'legacy-group'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(legacy_item_type, "group");
+
+        let mut conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        let created =
+            create_item_group(&mut conn, "Single item", "0.1.0", "item", sample_snapshot())
+                .unwrap();
+        assert_eq!(created.item_type, "item");
+        assert_eq!(created.snapshot.item_type, "item");
+        let persisted_type: String = conn
+            .query_row(
+                "SELECT item_type FROM library_item_groups WHERE id = ?1",
+                [&created.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(persisted_type, "item");
+    }
+
+    #[test]
     fn group_creation_rejects_invalid_version_and_empty_selection() {
         let mut conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
         assert!(create_item_group(&mut conn, "Group", "0.1", "group", sample_snapshot()).is_err());
+        assert!(
+            create_item_group(&mut conn, "Invalid type", "0.1.0", "invalid", sample_snapshot())
+                .is_err()
+        );
         let empty = super::LibraryItemGroupSnapshot {
             item_type: "group".to_string(),
             nodes: Vec::new(),
             edges: Vec::new(),
             cards: Vec::new(),
         };
-        assert!(create_item_group(&mut conn, "Empty", "0.1.0", empty).is_err());
+        assert!(create_item_group(&mut conn, "Empty", "0.1.0", "group", empty).is_err());
     }
 }
