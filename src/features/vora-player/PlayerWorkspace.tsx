@@ -183,9 +183,9 @@ export function PlayerWorkspace({
             >
               <button
                 type="button"
-                onClick={() => void player.seekTo(slice.start_seconds)}
+                onClick={() => void player.selectReference(slice)}
                 className="block w-full text-left"
-                title="Seek to the start of this reference"
+                title="Select and seek to this reference"
               >
                 <span className="block truncate font-medium">{slice.title}</span>
                 <span className="mt-1 block text-xs text-violet-200">

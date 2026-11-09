@@ -453,6 +453,8 @@ function AppContent() {
       setMediaPlayerRequest({
         requestId: mediaPlayerRequestId.current,
         payload,
+        filePath: null,
+        mediaType: null,
         error: payload ? null : "This Vora media link is malformed or unsupported.",
       });
       setIsTaskFlowOpen(false);
@@ -464,6 +466,36 @@ function AppContent() {
 
     document.addEventListener("click", handleMediaLinkClick, true);
     return () => document.removeEventListener("click", handleMediaLinkClick, true);
+  }, []);
+
+  useEffect(() => {
+    const handleOpenPlayerWithMedia = (event: Event): void => {
+      if (!(event instanceof CustomEvent) || !isRecord(event.detail)) return;
+      const { filePath, mediaType } = event.detail;
+      if (
+        typeof filePath !== "string" ||
+        (mediaType !== "image" && mediaType !== "audio" && mediaType !== "video")
+      ) return;
+
+      mediaPlayerRequestId.current += 1;
+      setMediaPlayerRequest({
+        requestId: mediaPlayerRequestId.current,
+        payload: null,
+        filePath,
+        mediaType,
+        error: null,
+      });
+      setIsTaskFlowOpen(false);
+      setIsAiTasksOpen(false);
+      setIsVoraTraceOpen(false);
+      setIsJournalOpen(false);
+      setIsDocumentWorkspaceOpen(false);
+      setIsPlayerOpen(true);
+      setActiveOpenPanel("none");
+    };
+
+    window.addEventListener("vora:open-player-with-media", handleOpenPlayerWithMedia);
+    return () => window.removeEventListener("vora:open-player-with-media", handleOpenPlayerWithMedia);
   }, []);
 
   useEffect(() => {
