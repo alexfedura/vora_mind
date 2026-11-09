@@ -1,7 +1,7 @@
 # Vora Mind Canvas Connection Creation
 
 > **Status**: APPROVED FOR IMPLEMENTATION
-> **Scope**: `canvas | cards | text`
+> **Scope**: `canvas | cards | text | shapes | media`
 
 ## Goal
 
@@ -9,7 +9,8 @@ Create and connect a new card or text node directly from a card or text node's o
 
 ## Behavior
 
-- Cards and text nodes expose orange connection handles at the midpoint of all four sides.
+- Cards, text, shape, and media nodes expose orange connection handles at the midpoint of their supported sides.
+- Media nodes expose source and target handles on all four sides, with handle IDs consistently named by direction and side.
 - Card toolbars and orange connection handles remain hidden on hover and appear only while the node is selected.
 - Dragging from any orange handle and releasing over empty canvas opens a nearby menu with `Card` and `Text` choices.
 - Choosing `Card` or `Text` creates that node at the release position and connects it to the originating handle.

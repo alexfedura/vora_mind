@@ -944,11 +944,13 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
       <Handle
         type="target"
         position={Position.Left}
+        id="target-left"
         className="!left-0 !top-1/2 !h-3 !w-3 !-translate-y-1/2 !rounded-full !border-2 !border-[#13151b] !bg-[#e8ad55] !opacity-0 !pointer-events-auto"
       />
       <Handle
         type="source"
         position={Position.Right}
+        id="source-right"
         className={`!right-0 !top-1/2 !h-3 !w-3 !-translate-y-1/2 !rounded-full !border-2 !border-[#13151b] !bg-[#e8ad55] transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`}
       />
       <svg
