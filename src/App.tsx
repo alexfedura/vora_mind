@@ -647,6 +647,22 @@ function AppContent() {
   );
   const canvasBoardId = libraryBoardSession?.boardId ?? activeBoardId;
   const flow = useVoraFlow(canvasBoardId, zoomScale, zoomScale, libraryBoardSession === null);
+
+  useEffect(() => {
+    const handleAttachMediaFileReference = (event: Event): void => {
+      if (!(event instanceof CustomEvent) || !isRecord(event.detail)) return;
+      const { nodeId, fileId } = event.detail;
+      if (typeof nodeId !== "string" || typeof fileId !== "string") return;
+      flow.saveHistorySnapshot();
+      flow.setNodes((nodes) => nodes.map((node) => {
+        if (node.id !== nodeId || node.type !== "voraMedia" || !isRecord(node.data)) return node;
+        return { ...node, data: { ...node.data, fileId } };
+      }));
+    };
+    window.addEventListener("vora:attach-media-file-reference", handleAttachMediaFileReference);
+    return () => window.removeEventListener("vora:attach-media-file-reference", handleAttachMediaFileReference);
+  }, [flow.saveHistorySnapshot, flow.setNodes]);
+
   const selectedNodes = useMemo(() => flow.nodes.filter((node) => node.selected), [flow.nodes]);
   const selectedGroupIds = useMemo(
     () => new Set([
