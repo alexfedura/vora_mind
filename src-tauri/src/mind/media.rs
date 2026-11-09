@@ -509,19 +509,25 @@ fn get_source(conn: &Connection, file_id: &str) -> rusqlite::Result<Option<Media
     get_file(conn, file_id).map(|file| file.map(source_from_file))
 }
 
-fn verify_source(source: &MediaSource, file_hash: &str) -> Result<(), String> {
+fn verify_source(source: &MediaSource, file_hash: &str) -> Result<i64, String> {
     let path = Path::new(&source.path);
     if !path.is_file() {
         return Err(format!("Media file is missing: {}", path.display()));
     }
-    let (size, _) = file_metadata(path)?;
-    if size != source.fingerprint_size || sha256_file(path)? != file_hash {
+    let (size, modified_time_ms) = file_metadata(path)?;
+    if size != source.fingerprint_size {
         return Err(format!(
             "Media file contents changed since import: {}.",
             path.display()
         ));
     }
-    Ok(())
+    if modified_time_ms != source.fingerprint_modified_ms && sha256_file(path)? != file_hash {
+        return Err(format!(
+            "Media file contents changed since import: {}.",
+            path.display()
+        ));
+    }
+    Ok(modified_time_ms)
 }
 
 fn lock_database<'a>(
@@ -736,8 +742,16 @@ pub fn validate_media_source(
     let file = get_file(&conn, &source_id)
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("Media file {source_id} was not found in this workspace."))?;
-    let source = source_from_file(file.clone());
-    verify_source(&source, &file.file_hash)?;
+    let mut source = source_from_file(file.clone());
+    let modified_time_ms = verify_source(&source, &file.file_hash)?;
+    if modified_time_ms != file.modified_time_ms {
+        conn.execute(
+            "UPDATE vora_files SET modified_time_ms = ?1 WHERE id = ?2",
+            params![modified_time_ms, source_id],
+        )
+        .map_err(|error| error.to_string())?;
+        source.fingerprint_modified_ms = modified_time_ms;
+    }
     Ok(source)
 }
 
