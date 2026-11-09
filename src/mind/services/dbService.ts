@@ -188,7 +188,14 @@ export interface ResolvedSnapshot {
 export function createLibraryItemGroupSnapshot(
   nodes: Node[],
   edges: Edge[],
-  cards: Record<string, { id: string; title: string; content: string; version?: string; deleted_at?: number | null }>,
+  cards: Record<string, {
+    id: string;
+    title: string;
+    content: string;
+    version?: string;
+    deleted_at?: number | null;
+    mediaLineage?: MediaCardLineage;
+  }>,
 ): LibraryItemGroupSnapshot {
   if (nodes.length === 0) {
     throw new Error("A Library schematic must contain at least one canvas item.");

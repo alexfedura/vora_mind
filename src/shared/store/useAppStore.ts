@@ -1,7 +1,7 @@
 ﻿import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { setSetting } from "@/shared/store/useSettingsStore";
-import type { CardVersionContent, VoraCard } from "@/mind/types";
+import type { CardVersionContent, MediaCardLineage, VoraCard } from "@/mind/types";
 import {
   createTextChangeSet,
   dbService,
@@ -98,6 +98,11 @@ interface AppState {
   toggleTextDirection: () => void;
   setCards: (cards: Record<string, VoraCard>) => void;
   addCard: (title?: string, content?: string, librarySourceCardId?: string) => string;
+  createCardFromMediaSlice: (
+    title: string,
+    content: string,
+    mediaLineage: MediaCardLineage,
+  ) => Promise<{ id: string; boardId: string }>;
   updateCardContent: (id: string, title: string, content: string) => void;
   updateCardVersion: (id: string, version: string) => void;
   commitCardVersion: (
@@ -329,6 +334,36 @@ export const useAppStore = create<AppState>()(
             .catch((error: unknown) => console.error("Failed to save new card:", error));
         }
         return id;
+      },
+      createCardFromMediaSlice: async (title, content, mediaLineage) => {
+        const { activeBoardId, isLibraryBoardEditing } = get();
+        if (!activeBoardId) throw new Error("Select a Board before sending a media slice to the Library.");
+        if (isLibraryBoardEditing) throw new Error("Media slice cards can only be created on a regular Board.");
+
+        const id = crypto.randomUUID();
+        const card: VoraCard = {
+          id,
+          title,
+          content,
+          boardId: activeBoardId,
+          mediaLineage,
+          version: "v0.1.0",
+          created_at: Date.now(),
+        };
+        await dbService.saveCardDirect(
+          activeBoardId,
+          id,
+          title,
+          content,
+          card.version,
+          [],
+          undefined,
+          mediaLineage,
+        );
+        if (get().activeBoardId === activeBoardId) {
+          set((state) => ({ cards: { ...state.cards, [id]: card } }));
+        }
+        return { id, boardId: activeBoardId };
       },
 
       updateCardContent: (id, title, content) =>

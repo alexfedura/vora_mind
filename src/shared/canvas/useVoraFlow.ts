@@ -85,6 +85,7 @@ function getCanvasSignature(
       version: card.version,
       deleted_at: card.deleted_at,
       librarySourceCardId: card.librarySourceCardId,
+      mediaLineage: card.mediaLineage,
     })),
   });
 }
@@ -583,6 +584,15 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
             librarySourceCardId: card.library_source_card_id ?? undefined,
             sourceDocumentId: card.document_id ?? undefined,
             sourceHighlightId: card.highlight_id ?? undefined,
+            mediaLineage: card.source_file_id !== null &&
+              typeof card.start_time === "number" &&
+              typeof card.end_time === "number"
+              ? {
+                  source_file_id: card.source_file_id,
+                  start_time: card.start_time,
+                  end_time: card.end_time,
+                }
+              : undefined,
           };
         }
         latestCards.current = cardsMap;
@@ -732,6 +742,15 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
         deleted_at: card.deleted_at ?? undefined,
         librarySourceCardId:
           librarySourceCardIds.current.get(card.id) ?? latestCards.current[card.id]?.librarySourceCardId,
+        mediaLineage: card.metadata?.source_file_id &&
+          typeof card.metadata.start_time === "number" &&
+          typeof card.metadata.end_time === "number"
+          ? {
+              source_file_id: card.metadata.source_file_id,
+              start_time: card.metadata.start_time,
+              end_time: card.metadata.end_time,
+            }
+          : undefined,
       };
     }
 
