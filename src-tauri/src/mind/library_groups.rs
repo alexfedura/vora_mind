@@ -527,6 +527,7 @@ mod tests {
                 content: "Saved content".to_string(),
                 version: "v0.1.0".to_string(),
                 deleted_at: None,
+                metadata: None,
             }],
         }
     }
