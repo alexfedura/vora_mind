@@ -410,6 +410,7 @@ function AppContent() {
     addCard,
     updateCardVersion,
     cards,
+    libraryObjects,
     setCards,
     activeBoardId,
     setActiveBoardId,
@@ -637,6 +638,37 @@ function AppContent() {
   );
   const canvasBoardId = libraryBoardSession?.boardId ?? activeBoardId;
   const flow = useVoraFlow(canvasBoardId, zoomScale, zoomScale, libraryBoardSession === null);
+  const handleDropCard = useCallback((id: string, clientX: number, clientY: number): void => {
+    if (!canvasBoardId) return;
+    const sourceCard = cards[id];
+    const libraryObject = libraryObjects.find((item) => item.id === id && item.type === "card");
+    const title = sourceCard?.title ?? libraryObject?.title;
+    const content = sourceCard?.content ?? libraryObject?.content;
+    if (typeof title !== "string" || typeof content !== "string") {
+      console.error("Could not copy Library card to canvas: the source card is no longer available.");
+      return;
+    }
+
+    flow.saveHistorySnapshot();
+    const copiedCardId = addCard(title, content, id);
+    const copiedVersion = sourceCard?.version || "v0.1.0";
+    updateCardVersion(copiedCardId, copiedVersion);
+
+    flow.setNodes((nodes) =>
+      nodes.concat({
+        id: `node-${crypto.randomUUID()}`,
+        type: "voraCard",
+        position: toCanvasFlowPosition({ x: clientX, y: clientY }),
+        data: {
+          label: title,
+          title,
+          content,
+          cardId: copiedCardId,
+          version: copiedVersion,
+        },
+      })
+    );
+  }, [addCard, canvasBoardId, cards, flow, libraryObjects, updateCardVersion]);
   const selectedNodes = useMemo(() => flow.nodes.filter((node) => node.selected), [flow.nodes]);
   const selectedGroupIds = useMemo(
     () => new Set([
@@ -1692,7 +1724,6 @@ function AppContent() {
 
     const handleDirectDropCard = (event: Event): void => {
       if (!(event instanceof CustomEvent) || !isRecord(event.detail)) return;
-      if (!canvasBoardId) return;
       const { id, clientX, clientY } = event.detail;
       if (
         typeof id !== "string" ||
@@ -1701,31 +1732,7 @@ function AppContent() {
         typeof clientY !== "number" ||
         !Number.isFinite(clientY)
       ) return;
-      const sourceCard = cards[id];
-      if (!sourceCard) {
-        console.error("Could not copy Library card to canvas: the source card is no longer available.");
-        return;
-      }
-
-      flow.saveHistorySnapshot();
-      const copiedCardId = addCard(sourceCard.title, sourceCard.content, sourceCard.id);
-      const copiedVersion = sourceCard.version || "v0.1.0";
-      updateCardVersion(copiedCardId, copiedVersion);
-
-      flow.setNodes((nds) =>
-        nds.concat({
-          id: `node-${crypto.randomUUID()}`,
-          type: "voraCard",
-          position: toCanvasFlowPosition({ x: clientX, y: clientY }),
-          data: {
-            label: sourceCard.title,
-            title: sourceCard.title,
-            content: sourceCard.content,
-            cardId: copiedCardId,
-            version: copiedVersion,
-          },
-        })
-      );
+      handleDropCard(id, clientX, clientY);
     };
 
     const handleDirectDropItemGroup = (event: Event): void => {
@@ -1901,7 +1908,7 @@ function AppContent() {
     screenToFlowPosition,
     canvasBoardId,
     libraryBoardSession,
-    addCard,
+    handleDropCard,
     updateCardVersion,
     itemGroups,
   ]);
@@ -3238,6 +3245,27 @@ function AppContent() {
       {/* بوم اصلی */}
       <main
         ref={flow.reactFlowWrapper}
+        onDragOver={isWorkspacePageOpen ? undefined : (event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={isWorkspacePageOpen ? undefined : (event) => {
+          event.preventDefault();
+          const cardData = event.dataTransfer.getData("application/vora-card");
+          if (!cardData) return;
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(cardData);
+          } catch (cause) {
+            console.error("Could not parse dropped Library card data:", cause);
+            return;
+          }
+          if (!isRecord(parsed) || typeof parsed.id !== "string") {
+            console.error("Could not handle dropped Library card: the drag data is invalid.");
+            return;
+          }
+          handleDropCard(parsed.id, event.clientX, event.clientY);
+        }}
         onContextMenu={isWorkspacePageOpen ? undefined : handleCanvasContextMenu}
         onPointerDownCapture={isWorkspacePageOpen ? undefined : handleCanvasPointerDown}
         onPointerMoveCapture={isWorkspacePageOpen ? undefined : handleCanvasPointerMove}

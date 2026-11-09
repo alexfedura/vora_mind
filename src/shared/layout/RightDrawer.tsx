@@ -1385,6 +1385,18 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                 return (
                   <article
                     key={`object-${item.id}`}
+                    draggable={item.type === "card"}
+                    onDragStart={(event) => {
+                      if (item.type !== "card") {
+                        event.preventDefault();
+                        return;
+                      }
+                      event.dataTransfer.setData(
+                        "application/vora-card",
+                        JSON.stringify({ id: item.id }),
+                      );
+                      event.dataTransfer.effectAllowed = "copy";
+                    }}
                     onMouseEnter={() => {
                       window.dispatchEvent(new CustomEvent<string>(
                         "vora:highlight-canvas-node",
