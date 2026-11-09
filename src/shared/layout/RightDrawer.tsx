@@ -1803,6 +1803,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                 </p>
               )}
             </div>
+            )}
           </div>
         )}
       </aside>
