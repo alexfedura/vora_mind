@@ -40,6 +40,8 @@ tree-sitter-typescript = "0.21.2"
 git2 = { version = "0.19", features = ["vendored-libgit2"] }
 uuid = { version = "1.10", features = ["v7", "serde"] }
 blake3 = "1.5"
+sha2 = "0.10"
+walkdir = "2.0"
 base64 = "0.22"
 clap = { version = "4", features = ["derive", "env"] }
 memmap2 = "0.9"
