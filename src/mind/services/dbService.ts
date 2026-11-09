@@ -9,6 +9,8 @@ import type {
   LibraryItemGroupUsage,
   LibraryItemGroupVersion,
   MediaFileLibraryEntry,
+  MediaCardLineage,
+  CardMediaMetadata,
   MediaSlice,
   MediaSliceInput,
   MediaSliceWithSource,
@@ -42,6 +44,9 @@ export interface CardDto {
   library_source_card_id: string | null;
   document_id?: string | null;
   highlight_id?: string | null;
+  source_file_id: string | null;
+  start_time: number | null;
+  end_time: number | null;
 }
 
 export type DocumentFileType = "pdf" | "docx" | "md";
@@ -111,6 +116,7 @@ export interface BoardVersionCard {
   content: string;
   version: string;
   deleted_at: number | null;
+  metadata?: CardMediaMetadata | null;
 }
 
 export interface BoardVersionSnapshot {
@@ -513,6 +519,13 @@ export const dbService = {
         content: card.content,
         version: card.version ?? "v0.1.0",
         deleted_at: card.deleted_at ?? null,
+        metadata: card.mediaLineage
+          ? {
+              source_file_id: card.mediaLineage.source_file_id,
+              start_time: card.mediaLineage.start_time,
+              end_time: card.mediaLineage.end_time,
+            }
+          : { source_file_id: null, start_time: null, end_time: null },
       })),
     };
     return await invoke<BoardVersionSummary>("create_board_version", {
@@ -632,6 +645,7 @@ export const dbService = {
     version: string,
     textChangeSets: TextChangeSet[] = [],
     librarySourceCardId?: string,
+    mediaLineage?: MediaCardLineage,
   ): Promise<void> {
     await invoke("save_card_direct", {
       boardId,
@@ -641,6 +655,7 @@ export const dbService = {
       version,
       textChangeSets,
       librarySourceCardId: librarySourceCardId ?? null,
+      mediaLineage: mediaLineage ?? null,
     });
   },
 

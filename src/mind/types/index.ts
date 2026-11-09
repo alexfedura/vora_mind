@@ -37,11 +37,24 @@ export interface VoraCard {
   librarySourceCardId?: string;
   sourceDocumentId?: string;
   sourceHighlightId?: string;
+  mediaLineage?: MediaCardLineage;
   version?: string;
   tags?: string[];
   created_at?: number;
   updated_at?: number;
   deleted_at?: number | null;
+}
+
+export interface MediaCardLineage {
+  source_file_id: string;
+  start_time: number;
+  end_time: number;
+}
+
+export interface CardMediaMetadata {
+  source_file_id: string | null;
+  start_time: number | null;
+  end_time: number | null;
 }
 
 export interface ParsedCardVersion {
