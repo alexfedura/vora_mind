@@ -46,6 +46,14 @@ at their original paths; Vora Mind stores metadata and annotations only.
   granting the WebView unrestricted filesystem access.
 - The Library's Media & Files view lists references and their slices, reports
   unavailable paths, and opens a slice at its saved start time.
+- Canvas video previews use single-click playback and double-click to open the
+  Vora Player. Saved slices can create Board cards carrying
+  `source_file_id`, `start_time`, and `end_time` in card metadata.
+- Card metadata is returned by card loading and retained in Board version
+  snapshots and checkouts. A card's source badge and Library media note both
+  reopen the source at the recorded timestamp.
+- The Media Notes view is scoped to media file references used by the active
+  Board, while preserving the original-file and missing-file workflows.
 - PDF, DOCX, and Markdown imports reference the original file. Existing
   document/highlight IDs and viewing behavior are preserved.
 
