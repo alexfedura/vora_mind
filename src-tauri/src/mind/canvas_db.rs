@@ -105,6 +105,25 @@ pub struct BoardVersionCard {
     pub content: String,
     pub version: String,
     pub deleted_at: Option<i64>,
+    #[serde(default)]
+    pub metadata: Option<CardMediaMetadata>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CardMediaMetadata {
+    #[serde(default)]
+    pub source_file_id: Option<String>,
+    #[serde(default)]
+    pub start_time: Option<f64>,
+    #[serde(default)]
+    pub end_time: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CardMediaLineage {
+    pub source_file_id: String,
+    pub start_time: f64,
+    pub end_time: f64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -1468,12 +1487,23 @@ pub fn checkout_board_version(
         params![now, board_id],
     )?;
     for card in &snapshot.cards {
+        let metadata = card
+            .metadata
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
         let changed = tx.execute(
-            "INSERT INTO objects (id, type, board_id, created_at, updated_at, deleted_at, working_content)
-             VALUES (?1, 'card', ?2, ?3, ?3, ?4, ?5)
+            "INSERT INTO objects
+                (id, type, board_id, created_at, updated_at, deleted_at, metadata, working_content)
+             VALUES (?1, 'card', ?2, ?3, ?3, ?4, ?5, ?6)
              ON CONFLICT(id) DO UPDATE SET
                  updated_at = excluded.updated_at,
                  deleted_at = excluded.deleted_at,
+                 metadata = CASE
+                     WHEN excluded.metadata IS NULL THEN objects.metadata
+                     ELSE json_patch(COALESCE(objects.metadata, '{}'), excluded.metadata)
+                 END,
                  working_content = excluded.working_content
              WHERE objects.board_id = excluded.board_id",
             params![
@@ -1481,6 +1511,7 @@ pub fn checkout_board_version(
                 board_id,
                 now,
                 card.deleted_at,
+                metadata,
                 serde_json::json!({
                     "title": card.title,
                     "content": card.content,
@@ -1858,6 +1889,7 @@ mod board_version_tests {
                 content: format!("content for {title}"),
                 version: "v0.1.0".to_string(),
                 deleted_at: None,
+                metadata: None,
             }],
             reason: None,
         }

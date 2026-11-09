@@ -282,6 +282,9 @@ pub struct CardDto {
     pub library_source_card_id: Option<String>,
     pub document_id: Option<String>,
     pub highlight_id: Option<String>,
+    pub source_file_id: Option<String>,
+    pub start_time: Option<f64>,
+    pub end_time: Option<f64>,
 }
 
 #[derive(serde::Serialize)]
@@ -1255,7 +1258,10 @@ fn get_all_cards(state: State<AppState>, board_id: String) -> Result<Vec<CardDto
                    o.deleted_at,
                    json_extract(o.metadata, '$.librarySourceCardId'),
                    json_extract(o.metadata, '$.documentId'),
-                   json_extract(o.metadata, '$.highlightId')
+                   json_extract(o.metadata, '$.highlightId'),
+                   json_extract(o.metadata, '$.source_file_id'),
+                   json_extract(o.metadata, '$.start_time'),
+                   json_extract(o.metadata, '$.end_time')
             FROM objects o
             LEFT JOIN object_versions v ON v.id = (
                 SELECT id FROM object_versions
@@ -1281,6 +1287,9 @@ fn get_all_cards(state: State<AppState>, board_id: String) -> Result<Vec<CardDto
                 library_source_card_id: r.get(5)?,
                 document_id: r.get(6)?,
                 highlight_id: r.get(7)?,
+                source_file_id: r.get(8)?,
+                start_time: r.get(9)?,
+                end_time: r.get(10)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -1570,6 +1579,7 @@ fn save_card_direct(
     version: String,
     text_change_sets: Vec<mind::canvas_db::TextChangeSet>,
     library_source_card_id: Option<String>,
+    media_lineage: Option<mind::canvas_db::CardMediaLineage>,
 ) -> Result<(), String> {
     let mut conn = state.db.lock().map_err(|e| e.to_string())?;
     let now = std::time::SystemTime::now()
@@ -1592,9 +1602,50 @@ fn save_card_direct(
         return Err("Board does not exist".to_string());
     }
 
-    let metadata = library_source_card_id.as_ref().map(|source_card_id| {
-        serde_json::json!({ "librarySourceCardId": source_card_id }).to_string()
-    });
+    if let Some(lineage) = &media_lineage {
+        if lineage.source_file_id.trim().is_empty()
+            || !lineage.start_time.is_finite()
+            || !lineage.end_time.is_finite()
+            || lineage.start_time < 0.0
+            || lineage.end_time <= lineage.start_time
+        {
+            return Err("Media card lineage requires a valid source file and increasing time range.".to_string());
+        }
+        let source_exists: bool = tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM vora_files WHERE id = ?1)",
+                [&lineage.source_file_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if !source_exists {
+            return Err("The media source file does not exist.".to_string());
+        }
+    }
+
+    let mut card_metadata = serde_json::Map::new();
+    if let Some(source_card_id) = &library_source_card_id {
+        card_metadata.insert(
+            "librarySourceCardId".to_string(),
+            serde_json::Value::String(source_card_id.clone()),
+        );
+    }
+    if let Some(lineage) = &media_lineage {
+        card_metadata.insert(
+            "source_file_id".to_string(),
+            serde_json::Value::String(lineage.source_file_id.clone()),
+        );
+        card_metadata.insert(
+            "start_time".to_string(),
+            serde_json::json!(lineage.start_time),
+        );
+        card_metadata.insert(
+            "end_time".to_string(),
+            serde_json::json!(lineage.end_time),
+        );
+    }
+    let metadata = (!card_metadata.is_empty())
+        .then(|| serde_json::Value::Object(card_metadata).to_string());
     let rows_updated = store_card_working_content(
         &tx,
         &board_id,
