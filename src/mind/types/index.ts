@@ -22,6 +22,7 @@ export interface VoraCardData {
 
 export interface VoraMediaData extends Record<string, unknown> {
   type: "image" | "audio" | "video";
+  fileId: string;
   filePath: string;
   fileName: string;
   width?: number;
@@ -141,11 +142,27 @@ export interface MediaSource {
   last_position_seconds: number;
   created_at: number;
   last_used_at: number;
+  is_available: boolean;
+}
+
+export interface VoraFile {
+  id: string;
+  original_name: string;
+  current_path: string;
+  file_type: "image" | "audio" | "video" | "pdf" | "docx" | "md";
+  file_hash: string;
+  size_bytes: number;
+  modified_time_ms: number;
+  created_at: number;
+  duration_seconds: number | null;
+  last_position_seconds: number;
+  last_used_at: number;
+  is_available: boolean;
 }
 
 export interface MediaSlice {
   id: string;
-  source_id: string;
+  file_id: string;
   title: string;
   start_seconds: number;
   end_seconds: number;
@@ -156,7 +173,7 @@ export interface MediaSlice {
 
 export interface MediaSliceInput {
   id?: string | null;
-  source_id: string;
+  file_id: string;
   title: string;
   start_seconds: number;
   end_seconds: number;
@@ -166,6 +183,11 @@ export interface MediaSliceInput {
 export interface MediaSliceWithSource {
   slice: MediaSlice;
   source: MediaSource;
+}
+
+export interface MediaFileLibraryEntry {
+  file: VoraFile;
+  slices: MediaSlice[];
 }
 
 export interface MediaLinkPayload {

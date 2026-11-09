@@ -36,6 +36,7 @@ pub struct MediaSource {
     pub last_position_seconds: f64,
     pub created_at: i64,
     pub last_used_at: i64,
+    pub is_available: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -371,11 +372,24 @@ fn migrate_legacy_sources(conn: &Connection) -> Result<(), String> {
             )
             .map_err(|error| error.to_string())?;
         } else {
-            let file = legacy_file_reference(conn, &path, &file_type, size, modified)?;
             conn.execute(
-                "UPDATE vora_files SET duration_seconds = ?1, last_position_seconds = ?2,
-                    last_used_at = ?3 WHERE id = ?4",
-                params![duration, position, last_used, file.id],
+                "INSERT OR IGNORE INTO vora_files
+                    (id, original_name, current_path, file_type, file_hash, size_bytes,
+                     modified_time_ms, created_at, duration_seconds, last_position_seconds, last_used_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![
+                    id,
+                    Path::new(&path).file_name().and_then(|name| name.to_str()).unwrap_or("Media file"),
+                    path,
+                    file_type,
+                    format!("legacy:{size}:{modified}"),
+                    size,
+                    modified,
+                    created,
+                    duration,
+                    position,
+                    last_used
+                ],
             )
             .map_err(|error| error.to_string())?;
         }
@@ -463,9 +477,11 @@ fn migrate_legacy_slices(conn: &Connection) -> Result<(), String> {
 }
 
 fn source_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MediaSource> {
+    let path: String = row.get(1)?;
     Ok(MediaSource {
         id: row.get(0)?,
-        path: row.get(1)?,
+        is_available: Path::new(&path).is_file(),
+        path,
         fingerprint_size: row.get(2)?,
         fingerprint_modified_ms: row.get(3)?,
         duration_seconds: row.get(4)?,
@@ -485,6 +501,7 @@ fn source_from_file(file: VoraFile) -> MediaSource {
         last_position_seconds: file.last_position_seconds,
         created_at: file.created_at,
         last_used_at: file.last_used_at,
+        is_available: file.is_available,
     }
 }
 

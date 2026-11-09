@@ -8,10 +8,12 @@ import type {
   LibraryItemGroupSnapshot,
   LibraryItemGroupUsage,
   LibraryItemGroupVersion,
+  MediaFileLibraryEntry,
   MediaSlice,
   MediaSliceInput,
   MediaSliceWithSource,
   MediaSource,
+  VoraFile,
   TextChangeSet,
   TextLink,
   TextLinkInput,
@@ -602,8 +604,20 @@ export const dbService = {
     await invoke("delete_board", { boardId });
   },
 
-  async importMediaFile(sourcePath: string): Promise<string> {
-    return await invoke<string>("import_media_file", { sourcePath });
+  async importFileReference(path: string): Promise<string> {
+    return await invoke<string>("import_file_reference", { path });
+  },
+
+  async getVoraFile(fileId: string): Promise<VoraFile> {
+    return await invoke<VoraFile>("get_vora_file", { fileId });
+  },
+
+  async resolveMissingFile(fileId: string, searchDir: string): Promise<string> {
+    return await invoke<string>("resolve_missing_file", { fileId, searchDir });
+  },
+
+  async listMediaFiles(): Promise<MediaFileLibraryEntry[]> {
+    return await invoke<MediaFileLibraryEntry[]>("list_media_files");
   },
 
   async getAllCards(boardId: string): Promise<CardDto[]> {
