@@ -139,30 +139,6 @@ export function useMediaPlayer(
       if (rangeCheckIntervalRef.current === intervalId) rangeCheckIntervalRef.current = null;
     };
 
-    const locateMissingFile = async (): Promise<void> => {
-      if (!source) return;
-      try {
-        const selected = await open({ directory: true, multiple: false });
-        if (typeof selected !== "string") return;
-        setIsBusy(true);
-        setError(null);
-        setStatus(null);
-        const resolvedPath = await dbService.resolveMissingFile(source.id, selected);
-        const resolvedSource = await dbService.validateMediaSource(source.id);
-        await dbService.playerLoadAt(resolvedPath, positionRef.current);
-        setSource(resolvedSource);
-        setLastSource(resolvedSource);
-        setSlices(await dbService.listMediaSlices(resolvedSource.id));
-        setStatus(`Located ${sourceName(resolvedPath)}.`);
-        window.dispatchEvent(new CustomEvent("vora:file-reference-updated", {
-          detail: { fileId: resolvedSource.id },
-        }));
-      } catch (locateError: unknown) {
-        setError(`Could not locate the media file: ${errorMessage(locateError)}`);
-      } finally {
-        setIsBusy(false);
-      }
-    };
   }, [active, isPlaying, playbackRange, rangeCheckVersion]);
 
   useEffect(() => {
@@ -402,6 +378,31 @@ export function useMediaPlayer(
       setStatus(`Resumed ${sourceName(lastSource.path)}.`);
     } catch (resumeError: unknown) {
       setError(`Could not resume the last source: ${errorMessage(resumeError)}`);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const locateMissingFile = async (): Promise<void> => {
+    if (!source) return;
+    try {
+      const selected = await open({ directory: true, multiple: false });
+      if (typeof selected !== "string") return;
+      setIsBusy(true);
+      setError(null);
+      setStatus(null);
+      const resolvedPath = await dbService.resolveMissingFile(source.id, selected);
+      const resolvedSource = await dbService.validateMediaSource(source.id);
+      await dbService.playerLoadAt(resolvedPath, positionRef.current);
+      setSource(resolvedSource);
+      setLastSource(resolvedSource);
+      setSlices(await dbService.listMediaSlices(resolvedSource.id));
+      setStatus(`Located ${sourceName(resolvedPath)}.`);
+      window.dispatchEvent(new CustomEvent("vora:file-reference-updated", {
+        detail: { fileId: resolvedSource.id },
+      }));
+    } catch (locateError: unknown) {
+      setError(`Could not locate the media file: ${errorMessage(locateError)}`);
     } finally {
       setIsBusy(false);
     }
