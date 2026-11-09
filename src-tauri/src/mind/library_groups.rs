@@ -512,6 +512,7 @@ mod tests {
                 y: 0.0,
                 width: Some(240.0),
                 height: Some(120.0),
+                z_index: None,
                 style: None,
             }],
             edges: vec![EdgeInput {
@@ -614,6 +615,7 @@ mod tests {
             y: 240.0,
             width: Some(100.0),
             height: Some(60.0),
+            z_index: None,
             style: None,
         };
         let first_snapshot_id = save_semantic_snapshot(

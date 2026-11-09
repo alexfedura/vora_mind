@@ -479,6 +479,7 @@ fn hypothesis_library_node(hypothesis: &Hypothesis) -> NodeInput {
         y: 0.0,
         width: Some(360.0),
         height: Some(240.0),
+        z_index: None,
         style: None,
     }
 }

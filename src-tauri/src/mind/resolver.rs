@@ -352,6 +352,7 @@ mod tests {
                 y: 84.0,
                 width: Some(240.0),
                 height: Some(160.0),
+                z_index: Some(7),
                 style: None,
             }],
             Vec::<EdgeInput>::new(),
@@ -363,6 +364,7 @@ mod tests {
         assert_eq!(restored.node_type, "voraShape");
         assert_eq!(restored.data, shape_data);
         assert_eq!(resolved.placements.get("path-1").unwrap().x, 42.0);
+        assert_eq!(resolved.placements.get("path-1").unwrap().z_index, 7);
         assert_eq!(resolved.placements.get("path-1").unwrap().width, 240.0);
         let object_type: String = connection
             .query_row("SELECT type FROM objects WHERE id = 'path-1'", [], |row| {
@@ -468,6 +470,7 @@ mod tests {
             y: 20.0,
             width: Some(280.0),
             height: Some(160.0),
+            z_index: None,
             style: None,
         }
     }

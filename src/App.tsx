@@ -2131,6 +2131,7 @@ function AppContent() {
 
     flow.saveHistorySnapshot();
     flow.setNodes((nodes) => {
+      if (!nodes.some((node) => node.id === nodeId)) return nodes;
       const currentLayer = direction === "front"
         ? Math.max(...nodes.map((node) => node.zIndex ?? 0)) + 1
         : Math.min(...nodes.map((node) => node.zIndex ?? 0)) - 1;

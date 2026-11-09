@@ -1839,6 +1839,7 @@ mod board_version_tests {
                 y: 50.0,
                 width: Some(320.0),
                 height: Some(180.0),
+                z_index: None,
                 style: None,
             }],
             edges: vec![EdgeInput {
@@ -2304,6 +2305,7 @@ mod board_version_tests {
                 y: 40.0,
                 width: Some(300.0),
                 height: Some(170.0),
+                z_index: None,
                 style: None,
             }],
             Vec::new(),
