@@ -1,11 +1,30 @@
 use crate::mind::canvas_db::AppState;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::Path;
+use sha2::{Digest, Sha256};
+use std::fs::{self, File};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 use uuid::Uuid;
+use walkdir::WalkDir;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VoraFile {
+    pub id: String,
+    pub original_name: String,
+    pub current_path: String,
+    pub file_type: String,
+    pub file_hash: String,
+    pub size_bytes: i64,
+    pub modified_time_ms: i64,
+    pub created_at: i64,
+    pub duration_seconds: Option<f64>,
+    pub last_position_seconds: f64,
+    pub last_used_at: i64,
+    pub is_available: bool,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MediaSource {
@@ -22,7 +41,7 @@ pub struct MediaSource {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MediaSlice {
     pub id: String,
-    pub source_id: String,
+    pub file_id: String,
     pub title: String,
     pub start_seconds: f64,
     pub end_seconds: f64,
@@ -34,7 +53,7 @@ pub struct MediaSlice {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaSliceInput {
     pub id: Option<String>,
-    pub source_id: String,
+    pub file_id: String,
     pub title: String,
     pub start_seconds: f64,
     pub end_seconds: f64,
@@ -45,6 +64,12 @@ pub struct MediaSliceInput {
 pub struct MediaSliceWithSource {
     pub slice: MediaSlice,
     pub source: MediaSource,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaFileLibraryEntry {
+    pub file: VoraFile,
+    pub slices: Vec<MediaSlice>,
 }
 
 fn now_ms() -> Result<i64, String> {
@@ -61,24 +86,380 @@ fn valid_range(start_seconds: f64, end_seconds: f64) -> bool {
         && end_seconds > start_seconds
 }
 
-fn fingerprint(path: &Path) -> Result<(i64, i64), String> {
-    let metadata = fs::metadata(path).map_err(|error| {
-        format!(
-            "Cannot read media source metadata for {}: {error}",
-            path.display()
-        )
-    })?;
+fn file_metadata(path: &Path) -> Result<(i64, i64), String> {
+    let metadata = fs::metadata(path)
+        .map_err(|error| format!("Cannot read file metadata for {}: {error}", path.display()))?;
     if !metadata.is_file() {
-        return Err(format!("Media source is not a file: {}", path.display()));
+        return Err(format!("File is not a regular file: {}", path.display()));
     }
     let size = i64::try_from(metadata.len()).map_err(|error| error.to_string())?;
     let modified = metadata
         .modified()
-        .map_err(|error| format!("Cannot read media source modification time: {error}"))?
+        .map_err(|error| format!("Cannot read file modification time: {error}"))?
         .duration_since(UNIX_EPOCH)
-        .map_err(|error| format!("Media source modification time is invalid: {error}"))?;
+        .map_err(|error| format!("File modification time is invalid: {error}"))?;
     let modified_ms = i64::try_from(modified.as_millis()).map_err(|error| error.to_string())?;
     Ok((size, modified_ms))
+}
+
+fn sha256_file(path: &Path) -> Result<String, String> {
+    let mut file = File::open(path)
+        .map_err(|error| format!("Cannot open file {} to fingerprint it: {error}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 1024 * 1024];
+    loop {
+        let count = file
+            .read(&mut buffer)
+            .map_err(|error| format!("Cannot fingerprint {}: {error}", path.display()))?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn file_type_for_path(path: &Path) -> Result<String, String> {
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .ok_or_else(|| "The selected file has no supported extension.".to_string())?;
+    let file_type = match extension.as_str() {
+        "png" | "jpg" | "jpeg" | "gif" | "webp" => "image",
+        "mp3" | "wav" | "ogg" | "m4a" | "aac" | "flac" => "audio",
+        "mp4" | "webm" | "mov" | "m4v" => "video",
+        "pdf" => "pdf",
+        "docx" => "docx",
+        "md" => "md",
+        _ => return Err(format!("Unsupported file extension: .{extension}")),
+    };
+    Ok(file_type.to_string())
+}
+
+fn file_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<VoraFile> {
+    let current_path: String = row.get(2)?;
+    Ok(VoraFile {
+        id: row.get(0)?,
+        original_name: row.get(1)?,
+        is_available: Path::new(&current_path).is_file(),
+        current_path,
+        file_type: row.get(3)?,
+        file_hash: row.get(4)?,
+        size_bytes: row.get(5)?,
+        modified_time_ms: row.get(6)?,
+        created_at: row.get(7)?,
+        duration_seconds: row.get(8)?,
+        last_position_seconds: row.get(9)?,
+        last_used_at: row.get(10)?,
+    })
+}
+
+const FILE_COLUMNS: &str = "id, original_name, current_path, file_type, file_hash,
+    size_bytes, modified_time_ms, created_at, duration_seconds, last_position_seconds, last_used_at";
+
+fn get_file(conn: &Connection, file_id: &str) -> rusqlite::Result<Option<VoraFile>> {
+    conn.query_row(
+        &format!("SELECT {FILE_COLUMNS} FROM vora_files WHERE id = ?1"),
+        [file_id],
+        file_from_row,
+    )
+    .optional()
+}
+
+pub fn ensure_file_reference(
+    conn: &Connection,
+    path: &Path,
+    requested_type: Option<&str>,
+) -> Result<VoraFile, String> {
+    let canonical_path = path.canonicalize().map_err(|error| {
+        format!("Cannot access file {}: {error}", path.display())
+    })?;
+    let (size_bytes, modified_time_ms) = file_metadata(&canonical_path)?;
+    let file_hash = sha256_file(&canonical_path)?;
+    let file_type = match requested_type {
+        Some(file_type) => {
+            if !matches!(file_type, "image" | "audio" | "video" | "pdf" | "docx" | "md") {
+                return Err(format!("Unsupported file type: {file_type}"));
+            }
+            file_type.to_string()
+        }
+        None => file_type_for_path(&canonical_path)?,
+    };
+    if let Some(mut file) = conn
+        .query_row(
+            &format!(
+                "SELECT {FILE_COLUMNS} FROM vora_files
+                 WHERE current_path = ?1 AND file_hash = ?2 AND size_bytes = ?3"
+            ),
+            params![canonical_path.to_string_lossy(), file_hash, size_bytes],
+            file_from_row,
+        )
+        .optional()
+        .map_err(|error| error.to_string())?
+    {
+        conn.execute(
+            "UPDATE vora_files SET modified_time_ms = ?1 WHERE id = ?2",
+            params![modified_time_ms, file.id],
+        )
+        .map_err(|error| error.to_string())?;
+        file.modified_time_ms = modified_time_ms;
+        return Ok(file);
+    }
+
+    let id = Uuid::now_v7().to_string();
+    let original_name = canonical_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "The file name cannot be represented as Unicode.".to_string())?
+        .to_string();
+    let created_at = now_ms()?;
+    conn.execute(
+        "INSERT INTO vora_files
+            (id, original_name, current_path, file_type, file_hash, size_bytes,
+             modified_time_ms, created_at, duration_seconds, last_position_seconds, last_used_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, 0, 0)",
+        params![
+            id,
+            original_name,
+            canonical_path.to_string_lossy(),
+            file_type,
+            file_hash,
+            size_bytes,
+            modified_time_ms,
+            created_at
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+    get_file(conn, &id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("Could not retrieve imported file {id}."))
+}
+
+pub fn migrate_file_references(conn: &Connection) -> Result<(), String> {
+    let has_legacy_sources = table_exists(conn, "mind_media_sources")?;
+    if has_legacy_sources {
+        migrate_legacy_sources(conn)?;
+    }
+    ensure_document_file_id(conn)?;
+    migrate_legacy_documents(conn)?;
+    migrate_legacy_slices(conn)?;
+    if has_legacy_sources {
+        conn.execute("DROP TABLE mind_media_sources", [])
+            .map_err(|error| format!("Could not remove migrated media sources: {error}"))?;
+    }
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_media_slices_file_time
+            ON mind_media_slices(file_id, start_seconds, created_at);
+         CREATE INDEX IF NOT EXISTS idx_vora_files_last_used
+            ON vora_files(last_used_at DESC, created_at DESC);",
+    )
+    .map_err(|error| format!("Could not index file references: {error}"))?;
+    Ok(())
+}
+
+fn table_exists(conn: &Connection, table: &str) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+        [table],
+        |row| row.get(0),
+    )
+    .map_err(|error| error.to_string())
+}
+
+fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM pragma_table_info(?1) WHERE name = ?2
+         )",
+        params![table, column],
+        |row| row.get(0),
+    )
+    .map_err(|error| error.to_string())
+}
+
+fn legacy_file_reference(
+    conn: &Connection,
+    path: &str,
+    file_type: &str,
+    size_bytes: i64,
+    modified_time_ms: i64,
+) -> Result<VoraFile, String> {
+    let source_path = Path::new(path);
+    if source_path.is_file() {
+        return ensure_file_reference(conn, source_path, Some(file_type));
+    }
+    let id = Uuid::now_v7().to_string();
+    let original_name = source_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("Missing file")
+        .to_string();
+    let created_at = now_ms()?;
+    conn.execute(
+        "INSERT INTO vora_files
+            (id, original_name, current_path, file_type, file_hash, size_bytes,
+             modified_time_ms, created_at, duration_seconds, last_position_seconds, last_used_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, 0, 0)",
+        params![
+            id,
+            original_name,
+            path,
+            file_type,
+            format!("legacy:{size_bytes}:{modified_time_ms}"),
+            size_bytes,
+            modified_time_ms,
+            created_at
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+    get_file(conn, &id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("Could not migrate file reference {id}."))
+}
+
+fn migrate_legacy_sources(conn: &Connection) -> Result<(), String> {
+    let mut statement = conn
+        .prepare(
+            "SELECT id, path, fingerprint_size, fingerprint_modified_ms, duration_seconds,
+                    last_position_seconds, created_at, last_used_at
+             FROM mind_media_sources",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, Option<f64>>(4)?,
+                row.get::<_, f64>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, i64>(7)?,
+            ))
+        })
+        .map_err(|error| error.to_string())?;
+    let legacy_sources = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    drop(statement);
+
+    for (id, path, size, modified, duration, position, created, last_used) in legacy_sources {
+        let file_type = file_type_for_path(Path::new(&path)).unwrap_or_else(|_| "video".to_string());
+        if Path::new(&path).is_file() {
+            let (actual_size, actual_modified) = file_metadata(Path::new(&path))?;
+            let hash = sha256_file(Path::new(&path))?;
+            conn.execute(
+                "INSERT OR IGNORE INTO vora_files
+                    (id, original_name, current_path, file_type, file_hash, size_bytes,
+                     modified_time_ms, created_at, duration_seconds, last_position_seconds, last_used_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![
+                    id,
+                    Path::new(&path).file_name().and_then(|name| name.to_str()).unwrap_or("Media file"),
+                    path,
+                    file_type,
+                    hash,
+                    actual_size,
+                    actual_modified,
+                    created,
+                    duration,
+                    position,
+                    last_used
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        } else {
+            let file = legacy_file_reference(conn, &path, &file_type, size, modified)?;
+            conn.execute(
+                "UPDATE vora_files SET duration_seconds = ?1, last_position_seconds = ?2,
+                    last_used_at = ?3 WHERE id = ?4",
+                params![duration, position, last_used, file.id],
+            )
+            .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn ensure_document_file_id(conn: &Connection) -> Result<(), String> {
+    if !column_exists(conn, "documents", "file_id")? {
+        conn.execute(
+            "ALTER TABLE documents ADD COLUMN file_id TEXT REFERENCES vora_files(id)",
+            [],
+        )
+        .map_err(|error| format!("Could not add document file identity: {error}"))?;
+    }
+    Ok(())
+}
+
+fn migrate_legacy_documents(conn: &Connection) -> Result<(), String> {
+    if !column_exists(conn, "documents", "file_path")? {
+        return Ok(());
+    }
+    let mut statement = conn
+        .prepare(
+            "SELECT id, file_path, file_type FROM documents
+             WHERE file_id IS NULL OR file_id = ''",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|error| error.to_string())?;
+    let documents = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    drop(statement);
+    for (document_id, path, file_type) in documents {
+        let file = legacy_file_reference(conn, &path, &file_type, 0, 0)?;
+        conn.execute(
+            "UPDATE documents SET file_id = ?1 WHERE id = ?2",
+            params![file.id, document_id],
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn migrate_legacy_slices(conn: &Connection) -> Result<(), String> {
+    let has_source_id = column_exists(conn, "mind_media_slices", "source_id")?;
+    let has_file_id = column_exists(conn, "mind_media_slices", "file_id")?;
+    if !has_source_id || has_file_id {
+        return Ok(());
+    }
+
+    conn.execute_batch("PRAGMA foreign_keys = OFF;")
+        .map_err(|error| error.to_string())?;
+    let migration = conn.execute_batch(
+        "BEGIN IMMEDIATE;
+         ALTER TABLE mind_media_slices RENAME TO mind_media_slices_legacy;
+         CREATE TABLE mind_media_slices (
+            id TEXT PRIMARY KEY,
+            file_id TEXT NOT NULL REFERENCES vora_files(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            start_seconds REAL NOT NULL CHECK(start_seconds >= 0),
+            end_seconds REAL NOT NULL CHECK(end_seconds > start_seconds),
+            note TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+         );
+         INSERT INTO mind_media_slices
+            (id, file_id, title, start_seconds, end_seconds, note, created_at, updated_at)
+         SELECT id, source_id, title, start_seconds, end_seconds, note, created_at, updated_at
+         FROM mind_media_slices_legacy;
+         DROP TABLE mind_media_slices_legacy;
+         COMMIT;",
+    );
+    conn.execute_batch("PRAGMA foreign_keys = ON;")
+        .map_err(|error| error.to_string())?;
+    migration.map_err(|error| format!("Could not migrate media annotations: {error}"))
 }
 
 fn source_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MediaSource> {
@@ -94,29 +475,32 @@ fn source_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MediaSource> {
     })
 }
 
-fn get_source(conn: &Connection, source_id: &str) -> rusqlite::Result<Option<MediaSource>> {
-    conn.query_row(
-        "SELECT id, path, fingerprint_size, fingerprint_modified_ms, duration_seconds,
-                last_position_seconds, created_at, last_used_at
-         FROM mind_media_sources WHERE id = ?1",
-        [source_id],
-        source_from_row,
-    )
-    .optional()
+fn source_from_file(file: VoraFile) -> MediaSource {
+    MediaSource {
+        id: file.id,
+        path: file.current_path,
+        fingerprint_size: file.size_bytes,
+        fingerprint_modified_ms: file.modified_time_ms,
+        duration_seconds: file.duration_seconds,
+        last_position_seconds: file.last_position_seconds,
+        created_at: file.created_at,
+        last_used_at: file.last_used_at,
+    }
 }
 
-fn verify_source(source: &MediaSource) -> Result<(), String> {
+fn get_source(conn: &Connection, file_id: &str) -> rusqlite::Result<Option<MediaSource>> {
+    get_file(conn, file_id).map(|file| file.map(source_from_file))
+}
+
+fn verify_source(source: &MediaSource, file_hash: &str) -> Result<(), String> {
     let path = Path::new(&source.path);
-    let (size, modified_ms) = fingerprint(path).map_err(|error| {
-        if !path.exists() {
-            format!("Media source is missing: {}", path.display())
-        } else {
-            error
-        }
-    })?;
-    if size != source.fingerprint_size || modified_ms != source.fingerprint_modified_ms {
+    if !path.is_file() {
+        return Err(format!("Media file is missing: {}", path.display()));
+    }
+    let (size, _) = file_metadata(path)?;
+    if size != source.fingerprint_size || sha256_file(path)? != file_hash {
         return Err(format!(
-            "Media source changed since it was referenced: {}. Reopen the current file to create a new source reference.",
+            "Media file contents changed since import: {}.",
             path.display()
         ));
     }
@@ -133,70 +517,144 @@ fn lock_database<'a>(
 }
 
 #[tauri::command]
+pub fn import_file_reference(state: State<'_, AppState>, path: String) -> Result<String, String> {
+    let conn = lock_database(&state)?;
+    let file = ensure_file_reference(&conn, Path::new(&path), None)?;
+    Ok(file.id)
+}
+
+#[tauri::command]
+pub fn get_vora_file(state: State<'_, AppState>, file_id: String) -> Result<VoraFile, String> {
+    let conn = lock_database(&state)?;
+    get_file(&conn, &file_id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("File {file_id} was not found in this workspace."))
+}
+
+#[tauri::command]
+pub fn resolve_missing_file(
+    state: State<'_, AppState>,
+    file_id: String,
+    search_dir: String,
+) -> Result<String, String> {
+    let search_root = PathBuf::from(&search_dir)
+        .canonicalize()
+        .map_err(|error| format!("Cannot access search directory {search_dir}: {error}"))?;
+    if !search_root.is_dir() {
+        return Err(format!("Search path is not a directory: {}", search_root.display()));
+    }
+    let conn = lock_database(&state)?;
+    let file = get_file(&conn, &file_id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("File {file_id} was not found in this workspace."))?;
+    for entry in WalkDir::new(&search_root).follow_links(false) {
+        let entry = entry.map_err(|error| format!("Could not search files: {error}"))?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let candidate = entry.path();
+        let Ok((size, modified_time_ms)) = file_metadata(candidate) else {
+            continue;
+        };
+        if size != file.size_bytes {
+            continue;
+        }
+        let matches = if let Some((legacy_size, legacy_modified)) = file.file_hash
+            .strip_prefix("legacy:")
+            .and_then(|value| value.split_once(':'))
+        {
+            legacy_size.parse::<i64>().ok() == Some(size)
+                && legacy_modified.parse::<i64>().ok() == Some(modified_time_ms)
+        } else {
+            sha256_file(candidate)? == file.file_hash
+        };
+        if !matches {
+            continue;
+        }
+        let canonical_path = candidate
+            .canonicalize()
+            .map_err(|error| format!("Could not resolve matched file path: {error}"))?;
+        conn.execute(
+            "UPDATE vora_files SET current_path = ?1, modified_time_ms = ?2 WHERE id = ?3",
+            params![canonical_path.to_string_lossy(), modified_time_ms, file_id],
+        )
+        .map_err(|error| error.to_string())?;
+        return canonical_path
+            .to_str()
+            .map(str::to_string)
+            .ok_or_else(|| "Matched file path cannot be represented as Unicode.".to_string());
+    }
+    Err(format!(
+        "Could not locate {} in {}. No file with matching content was found.",
+        file.original_name,
+        search_root.display()
+    ))
+}
+
+#[tauri::command]
+pub fn list_media_files(
+    state: State<'_, AppState>,
+) -> Result<Vec<MediaFileLibraryEntry>, String> {
+    let conn = lock_database(&state)?;
+    let files = {
+        let mut statement = conn
+            .prepare(&format!("SELECT {FILE_COLUMNS} FROM vora_files ORDER BY original_name COLLATE NOCASE, id"))
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([], file_from_row)
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?
+    };
+    files
+        .into_iter()
+        .map(|file| {
+            let slices = list_slices(&conn, &file.id)?;
+            Ok(MediaFileLibraryEntry { file, slices })
+        })
+        .collect()
+}
+
+fn list_slices(conn: &Connection, file_id: &str) -> Result<Vec<MediaSlice>, String> {
+    let mut statement = conn
+        .prepare(
+            "SELECT id, file_id, title, start_seconds, end_seconds, note, created_at, updated_at
+             FROM mind_media_slices WHERE file_id = ?1 ORDER BY start_seconds, created_at",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([file_id], |row| {
+            Ok(MediaSlice {
+                id: row.get(0)?,
+                file_id: row.get(1)?,
+                title: row.get(2)?,
+                start_seconds: row.get(3)?,
+                end_seconds: row.get(4)?,
+                note: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn register_media_source(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<MediaSource, String> {
-    let selected_path = Path::new(&path);
-    let canonical_path = selected_path.canonicalize().map_err(|error| {
-        format!(
-            "Cannot open media source {}: {error}",
-            selected_path.display()
-        )
-    })?;
-    let canonical_path = canonical_path
-        .to_str()
-        .ok_or_else(|| "Media source path cannot be represented as Unicode.".to_string())?
-        .to_string();
-    let (size, modified_ms) = fingerprint(Path::new(&canonical_path))?;
     let now = now_ms()?;
     let conn = lock_database(&state)?;
-
-    let existing = conn
-        .query_row(
-            "SELECT id, path, fingerprint_size, fingerprint_modified_ms, duration_seconds,
-                    last_position_seconds, created_at, last_used_at
-             FROM mind_media_sources
-             WHERE path = ?1 AND fingerprint_size = ?2 AND fingerprint_modified_ms = ?3",
-            params![canonical_path, size, modified_ms],
-            source_from_row,
-        )
-        .optional()
-        .map_err(|error| error.to_string())?;
-    if let Some(mut source) = existing {
-        conn.execute(
-            "UPDATE mind_media_sources SET last_used_at = ?1 WHERE id = ?2",
-            params![now, source.id],
-        )
-        .map_err(|error| error.to_string())?;
-        source.last_used_at = now;
-        return Ok(source);
-    }
-
-    let source = MediaSource {
-        id: Uuid::now_v7().to_string(),
-        path: canonical_path,
-        fingerprint_size: size,
-        fingerprint_modified_ms: modified_ms,
-        duration_seconds: None,
-        last_position_seconds: 0.0,
-        created_at: now,
-        last_used_at: now,
-    };
+    let file = ensure_file_reference(&conn, Path::new(&path), None)?;
     conn.execute(
-        "INSERT INTO mind_media_sources
-            (id, path, fingerprint_size, fingerprint_modified_ms, duration_seconds,
-             last_position_seconds, created_at, last_used_at)
-         VALUES (?1, ?2, ?3, ?4, NULL, 0, ?5, ?5)",
-        params![
-            source.id,
-            source.path,
-            source.fingerprint_size,
-            source.fingerprint_modified_ms,
-            source.created_at
-        ],
+        "UPDATE vora_files SET last_used_at = ?1 WHERE id = ?2",
+        params![now, file.id],
     )
     .map_err(|error| error.to_string())?;
+    let mut source = source_from_file(file);
+    source.last_used_at = now;
     Ok(source)
 }
 
@@ -208,16 +666,17 @@ pub fn get_media_source(
     let conn = lock_database(&state)?;
     get_source(&conn, &source_id)
         .map_err(|error| error.to_string())?
-        .ok_or_else(|| format!("Media source {source_id} was not found in this workspace."))
+        .ok_or_else(|| format!("Media file {source_id} was not found in this workspace."))
 }
 
 #[tauri::command]
 pub fn get_last_media_source(state: State<'_, AppState>) -> Result<Option<MediaSource>, String> {
     let conn = lock_database(&state)?;
     conn.query_row(
-        "SELECT id, path, fingerprint_size, fingerprint_modified_ms, duration_seconds,
+        "SELECT id, current_path, size_bytes, modified_time_ms, duration_seconds,
                 last_position_seconds, created_at, last_used_at
-         FROM mind_media_sources ORDER BY last_used_at DESC, created_at DESC LIMIT 1",
+         FROM vora_files WHERE file_type IN ('audio', 'video') AND last_used_at > 0
+         ORDER BY last_used_at DESC, created_at DESC LIMIT 1",
         [],
         source_from_row,
     )
@@ -231,10 +690,11 @@ pub fn validate_media_source(
     source_id: String,
 ) -> Result<MediaSource, String> {
     let conn = lock_database(&state)?;
-    let source = get_source(&conn, &source_id)
+    let file = get_file(&conn, &source_id)
         .map_err(|error| error.to_string())?
-        .ok_or_else(|| format!("Media source {source_id} was not found in this workspace."))?;
-    verify_source(&source)?;
+        .ok_or_else(|| format!("Media file {source_id} was not found in this workspace."))?;
+    let source = source_from_file(file.clone());
+    verify_source(&source, &file.file_hash)?;
     Ok(source)
 }
 
@@ -250,14 +710,12 @@ pub fn update_media_source_duration(
     let conn = lock_database(&state)?;
     let updated = conn
         .execute(
-            "UPDATE mind_media_sources SET duration_seconds = ?1 WHERE id = ?2",
+            "UPDATE vora_files SET duration_seconds = ?1 WHERE id = ?2",
             params![duration_seconds, source_id],
         )
         .map_err(|error| error.to_string())?;
     if updated == 0 {
-        return Err(format!(
-            "Media source {source_id} was not found in this workspace."
-        ));
+        return Err(format!("Media file {source_id} was not found in this workspace."));
     }
     Ok(())
 }
@@ -274,15 +732,12 @@ pub fn save_media_source_position(
     let conn = lock_database(&state)?;
     let updated = conn
         .execute(
-            "UPDATE mind_media_sources SET last_position_seconds = ?1, last_used_at = ?2
-             WHERE id = ?3",
+            "UPDATE vora_files SET last_position_seconds = ?1, last_used_at = ?2 WHERE id = ?3",
             params![position_seconds, now_ms()?, source_id],
         )
         .map_err(|error| error.to_string())?;
     if updated == 0 {
-        return Err(format!(
-            "Media source {source_id} was not found in this workspace."
-        ));
+        return Err(format!("Media file {source_id} was not found in this workspace."));
     }
     Ok(())
 }
@@ -290,31 +745,10 @@ pub fn save_media_source_position(
 #[tauri::command]
 pub fn list_media_slices(
     state: State<'_, AppState>,
-    source_id: String,
+    file_id: String,
 ) -> Result<Vec<MediaSlice>, String> {
     let conn = lock_database(&state)?;
-    let mut statement = conn
-        .prepare(
-            "SELECT id, source_id, title, start_seconds, end_seconds, note, created_at, updated_at
-             FROM mind_media_slices WHERE source_id = ?1 ORDER BY start_seconds, created_at",
-        )
-        .map_err(|error| error.to_string())?;
-    let rows = statement
-        .query_map([source_id], |row| {
-            Ok(MediaSlice {
-                id: row.get(0)?,
-                source_id: row.get(1)?,
-                title: row.get(2)?,
-                start_seconds: row.get(3)?,
-                end_seconds: row.get(4)?,
-                note: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
-            })
-        })
-        .map_err(|error| error.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|error| error.to_string())
+    list_slices(&conn, &file_id)
 }
 
 #[tauri::command]
@@ -333,16 +767,11 @@ pub fn save_media_slice(
     }
 
     let mut conn = lock_database(&state)?;
-    let source = get_source(&conn, &input.source_id)
+    let file = get_file(&conn, &input.file_id)
         .map_err(|error| error.to_string())?
-        .ok_or_else(|| {
-            format!(
-                "Media source {} was not found in this workspace.",
-                input.source_id
-            )
-        })?;
-    verify_source(&source)?;
-    if source
+        .ok_or_else(|| format!("File {} was not found in this workspace.", input.file_id))?;
+    verify_source(&source_from_file(file.clone()), &file.file_hash)?;
+    if file
         .duration_seconds
         .is_some_and(|duration| input.end_seconds > duration)
     {
@@ -352,25 +781,25 @@ pub fn save_media_slice(
     let now = now_ms()?;
     let id = input.id.unwrap_or_else(|| Uuid::now_v7().to_string());
     let tx = conn.transaction().map_err(|error| error.to_string())?;
-    let existing_source_id = tx
+    let existing_file_id = tx
         .query_row(
-            "SELECT source_id FROM mind_media_slices WHERE id = ?1",
+            "SELECT file_id FROM mind_media_slices WHERE id = ?1",
             [&id],
             |row| row.get::<_, String>(0),
         )
         .optional()
         .map_err(|error| error.to_string())?;
-    if existing_source_id
+    if existing_file_id
         .as_ref()
-        .is_some_and(|existing| existing != &input.source_id)
+        .is_some_and(|existing| existing != &input.file_id)
     {
-        return Err("A media reference cannot be moved to a different source.".to_string());
+        return Err("A media reference cannot be moved to a different file.".to_string());
     }
-    if existing_source_id.is_some() {
+    if existing_file_id.is_some() {
         tx.execute(
             "UPDATE mind_media_slices
              SET title = ?1, start_seconds = ?2, end_seconds = ?3, note = ?4, updated_at = ?5
-             WHERE id = ?6 AND source_id = ?7",
+             WHERE id = ?6 AND file_id = ?7",
             params![
                 title,
                 input.start_seconds,
@@ -378,18 +807,18 @@ pub fn save_media_slice(
                 input.note,
                 now,
                 id,
-                input.source_id
+                input.file_id
             ],
         )
         .map_err(|error| error.to_string())?;
     } else {
         tx.execute(
             "INSERT INTO mind_media_slices
-                (id, source_id, title, start_seconds, end_seconds, note, created_at, updated_at)
+                (id, file_id, title, start_seconds, end_seconds, note, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
             params![
                 id,
-                input.source_id,
+                input.file_id,
                 title,
                 input.start_seconds,
                 input.end_seconds,
@@ -401,13 +830,13 @@ pub fn save_media_slice(
     }
     let slice = tx
         .query_row(
-            "SELECT id, source_id, title, start_seconds, end_seconds, note, created_at, updated_at
+            "SELECT id, file_id, title, start_seconds, end_seconds, note, created_at, updated_at
              FROM mind_media_slices WHERE id = ?1",
             [&id],
             |row| {
                 Ok(MediaSlice {
                     id: row.get(0)?,
-                    source_id: row.get(1)?,
+                    file_id: row.get(1)?,
                     title: row.get(2)?,
                     start_seconds: row.get(3)?,
                     end_seconds: row.get(4)?,
@@ -442,13 +871,13 @@ pub fn get_media_slice(
     let conn = lock_database(&state)?;
     let slice = conn
         .query_row(
-            "SELECT id, source_id, title, start_seconds, end_seconds, note, created_at, updated_at
+            "SELECT id, file_id, title, start_seconds, end_seconds, note, created_at, updated_at
              FROM mind_media_slices WHERE id = ?1",
             [&slice_id],
             |row| {
                 Ok(MediaSlice {
                     id: row.get(0)?,
-                    source_id: row.get(1)?,
+                    file_id: row.get(1)?,
                     title: row.get(2)?,
                     start_seconds: row.get(3)?,
                     end_seconds: row.get(4)?,
@@ -461,55 +890,31 @@ pub fn get_media_slice(
         .optional()
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("Media reference {slice_id} was not found in this workspace."))?;
-    let source = get_source(&conn, &slice.source_id)
+    let source = get_source(&conn, &slice.file_id)
         .map_err(|error| error.to_string())?
-        .ok_or_else(|| {
-            format!(
-                "Media source {} was not found in this workspace.",
-                slice.source_id
-            )
-        })?;
+        .ok_or_else(|| format!("File {} was not found in this workspace.", slice.file_id))?;
     Ok(MediaSliceWithSource { slice, source })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{fingerprint, valid_range, verify_source, MediaSource};
+    use super::{file_metadata, migrate_file_references, sha256_file, valid_range};
     use std::fs;
     use std::io::Write;
     use std::path::PathBuf;
     use uuid::Uuid;
 
     #[test]
-    fn fingerprint_tracks_size_and_modification_time() {
-        let path: PathBuf = std::env::temp_dir().join(format!("vora-media-{}.bin", Uuid::now_v7()));
+    fn fingerprint_tracks_content_and_metadata() {
+        let path: PathBuf = std::env::temp_dir().join(format!("vora-file-{}.bin", Uuid::now_v7()));
         let mut file = fs::File::create(&path).unwrap();
         file.write_all(b"original").unwrap();
         drop(file);
-        let original = fingerprint(&path).unwrap();
+        let original_hash = sha256_file(&path).unwrap();
+        let original_metadata = file_metadata(&path).unwrap();
         fs::write(&path, b"changed-size").unwrap();
-        let changed = fingerprint(&path).unwrap();
-        assert_ne!(original, changed);
-        fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn verification_rejects_a_changed_source() {
-        let path: PathBuf = std::env::temp_dir().join(format!("vora-media-{}.bin", Uuid::now_v7()));
-        fs::write(&path, b"original").unwrap();
-        let (size, modified_ms) = fingerprint(&path).unwrap();
-        let source = MediaSource {
-            id: Uuid::now_v7().to_string(),
-            path: path.to_string_lossy().into_owned(),
-            fingerprint_size: size,
-            fingerprint_modified_ms: modified_ms,
-            duration_seconds: None,
-            last_position_seconds: 0.0,
-            created_at: 0,
-            last_used_at: 0,
-        };
-        fs::write(&path, b"replaced source").unwrap();
-        assert!(verify_source(&source).is_err());
+        assert_ne!(original_hash, sha256_file(&path).unwrap());
+        assert_ne!(original_metadata.0, file_metadata(&path).unwrap().0);
         fs::remove_file(path).unwrap();
     }
 
@@ -523,25 +928,76 @@ mod tests {
     }
 
     #[test]
-    fn media_schema_initializes_idempotently() {
+    fn migrates_existing_player_sources_and_slices() {
+        let path = std::env::temp_dir().join(format!("vora-legacy-{}.mp4", Uuid::now_v7()));
+        fs::write(&path, b"old media bytes").unwrap();
+        let now = 1_700_000_000_000_i64;
         let connection = rusqlite::Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 CREATE TABLE mind_media_sources (
+                    id TEXT PRIMARY KEY, path TEXT NOT NULL, fingerprint_size INTEGER NOT NULL,
+                    fingerprint_modified_ms INTEGER NOT NULL, duration_seconds REAL,
+                    last_position_seconds REAL NOT NULL, created_at INTEGER NOT NULL,
+                    last_used_at INTEGER NOT NULL);
+                 CREATE TABLE mind_media_slices (
+                    id TEXT PRIMARY KEY, source_id TEXT NOT NULL, title TEXT NOT NULL,
+                    start_seconds REAL NOT NULL, end_seconds REAL NOT NULL, note TEXT NOT NULL,
+                    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                    FOREIGN KEY(source_id) REFERENCES mind_media_sources(id));
+                 CREATE TABLE documents (
+                    id TEXT PRIMARY KEY, title TEXT NOT NULL, file_path TEXT NOT NULL UNIQUE,
+                    file_type TEXT NOT NULL, page_count INTEGER, created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL);",
+            )
+            .unwrap();
+        let (size, modified) = file_metadata(&path).unwrap();
+        connection
+            .execute(
+                "INSERT INTO mind_media_sources VALUES ('file-1', ?1, ?2, ?3, 60, 3, ?4, ?4)",
+                rusqlite::params![path.to_string_lossy(), size, modified, now],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO mind_media_slices VALUES ('slice-1', 'file-1', 'Note', 1, 5, 'Text', ?1, ?1)",
+                [now],
+            )
+            .unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE vora_files (
+                    id TEXT PRIMARY KEY, original_name TEXT NOT NULL, current_path TEXT NOT NULL,
+                    file_type TEXT NOT NULL, file_hash TEXT NOT NULL, size_bytes INTEGER NOT NULL,
+                    modified_time_ms INTEGER NOT NULL, created_at INTEGER NOT NULL,
+                    duration_seconds REAL, last_position_seconds REAL NOT NULL DEFAULT 0,
+                    last_used_at INTEGER NOT NULL DEFAULT 0);
+                 CREATE TABLE mind_media_slices_new (
+                    id TEXT PRIMARY KEY, file_id TEXT NOT NULL REFERENCES vora_files(id),
+                    title TEXT NOT NULL, start_seconds REAL NOT NULL, end_seconds REAL NOT NULL,
+                    note TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+                 DROP TABLE mind_media_slices_new;",
+            )
+            .unwrap();
         crate::mind::canvas_db::init_db(&connection).unwrap();
-        crate::mind::canvas_db::init_db(&connection).unwrap();
-        let source_table_exists: bool = connection
+        migrate_file_references(&connection).unwrap();
+        let file_hash: String = connection
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'mind_media_sources')",
+                "SELECT file_hash FROM vora_files WHERE id = 'file-1'",
                 [],
                 |row| row.get(0),
             )
             .unwrap();
-        let slice_table_exists: bool = connection
+        assert_eq!(file_hash, sha256_file(&path).unwrap());
+        let migrated_file_id: String = connection
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'mind_media_slices')",
+                "SELECT file_id FROM mind_media_slices WHERE id = 'slice-1'",
                 [],
                 |row| row.get(0),
             )
             .unwrap();
-        assert!(source_table_exists);
-        assert!(slice_table_exists);
+        assert_eq!(migrated_file_id, "file-1");
+        fs::remove_file(path).unwrap();
     }
 }
