@@ -915,7 +915,7 @@ pub fn get_media_slice(
 
 #[cfg(test)]
 mod tests {
-    use super::{file_metadata, migrate_file_references, sha256_file, valid_range};
+    use super::{file_metadata, sha256_file, valid_range};
     use std::fs;
     use std::io::Write;
     use std::path::PathBuf;
