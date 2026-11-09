@@ -254,10 +254,24 @@ pub fn init_db(conn: &Connection) -> Result<()> {
                 CHECK (review_status IN ('active', 'completed', 'not_needed'))
         );
 
+        CREATE TABLE IF NOT EXISTS vora_files (
+            id TEXT PRIMARY KEY,
+            original_name TEXT NOT NULL,
+            current_path TEXT NOT NULL,
+            file_type TEXT NOT NULL,
+            file_hash TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL,
+            modified_time_ms INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            duration_seconds REAL,
+            last_position_seconds REAL NOT NULL DEFAULT 0,
+            last_used_at INTEGER NOT NULL DEFAULT 0
+        );
+
         CREATE TABLE IF NOT EXISTS documents (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
-            file_path TEXT NOT NULL UNIQUE,
+            file_id TEXT NOT NULL REFERENCES vora_files(id),
             file_type TEXT NOT NULL CHECK(file_type IN ('pdf', 'docx', 'md')),
             page_count INTEGER,
             created_at INTEGER NOT NULL,
@@ -390,28 +404,15 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             CHECK(target_start >= 0 AND target_end > target_start)
         );
 
-        CREATE TABLE IF NOT EXISTS mind_media_sources (
-            id TEXT PRIMARY KEY,
-            path TEXT NOT NULL,
-            fingerprint_size INTEGER NOT NULL,
-            fingerprint_modified_ms INTEGER NOT NULL,
-            duration_seconds REAL,
-            last_position_seconds REAL NOT NULL DEFAULT 0,
-            created_at INTEGER NOT NULL,
-            last_used_at INTEGER NOT NULL,
-            UNIQUE(path, fingerprint_size, fingerprint_modified_ms)
-        );
-
         CREATE TABLE IF NOT EXISTS mind_media_slices (
             id TEXT PRIMARY KEY,
-            source_id TEXT NOT NULL,
+            file_id TEXT NOT NULL REFERENCES vora_files(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             start_seconds REAL NOT NULL CHECK(start_seconds >= 0),
             end_seconds REAL NOT NULL CHECK(end_seconds > start_seconds),
             note TEXT NOT NULL DEFAULT '',
             created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL,
-            FOREIGN KEY(source_id) REFERENCES mind_media_sources(id) ON DELETE CASCADE
+            updated_at INTEGER NOT NULL
         );
 
         CREATE INDEX IF NOT EXISTS idx_snapshots_parent ON mind_snapshots(parent_snapshot_id);
@@ -435,10 +436,10 @@ pub fn init_db(conn: &Connection) -> Result<()> {
              WHERE library_item_group_id IS NOT NULL;
          CREATE INDEX IF NOT EXISTS idx_library_item_groups_created ON library_item_groups(created_at, id);
          CREATE INDEX IF NOT EXISTS idx_library_item_group_versions_history ON library_item_group_versions(group_id, created_at, id);
-         CREATE INDEX IF NOT EXISTS idx_media_slices_source_time ON mind_media_slices(source_id, start_seconds, created_at);
          CREATE INDEX IF NOT EXISTS idx_text_links_source ON mind_text_links(source_board_id, source_card_id, source_field, source_start);
          CREATE INDEX IF NOT EXISTS idx_text_links_target ON mind_text_links(target_board_id, target_card_id, target_field, target_start);",
     )?;
+    crate::mind::media::migrate_file_references(conn).map_err(anyhow::Error::msg)?;
     conn.execute(
         "INSERT OR IGNORE INTO library_item_group_versions
             (id, group_id, version, snapshot_json, created_at)

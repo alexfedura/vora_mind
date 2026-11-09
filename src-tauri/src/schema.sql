@@ -15,10 +15,24 @@ CREATE TABLE IF NOT EXISTS objects (
         CHECK (review_status IN ('active', 'completed', 'not_needed'))
 );
 
+CREATE TABLE IF NOT EXISTS vora_files (
+    id TEXT PRIMARY KEY,
+    original_name TEXT NOT NULL,
+    current_path TEXT NOT NULL,
+    file_type TEXT NOT NULL,
+    file_hash TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    modified_time_ms INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    duration_seconds REAL,
+    last_position_seconds REAL NOT NULL DEFAULT 0,
+    last_used_at INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS documents (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
-    file_path TEXT NOT NULL UNIQUE,
+    file_id TEXT NOT NULL REFERENCES vora_files(id),
     file_type TEXT NOT NULL CHECK(file_type IN ('pdf', 'docx', 'md')),
     page_count INTEGER,
     created_at INTEGER NOT NULL,
