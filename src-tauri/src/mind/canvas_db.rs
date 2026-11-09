@@ -1856,7 +1856,8 @@ mod board_version_tests {
     use super::{
         checkout_board_version, create_board, create_board_version, get_all_boards,
         get_board_version_snapshot, get_board_versions, init_db, search_library_objects,
-        update_object_review_status, BoardVersionCard, BoardVersionSnapshot, EdgeInput, NodeInput,
+        update_object_review_status, BoardVersionCard, BoardVersionSnapshot, CardMediaMetadata,
+        EdgeInput, NodeInput,
     };
     use rusqlite::Connection;
     use serde_json::json;
@@ -1889,7 +1890,11 @@ mod board_version_tests {
                 content: format!("content for {title}"),
                 version: "v0.1.0".to_string(),
                 deleted_at: None,
-                metadata: None,
+                metadata: Some(CardMediaMetadata {
+                    source_file_id: Some("video-file-id".to_string()),
+                    start_time: Some(323.0),
+                    end_time: Some(495.0),
+                }),
             }],
             reason: None,
         }
@@ -2238,6 +2243,31 @@ mod board_version_tests {
         assert_eq!(restored.nodes[0].title, "v0.2.0");
         assert_eq!(restored.edges[0].id, "edge-a");
         assert_eq!(restored.cards[0].content, "content for v0.2.0");
+        assert_eq!(
+            restored.cards[0]
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.source_file_id.as_deref()),
+            Some("video-file-id")
+        );
+        assert_eq!(
+            restored.cards[0]
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.start_time),
+            Some(323.0)
+        );
+        let stored_metadata: String = conn
+            .query_row(
+                "SELECT metadata FROM objects WHERE id = 'card-a'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let stored_metadata: serde_json::Value =
+            serde_json::from_str(&stored_metadata).unwrap();
+        assert_eq!(stored_metadata["source_file_id"], "video-file-id");
+        assert_eq!(stored_metadata["start_time"], 323.0);
         assert_eq!(
             get_all_boards(&conn).unwrap()[0].active_version,
             "0.2.0 - 0.3.0"
