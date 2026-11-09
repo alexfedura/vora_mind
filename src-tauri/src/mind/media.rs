@@ -541,15 +541,26 @@ pub fn import_file_reference(state: State<'_, AppState>, path: String) -> Result
 }
 
 #[tauri::command]
-pub fn get_vora_file(state: State<'_, AppState>, file_id: String) -> Result<VoraFile, String> {
+pub fn get_vora_file(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    file_id: String,
+) -> Result<VoraFile, String> {
     let conn = lock_database(&state)?;
-    get_file(&conn, &file_id)
+    let file = get_file(&conn, &file_id)
         .map_err(|error| error.to_string())?
-        .ok_or_else(|| format!("File {file_id} was not found in this workspace."))
+        .ok_or_else(|| format!("File {file_id} was not found in this workspace."))?;
+    if file.is_available {
+        app.asset_protocol_scope()
+            .allow_file(&file.current_path)
+            .map_err(|error| format!("Could not authorize media file access: {error}"))?;
+    }
+    Ok(file)
 }
 
 #[tauri::command]
 pub fn resolve_missing_file(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     file_id: String,
     search_dir: String,
@@ -596,6 +607,9 @@ pub fn resolve_missing_file(
             params![canonical_path.to_string_lossy(), modified_time_ms, file_id],
         )
         .map_err(|error| error.to_string())?;
+        app.asset_protocol_scope()
+            .allow_file(&canonical_path)
+            .map_err(|error| format!("Could not authorize the relocated file: {error}"))?;
         return canonical_path
             .to_str()
             .map(str::to_string)
