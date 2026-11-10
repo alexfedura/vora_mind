@@ -5,6 +5,8 @@ $resourceDirectory = [System.IO.Path]::GetFullPath(
     (Join-Path $root "src-tauri\resources\binaries\mpv")
 )
 $tempDirectory = $null
+$preservedRuntimeDirectory = $null
+$preservedRuntimeFiles = @()
 
 $runtimeFiles = @()
 $runtimeVersion = ""
@@ -98,6 +100,17 @@ try {
     }
 
     if (Test-Path -LiteralPath $resourceDirectory) {
+        $preservedRuntimeFiles = Get-ChildItem -LiteralPath $resourceDirectory -File |
+            Where-Object { $_.Name -in @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll") }
+        if ($preservedRuntimeFiles) {
+            $preservedRuntimeDirectory = Join-Path $env:TEMP (
+                "vora-mpv-runtime-" + [guid]::NewGuid().ToString("N")
+            )
+            New-Item -ItemType Directory -Force -Path $preservedRuntimeDirectory | Out-Null
+            foreach ($file in $preservedRuntimeFiles) {
+                Copy-Item -LiteralPath $file.FullName -Destination $preservedRuntimeDirectory -Force
+            }
+        }
         Remove-Item -LiteralPath $resourceDirectory -Recurse -Force
     }
     New-Item -ItemType Directory -Force -Path $resourceDirectory | Out-Null
@@ -113,6 +126,13 @@ try {
         $destinationDirectory = Split-Path -Parent $destination
         New-Item -ItemType Directory -Force -Path $destinationDirectory | Out-Null
         Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+    }
+    foreach ($file in $preservedRuntimeFiles) {
+        $destination = Join-Path $resourceDirectory $file.Name
+        if (-not (Test-Path -LiteralPath $destination -PathType Leaf)) {
+            Copy-Item -LiteralPath (Join-Path $preservedRuntimeDirectory $file.Name) `
+                -Destination $destination -Force
+        }
     }
 
     Set-Content -LiteralPath (Join-Path $resourceDirectory "MPV-VERSION.txt") -Value $runtimeVersion -Encoding UTF8
@@ -132,5 +152,8 @@ try {
 } finally {
     if ($tempDirectory -and (Test-Path -LiteralPath $tempDirectory)) {
         Remove-Item -LiteralPath $tempDirectory -Recurse -Force
+    }
+    if ($preservedRuntimeDirectory -and (Test-Path -LiteralPath $preservedRuntimeDirectory)) {
+        Remove-Item -LiteralPath $preservedRuntimeDirectory -Recurse -Force
     }
 }
