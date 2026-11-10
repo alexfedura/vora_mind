@@ -86,6 +86,7 @@ fn object_type_for_node(node_type: &str) -> &'static str {
         "voraText" => "text",
         "voraShape" => "shape",
         "voraMedia" => "media",
+        "voraMatrix" => "canvas_node",
         _ => "canvas_node",
     }
 }

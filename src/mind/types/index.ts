@@ -20,6 +20,12 @@ export interface VoraCardData {
   version?: string;
 }
 
+export interface VoraMatrixData {
+  title: string;
+  columns: { id: string; name: string; weight: number }[];
+  rows: { id: string; name: string; scores: Record<string, number> }[];
+}
+
 export interface VoraMediaData extends Record<string, unknown> {
   type: "image" | "audio" | "video";
   fileId?: string;
