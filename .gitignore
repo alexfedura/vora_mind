@@ -97,6 +97,11 @@ ehthumbs.db
 *.crt
 /src-tauri/vora.key
 /src-tauri/resources/binaries/mpv/
+!/src-tauri/resources/binaries/mpv/
+src-tauri/resources/binaries/mpv/*
+!/src-tauri/resources/binaries/mpv/msvcp140.dll
+!/src-tauri/resources/binaries/mpv/vcruntime140.dll
+!/src-tauri/resources/binaries/mpv/vcruntime140_1.dll
 .env
 .env.*
 !.env.example
