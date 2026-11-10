@@ -97,6 +97,7 @@ interface AppState {
   setTextDirection: (direction: "rtl" | "ltr") => void;
   toggleTextDirection: () => void;
   setCards: (cards: Record<string, VoraCard>) => void;
+  ensureLibraryCardLoaded: (boardId: string, cardId: string) => Promise<VoraCard>;
   addCard: (
     title?: string,
     content?: string,
@@ -309,6 +310,37 @@ export const useAppStore = create<AppState>()(
       setCards: (cards) => set({ cards }),
       setLibraryBoardEditing: (editing, returnCards = null) =>
         set({ isLibraryBoardEditing: editing, libraryBoardReturnCards: editing ? returnCards : null }),
+      ensureLibraryCardLoaded: async (boardId, cardId) => {
+        const cachedCard = get().cards[cardId];
+        if (cachedCard?.boardId === boardId) return cachedCard;
+
+        const savedCard = (await dbService.getAllCards(boardId))
+          .find((card) => card.id === cardId && card.deleted_at === null);
+        if (!savedCard) throw new Error("The Library card is no longer available.");
+
+        const card: VoraCard = {
+          id: savedCard.id,
+          title: savedCard.title,
+          content: savedCard.content,
+          version: savedCard.version || "v0.1.0",
+          boardId,
+          deleted_at: savedCard.deleted_at ?? undefined,
+          librarySourceCardId: savedCard.library_source_card_id ?? undefined,
+          sourceDocumentId: savedCard.document_id ?? undefined,
+          sourceHighlightId: savedCard.highlight_id ?? undefined,
+          mediaLineage: typeof savedCard.source_file_id === "string" &&
+            typeof savedCard.start_time === "number" &&
+            typeof savedCard.end_time === "number"
+            ? {
+                source_file_id: savedCard.source_file_id,
+                start_time: savedCard.start_time,
+                end_time: savedCard.end_time,
+              }
+            : undefined,
+        };
+        set((state) => ({ cards: { ...state.cards, [cardId]: card } }));
+        return card;
+      },
 
       addCard: (title = "New card", content = "", librarySourceCardId, mediaLineage) => {
         const boardId = get().activeBoardId;
@@ -411,7 +443,12 @@ export const useAppStore = create<AppState>()(
               })
               .catch((error: unknown) => console.error("Failed to save card content:", error));
           }
-          return { cards };
+          return {
+            cards,
+            libraryObjects: state.libraryObjects.map((item) =>
+              item.id === id && item.type === "card" ? { ...item, title, content } : item
+            ),
+          };
         }),
 
       updateCardVersion: (id, version) =>
@@ -477,7 +514,10 @@ export const useAppStore = create<AppState>()(
               .moveToBin(card.boardId ?? state.activeBoardId, id)
               .catch((error: unknown) => console.error("Failed to move card to trash:", error));
           }
-          return { cards: { ...state.cards, [id]: { ...card, deleted_at: Date.now() } } };
+          return {
+            cards: { ...state.cards, [id]: { ...card, deleted_at: Date.now() } },
+            libraryObjects: state.libraryObjects.filter((item) => item.id !== id),
+          };
         }),
 
       restoreFromBin: (id) =>
