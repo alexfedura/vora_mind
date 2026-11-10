@@ -596,6 +596,21 @@ export const HypothesisDetail: React.FC<HypothesisDetailProps> = ({
           🔗 Refined from: {refinedFromHypothesis?.statementH1 ?? hypothesis.refinedFromId}
         </p>
       )}
+      {hypothesis.sourceCardId && (
+        <button
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent("vora:open-hypothesis-source", {
+              detail: hypothesis.sourceCardId,
+            }));
+          }}
+          className="mt-3 inline-flex max-w-full items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-start text-xs font-medium text-violet-200 transition hover:bg-violet-500/20"
+          title={`View source card ${hypothesis.sourceCardId}`}
+        >
+          View Source Card
+          <span className="truncate text-violet-300/70">{hypothesis.sourceCardId}</span>
+        </button>
+      )}
 
       <section dir="auto" aria-label="Hypothesis trace" className="mt-5 rounded-xl border border-[#292c34] bg-[#101114] p-4">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
