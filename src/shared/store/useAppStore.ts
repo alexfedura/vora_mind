@@ -19,6 +19,7 @@ import type {
   LibraryDefinitionSelection,
   JournalEntry,
   QuestionItem,
+  SourceHypothesisInput,
   TaskFlowItem,
   TaskFlowType,
 } from "@/types";
@@ -199,6 +200,7 @@ interface AppState {
   analyzeWithAi: (hypothesisId: string) => Promise<string>;
   recordHypothesisExecution: (id: string, rawData: string) => Promise<Hypothesis>;
   promoteToHypothesis: (input: HypothesisPromotionInput) => Promise<Hypothesis>;
+  createHypothesisFromSource: (input: SourceHypothesisInput) => Promise<Hypothesis>;
   graduateToLibrary: (hypothesisId: string, libraryGroupId?: string | null) => Promise<Hypothesis>;
   createChildHypothesis: (input: ChildHypothesisInput) => Promise<Hypothesis>;
   recordVerdict: (
@@ -1164,6 +1166,15 @@ export const useAppStore = create<AppState>()(
                 }
               : question
           )),
+        }));
+        return hypothesis;
+      },
+      createHypothesisFromSource: async (input) => {
+        const hypothesis = await dbService.createHypothesisFromSource(input);
+        set((state) => ({
+          hypotheses: [hypothesis, ...state.hypotheses.filter(
+            (item) => item.id !== hypothesis.id
+          )],
         }));
         return hypothesis;
       },

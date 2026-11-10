@@ -2461,6 +2461,7 @@ pub fn run() {
             select_for_promotion,
             unselect_for_promotion,
             mind::hypothesis::promote_to_hypothesis,
+            mind::hypothesis::create_hypothesis_from_source,
             mind::hypothesis::get_hypotheses,
             mind::hypothesis::link_snapshot_to_hypothesis,
             mind::hypothesis::unlink_snapshot_from_hypothesis,

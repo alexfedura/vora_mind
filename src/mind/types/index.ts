@@ -26,6 +26,14 @@ export interface VoraMatrixData extends Record<string, unknown> {
   rows: { id: string; name: string; scores: Record<string, number> }[];
 }
 
+export interface VoraHypothesisData extends Record<string, unknown> {
+  hypothesisId: string;
+  statementH1: string;
+  status: string;
+  verdict: string | null;
+  sourceCardId: string;
+}
+
 export interface VoraMediaData extends Record<string, unknown> {
   type: "image" | "audio" | "video";
   fileId?: string;

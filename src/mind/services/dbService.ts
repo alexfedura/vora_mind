@@ -32,6 +32,7 @@ import type {
   LibraryDefinitionSelection,
   JournalEntry,
   QuestionItem,
+  SourceHypothesisInput,
   TaskFlowItem,
   TaskFlowType,
 } from "@/types";
@@ -373,6 +374,21 @@ export const dbService = {
       metric: input.metric,
       successThreshold: input.successThreshold,
       linkedDefinitions: input.linkedDefinitions ?? [],
+    });
+  },
+
+  async createHypothesisFromSource(input: SourceHypothesisInput): Promise<Hypothesis> {
+    return await invoke<Hypothesis>("create_hypothesis_from_source", {
+      sourceCardId: input.sourceCardId,
+      sourceHighlightId: input.sourceHighlightId ?? null,
+      sourceTitle: input.sourceTitle,
+      sourceContent: input.sourceContent,
+      statementH1: input.statementH1,
+      statementH0: input.statementH0,
+      independentVar: input.independentVar,
+      dependentVar: input.dependentVar,
+      metric: input.metric,
+      successThreshold: input.successThreshold,
     });
   },
 

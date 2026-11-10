@@ -146,6 +146,8 @@ export interface Hypothesis {
   protocolType: "text" | "flowchart";
   protocolFlowchartJson?: string | null;
   protocolCompletedSteps?: string | null;
+  sourceCardId: string | null;
+  sourceHighlightId: string | null;
 }
 
 export type ChecklistFieldType = "select" | "number" | "text" | "boolean";
@@ -181,6 +183,19 @@ export interface HypothesisPromotionInput {
   metric: string;
   successThreshold: string;
   linkedDefinitions?: LinkedDefinition[];
+}
+
+export interface SourceHypothesisInput {
+  sourceCardId: string;
+  sourceHighlightId?: string | null;
+  sourceTitle: string;
+  sourceContent: string;
+  statementH1: string;
+  statementH0: string;
+  independentVar: string;
+  dependentVar: string;
+  metric: string;
+  successThreshold: string;
 }
 
 export interface ChildHypothesisInput {
