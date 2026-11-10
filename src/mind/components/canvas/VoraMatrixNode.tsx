@@ -58,7 +58,7 @@ export const VoraMatrixNode = memo(({ id, data, selected }: NodeProps<VoraMatrix
   };
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden rounded-xl border border-[#303543] bg-[#171a22] text-zinc-200 shadow-xl">
+    <div className="relative flex h-full w-full flex-col rounded-xl border border-[#303543] bg-[#171a22] text-zinc-200 shadow-xl">
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -108,7 +108,7 @@ export const VoraMatrixNode = memo(({ id, data, selected }: NodeProps<VoraMatrix
                       type="number"
                       min={0}
                       max={100}
-                      step={0.1}
+                      step={1}
                       aria-label={`Weight for ${column.name}`}
                       value={column.weight}
                       onChange={(event) => {

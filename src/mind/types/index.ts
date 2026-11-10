@@ -20,7 +20,7 @@ export interface VoraCardData {
   version?: string;
 }
 
-export interface VoraMatrixData {
+export interface VoraMatrixData extends Record<string, unknown> {
   title: string;
   columns: { id: string; name: string; weight: number }[];
   rows: { id: string; name: string; scores: Record<string, number> }[];
