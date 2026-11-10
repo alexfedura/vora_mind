@@ -22,6 +22,7 @@ import {
   Type,
   Film,
   BookOpen,
+  MoreHorizontal,
   AlertTriangle,
   FolderOpen,
   Image,
@@ -362,6 +363,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     toggleRightDrawer,
     activeBoardId,
     cards,
+    ensureLibraryCardLoaded,
     libraryObjects,
     isLibrarySearchLoading,
     librarySearchError,
@@ -386,6 +388,13 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [reviewStatusFilter, setReviewStatusFilter] = useState<LibraryObjectReviewStatus | "all">("active");
   const [libraryActionError, setLibraryActionError] = useState<string | null>(null);
+  const [openCardOptionsId, setOpenCardOptionsId] = useState<string | null>(null);
+  const [editingLibraryCard, setEditingLibraryCard] = useState<{
+    id: string;
+    title: string;
+    content: string;
+  } | null>(null);
+  const [loadingLibraryCardId, setLoadingLibraryCardId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [groupError, setGroupError] = useState<string | null>(null);
   const [groupVersions, setGroupVersions] = useState<LibraryItemGroupVersion[]>([]);
@@ -586,8 +595,6 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
 
   const handleLibraryItemPointerDown = (e: React.PointerEvent, item: LibraryDragPreview) => {
     if (e.button !== 0) return;
-    const targetButton = e.target instanceof Element ? e.target.closest("button") : null;
-    if (targetButton && targetButton.getAttribute("aria-label")?.startsWith("Open Library ") !== true) return;
     dragStartPos.current = { x: e.clientX, y: e.clientY };
     currentDraggingItemRef.current = item;
   };
@@ -709,6 +716,50 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     } catch (cause) {
       console.error("Could not open Library object:", cause);
       setLibraryActionError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const handleOpenLibraryCardEditor = async (
+    item: (typeof libraryObjectsForView)[number],
+  ): Promise<void> => {
+    if (item.type !== "card") return;
+    setLibraryActionError(null);
+    setLoadingLibraryCardId(item.id);
+    setOpenCardOptionsId(null);
+    try {
+      const card = await ensureLibraryCardLoaded(item.board_id, item.id);
+      setEditingLibraryCard({ id: card.id, title: card.title, content: card.content });
+    } catch (cause) {
+      console.error("Could not load Library card for editing:", cause);
+      setLibraryActionError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setLoadingLibraryCardId(null);
+    }
+  };
+
+  const handleSaveLibraryCardEdit = (event: React.FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    if (!editingLibraryCard) return;
+    updateCardContent(editingLibraryCard.id, editingLibraryCard.title, editingLibraryCard.content);
+    onNodeDataSync(editingLibraryCard.id, editingLibraryCard.title, editingLibraryCard.content);
+    setEditingLibraryCard(null);
+  };
+
+  const handleDeleteLibraryCard = async (
+    item: (typeof libraryObjectsForView)[number],
+  ): Promise<void> => {
+    if (item.type !== "card") return;
+    setLibraryActionError(null);
+    setLoadingLibraryCardId(item.id);
+    setOpenCardOptionsId(null);
+    try {
+      await ensureLibraryCardLoaded(item.board_id, item.id);
+      handleMoveToTrash(item.id);
+    } catch (cause) {
+      console.error("Could not delete Library card:", cause);
+      setLibraryActionError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setLoadingLibraryCardId(null);
     }
   };
 
@@ -1578,8 +1629,18 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                   >
                     <button
                       type="button"
-                      onClick={() => void handleLibraryObjectClick(item.id)}
-                      title={item.is_placed ? "Open or locate on board" : "Open owning Board"}
+                      onClick={(event) => {
+                        if (item.type === "card") {
+                          if (!handleLibraryItemClick(event, "card", item.id)) {
+                            void handleOpenLibraryCardEditor(item);
+                          }
+                          return;
+                        }
+                        void handleLibraryObjectClick(item.id);
+                      }}
+                      title={item.type === "card"
+                        ? "Edit card details"
+                        : item.is_placed ? "Open or locate on board" : "Open owning Board"}
                       className="flex min-h-0 flex-1 flex-col text-left"
                     >
                       <div className="flex w-full items-center gap-2 border-b border-[#232836]/60 pb-2">
@@ -1608,12 +1669,70 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                         {item.content || "No content"}
                       </p>
                     </button>
+                    {item.type === "card" && (
+                      <div className="absolute right-2 top-2 z-20">
+                        <button
+                          type="button"
+                          aria-label={`More options for ${item.title || "Library card"}`}
+                          aria-haspopup="menu"
+                          aria-expanded={openCardOptionsId === item.id}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setOpenCardOptionsId((openId) => openId === item.id ? null : item.id);
+                          }}
+                          className="rounded-md border border-[#303543] bg-[#111318]/90 p-1 text-zinc-400 transition hover:bg-[#282d3a] hover:text-white"
+                        >
+                          <MoreHorizontal size={15} aria-hidden="true" />
+                        </button>
+                        {openCardOptionsId === item.id && (
+                          <div
+                            role="menu"
+                            aria-label={`Options for ${item.title || "Library card"}`}
+                            className="absolute right-0 top-full mt-1 flex min-w-36 flex-col rounded-lg border border-[#303543] bg-[#171a22] p-1 text-zinc-200 shadow-xl"
+                          >
+                            <button
+                              type="button"
+                              role="menuitem"
+                              disabled={loadingLibraryCardId === item.id}
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={() => void handleOpenLibraryCardEditor(item)}
+                              className="rounded px-2.5 py-1.5 text-left text-xs hover:bg-[#282d3a] disabled:opacity-50"
+                            >
+                              Edit details
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={() => void handleDeleteLibraryCard(item)}
+                              className="rounded px-2.5 py-1.5 text-left text-xs text-rose-300 hover:bg-rose-500/15"
+                            >
+                              Move to Trash
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={() => {
+                                setOpenCardOptionsId(null);
+                                void handleLibraryObjectClick(item.id);
+                              }}
+                              className="rounded px-2.5 py-1.5 text-left text-xs hover:bg-[#282d3a]"
+                            >
+                              Open Board
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="mt-2 flex items-center justify-between border-t border-[#232836]/60 pt-2">
                       <span className="truncate text-[9px] text-zinc-500">
                         {item.review_status === "not_needed" ? "Not needed" : item.review_status}
                       </span>
                       <select
                         aria-label={`Review status for ${item.title || item.type}`}
+                        onPointerDown={(event) => event.stopPropagation()}
                         value={item.review_status}
                         onChange={(event) => {
                           const status = event.currentTarget.value;
@@ -1817,6 +1936,61 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
           </div>
         )}
       </aside>
+      {editingLibraryCard && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setEditingLibraryCard(null);
+          }}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="library-card-edit-title"
+            onSubmit={handleSaveLibraryCardEdit}
+            className="flex w-full max-w-xl flex-col gap-4 rounded-2xl border border-[#303543] bg-[#171a22] p-5 text-zinc-200 shadow-2xl"
+          >
+            <h2 id="library-card-edit-title" className="text-base font-semibold text-white">Edit Library card</h2>
+            <label className="flex flex-col gap-1.5 text-xs text-zinc-400">
+              Title
+              <input
+                autoFocus
+                value={editingLibraryCard.title}
+                onChange={(event) => setEditingLibraryCard((current) =>
+                  current ? { ...current, title: event.currentTarget.value } : current
+                )}
+                className="rounded-lg border border-[#303543] bg-[#111318] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-500/60"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs text-zinc-400">
+              Content
+              <textarea
+                rows={10}
+                value={editingLibraryCard.content}
+                onChange={(event) => setEditingLibraryCard((current) =>
+                  current ? { ...current, content: event.currentTarget.value } : current
+                )}
+                className="resize-y rounded-lg border border-[#303543] bg-[#111318] px-3 py-2 text-sm leading-relaxed text-zinc-100 outline-none focus:border-purple-500/60"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingLibraryCard(null)}
+                className="rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-white/5"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-medium text-white hover:bg-purple-500"
+              >
+                Save changes
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </>
   );
 };
