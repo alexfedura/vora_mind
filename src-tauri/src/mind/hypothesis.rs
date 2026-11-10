@@ -69,6 +69,8 @@ pub struct Hypothesis {
     pub protocol_type: String,
     pub protocol_flowchart_json: Option<String>,
     pub protocol_completed_steps: Option<String>,
+    pub source_card_id: Option<String>,
+    pub source_highlight_id: Option<String>,
 }
 
 const HYPOTHESIS_COLUMNS: &str = "id, inquiry_id, statement_h1, statement_h0, \
@@ -76,7 +78,7 @@ const HYPOTHESIS_COLUMNS: &str = "id, inquiry_id, statement_h1, statement_h0, \
     evidence_notes, verdict, evaluated_at, promoted_to_library_id, parent_hypothesis_id, \
     protocol_steps, protocol_locked_at, raw_data, data_analysis, executed_at, \
     boundary_conditions, refined_from_id, checklist_schema, protocol_type, \
-    protocol_flowchart_json, protocol_completed_steps";
+    protocol_flowchart_json, protocol_completed_steps, source_card_id, source_highlight_id";
 
 pub fn init_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -121,6 +123,8 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         ("protocol_type", "TEXT NOT NULL DEFAULT 'text'"),
         ("protocol_flowchart_json", "TEXT NULL"),
         ("protocol_completed_steps", "TEXT NULL"),
+        ("source_card_id", "TEXT NULL"),
+        ("source_highlight_id", "TEXT NULL"),
     ] {
         if !columns.iter().any(|column| column == name) {
             conn.execute_batch(&format!(
@@ -353,11 +357,13 @@ fn create_child_hypothesis_in_db(
     now: i64,
 ) -> std::result::Result<Hypothesis, String> {
     let transaction = conn.transaction().map_err(|error| error.to_string())?;
-    let (inquiry_id, parent_verdict): (String, Option<String>) = transaction
+    let (inquiry_id, parent_verdict, source_card_id, source_highlight_id):
+        (String, Option<String>, Option<String>, Option<String>) = transaction
         .query_row(
-            "SELECT inquiry_id, verdict FROM hypotheses WHERE id = ?1",
+            "SELECT inquiry_id, verdict, source_card_id, source_highlight_id
+             FROM hypotheses WHERE id = ?1",
             [parent_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .optional()
         .map_err(|error| error.to_string())?
@@ -374,8 +380,9 @@ fn create_child_hypothesis_in_db(
             "INSERT INTO hypotheses (
                 id, inquiry_id, statement_h1, statement_h0, independent_var,
                 dependent_var, metric, success_threshold, status, created_at,
-                updated_at, parent_hypothesis_id, refined_from_id
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'draft', ?9, ?9, ?10, ?11)",
+                updated_at, parent_hypothesis_id, refined_from_id, source_card_id,
+                source_highlight_id
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'draft', ?9, ?9, ?10, ?11, ?12, ?13)",
             params![
                 id,
                 inquiry_id,
@@ -387,7 +394,9 @@ fn create_child_hypothesis_in_db(
                 success_threshold,
                 now,
                 parent_id,
-                refined_from_id
+                refined_from_id,
+                source_card_id,
+                source_highlight_id
             ],
         )
         .map_err(|error| error.to_string())?;
@@ -618,8 +627,9 @@ pub fn promote_inquiry(
     transaction.execute(
         "INSERT INTO hypotheses (
             id, inquiry_id, statement_h1, statement_h0, independent_var,
-            dependent_var, metric, success_threshold, created_at, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)",
+            dependent_var, metric, success_threshold, created_at, updated_at,
+            source_card_id, source_highlight_id
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, NULL, NULL)",
         params![
             id,
             inquiry_id,
@@ -701,6 +711,114 @@ pub fn promote_to_hypothesis(
         &metric,
         &success_threshold,
         linked_definitions.as_deref().unwrap_or_default(),
+        now,
+    )
+    .map_err(|error| error.to_string())
+}
+
+fn create_hypothesis_from_source_in_db(
+    conn: &mut Connection,
+    id: &str,
+    inquiry_id: &str,
+    source_card_id: &str,
+    source_highlight_id: Option<&str>,
+    source_title: &str,
+    source_content: &str,
+    statement_h1: &str,
+    statement_h0: &str,
+    independent_var: &str,
+    dependent_var: &str,
+    metric: &str,
+    success_threshold: &str,
+    now: i64,
+) -> Result<Hypothesis> {
+    let title = source_title.trim();
+    if title.is_empty() || title.chars().count() > 200 {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "Source title must contain between 1 and 200 characters.".to_string(),
+        ));
+    }
+
+    let transaction = conn.transaction()?;
+    transaction.execute(
+        "INSERT INTO questions (
+            id, title, description, status, triaged_at, is_selected_for_promotion,
+            promoted_to_hypothesis_id, created_at, updated_at
+         ) VALUES (?1, ?2, ?3, 'triaged', ?4, 1, NULL, ?4, ?4)",
+        params![inquiry_id, title, source_content, now],
+    )?;
+    transaction.execute(
+        "INSERT INTO hypotheses (
+            id, inquiry_id, statement_h1, statement_h0, independent_var,
+            dependent_var, metric, success_threshold, created_at, updated_at,
+            source_card_id, source_highlight_id
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, ?10, ?11)",
+        params![
+            id,
+            inquiry_id,
+            statement_h1,
+            statement_h0,
+            independent_var,
+            dependent_var,
+            metric,
+            success_threshold,
+            now,
+            source_card_id,
+            source_highlight_id
+        ],
+    )?;
+    let changed = transaction.execute(
+        "UPDATE questions
+         SET status = 'promoted', promoted_to_hypothesis_id = ?1,
+             is_selected_for_promotion = 0, updated_at = ?2
+         WHERE id = ?3 AND status = 'triaged' AND is_selected_for_promotion = 1",
+        params![id, now, inquiry_id],
+    )?;
+    if changed != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    let hypothesis = query_hypothesis(&transaction, id)?;
+    transaction.commit()?;
+    Ok(hypothesis)
+}
+
+#[tauri::command]
+pub fn create_hypothesis_from_source(
+    state: State<AppState>,
+    source_card_id: String,
+    source_highlight_id: Option<String>,
+    source_title: String,
+    source_content: String,
+    statement_h1: String,
+    statement_h0: String,
+    independent_var: String,
+    dependent_var: String,
+    metric: String,
+    success_threshold: String,
+) -> Result<Hypothesis, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let now = i64::try_from(now).map_err(|error| error.to_string())?;
+    let id = format!("hypothesis_{}", uuid::Uuid::now_v7());
+    let inquiry_id = format!("question_{}", uuid::Uuid::now_v7());
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    create_hypothesis_from_source_in_db(
+        &mut conn,
+        &id,
+        &inquiry_id,
+        &source_card_id,
+        source_highlight_id.as_deref(),
+        &source_title,
+        &source_content,
+        &statement_h1,
+        &statement_h0,
+        &independent_var,
+        &dependent_var,
+        &metric,
+        &success_threshold,
         now,
     )
     .map_err(|error| error.to_string())
@@ -1650,6 +1768,8 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
         protocol_type: row.get(24)?,
         protocol_flowchart_json: row.get(25)?,
         protocol_completed_steps: row.get(26)?,
+        source_card_id: row.get(27)?,
+        source_highlight_id: row.get(28)?,
     })
 }
 
