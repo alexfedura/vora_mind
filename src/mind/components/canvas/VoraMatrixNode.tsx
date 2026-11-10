@@ -66,14 +66,14 @@ export const VoraMatrixNode = memo(({ id, data, selected }: NodeProps<VoraMatrix
         minHeight={220}
         color="#a78bfa"
       />
-      <Handle type="source" position={Position.Left} id="source-left" className={`!z-10 !h-3 !w-3 !-left-1.5 !border-2 !border-[#171a22] !bg-violet-400 ${selected ? "!opacity-100" : "!opacity-0"}`} />
-      <Handle type="source" position={Position.Right} id="source-right" className={`!z-10 !h-3 !w-3 !-right-1.5 !border-2 !border-[#171a22] !bg-violet-400 ${selected ? "!opacity-100" : "!opacity-0"}`} />
-      <Handle type="source" position={Position.Top} id="source-top" className={`!z-10 !h-3 !w-3 !-top-1.5 !border-2 !border-[#171a22] !bg-violet-400 ${selected ? "!opacity-100" : "!opacity-0"}`} />
-      <Handle type="source" position={Position.Bottom} id="source-bottom" className={`!z-10 !h-3 !w-3 !-bottom-1.5 !border-2 !border-[#171a22] !bg-violet-400 ${selected ? "!opacity-100" : "!opacity-0"}`} />
-      <Handle type="target" position={Position.Left} id="target-left" className="!z-10 !h-3 !w-3 !-left-1.5 !border-2 !border-[#171a22] !bg-amber-300" />
-      <Handle type="target" position={Position.Right} id="target-right" className="!z-10 !h-3 !w-3 !-right-1.5 !border-2 !border-[#171a22] !bg-amber-300" />
-      <Handle type="target" position={Position.Top} id="target-top" className="!z-10 !h-3 !w-3 !-top-1.5 !border-2 !border-[#171a22] !bg-amber-300" />
-      <Handle type="target" position={Position.Bottom} id="target-bottom" className="!z-10 !h-3 !w-3 !-bottom-1.5 !border-2 !border-[#171a22] !bg-amber-300" />
+      <Handle type="source" position={Position.Left} id="source-left" className={`!h-3 !w-3 !-left-1.5 !border-2 !border-[#171a22] !bg-[#e8ad55] transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`} />
+      <Handle type="source" position={Position.Right} id="source-right" className={`!h-3 !w-3 !-right-1.5 !border-2 !border-[#171a22] !bg-[#e8ad55] transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`} />
+      <Handle type="source" position={Position.Top} id="source-top" className={`!h-3 !w-3 !-top-1.5 !border-2 !border-[#171a22] !bg-[#e8ad55] transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`} />
+      <Handle type="source" position={Position.Bottom} id="source-bottom" className={`!h-3 !w-3 !-bottom-1.5 !border-2 !border-[#171a22] !bg-[#e8ad55] transition-opacity ${selected ? "!opacity-100 !pointer-events-auto" : "!opacity-0 !pointer-events-none"}`} />
+      <Handle type="target" position={Position.Left} id="target-left" className="!h-3 !w-3 !-left-1.5 !opacity-0" />
+      <Handle type="target" position={Position.Right} id="target-right" className="!h-3 !w-3 !-right-1.5 !opacity-0" />
+      <Handle type="target" position={Position.Top} id="target-top" className="!h-3 !w-3 !-top-1.5 !opacity-0" />
+      <Handle type="target" position={Position.Bottom} id="target-bottom" className="!h-3 !w-3 !-bottom-1.5 !opacity-0" />
 
       <div className="flex shrink-0 items-center gap-2 border-b border-[#303543] bg-[#111318] px-3 py-2">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300">Decision Matrix</span>
@@ -114,7 +114,10 @@ export const VoraMatrixNode = memo(({ id, data, selected }: NodeProps<VoraMatrix
                       onChange={(event) => {
                         const weight = event.currentTarget.valueAsNumber;
                         if (Number.isFinite(weight)) {
-                          updateColumn(column.id, (current) => ({ ...current, weight: Math.min(100, Math.max(0, weight)) }));
+                          updateColumn(column.id, (current) => ({
+                            ...current,
+                            weight: Math.round(Math.min(100, Math.max(0, weight))),
+                          }));
                         }
                       }}
                       className="nodrag nowheel w-14 rounded border border-[#353a48] bg-[#111318] px-1 py-0.5 text-right text-zinc-100 outline-none focus:border-violet-400"
