@@ -599,6 +599,7 @@ function AppContent() {
     sourceHighlightId: string | null;
     sourceTitle: string;
     sourceContent: string;
+    sourceNodeId: string;
     position: { x: number; y: number };
     width: number;
   } | null>(null);
@@ -2317,6 +2318,7 @@ function AppContent() {
         (typeof data.sourceHighlightId === "string" ? data.sourceHighlightId : null),
       sourceTitle: Array.from(sourceTitle).slice(0, 200).join(""),
       sourceContent,
+      sourceNodeId: node.id,
       position: node.position,
       width: node.measured?.width ?? node.width ?? 280,
     });
@@ -2357,6 +2359,19 @@ function AppContent() {
     flow.setNodes((nodes) => [
       ...nodes.map((current) => ({ ...current, selected: false })),
       node,
+    ]);
+    flow.setEdges((edges) => [
+      ...edges,
+      {
+        id: `source-hypothesis-${crypto.randomUUID()}`,
+        source: hypothesisSource.sourceNodeId,
+        sourceHandle: "source-right",
+        target: node.id,
+        targetHandle: "target-left",
+        type: "default",
+        label: "Source",
+        markerEnd: MarkerType.ArrowClosed,
+      },
     ]);
     setHypothesisSource(null);
   };

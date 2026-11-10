@@ -22,7 +22,8 @@ canvas node, connect it to source and matrix nodes, and open its Lab detail.
   Source”. The form captures H1, H0, variables, metric, and success threshold,
   and includes the source card/node and available highlight lineage.
 - Successful creation places a `voraHypothesis` node beside its source with
-  the hypothesis ID, statement, and outcome/status presentation.
+  the hypothesis ID, statement, and outcome/status presentation, and adds a
+  labeled source-to-hypothesis canvas edge.
 - Hypothesis nodes have source/target handles on each side so they can be
   connected to cards and decision matrices using standard canvas edges.
 - Double-clicking a hypothesis node opens the Lab tab at that hypothesis.
