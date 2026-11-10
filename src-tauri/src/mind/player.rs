@@ -1,4 +1,5 @@
 use serde_json::{json, Value};
+use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -80,8 +81,8 @@ pub fn player_spawn(app: tauri::AppHandle, window: tauri::Window) -> Result<u32,
             "--force-window=yes",
             "--keep-open=yes",
             "--hr-seek=yes",
-            "--gpu-api=d3d11",
-            "--gpu-context=d3d11",
+            "--hwdec=auto-safe",
+            "--vo=gpu-next",
             "--osc=no",
             "--input-default-bindings=no",
             "--input-vo-keyboard=no",
@@ -108,12 +109,40 @@ pub fn player_spawn(app: tauri::AppHandle, window: tauri::Window) -> Result<u32,
     #[cfg(not(target_os = "windows"))]
     let _ = window;
 
+    let log_path = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Could not locate the MPV log directory: {error}"))?
+        .join("mpv_crash.log");
+    if let Some(log_directory) = log_path.parent() {
+        fs::create_dir_all(log_directory).map_err(|error| {
+            format!(
+                "Could not create the MPV log directory {}: {error}",
+                log_directory.display()
+            )
+        })?;
+    }
+    let stderr_log = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(|error| {
+            format!(
+                "Could not open the MPV log file {}: {error}",
+                log_path.display()
+            )
+        })?;
     let child = command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::from(stderr_log))
         .spawn()
-        .map_err(|error| format!("Could not start the bundled MPV player: {error}"))?;
+        .map_err(|error| {
+            format!(
+                "Could not start the bundled MPV player at {}: {error}",
+                executable.display()
+            )
+        })?;
     let process_id = child.id();
     *process = Some(child);
     Ok(process_id)

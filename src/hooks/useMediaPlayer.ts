@@ -209,7 +209,10 @@ export function useMediaPlayer(
     void dbService.playerSpawn().then(() => {
       if (!cancelled) setIsReady(true);
     }).catch((spawnError: unknown) => {
-      if (!cancelled) setError(`Could not start the bundled MPV player: ${errorMessage(spawnError)}`);
+      console.error("Could not start the bundled MPV player:", spawnError);
+      if (!cancelled) {
+        setError("Video player failed to start. Please check the logs.");
+      }
     });
 
     return () => {
