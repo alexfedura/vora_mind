@@ -2313,8 +2313,9 @@ function AppContent() {
       (typeof data.filePath === "string" ? `Media file: ${data.filePath}` : "");
     setHypothesisSource({
       sourceCardId: cardId,
-      sourceHighlightId: sourceCard?.sourceHighlightId ?? null,
-      sourceTitle: sourceTitle.slice(0, 200),
+      sourceHighlightId: sourceCard?.sourceHighlightId ??
+        (typeof data.sourceHighlightId === "string" ? data.sourceHighlightId : null),
+      sourceTitle: Array.from(sourceTitle).slice(0, 200).join(""),
       sourceContent,
       position: node.position,
       width: node.measured?.width ?? node.width ?? 280,

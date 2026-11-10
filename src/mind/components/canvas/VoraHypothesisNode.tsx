@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, type MouseEvent } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { useAppStore } from "@/shared/store/useAppStore";
 import type { VoraHypothesisData } from "@/mind/types";
@@ -33,7 +33,7 @@ export const VoraHypothesisNode = memo(({ data, selected }: NodeProps<VoraHypoth
   const presentation = getStatusPresentation(status);
   const statement = hypothesis?.statementH1 ?? data.statementH1;
 
-  const openLabDetail = (event: React.MouseEvent<HTMLDivElement>): void => {
+  const openLabDetail = (event: MouseEvent<HTMLDivElement>): void => {
     event.stopPropagation();
     window.dispatchEvent(new CustomEvent("vora:open-hypothesis-lab", {
       detail: { hypothesisId: data.hypothesisId },
@@ -42,7 +42,7 @@ export const VoraHypothesisNode = memo(({ data, selected }: NodeProps<VoraHypoth
 
   return (
     <div
-      className={`nodrag nowheel relative flex min-h-36 w-72 flex-col gap-3 rounded-xl border bg-[#171a22] p-4 text-zinc-200 shadow-xl ${
+      className={`relative flex min-h-36 w-72 flex-col gap-3 rounded-xl border bg-[#171a22] p-4 text-zinc-200 shadow-xl ${
         selected ? "border-violet-300 ring-2 ring-violet-400/30" : "border-violet-500/40"
       }`}
       onDoubleClick={openLabDetail}
