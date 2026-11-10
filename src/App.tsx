@@ -2351,6 +2351,7 @@ function AppContent() {
         status: hypothesis.status,
         verdict: hypothesis.verdict ?? null,
         sourceCardId: hypothesisSource.sourceCardId,
+        protocolLockedAt: hypothesis.protocolLockedAt ?? null,
       },
     };
     flow.setNodes((nodes) => [

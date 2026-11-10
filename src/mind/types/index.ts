@@ -32,6 +32,7 @@ export interface VoraHypothesisData extends Record<string, unknown> {
   status: string;
   verdict: string | null;
   sourceCardId: string;
+  protocolLockedAt: number | null;
 }
 
 export interface VoraMediaData extends Record<string, unknown> {

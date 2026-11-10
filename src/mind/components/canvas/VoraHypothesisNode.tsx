@@ -29,7 +29,10 @@ export const VoraHypothesisNode = memo(({ data, selected }: NodeProps<VoraHypoth
   const hypothesis = useAppStore((state) =>
     state.hypotheses.find((item) => item.id === data.hypothesisId),
   );
-  const status = hypothesis?.verdict ?? data.verdict ?? hypothesis?.status ?? data.status;
+  const status = hypothesis?.verdict ??
+    (hypothesis?.protocolLockedAt != null || data.protocolLockedAt != null
+      ? "testing"
+      : data.verdict ?? hypothesis?.status ?? data.status);
   const presentation = getStatusPresentation(status);
   const statement = hypothesis?.statementH1 ?? data.statementH1;
 
