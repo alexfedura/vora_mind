@@ -888,7 +888,17 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
       <aside className="w-[26rem] flex-shrink-0 bg-background flex flex-col z-30 shadow-2xl transition-all border-l border-[#2a2a2a] select-none">
         <div className="h-14 px-5 flex items-center justify-between border-b border-[#20242f] bg-[#111317]">
           <span className="text-sm font-bold text-gray-200 tracking-wide">
-            {activeCard ? "Card View" : activeGroup ? activeGroup.name : currentFilter === "trash" ? "Trash" : currentFilter === "media" ? "Media Notes" : "Library"}
+            {editingLibraryCard
+              ? "Edit Library card"
+              : activeCard
+                ? "Card View"
+                : activeGroup
+                  ? activeGroup.name
+                  : currentFilter === "trash"
+                    ? "Trash"
+                    : currentFilter === "media"
+                      ? "Media Notes"
+                      : "Library"}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -910,6 +920,57 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
           </div>
         </div>
 
+        {editingLibraryCard ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
+            <form
+              aria-labelledby="library-card-edit-title"
+              onSubmit={handleSaveLibraryCardEdit}
+              className="flex min-h-0 flex-1 flex-col gap-4"
+            >
+              <h2 id="library-card-edit-title" className="text-base font-semibold text-white">
+                Edit Library card
+              </h2>
+              <label className="flex flex-col gap-1.5 text-xs text-zinc-400">
+                Title
+                <input
+                  autoFocus
+                  value={editingLibraryCard.title}
+                  onChange={(event) => setEditingLibraryCard((current) =>
+                    current ? { ...current, title: event.currentTarget.value } : current
+                  )}
+                  className="w-full rounded-lg border border-[#303543] bg-[#111318] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-500/60"
+                />
+              </label>
+              <label className="flex min-h-0 flex-1 flex-col gap-1.5 text-xs text-zinc-400">
+                Content
+                <textarea
+                  rows={10}
+                  value={editingLibraryCard.content}
+                  onChange={(event) => setEditingLibraryCard((current) =>
+                    current ? { ...current, content: event.currentTarget.value } : current
+                  )}
+                  className="min-h-[200px] w-full flex-1 resize-y rounded-lg border border-[#303543] bg-[#111318] px-3 py-2 text-sm leading-relaxed text-zinc-100 outline-none focus:border-purple-500/60"
+                />
+              </label>
+              <div className="mt-auto flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingLibraryCard(null)}
+                  className="rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-white/5"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-medium text-white hover:bg-purple-500"
+                >
+                  Save changes
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <>
         {activeCard ? (
           <div className="flex flex-col flex-1 overflow-y-auto no-scrollbar">
             <div className="px-5 py-2.5 flex items-center justify-between bg-[#171920] border-b border-[#20242f]">
@@ -1935,62 +1996,9 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
             )}
           </div>
         )}
+          </>
+        )}
       </aside>
-      {editingLibraryCard && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setEditingLibraryCard(null);
-          }}
-        >
-          <form
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="library-card-edit-title"
-            onSubmit={handleSaveLibraryCardEdit}
-            className="flex w-full max-w-xl flex-col gap-4 rounded-2xl border border-[#303543] bg-[#171a22] p-5 text-zinc-200 shadow-2xl"
-          >
-            <h2 id="library-card-edit-title" className="text-base font-semibold text-white">Edit Library card</h2>
-            <label className="flex flex-col gap-1.5 text-xs text-zinc-400">
-              Title
-              <input
-                autoFocus
-                value={editingLibraryCard.title}
-                onChange={(event) => setEditingLibraryCard((current) =>
-                  current ? { ...current, title: event.currentTarget.value } : current
-                )}
-                className="rounded-lg border border-[#303543] bg-[#111318] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-500/60"
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 text-xs text-zinc-400">
-              Content
-              <textarea
-                rows={10}
-                value={editingLibraryCard.content}
-                onChange={(event) => setEditingLibraryCard((current) =>
-                  current ? { ...current, content: event.currentTarget.value } : current
-                )}
-                className="resize-y rounded-lg border border-[#303543] bg-[#111318] px-3 py-2 text-sm leading-relaxed text-zinc-100 outline-none focus:border-purple-500/60"
-              />
-            </label>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setEditingLibraryCard(null)}
-                className="rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-white/5"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-medium text-white hover:bg-purple-500"
-              >
-                Save changes
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </>
   );
 };
