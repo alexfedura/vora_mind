@@ -2303,11 +2303,11 @@ function AppContent() {
       ? data.cardId
       : node.id;
     const sourceCard = cards[cardId];
-    const sourceTitle = sourceCard?.title ??
+    const sourceTitle = (sourceCard?.title ??
       (typeof data.title === "string" ? data.title : null) ??
       (typeof data.label === "string" ? data.label : null) ??
       (typeof data.fileName === "string" ? data.fileName : null) ??
-      "Canvas source";
+      "Canvas source").trim() || "Canvas source";
     const sourceContent = sourceCard?.content ??
       (typeof data.content === "string" ? data.content : null) ??
       (typeof data.filePath === "string" ? `Media file: ${data.filePath}` : "");
