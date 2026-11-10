@@ -747,6 +747,9 @@ function AppContent() {
   }, [flow.saveHistorySnapshot, flow.setNodes]);
 
   const selectedNodes = useMemo(() => flow.nodes.filter((node) => node.selected), [flow.nodes]);
+  const contextMenuNode = canvasNodeContextMenu?.nodeId
+    ? flow.nodes.find((node) => node.id === canvasNodeContextMenu.nodeId)
+    : undefined;
   const activeBoardMediaFileIds = useMemo(() => [...new Set(flow.nodes.flatMap((node) => {
     if (node.type !== "voraMedia" || !isRecord(node.data)) return [];
     return typeof node.data.fileId === "string" ? [node.data.fileId] : [];
@@ -1177,6 +1180,7 @@ function AppContent() {
       voraShape: VoraShapeNode,
       voraMedia: VoraMediaNode,
       voraMatrix: VoraMatrixNode,
+      voraHypothesis: VoraHypothesisNode,
       forgeAst: ForgeAstNode,
     }),
     []
@@ -2290,6 +2294,71 @@ function AppContent() {
       flow.setEdges((edges) => edges.map((edge) => ({ ...edge, selected: false })));
     }
     setCanvasNodeContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id });
+  };
+
+  const handleCreateHypothesisFromSourceRequest = (): void => {
+    const node = contextMenuNode;
+    if (!node || (node.type !== "voraCard" && node.type !== "voraMedia")) return;
+    const data = isRecord(node.data) ? node.data : {};
+    const cardId = node.type === "voraCard" && typeof data.cardId === "string"
+      ? data.cardId
+      : node.id;
+    const sourceCard = cards[cardId];
+    const sourceTitle = sourceCard?.title ??
+      (typeof data.title === "string" ? data.title : null) ??
+      (typeof data.label === "string" ? data.label : null) ??
+      (typeof data.fileName === "string" ? data.fileName : null) ??
+      "Canvas source";
+    const sourceContent = sourceCard?.content ??
+      (typeof data.content === "string" ? data.content : null) ??
+      (typeof data.filePath === "string" ? `Media file: ${data.filePath}` : "");
+    setHypothesisSource({
+      sourceCardId: cardId,
+      sourceHighlightId: sourceCard?.sourceHighlightId ?? null,
+      sourceTitle: sourceTitle.slice(0, 200),
+      sourceContent,
+      sourceNodeId: node.id,
+      position: node.position,
+      width: node.measured?.width ?? node.width ?? 280,
+    });
+    setCanvasNodeContextMenu(null);
+  };
+
+  const handleCreateHypothesisFromSource = async (
+    fields: Omit<SourceHypothesisInput, "sourceCardId" | "sourceHighlightId" | "sourceTitle" | "sourceContent">,
+  ): Promise<void> => {
+    if (!hypothesisSource) return;
+    const hypothesis = await createHypothesisFromSourceInStore({
+      ...fields,
+      sourceCardId: hypothesisSource.sourceCardId,
+      sourceHighlightId: hypothesisSource.sourceHighlightId,
+      sourceTitle: hypothesisSource.sourceTitle,
+      sourceContent: hypothesisSource.sourceContent,
+    });
+    flow.saveHistorySnapshot();
+    const node: Node<VoraHypothesisData, "voraHypothesis"> = {
+      id: `hypothesis-${hypothesis.id}`,
+      type: "voraHypothesis",
+      position: {
+        x: hypothesisSource.position.x + hypothesisSource.width + 90,
+        y: hypothesisSource.position.y,
+      },
+      width: 300,
+      height: 190,
+      selected: true,
+      data: {
+        hypothesisId: hypothesis.id,
+        statementH1: hypothesis.statementH1,
+        status: hypothesis.status,
+        verdict: hypothesis.verdict ?? null,
+        sourceCardId: hypothesisSource.sourceCardId,
+      },
+    };
+    flow.setNodes((nodes) => [
+      ...nodes.map((current) => ({ ...current, selected: false })),
+      node,
+    ]);
+    setHypothesisSource(null);
   };
 
   const handleCanvasNodeLayerChange = (direction: "front" | "back"): void => {
@@ -3651,6 +3720,16 @@ function AppContent() {
                   </button>
                 </>
               )}
+              {(contextMenuNode?.type === "voraCard" || contextMenuNode?.type === "voraMedia") && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full rounded-md px-3 py-2 text-left text-xs text-violet-200 hover:bg-[#282d3a]"
+                  onClick={handleCreateHypothesisFromSourceRequest}
+                >
+                  Create Hypothesis from this Source
+                </button>
+              )}
               <button
                 type="button"
                 role="menuitem"
@@ -3693,6 +3772,15 @@ function AppContent() {
               )}
             </div>
           </>
+        )}
+        {hypothesisSource && (
+          <CreateHypothesisFromSourceModal
+            sourceTitle={hypothesisSource.sourceTitle}
+            sourceCardId={hypothesisSource.sourceCardId}
+            sourceHighlightId={hypothesisSource.sourceHighlightId}
+            onClose={() => setHypothesisSource(null)}
+            onCreate={handleCreateHypothesisFromSource}
+          />
         )}
         {connectionCreateMenu && (
           <>
