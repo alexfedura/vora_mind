@@ -70,6 +70,7 @@ import {
   type MediaSlice,
   VORA_DIAGRAM_SHAPE_LABELS,
   type VoraMediaData,
+  type VoraHypothesisData,
   type VoraMatrixData,
 } from "./mind/types";
 import { VoraCardNode } from "./mind/components/canvas/VoraCardNode";
@@ -77,6 +78,7 @@ import { VoraTextNode } from "./mind/components/canvas/VoraTextNode";
 import { VoraShapeNode } from "./mind/components/canvas/VoraShapeNode";
 import { VoraMediaNode } from "./mind/components/canvas/VoraMediaNode";
 import { VoraMatrixNode } from "./mind/components/canvas/VoraMatrixNode";
+import { VoraHypothesisNode } from "./mind/components/canvas/VoraHypothesisNode";
 import { CanvasZoomContext } from "./mind/components/canvas/CanvasZoomContext";
 import { isVoraDiagramShape } from "./mind/utils/shapeGeometry";
 import type { VoraShapeData, VoraShapeDefaults, VoraShapePoint, VoraShapeStyleSettings } from "./mind/types";
@@ -106,8 +108,10 @@ import { CommitCardModal } from "./shared/modals/CommitCardModal";
 import { CardHistoryModal } from "./shared/modals/CardHistoryModal";
 import { FullscreenDocModal } from "./shared/modals/FullscreenDocModal";
 import { GenerateBoardModal } from "./shared/modals/GenerateBoardModal";
+import { CreateHypothesisFromSourceModal } from "./shared/layout/CreateHypothesisFromSourceModal";
 import { applyDagreLayout } from "./mind/utils/generatedBoardLayout";
 import { OpenPanel } from "./mind/types";
+import type { SourceHypothesisInput } from "./types";
 
 type ShapeTool = VoraDiagramShape | null;
 type ShapePreview = { shape: VoraDiagramShape; points: { x: number; y: number }[] };
@@ -425,6 +429,8 @@ function AppContent() {
     setLibraryBoardEditing,
     toggleForgeAgent,
     fetchCanonicalEntities,
+    setLabReturnState,
+    createHypothesisFromSource: createHypothesisFromSourceInStore,
   } = useAppStore();
 
   const [activeOpenPanel, setActiveOpenPanel] = useState<OpenPanel>("none");
@@ -588,6 +594,15 @@ function AppContent() {
     };
   }, [isBoardTransferMenuOpen]);
   const [canvasNodeContextMenu, setCanvasNodeContextMenu] = useState<CanvasNodeContextMenu | null>(null);
+  const [hypothesisSource, setHypothesisSource] = useState<{
+    sourceCardId: string;
+    sourceHighlightId: string | null;
+    sourceTitle: string;
+    sourceContent: string;
+    sourceNodeId: string;
+    position: { x: number; y: number };
+    width: number;
+  } | null>(null);
   const [connectionCreateMenu, setConnectionCreateMenu] = useState<ConnectionCreateMenu | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [fullscreenCardId, setFullscreenCardId] = useState<string | null>(null);
@@ -609,6 +624,53 @@ function AppContent() {
     boxShadow: string;
     transition: string;
   } | null>(null);
+
+  useEffect(() => {
+    const handleOpenHypothesisLab = (event: Event): void => {
+      if (!(event instanceof CustomEvent) || !isRecord(event.detail)) return;
+      const { hypothesisId } = event.detail;
+      if (typeof hypothesisId !== "string" || hypothesisId.length === 0) return;
+
+      setLabReturnState({ hypothesisId, tab: "lab" });
+      setIsAiTasksOpen(false);
+      setIsVoraTraceOpen(false);
+      setIsJournalOpen(false);
+      setIsPlayerOpen(false);
+      setIsDocumentWorkspaceOpen(false);
+      setIsTaskFlowOpen(true);
+      setLastActivePanel("sidebar");
+      setActiveOpenPanel("sidebar");
+      navigate(location.pathname, { state: { activeTab: "lab" } });
+    };
+
+    const handleOpenHypothesisSource = (event: Event): void => {
+      if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
+      const sourceNodeId = event.detail;
+      setIsTaskFlowOpen(false);
+      setIsAiTasksOpen(false);
+      setIsVoraTraceOpen(false);
+      setIsJournalOpen(false);
+      setIsPlayerOpen(false);
+      setIsDocumentWorkspaceOpen(false);
+      setActiveOpenPanel("none");
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("vora:highlight-canvas-node", {
+          detail: sourceNodeId,
+        }));
+      }, 80);
+    };
+
+    window.addEventListener("vora:open-hypothesis-lab", handleOpenHypothesisLab);
+    window.addEventListener("vora:open-hypothesis-source", handleOpenHypothesisSource);
+    return () => {
+      window.removeEventListener("vora:open-hypothesis-lab", handleOpenHypothesisLab);
+      window.removeEventListener("vora:open-hypothesis-source", handleOpenHypothesisSource);
+    };
+  }, [
+    location.pathname,
+    navigate,
+    setLabReturnState,
+  ]);
 
   useEffect(() => {
     const handleOpenCardCommit = (event: Event): void => {
