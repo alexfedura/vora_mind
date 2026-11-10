@@ -42,6 +42,7 @@ import {
   Menu,
   Film,
   Files,
+  Table,
 } from "lucide-react";
 
 import { ForgeAgentDrawer } from "./forge/components/agent/ForgeAgentDrawer";
@@ -69,11 +70,13 @@ import {
   type MediaSlice,
   VORA_DIAGRAM_SHAPE_LABELS,
   type VoraMediaData,
+  type VoraMatrixData,
 } from "./mind/types";
 import { VoraCardNode } from "./mind/components/canvas/VoraCardNode";
 import { VoraTextNode } from "./mind/components/canvas/VoraTextNode";
 import { VoraShapeNode } from "./mind/components/canvas/VoraShapeNode";
 import { VoraMediaNode } from "./mind/components/canvas/VoraMediaNode";
+import { VoraMatrixNode } from "./mind/components/canvas/VoraMatrixNode";
 import { CanvasZoomContext } from "./mind/components/canvas/CanvasZoomContext";
 import { isVoraDiagramShape } from "./mind/utils/shapeGeometry";
 import type { VoraShapeData, VoraShapeDefaults, VoraShapePoint, VoraShapeStyleSettings } from "./mind/types";
@@ -1111,6 +1114,7 @@ function AppContent() {
       voraText: VoraTextNode,
       voraShape: VoraShapeNode,
       voraMedia: VoraMediaNode,
+      voraMatrix: VoraMatrixNode,
       forgeAst: ForgeAstNode,
     }),
     []
@@ -2403,6 +2407,56 @@ function AppContent() {
     return newId;
   };
 
+  const addDecisionMatrix = (): void => {
+    if (!canvasBoardId) return;
+    const bounds = flow.reactFlowWrapper.current?.getBoundingClientRect();
+    const position = toCanvasFlowPosition({
+      x: bounds ? bounds.left + bounds.width / 2 : window.innerWidth / 2,
+      y: bounds ? bounds.top + bounds.height / 2 : window.innerHeight / 2,
+    });
+    const columns = [
+      { id: `criterion-${crypto.randomUUID()}`, name: "Cost", weight: 1 },
+      { id: `criterion-${crypto.randomUUID()}`, name: "Quality", weight: 1 },
+    ];
+    const data: VoraMatrixData = {
+      title: "Decision Matrix",
+      columns,
+      rows: [
+        {
+          id: `option-${crypto.randomUUID()}`,
+          name: "Option 1",
+          scores: Object.fromEntries(columns.map((column) => [column.id, 5])),
+        },
+        {
+          id: `option-${crypto.randomUUID()}`,
+          name: "Option 2",
+          scores: Object.fromEntries(columns.map((column) => [column.id, 5])),
+        },
+      ],
+    };
+    flow.saveHistorySnapshot();
+    const node: Node<VoraMatrixData, "voraMatrix"> = {
+      id: `matrix-${canvasBoardId}-${crypto.randomUUID()}`,
+      type: "voraMatrix",
+      position: { x: position.x - 380, y: position.y - 190 },
+      width: 760,
+      height: 380,
+      selected: true,
+      data,
+    };
+    flow.setNodes((nodes) => [
+      ...nodes.map((current) => ({ ...current, selected: false })),
+      node,
+    ]);
+    setIsDiagramPaletteOpen(false);
+    setIsAddCardToolActive(false);
+    setIsTextToolActive(false);
+    setActiveShapeTool(null);
+    rectangleStartRef.current = null;
+    pathPointsRef.current = [];
+    setShapePreview(null);
+  };
+
   const handleConnectEnd: OnConnectEnd = (event, connectionState) => {
     const sourceNode = connectionState.fromNode;
     const sourceHandle = connectionState.fromHandle;
@@ -3120,6 +3174,16 @@ function AppContent() {
           title="Text Tool (Click canvas to place text)"
         >
           <Type size={16} />
+        </button>
+        <button
+          type="button"
+          aria-label="Add Decision Matrix"
+          disabled={!canvasBoardId}
+          onClick={addDecisionMatrix}
+          className={`${CANVAS_TOOL_BUTTON_CLASS} ${CANVAS_TOOL_BUTTON_IDLE_CLASS} disabled:cursor-not-allowed disabled:opacity-40`}
+          title="Add Decision Matrix"
+        >
+          <Table size={16} />
         </button>
         <button
           type="button"
