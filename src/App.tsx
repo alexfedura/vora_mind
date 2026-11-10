@@ -599,7 +599,6 @@ function AppContent() {
     sourceHighlightId: string | null;
     sourceTitle: string;
     sourceContent: string;
-    sourceNodeId: string;
     position: { x: number; y: number };
     width: number;
   } | null>(null);
@@ -2317,7 +2316,6 @@ function AppContent() {
       sourceHighlightId: sourceCard?.sourceHighlightId ?? null,
       sourceTitle: sourceTitle.slice(0, 200),
       sourceContent,
-      sourceNodeId: node.id,
       position: node.position,
       width: node.measured?.width ?? node.width ?? 280,
     });

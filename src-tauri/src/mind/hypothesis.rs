@@ -1777,8 +1777,9 @@ fn map_hypothesis(row: &rusqlite::Row<'_>) -> Result<Hypothesis> {
 mod tests {
     use super::{
         add_data_entry_in_db, add_hypothesis_insight_in_db, build_hypothesis_analysis_prompt,
-        create_child_hypothesis_in_db, delete_data_entry_in_db, delete_hypothesis_insight_in_db,
-        graduate_to_library_in_db, init_schema, link_snapshot_to_hypothesis_in_db,
+        create_child_hypothesis_in_db, create_hypothesis_from_source_in_db,
+        delete_data_entry_in_db, delete_hypothesis_insight_in_db, graduate_to_library_in_db,
+        init_schema, link_snapshot_to_hypothesis_in_db,
         list_data_entries, list_hypotheses, list_hypothesis_insights, list_hypothesis_snapshots,
         promote_inquiry, record_hypothesis_execution_in_db, record_verdict_in_db,
         save_checklist_schema_in_db, save_hypothesis_protocol_in_db, save_protocol_flowchart_in_db,
@@ -2072,6 +2073,47 @@ mod tests {
             list_hypotheses(&connection).expect("list hypotheses").len(),
             1
         );
+    }
+
+    #[test]
+    fn source_creation_records_origin_and_promotes_its_inquiry_atomically() {
+        let mut connection = setup();
+        let hypothesis = create_hypothesis_from_source_in_db(
+            &mut connection,
+            "hypothesis-source-1",
+            "inquiry-source-1",
+            "source-card-1",
+            Some("source-highlight-1"),
+            "Research source",
+            "Evidence text",
+            "If X then Y",
+            "X does not affect Y",
+            "X",
+            "Y",
+            "rate",
+            "above 10%",
+            10,
+        )
+        .expect("create source hypothesis");
+
+        assert_eq!(hypothesis.source_card_id.as_deref(), Some("source-card-1"));
+        assert_eq!(
+            hypothesis.source_highlight_id.as_deref(),
+            Some("source-highlight-1")
+        );
+        assert_eq!(hypothesis.inquiry_id, "inquiry-source-1");
+
+        let (status, promoted_id, selected): (String, String, bool) = connection
+            .query_row(
+                "SELECT status, promoted_to_hypothesis_id, is_selected_for_promotion
+                 FROM questions WHERE id = 'inquiry-source-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read generated inquiry");
+        assert_eq!(status, "promoted");
+        assert_eq!(promoted_id, "hypothesis-source-1");
+        assert!(!selected);
     }
 
     #[test]
