@@ -5,6 +5,50 @@ pub mod repository;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum ModelStatus {
+    Proposed,
+    Active,
+    Deprecated,
+    Replaced,
+    Retired,
+}
+
+impl ModelStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Proposed => "proposed",
+            Self::Active => "active",
+            Self::Deprecated => "deprecated",
+            Self::Replaced => "replaced",
+            Self::Retired => "retired",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelVersionLifecycleStatus {
+    Draft,
+    Review,
+    Released,
+    Superseded,
+    Withdrawn,
+}
+
+impl ModelVersionLifecycleStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::Review => "review",
+            Self::Released => "released",
+            Self::Superseded => "superseded",
+            Self::Withdrawn => "withdrawn",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum ModelChangeClass {
     Refinement,
     Extension,
@@ -105,6 +149,33 @@ pub struct CreateModelReq {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct TransitionModelReq {
+    pub model_id: String,
+    pub next_status: ModelStatus,
+    pub rationale: String,
+    pub actor_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelLifecycleEventDto {
+    pub status: String,
+    pub rationale: String,
+    pub actor_id: Option<String>,
+    pub occurred_at_us: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TransitionModelVersionReq {
+    pub version_id: String,
+    pub next_status: ModelVersionLifecycleStatus,
+    pub rationale: String,
+    pub actor_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelDto {
     pub id: String,
     pub display_name: String,
@@ -112,6 +183,7 @@ pub struct ModelDto {
     pub origin_project_id: Option<String>,
     pub domain_id: Option<String>,
     pub status: String,
+    pub events: Vec<ModelLifecycleEventDto>,
     pub created_by: Option<String>,
     pub created_at_us: i64,
 }
@@ -322,6 +394,8 @@ pub struct ModelVersionDto {
     pub content_sha256: String,
     pub created_by: Option<String>,
     pub created_at_us: i64,
+    pub lifecycle_status: ModelVersionLifecycleStatus,
+    pub lifecycle_events: Vec<ModelLifecycleEventDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
