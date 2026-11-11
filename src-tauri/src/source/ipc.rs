@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::mind::canvas_db::AppState;
-use crate::source::{db, model::*, tree};
+use crate::source::{db, model::*, revision, tree};
 
 // ══════════════════════════════════════════════════════════════════
 // DTOs — request / response shapes
@@ -75,6 +75,20 @@ pub struct ExtractDetail {
     pub segment: Segment,
     pub source: Source,
     pub links: Vec<Link>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceRevisionDto {
+    pub id: String,
+    pub entity_kind: EntityKind,
+    pub entity_id: String,
+    pub revision_type: RevisionType,
+    pub before_json: Option<String>,
+    pub after_json: String,
+    pub reason: String,
+    pub created_by: String,
+    pub created_at: i64,
 }
 
 #[derive(Deserialize)]
@@ -379,6 +393,31 @@ pub fn mark_extract_reviewed_impl(conn: &rusqlite::Connection, id: &str) -> Resu
     db::mark_extract_reviewed(conn, id).map_err(e)
 }
 
+pub fn list_source_revisions_impl(
+    conn: &rusqlite::Connection,
+    entity_kind: EntityKind,
+    entity_id: &str,
+) -> Result<Vec<SourceRevisionDto>, String> {
+    revision::list_for_entity(conn, entity_kind, entity_id)
+        .map(|revisions| {
+            revisions
+                .into_iter()
+                .map(|revision| SourceRevisionDto {
+                    id: revision.id,
+                    entity_kind: revision.entity_kind,
+                    entity_id: revision.entity_id,
+                    revision_type: revision.revision_type,
+                    before_json: revision.before_json,
+                    after_json: revision.after_json,
+                    reason: revision.reason,
+                    created_by: revision.created_by,
+                    created_at: revision.created_at,
+                })
+                .collect()
+        })
+        .map_err(e)
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Tauri commands — lock the shared connection and delegate to _impl
 // ══════════════════════════════════════════════════════════════════
@@ -441,6 +480,16 @@ pub fn src_create_link(req: CreateLinkReq, state: State<AppState>) -> Result<Str
 pub fn src_mark_extract_reviewed(id: String, state: State<AppState>) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     mark_extract_reviewed_impl(&conn, &id)
+}
+
+#[tauri::command]
+pub fn src_list_source_revisions(
+    entity_kind: EntityKind,
+    entity_id: String,
+    state: State<AppState>,
+) -> Result<Vec<SourceRevisionDto>, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    list_source_revisions_impl(&conn, entity_kind, &entity_id)
 }
 
 // ══════════════════════════════════════════════════════════════════
