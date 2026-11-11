@@ -2714,10 +2714,7 @@ mod tests {
                 .iter()
                 .any(|evidence| evidence.id == evidence_id));
             assert_eq!(state.evaluations.len(), 1);
-            assert_eq!(
-                state.evaluations[0].model_version_id,
-                successor_version_id
-            );
+            assert_eq!(state.evaluations[0].model_version_id, successor_version_id);
             assert_eq!(state.validations.len(), 1);
             assert_eq!(state.replications.len(), 2);
             assert!(state
