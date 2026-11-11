@@ -55,8 +55,7 @@ pub fn initialize_schema(conn: &Connection) -> Result<()> {
              applied_at_us INTEGER NOT NULL
          );",
     )?;
-    let foreign_keys_enabled: i64 =
-        conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
+    let foreign_keys_enabled: i64 = conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
     if foreign_keys_enabled != 1 {
         bail!("SQLite foreign-key enforcement is required for Knowledge Transfer.");
     }
@@ -298,7 +297,12 @@ pub fn create_concept_version(
         tx.execute(
             "INSERT INTO knowledge_concepts (id, title, definition, lifecycle, created_at_us)
              VALUES (?1, ?2, ?3, 'proposed', ?4)",
-            params![concept_id, request.title.trim(), request.definition.trim(), now],
+            params![
+                concept_id,
+                request.title.trim(),
+                request.definition.trim(),
+                now
+            ],
         )?;
     }
     let version_no = next_version_number(
@@ -329,7 +333,13 @@ pub fn create_concept_version(
         "INSERT INTO knowledge_concept_version_events
             (id, version_id, status, rationale, actor_id, occurred_at_us)
          VALUES (?1, ?2, 'draft', ?3, ?4, ?5)",
-        params![id(), version_id, request.rationale.trim(), request.created_by, now],
+        params![
+            id(),
+            version_id,
+            request.rationale.trim(),
+            request.created_by,
+            now
+        ],
     )?;
     tx.commit()?;
     Ok(version_id)
@@ -380,7 +390,12 @@ pub fn create_principle_version(
         tx.execute(
             "INSERT INTO knowledge_principles (id, title, statement, lifecycle, created_at_us)
              VALUES (?1, ?2, ?3, 'proposed', ?4)",
-            params![principle_id, request.title.trim(), request.statement.trim(), now],
+            params![
+                principle_id,
+                request.title.trim(),
+                request.statement.trim(),
+                now
+            ],
         )?;
     }
     let version_no = next_version_number(
@@ -411,7 +426,13 @@ pub fn create_principle_version(
         "INSERT INTO knowledge_principle_version_events
             (id, version_id, status, rationale, actor_id, occurred_at_us)
          VALUES (?1, ?2, 'draft', ?3, ?4, ?5)",
-        params![id(), version_id, request.rationale.trim(), request.created_by, now],
+        params![
+            id(),
+            version_id,
+            request.rationale.trim(),
+            request.created_by,
+            now
+        ],
     )?;
     tx.commit()?;
     Ok(version_id)
@@ -545,7 +566,11 @@ pub fn create_eligibility(
     required(&request.attribution_text, "Attribution text")?;
     required(&request.permission_basis, "Permission basis")?;
     required(&request.reviewed_by, "Rights reviewer")?;
-    if request.license_identifier.trim().eq_ignore_ascii_case("unknown") {
+    if request
+        .license_identifier
+        .trim()
+        .eq_ignore_ascii_case("unknown")
+    {
         bail!("Unknown rights must be resolved before enabling transfer.");
     }
     if !request.permission_granted {
@@ -724,12 +749,22 @@ pub fn adopt_knowledge(
         "INSERT INTO transfer_attributions
             (transfer_id, attribution_text, recorded_by, recorded_at_us)
          VALUES (?1, ?2, ?3, ?4)",
-        params![transfer_id, request.attribution_text.trim(), request.requested_by, now],
+        params![
+            transfer_id,
+            request.attribution_text.trim(),
+            request.requested_by,
+            now
+        ],
     )?;
     tx.execute(
         "INSERT INTO transfer_contexts (transfer_id, context, recorded_by, recorded_at_us)
          VALUES (?1, ?2, ?3, ?4)",
-        params![transfer_id, request.context.trim(), request.requested_by, now],
+        params![
+            transfer_id,
+            request.context.trim(),
+            request.requested_by,
+            now
+        ],
     )?;
     tx.execute(
         "INSERT INTO knowledge_transfer_events
@@ -785,35 +820,80 @@ pub fn create_adaptation(
                 (id, transfer_id, origin_id, receiving_project_id, artifact_kind,
                  finding_version_id, rationale, adapted_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, 'finding_version', ?5, ?6, ?7, ?8)",
-            params![adaptation_id, request.transfer_id, transfer.origin.id, transfer.receiving_project_id, version_id, request.rationale.trim(), request.adapted_by, now],
+            params![
+                adaptation_id,
+                request.transfer_id,
+                transfer.origin.id,
+                transfer.receiving_project_id,
+                version_id,
+                request.rationale.trim(),
+                request.adapted_by,
+                now
+            ],
         )?,
         TransferArtifactRef::ConceptVersion { version_id, .. } => tx.execute(
             "INSERT INTO transfer_adaptations
                 (id, transfer_id, origin_id, receiving_project_id, artifact_kind,
                  concept_version_id, rationale, adapted_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, 'concept_version', ?5, ?6, ?7, ?8)",
-            params![adaptation_id, request.transfer_id, transfer.origin.id, transfer.receiving_project_id, version_id, request.rationale.trim(), request.adapted_by, now],
+            params![
+                adaptation_id,
+                request.transfer_id,
+                transfer.origin.id,
+                transfer.receiving_project_id,
+                version_id,
+                request.rationale.trim(),
+                request.adapted_by,
+                now
+            ],
         )?,
         TransferArtifactRef::PrincipleVersion { version_id, .. } => tx.execute(
             "INSERT INTO transfer_adaptations
                 (id, transfer_id, origin_id, receiving_project_id, artifact_kind,
                  principle_version_id, rationale, adapted_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, 'principle_version', ?5, ?6, ?7, ?8)",
-            params![adaptation_id, request.transfer_id, transfer.origin.id, transfer.receiving_project_id, version_id, request.rationale.trim(), request.adapted_by, now],
+            params![
+                adaptation_id,
+                request.transfer_id,
+                transfer.origin.id,
+                transfer.receiving_project_id,
+                version_id,
+                request.rationale.trim(),
+                request.adapted_by,
+                now
+            ],
         )?,
         TransferArtifactRef::FrameworkVersion { version_id, .. } => tx.execute(
             "INSERT INTO transfer_adaptations
                 (id, transfer_id, origin_id, receiving_project_id, artifact_kind,
                  framework_version_id, rationale, adapted_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, 'framework_version', ?5, ?6, ?7, ?8)",
-            params![adaptation_id, request.transfer_id, transfer.origin.id, transfer.receiving_project_id, version_id, request.rationale.trim(), request.adapted_by, now],
+            params![
+                adaptation_id,
+                request.transfer_id,
+                transfer.origin.id,
+                transfer.receiving_project_id,
+                version_id,
+                request.rationale.trim(),
+                request.adapted_by,
+                now
+            ],
         )?,
         TransferArtifactRef::ModelVersion { version_id, .. } => tx.execute(
             "INSERT INTO transfer_adaptations
                 (id, transfer_id, origin_id, receiving_project_id, artifact_kind,
                  model_version_id, rationale, adapted_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, 'model_version', ?5, ?6, ?7, ?8)",
-            params![adaptation_id, request.transfer_id, transfer.origin.id, transfer.receiving_project_id, version_id, request.rationale.trim(), request.adapted_by, now],
+            params![
+                adaptation_id,
+                request.transfer_id,
+                transfer.origin.id,
+                transfer.receiving_project_id,
+                version_id,
+                request.rationale.trim(),
+                request.adapted_by,
+                now
+            ],
         )?,
     }?;
     tx.execute(
@@ -850,13 +930,7 @@ pub fn record_downstream_usage(
     }
     let usage_id = id();
     let now = now_us()?;
-    insert_downstream_usage(
-        &tx,
-        request,
-        &usage_id,
-        &transfer.receiving_project_id,
-        now,
-    )?;
+    insert_downstream_usage(&tx, request, &usage_id, &transfer.receiving_project_id, now)?;
     tx.commit()?;
     query_usage(conn, &usage_id)
 }
@@ -1059,7 +1133,12 @@ fn query_origin(conn: &Connection, origin_id: &str) -> Result<KnowledgeTransferO
     })
 }
 
-fn project_or_entity(kind: &str, project_id: String, version_id: &str, conn: &Connection) -> Result<String> {
+fn project_or_entity(
+    kind: &str,
+    project_id: String,
+    version_id: &str,
+    conn: &Connection,
+) -> Result<String> {
     let _ = project_id;
     Ok(match kind {
         "finding_version" => conn.query_row(
@@ -1217,7 +1296,13 @@ fn query_transfer(conn: &Connection, transfer_id: &str) -> Result<KnowledgeTrans
     let events = event_stmt
         .query_map([transfer_id], |row| {
             let state: String = row.get(1)?;
-            Ok((row.get::<_, String>(0)?, state, row.get::<_, String>(2)?, row.get::<_, Option<String>>(3)?, row.get::<_, i64>(4)?))
+            Ok((
+                row.get::<_, String>(0)?,
+                state,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, i64>(4)?,
+            ))
         })?
         .map(|row| {
             let (id, state, rationale, actor_id, occurred_at_us) = row?;
@@ -1271,7 +1356,16 @@ fn parse_transfer_state(value: &str) -> Result<KnowledgeTransferState> {
 }
 
 fn query_adaptation(conn: &Connection, adaptation_id: &str) -> Result<TransferAdaptationDto> {
-    let (transfer_id, origin_id, receiving_project_id, kind, version_id, rationale, adapted_by, created_at): (
+    let (
+        transfer_id,
+        origin_id,
+        receiving_project_id,
+        kind,
+        version_id,
+        rationale,
+        adapted_by,
+        created_at,
+    ): (
         String,
         String,
         String,
@@ -1287,7 +1381,18 @@ fn query_adaptation(conn: &Connection, adaptation_id: &str) -> Result<TransferAd
                 rationale, adapted_by, created_at_us
          FROM transfer_adaptations WHERE id = ?1",
         [adaptation_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+            ))
+        },
     )?;
     let entity_id = project_or_entity(&kind, receiving_project_id.clone(), &version_id, conn)?;
     let artifact = enum_artifact(&kind, entity_id, version_id)?;
@@ -1322,18 +1427,58 @@ fn query_usage(conn: &Connection, usage_id: &str) -> Result<DownstreamUsageDto> 
                 use_context, recorded_by, recorded_at_us
          FROM downstream_usage WHERE id = ?1",
         [usage_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+            ))
+        },
     )?;
     let reference = match kind.as_str() {
         "finding_version" | "concept_version" | "principle_version" | "framework_version"
         | "model_version" => {
             let entity_id = project_or_entity(&kind, project_id.clone(), &artifact_id, conn)?;
             match enum_artifact(&kind, entity_id, artifact_id)? {
-                TransferArtifactRef::FindingVersion { finding_id, version_id } => DownstreamUseRef::FindingVersion { finding_id, version_id },
-                TransferArtifactRef::ConceptVersion { concept_id, version_id } => DownstreamUseRef::ConceptVersion { concept_id, version_id },
-                TransferArtifactRef::PrincipleVersion { principle_id, version_id } => DownstreamUseRef::PrincipleVersion { principle_id, version_id },
-                TransferArtifactRef::FrameworkVersion { framework_id, version_id } => DownstreamUseRef::FrameworkVersion { framework_id, version_id },
-                TransferArtifactRef::ModelVersion { model_id, version_id } => DownstreamUseRef::ModelVersion { model_id, version_id },
+                TransferArtifactRef::FindingVersion {
+                    finding_id,
+                    version_id,
+                } => DownstreamUseRef::FindingVersion {
+                    finding_id,
+                    version_id,
+                },
+                TransferArtifactRef::ConceptVersion {
+                    concept_id,
+                    version_id,
+                } => DownstreamUseRef::ConceptVersion {
+                    concept_id,
+                    version_id,
+                },
+                TransferArtifactRef::PrincipleVersion {
+                    principle_id,
+                    version_id,
+                } => DownstreamUseRef::PrincipleVersion {
+                    principle_id,
+                    version_id,
+                },
+                TransferArtifactRef::FrameworkVersion {
+                    framework_id,
+                    version_id,
+                } => DownstreamUseRef::FrameworkVersion {
+                    framework_id,
+                    version_id,
+                },
+                TransferArtifactRef::ModelVersion {
+                    model_id,
+                    version_id,
+                } => DownstreamUseRef::ModelVersion {
+                    model_id,
+                    version_id,
+                },
             }
         }
         "model_evaluation" => DownstreamUseRef::ModelEvaluation { id: artifact_id },
@@ -1353,7 +1498,16 @@ fn query_usage(conn: &Connection, usage_id: &str) -> Result<DownstreamUsageDto> 
 }
 
 fn query_lineage(conn: &Connection, lineage_id: &str) -> Result<ResearchLineageDto> {
-    let (transfer_id, origin_id, origin_project_id, receiving_project_id, relation_kind, adaptation_id, rationale, occurred_at): (
+    let (
+        transfer_id,
+        origin_id,
+        origin_project_id,
+        receiving_project_id,
+        relation_kind,
+        adaptation_id,
+        rationale,
+        occurred_at,
+    ): (
         String,
         String,
         String,
@@ -1367,7 +1521,18 @@ fn query_lineage(conn: &Connection, lineage_id: &str) -> Result<ResearchLineageD
                 relation_kind, adaptation_id, rationale, occurred_at_us
          FROM research_lineage WHERE id = ?1",
         [lineage_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+            ))
+        },
     )?;
     let origin = query_origin(conn, &origin_id)?.artifact;
     let adaptation = adaptation_id
@@ -1387,8 +1552,8 @@ fn query_lineage(conn: &Connection, lineage_id: &str) -> Result<ResearchLineageD
 }
 
 pub fn workspace(conn: &Connection) -> Result<TransferWorkspaceDto> {
-    let mut project_stmt =
-        conn.prepare("SELECT id, title, lifecycle_status FROM research_projects ORDER BY title, id")?;
+    let mut project_stmt = conn
+        .prepare("SELECT id, title, lifecycle_status FROM research_projects ORDER BY title, id")?;
     let projects = project_stmt
         .query_map([], |row| {
             Ok(ResearchProjectDto {
@@ -1652,10 +1817,7 @@ pub fn provenance_preview(
             provenance.extend(
                 run_stmt
                     .query_map([version_id], |row| {
-                        Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, String>(1)?,
-                        ))
+                        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
                     })?
                     .map(|row| {
                         let (run_id, status) = row?;
@@ -1766,7 +1928,9 @@ pub fn provenance_preview(
             for (validation_id, validation_scope_text, population, method, outcome) in
                 validation_rows
             {
-                validation_scope.push(format!("{validation_scope_text} / {population} ({outcome})"));
+                validation_scope.push(format!(
+                    "{validation_scope_text} / {population} ({outcome})"
+                ));
                 provenance.push(TransferProvenanceRecordDto {
                     record_kind: "validation".to_string(),
                     record_id: validation_id,
@@ -1813,7 +1977,10 @@ pub fn provenance_preview(
                     .collect::<Result<Vec<_>>>()?,
             );
         }
-        TransferArtifactRef::ConceptVersion { concept_id, version_id } => {
+        TransferArtifactRef::ConceptVersion {
+            concept_id,
+            version_id,
+        } => {
             (scope, applicability, uncertainty, limitations) = conn.query_row(
                 "SELECT v.definition, v.created_in_project_id, '', v.rationale
                  FROM knowledge_concept_versions v WHERE v.id = ?1 AND v.concept_id = ?2",
@@ -1822,7 +1989,10 @@ pub fn provenance_preview(
             )?;
             append_acquisition_provenance(conn, "concept_id", concept_id, &mut provenance)?;
         }
-        TransferArtifactRef::PrincipleVersion { principle_id, version_id } => {
+        TransferArtifactRef::PrincipleVersion {
+            principle_id,
+            version_id,
+        } => {
             (scope, applicability, uncertainty, limitations) = conn.query_row(
                 "SELECT v.statement, v.created_in_project_id, '', v.rationale
                  FROM knowledge_principle_versions v WHERE v.id = ?1 AND v.principle_id = ?2",
@@ -1897,8 +2067,8 @@ fn find_origin_id(conn: &Connection, artifact: &TransferArtifactRef) -> Result<O
         TransferArtifactKind::FrameworkVersion => ("framework_version_id", ""),
         TransferArtifactKind::ModelVersion => ("model_version_id", ""),
     };
-    let sql = format!(
-        "SELECT id FROM knowledge_transfer_origins WHERE {column} = ?1"
-    );
-    Ok(conn.query_row(&sql, [artifact.version_id()], |row| row.get(0)).optional()?)
+    let sql = format!("SELECT id FROM knowledge_transfer_origins WHERE {column} = ?1");
+    Ok(conn
+        .query_row(&sql, [artifact.version_id()], |row| row.get(0))
+        .optional()?)
 }

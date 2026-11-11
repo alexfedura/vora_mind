@@ -37,7 +37,11 @@ impl TransferArtifactKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum TransferArtifactRef {
     FindingVersion {
         finding_id: String,
@@ -309,16 +313,41 @@ pub struct TransferAdaptationDto {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum DownstreamUseRef {
-    FindingVersion { finding_id: String, version_id: String },
-    ConceptVersion { concept_id: String, version_id: String },
-    PrincipleVersion { principle_id: String, version_id: String },
-    FrameworkVersion { framework_id: String, version_id: String },
-    ModelVersion { model_id: String, version_id: String },
-    ModelEvaluation { id: String },
-    AnalysisRun { id: String },
-    ExperimentRun { id: String },
+    FindingVersion {
+        finding_id: String,
+        version_id: String,
+    },
+    ConceptVersion {
+        concept_id: String,
+        version_id: String,
+    },
+    PrincipleVersion {
+        principle_id: String,
+        version_id: String,
+    },
+    FrameworkVersion {
+        framework_id: String,
+        version_id: String,
+    },
+    ModelVersion {
+        model_id: String,
+        version_id: String,
+    },
+    ModelEvaluation {
+        id: String,
+    },
+    AnalysisRun {
+        id: String,
+    },
+    ExperimentRun {
+        id: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
