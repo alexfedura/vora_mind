@@ -1085,3 +1085,333 @@ fn query_evaluations(conn: &Connection, project_id: &str) -> Result<Vec<ModelEva
         .collect::<rusqlite::Result<Vec<_>>>()?;
     ids.iter().map(|evaluation_id| query_evaluation(conn, evaluation_id)).collect()
 }
+
+pub fn create_validation(
+    conn: &mut Connection,
+    request: &CreateModelValidationReq,
+) -> Result<ModelValidationDto> {
+    validate_validation_request(conn, request)?;
+    let validation_id = id();
+    let criteria_json = json(&request.criteria)?;
+    let criteria_sha256 = sha256(criteria_json.as_bytes());
+    conn.execute(
+        "INSERT INTO model_validations
+            (id, project_id, target_model_version_id, target_finding_version_id,
+             target_source_claim_id, criteria_json, criteria_sha256, scope, population_scope,
+             evaluation_method, evaluator_identity, independence_state,
+             independence_rationale, conflict_of_interest, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+        params![
+            validation_id,
+            request.project_id,
+            validation_target_column(&request.target, 0),
+            validation_target_column(&request.target, 1),
+            validation_target_column(&request.target, 2),
+            criteria_json,
+            criteria_sha256,
+            request.scope.trim(),
+            request.population_scope.trim(),
+            request.evaluation_method.trim(),
+            request.evaluator_identity.trim(),
+            request.independence_state,
+            request.independence_rationale.trim(),
+            request.conflict_of_interest.trim(),
+            request.created_by,
+            now_us()?
+        ],
+    )?;
+    query_validation(conn, &validation_id)
+}
+
+fn validate_validation_request(
+    conn: &Connection,
+    request: &CreateModelValidationReq,
+) -> Result<()> {
+    for (value, label) in [
+        (&request.scope, "Validation scope"),
+        (&request.population_scope, "Validation population scope"),
+        (&request.evaluation_method, "Validation method"),
+        (&request.evaluator_identity, "Evaluator identity"),
+        (&request.conflict_of_interest, "Conflict-of-interest declaration"),
+    ] {
+        required(value, label)?;
+    }
+    exists(
+        conn,
+        "SELECT EXISTS(SELECT 1 FROM research_projects WHERE id = ?1)",
+        &request.project_id,
+        "Validation research project was not found.",
+    )?;
+    if request.criteria.is_empty()
+        || request.criteria.iter().any(|criterion| match criterion {
+            serde_json::Value::String(value) => value.trim().is_empty(),
+            serde_json::Value::Object(value) => value
+                .get("criterion")
+                .and_then(serde_json::Value::as_str)
+                .is_none_or(|text| text.trim().is_empty()),
+            _ => true,
+        })
+    {
+        return Err(anyhow!(
+            "Validation requires non-empty predeclared criteria."
+        ));
+    }
+    if !matches!(
+        request.independence_state.as_str(),
+        "independent" | "not_independent" | "unknown"
+    ) {
+        return Err(anyhow!("Invalid evaluator-independence state."));
+    }
+    if request.independence_state != "independent" {
+        required(
+            &request.independence_rationale,
+            "Evaluator-independence rationale",
+        )?;
+    }
+    match &request.target {
+        ModelValidationTarget::ModelVersion(version_id) => exists(
+            conn,
+            "SELECT EXISTS(SELECT 1 FROM model_versions WHERE id = ?1)",
+            version_id,
+            "Validation model version was not found.",
+        )?,
+        ModelValidationTarget::FindingVersion(finding_id) => {
+            let owning_project: Option<String> = conn
+                .query_row(
+                    "SELECT project_id FROM analysis_finding_versions WHERE id = ?1",
+                    [finding_id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if owning_project.as_deref() != Some(request.project_id.as_str()) {
+                return Err(anyhow!(
+                    "Validation finding must belong to the selected project."
+                ));
+            }
+        }
+        ModelValidationTarget::SourceClaim(claim_id) => exists(
+            conn,
+            "SELECT EXISTS(SELECT 1 FROM source_claims WHERE id = ?1)",
+            claim_id,
+            "Validation source claim was not found.",
+        )?,
+    }
+    Ok(())
+}
+
+fn validation_target_column(target: &ModelValidationTarget, column: usize) -> Option<&str> {
+    match (target, column) {
+        (ModelValidationTarget::ModelVersion(value), 0) => Some(value),
+        (ModelValidationTarget::FindingVersion(value), 1) => Some(value),
+        (ModelValidationTarget::SourceClaim(value), 2) => Some(value),
+        _ => None,
+    }
+}
+
+pub fn finalize_validation(
+    conn: &mut Connection,
+    request: &FinalizeModelValidationReq,
+) -> Result<ModelValidationDto> {
+    required(&request.rationale, "Validation result rationale")?;
+    let target: Option<(Option<String>, Option<String>, Option<String>, String)> = conn
+        .query_row(
+            "SELECT target_model_version_id, target_finding_version_id,
+                    target_source_claim_id, project_id
+             FROM model_validations WHERE id = ?1",
+            [&request.validation_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .optional()?;
+    let Some((model_version, finding_version, source_claim, project_id)) = target else {
+        return Err(anyhow!("Validation record was not found."));
+    };
+    let existing_result: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM model_validation_events WHERE validation_id = ?1)",
+        [&request.validation_id],
+        |row| row.get(0),
+    )?;
+    if existing_result {
+        return Err(anyhow!(
+            "A validation attempt is immutable after its result is recorded; create a new attempt."
+        ));
+    }
+    for evidence_id in &request.analysis_evidence_ids {
+        let evidence: Option<(String, Option<String>, Option<String>, Option<String>)> = conn
+            .query_row(
+                "SELECT project_id, target_source_claim_id, target_hypothesis_version_id,
+                        target_finding_version_id
+                 FROM analysis_evidence WHERE id = ?1",
+                [evidence_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()?;
+        let Some((evidence_project, evidence_claim, _, evidence_finding)) = evidence else {
+            return Err(anyhow!("Validation evidence was not found."));
+        };
+        if evidence_project != project_id
+            || (source_claim.is_some() && evidence_claim != source_claim)
+            || (finding_version.is_some() && evidence_finding != finding_version)
+        {
+            return Err(anyhow!(
+                "Validation evidence must match the target claim/finding and project."
+            ));
+        }
+    }
+    for evidence_id in &request.model_evidence_ids {
+        let evidence_version: Option<String> = conn
+            .query_row(
+                "SELECT model_version_id FROM model_evidence WHERE id = ?1",
+                [evidence_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if model_version.as_deref().is_none()
+            || evidence_version.as_deref() != model_version.as_deref()
+        {
+            return Err(anyhow!(
+                "Model validation evidence must target the exact validated ModelVersion."
+            ));
+        }
+    }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    tx.execute(
+        "INSERT INTO model_validation_events
+            (id, validation_id, outcome, rationale, deviations_json, actor_id, occurred_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            id(),
+            request.validation_id,
+            request.outcome.as_str(),
+            request.rationale.trim(),
+            json(&request.deviations)?,
+            request.actor_id,
+            now_us()?
+        ],
+    )?;
+    for evidence_id in &request.analysis_evidence_ids {
+        tx.execute(
+            "INSERT INTO model_validation_analysis_evidence (validation_id, evidence_id)
+             VALUES (?1, ?2)",
+            params![request.validation_id, evidence_id],
+        )?;
+    }
+    for evidence_id in &request.model_evidence_ids {
+        tx.execute(
+            "INSERT INTO model_validation_model_evidence (validation_id, evidence_id)
+             VALUES (?1, ?2)",
+            params![request.validation_id, evidence_id],
+        )?;
+    }
+    tx.commit()?;
+    query_validation(conn, &request.validation_id)
+}
+
+fn query_validation(conn: &Connection, validation_id: &str) -> Result<ModelValidationDto> {
+    let row = conn.query_row(
+        "SELECT v.id, v.project_id, v.target_model_version_id, v.target_finding_version_id,
+                v.target_source_claim_id, v.criteria_json, v.scope, v.population_scope,
+                v.evaluation_method, v.evaluator_identity, v.independence_state,
+                v.independence_rationale, v.conflict_of_interest, v.created_by, v.created_at_us,
+                e.outcome, e.rationale, e.deviations_json, e.occurred_at_us
+         FROM model_validations v LEFT JOIN model_validation_events e ON e.validation_id = v.id
+         WHERE v.id = ?1",
+        [validation_id],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, String>(8)?,
+                row.get::<_, String>(9)?,
+                row.get::<_, String>(10)?,
+                row.get::<_, String>(11)?,
+                row.get::<_, String>(12)?,
+                row.get::<_, Option<String>>(13)?,
+                row.get::<_, i64>(14)?,
+                row.get::<_, Option<String>>(15)?,
+                row.get::<_, Option<String>>(16)?,
+                row.get::<_, Option<String>>(17)?,
+                row.get::<_, Option<i64>>(18)?,
+            ))
+        },
+    )?;
+    let target = match (row.2, row.3, row.4) {
+        (Some(value), None, None) => ModelValidationTarget::ModelVersion(value),
+        (None, Some(value), None) => ModelValidationTarget::FindingVersion(value),
+        (None, None, Some(value)) => ModelValidationTarget::SourceClaim(value),
+        _ => return Err(anyhow!("Validation record has an invalid target.")),
+    };
+    let analysis_evidence_ids = query_ids(
+        conn,
+        "SELECT evidence_id FROM model_validation_analysis_evidence
+         WHERE validation_id = ?1 ORDER BY evidence_id",
+        validation_id,
+    )?;
+    let model_evidence_ids = query_ids(
+        conn,
+        "SELECT evidence_id FROM model_validation_model_evidence
+         WHERE validation_id = ?1 ORDER BY evidence_id",
+        validation_id,
+    )?;
+    let outcome = row
+        .15
+        .as_deref()
+        .map(parse_validation_outcome)
+        .transpose()?;
+    Ok(ModelValidationDto {
+        id: row.0,
+        project_id: row.1,
+        target,
+        criteria: parse_json(&row.5)?,
+        scope: row.6,
+        population_scope: row.7,
+        evaluation_method: row.8,
+        evaluator_identity: row.9,
+        independence_state: row.10,
+        independence_rationale: row.11,
+        conflict_of_interest: row.12,
+        outcome,
+        result_rationale: row.16,
+        deviations: row
+            .17
+            .as_deref()
+            .map(parse_json)
+            .transpose()?
+            .unwrap_or_default(),
+        analysis_evidence_ids,
+        model_evidence_ids,
+        created_by: row.13,
+        created_at_us: row.14,
+        finalized_at_us: row.18,
+    })
+}
+
+fn parse_validation_outcome(value: &str) -> Result<ModelValidationOutcome> {
+    match value {
+        "pass" => Ok(ModelValidationOutcome::Pass),
+        "fail" => Ok(ModelValidationOutcome::Fail),
+        "inconclusive" => Ok(ModelValidationOutcome::Inconclusive),
+        _ => Err(anyhow!("Invalid validation outcome: {value}")),
+    }
+}
+
+fn query_ids(conn: &Connection, sql: &str, id_value: &str) -> Result<Vec<String>> {
+    let mut statement = conn.prepare(sql)?;
+    Ok(statement
+        .query_map([id_value], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+fn query_validations(conn: &Connection, project_id: &str) -> Result<Vec<ModelValidationDto>> {
+    let ids = query_ids(
+        conn,
+        "SELECT id FROM model_validations WHERE project_id = ?1 ORDER BY created_at_us, id",
+        project_id,
+    )?;
+    ids.iter().map(|validation_id| query_validation(conn, validation_id)).collect()
+}
