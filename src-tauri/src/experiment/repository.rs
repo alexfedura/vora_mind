@@ -7,7 +7,11 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 const EXPERIMENT_SCHEMA: &str = include_str!("schema.sql");
+const EXPERIMENT_SCHEMA_V2: &str = include_str!("schema_v2.sql");
 const EXPERIMENT_MIGRATION_ID: &str = "phase3-experiments-001";
+const EXPERIMENT_MIGRATION_V1_CHECKSUM: &str =
+    "9213c7c7352c5d99cad3446abef07f99cf052dfd7c155d33d71fa35c4aecadc5";
+const EXPERIMENT_MIGRATION_V2_ID: &str = "phase3-experiments-002";
 
 #[derive(Debug)]
 pub struct ExperimentError(String);
@@ -50,10 +54,6 @@ fn invalid(message: impl Into<String>) -> ExperimentError {
     ExperimentError(message.into())
 }
 
-fn migration_checksum() -> String {
-    format!("{:x}", Sha256::digest(EXPERIMENT_SCHEMA.as_bytes()))
-}
-
 pub fn initialize_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "PRAGMA foreign_keys = ON;
@@ -70,32 +70,63 @@ pub fn initialize_schema(conn: &Connection) -> Result<()> {
             "SQLite foreign-key enforcement is required for Experiment writes.",
         ));
     }
-    let applied: Option<(String, String)> = conn
-        .query_row(
-            "SELECT migration_id, checksum
-             FROM experiment_schema_migrations WHERE version = 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?;
-    let checksum = migration_checksum();
-    if let Some((migration_id, applied_checksum)) = applied {
-        if migration_id != EXPERIMENT_MIGRATION_ID || applied_checksum != checksum {
-            return Err(invalid(
-                "Experiment migration 1 differs from the applied migration; add a new numbered migration.",
-            ));
-        }
-        return Ok(());
+    if sha256_text(EXPERIMENT_SCHEMA) != EXPERIMENT_MIGRATION_V1_CHECKSUM {
+        return Err(invalid(
+            "Experiment migration 1 was modified; add a new numbered migration.",
+        ));
     }
+    apply_migration(
+        conn,
+        1,
+        EXPERIMENT_MIGRATION_ID,
+        EXPERIMENT_MIGRATION_V1_CHECKSUM,
+        EXPERIMENT_SCHEMA,
+    )?;
+    let migration_v2_checksum = sha256_text(EXPERIMENT_SCHEMA_V2);
+    apply_migration(
+        conn,
+        2,
+        EXPERIMENT_MIGRATION_V2_ID,
+        &migration_v2_checksum,
+        EXPERIMENT_SCHEMA_V2,
+    )?;
+    Ok(())
+}
+
+fn apply_migration(
+    conn: &Connection,
+    version: i64,
+    migration_id: &str,
+    checksum: &str,
+    schema: &str,
+) -> Result<()> {
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let migration_result = (|| -> Result<()> {
-        conn.execute_batch(EXPERIMENT_SCHEMA)?;
+        let applied: Option<(String, String)> = conn
+            .query_row(
+                "SELECT migration_id, checksum
+                 FROM experiment_schema_migrations WHERE version = ?1",
+                [version],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        if let Some((applied_id, applied_checksum)) = applied {
+            if applied_id != migration_id || applied_checksum != checksum {
+                return Err(invalid(format!(
+                    "Experiment migration {version} differs from the applied migration; add a new numbered migration."
+                )));
+            }
+            return Ok(());
+        }
+
+        conn.execute_batch(schema)?;
         conn.execute(
             "INSERT INTO experiment_schema_migrations
                 (version, migration_id, checksum, applied_at_us)
-             VALUES (1, ?1, ?2, ?3)",
+             VALUES (?1, ?2, ?3, ?4)",
             params![
-                EXPERIMENT_MIGRATION_ID,
+                version,
+                migration_id,
                 checksum,
                 now_ts_us().map_err(invalid)?
             ],
@@ -2596,7 +2627,7 @@ mod tests {
         let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
         initialize(&conn);
         project(&conn, "legacy-design-project");
-        conn.execute(
+        conn.execute_batch(
             "INSERT INTO research_experiment_designs
                 (id, project_id, title, created_at_us)
              VALUES ('legacy-design', 'legacy-design-project', 'Legacy design', 1);
@@ -2605,7 +2636,6 @@ mod tests {
                  created_at_us, preregistered_at_us)
              VALUES ('legacy-design-v1', 'legacy-design', 1, 'Legacy description',
                      'Legacy protocol', 'preregistered', 1, 1);",
-            [],
         )
         .expect("insert legacy design");
         initialize_schema(&conn).expect("repeat experiment migration");
