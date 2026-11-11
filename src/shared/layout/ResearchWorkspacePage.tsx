@@ -625,11 +625,19 @@ export const ResearchWorkspacePage: React.FC = () => {
           ) : (
             <div className="space-y-2">
               {workspace.projects.map((project) => (
-                <button key={project.id} type="button" onClick={() => setProjectId(project.id)} className={`block w-full rounded-lg border p-3 text-left ${project.id === projectId ? "border-[#e8ad55]/60 bg-[#221f1a]" : "border-[#292c34] bg-[#101114]"}`}>
-                  <span className="block text-sm font-medium text-white">{project.title}</span>
-                  <span className="mt-1 block text-xs text-gray-400">{project.lifecycleStatus} · {project.pathwayKeys.join(", ")}</span>
-                  <span className="mt-1 block text-[11px] text-gray-500">{project.domainIds.length} domain assignment(s)</span>
-                </button>
+                <article key={project.id} className={`rounded-lg border p-3 ${project.id === projectId ? "border-[#e8ad55]/60 bg-[#221f1a]" : "border-[#292c34] bg-[#101114]"}`}>
+                  <button type="button" onClick={() => setProjectId(project.id)} className="block w-full text-left">
+                    <span className="block text-sm font-medium text-white">{project.title}</span>
+                    <span className="mt-1 block text-xs text-gray-400">{project.lifecycleStatus} · {project.pathwayKeys.join(", ")}</span>
+                    <span className="mt-1 block text-[11px] text-gray-500">{project.domainIds.length} domain assignment(s)</span>
+                  </button>
+                  <div className="mt-2 flex gap-2">
+                    {project.lifecycleStatus === "proposed" && <button type="button" onClick={() => void act(() => researchService.transitionProject(project.id, "active", null))} className="rounded border border-emerald-800 px-2 py-1 text-[11px] text-emerald-300">Activate</button>}
+                    {project.lifecycleStatus === "active" && <button type="button" onClick={() => void act(() => researchService.transitionProject(project.id, "paused", null))} className="rounded border border-[#343741] px-2 py-1 text-[11px] text-gray-300">Pause</button>}
+                    {project.lifecycleStatus === "paused" && <button type="button" onClick={() => void act(() => researchService.transitionProject(project.id, "active", null))} className="rounded border border-emerald-800 px-2 py-1 text-[11px] text-emerald-300">Resume</button>}
+                    {["active", "paused"].includes(project.lifecycleStatus) && <button type="button" onClick={() => void act(() => researchService.transitionProject(project.id, "completed", null))} className="rounded border border-[#343741] px-2 py-1 text-[11px] text-gray-300">Complete</button>}
+                  </div>
+                </article>
               ))}
             </div>
           )}
