@@ -3096,9 +3096,8 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<AnalysisWorkspac
              JOIN analysis_methods m ON m.id = v.method_id
              WHERE m.project_id = ?1 ORDER BY m.name, v.version_no",
         )?;
-        statement
-            .query_map([project_id], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+        let rows = statement.query_map([project_id], |row| row.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
     let methods = method_ids
         .iter()
@@ -3111,9 +3110,8 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<AnalysisWorkspac
              JOIN analysis_metric_definitions m ON m.id = v.metric_definition_id
              WHERE m.project_id = ?1 ORDER BY m.metric_key, v.version_no",
         )?;
-        statement
-            .query_map([project_id], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+        let rows = statement.query_map([project_id], |row| row.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
     let metrics = metric_ids
         .iter()
@@ -3126,9 +3124,8 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<AnalysisWorkspac
              JOIN analysis_definitions d ON d.id = v.definition_id
              WHERE d.project_id = ?1 ORDER BY d.title, v.version_no",
         )?;
-        statement
-            .query_map([project_id], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+        let rows = statement.query_map([project_id], |row| row.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
     let definitions = definition_ids
         .iter()
@@ -3140,9 +3137,8 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<AnalysisWorkspac
             "SELECT id FROM analysis_runs WHERE project_id = ?1
              ORDER BY created_at_us, id",
         )?;
-        statement
-            .query_map([project_id], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+        let rows = statement.query_map([project_id], |row| row.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
     let runs = run_ids
         .iter()
