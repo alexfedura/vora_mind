@@ -422,11 +422,6 @@ BEFORE DELETE ON experiment_dataset_split_groups
 BEGIN
     SELECT RAISE(ABORT, 'dataset split groups are immutable');
 END;
-CREATE TRIGGER experiment_split_group_staged_guard
-BEFORE UPDATE ON experiment_dataset_split_groups
-BEGIN
-    SELECT RAISE(ABORT, 'dataset split groups are immutable');
-END;
 CREATE TRIGGER experiment_split_group_revision
 AFTER INSERT ON experiment_dataset_split_groups
 BEGIN
@@ -442,8 +437,9 @@ END;
 CREATE TRIGGER experiment_design_dataset_pin_draft_insert
 BEFORE INSERT ON experiment_design_dataset_pins
 WHEN (SELECT lifecycle_status FROM research_experiment_design_versions WHERE id = NEW.design_version_id) <> 'draft'
+ OR (SELECT lifecycle_status FROM experiment_dataset_versions WHERE id = NEW.dataset_version_id) <> 'sealed'
 BEGIN
-    SELECT RAISE(ABORT, 'dataset pins can only be added to draft designs');
+    SELECT RAISE(ABORT, 'design pins require a draft design and sealed dataset version');
 END;
 CREATE TRIGGER experiment_design_dataset_pin_no_update
 BEFORE UPDATE ON experiment_design_dataset_pins
@@ -463,8 +459,10 @@ WHEN
     OR
     (NEW.usage_kind = 'output' AND
      (SELECT lifecycle_status FROM experiment_runs WHERE id = NEW.run_id) <> 'running')
+    OR
+    (SELECT lifecycle_status FROM experiment_dataset_versions WHERE id = NEW.dataset_version_id) <> 'sealed'
 BEGIN
-    SELECT RAISE(ABORT, 'run dataset pins can only be added at creation or finalization');
+    SELECT RAISE(ABORT, 'run dataset pins require sealed versions and valid run lifecycle state');
 END;
 CREATE TRIGGER experiment_run_dataset_pin_no_update
 BEFORE UPDATE ON experiment_run_dataset_pins
