@@ -1033,7 +1033,6 @@ pub fn create_framework_version(
     conn: &Connection,
     req: CreateFrameworkVersionReq,
 ) -> Result<FrameworkVersionDto, String> {
-    validate_required(&req.change_class, "changeClass")?;
     validate_required(&req.change_rationale, "changeRationale")?;
     if req.affected_claim_ids.is_empty() && req.assumption_claim_ids.is_empty() {
         return Err("a framework change must link at least one affected claim or assumption".into());
@@ -1045,12 +1044,6 @@ pub fn create_framework_version(
 pub fn add_framework_item(conn: &Connection, req: AddFrameworkItemReq) -> Result<String, String> {
     if req.item_order < 0 {
         return Err("itemOrder must be non-negative".into());
-    }
-    if !matches!(
-        req.membership_role.as_str(),
-        "core" | "supporting" | "counterpoint" | "method" | "example" | "context"
-    ) {
-        return Err(format!("invalid framework membership role: {}", req.membership_role));
     }
     repository::add_framework_item(conn, &req, &new_id(), now_ts_us())
         .map_err(|error| error.to_string())
@@ -1094,12 +1087,6 @@ pub fn review_framework_version(
     conn: &Connection,
     req: ReviewFrameworkReq,
 ) -> Result<(), String> {
-    if !matches!(
-        req.review_status.as_str(),
-        "approved" | "changes_requested" | "rejected"
-    ) {
-        return Err(format!("invalid framework review status: {}", req.review_status));
-    }
     repository::review_framework_version(
         conn,
         &req,
