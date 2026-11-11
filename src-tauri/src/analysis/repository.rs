@@ -3499,7 +3499,8 @@ mod tests {
                         "value".to_string(),
                         crate::experiment::DatasetSampleValue::Decimal {
                             value: "2.5".to_string(),
-                            unit: Some("score".to_string()),
+                            unit: "score".to_string(),
+                            uncertainty: None,
                         },
                     )]),
                     provenance: Vec::new(),
@@ -3623,8 +3624,10 @@ mod tests {
             std::env::temp_dir().join(format!("vora-analysis-{}.sqlite", Uuid::now_v7()));
         let result = (|| -> Result<()> {
             let mut conn = Connection::open(&database_path)?;
-            crate::mind::portable_db::initialize_workspace_schema(&conn)?;
-            crate::mind::portable_db::initialize_workspace_schema(&conn)?;
+            crate::mind::portable_db::initialize_workspace_schema(&conn)
+                .map_err(|error| anyhow!(error.to_string()))?;
+            crate::mind::portable_db::initialize_workspace_schema(&conn)
+                .map_err(|error| anyhow!(error.to_string()))?;
             let project_id = id();
             test_project(&conn, &project_id);
 
@@ -3721,7 +3724,7 @@ mod tests {
             assert_ne!(completed.id, failed.id);
 
             let source_claim_id = create_source_claim(&conn);
-            let create_evidence = |polarity| CreateEvidenceReq {
+            let evidence_request = |polarity| CreateEvidenceReq {
                 project_id: project_id.clone(),
                 proposition: PropositionRefDto::SourceClaim(source_claim_id.clone()),
                 artifact: EvidenceArtifactRefDto::AnalysisOutput(
@@ -3734,9 +3737,10 @@ mod tests {
                 provenance: serde_json::json!({"runId": completed.id}),
                 created_by: Some("analyst".to_string()),
             };
-            let supports = create_evidence(&mut conn, &create_evidence(EvidencePolarity::Supports))?;
+            let supports =
+                create_evidence(&mut conn, &evidence_request(EvidencePolarity::Supports))?;
             let contradicts =
-                create_evidence(&mut conn, &create_evidence(EvidencePolarity::Contradicts))?;
+                create_evidence(&mut conn, &evidence_request(EvidencePolarity::Contradicts))?;
             assert_eq!(supports.polarity, EvidencePolarity::Supports);
             assert_eq!(contradicts.polarity, EvidencePolarity::Contradicts);
 
@@ -3830,7 +3834,8 @@ mod tests {
 
             drop(conn);
             let reopened = Connection::open(&database_path)?;
-            crate::mind::portable_db::initialize_workspace_schema(&reopened)?;
+            crate::mind::portable_db::initialize_workspace_schema(&reopened)
+                .map_err(|error| anyhow!(error.to_string()))?;
             let reopened_run = query_run(&reopened, &completed.id)?;
             assert_eq!(reopened_run.outputs[0].payload, serde_json::json!({"source": "external"}));
             assert_eq!(reopened_run.inputs[0].samples[0].sample_id, "sample-1");
