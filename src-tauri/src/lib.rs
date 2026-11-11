@@ -2589,6 +2589,7 @@ pub fn run() {
             crate::source::acquisition_ipc::src_list_frameworks,
             crate::source::acquisition_ipc::src_create_framework,
             crate::source::acquisition_ipc::src_list_framework_versions,
+            crate::source::acquisition_ipc::src_list_framework_reviews,
             crate::source::acquisition_ipc::src_create_framework_version,
             crate::source::acquisition_ipc::src_add_framework_item,
             crate::source::acquisition_ipc::src_remove_framework_item,
