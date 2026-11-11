@@ -620,6 +620,15 @@ export const ResearchWorkspacePage: React.FC = () => {
               </span>
             ))}
           </div>
+          <form onSubmit={(event) => void adoptFrameworkVersion(event)} className="space-y-2 border-t border-[#292c34] pt-3">
+            <h4 className="text-xs font-semibold text-gray-300">Adopt an external knowledge version</h4>
+            <Field label="Published framework version"><select className={inputClass} name="frameworkVersionId" required><option value="">Select a published version</option>{workspace.frameworkVersions.map((version) => <option key={version.frameworkVersionId} value={version.frameworkVersionId}>{version.title} · v{version.versionNo}</option>)}</select></Field>
+            <Field label="Use context"><input className={inputClass} name="context" required /></Field>
+            <button className={buttonClass} disabled={!projectId || workspace.frameworkVersions.length === 0}>Adopt immutable version</button>
+            {workspace.adoptions.filter((item) => item.projectId === projectId).map((item) => (
+              <p key={item.id} className="text-[11px] text-gray-500">{item.title} v{item.versionNo} · {item.useContext}</p>
+            ))}
+          </form>
         </div>
       </section>
 
@@ -657,6 +666,20 @@ export const ResearchWorkspacePage: React.FC = () => {
               <Field label="Citation note"><input className={inputClass} name="citationNote" /></Field>
               <button className={buttonClass} disabled={!selectedSource}><BookOpenCheck size={14} /> Add citation and review</button>
             </form>
+            {projectReviews.map((review) => (
+              <article key={review.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3">
+                <h4 className="text-sm text-white">{review.title} · {review.lifecycleStatus}</h4>
+                <p className="mt-1 text-xs text-gray-500">Search scope: {review.searchScope}</p>
+                {review.sources.map((citation) => (
+                  <p key={citation.id} className="mt-1 text-[11px] text-gray-400">
+                    {citation.sourceId} · exact version {citation.sourceVersionId}
+                    {citation.sourceLocationId ? ` · location ${citation.sourceLocationId}` : " · location unspecified"}
+                    {citation.sourceClaimId ? ` · source claim ${citation.sourceClaimId}` : ""}
+                    {" · "}{citation.citationNote || "no note"} · <Link to="/sources" className="text-amber-300 underline">Open source workspace</Link>
+                  </p>
+                ))}
+              </article>
+            ))}
           </section>
 
           <section className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
