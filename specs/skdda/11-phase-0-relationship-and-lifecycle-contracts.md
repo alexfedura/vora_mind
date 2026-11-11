@@ -15,7 +15,7 @@ A scientific relation is an asserted, directed semantic fact—not a visual edge
 - Created-by actor, UTC creation time, rationale/locator as required by predicate, and linked provenance/evidence records.
 - Append-only relation lifecycle events. Retraction or reinstatement changes the derived current projection, not the original assertion row.
 
-`SourceVersion`, `FrameworkVersion`, `ModelVersion`, and other `*Version` references are version records belonging to stable entity IDs; they are not separately inferred polymorphic targets. A versioned endpoint is represented as `(entity_id, entity_type, version_id)`. The registry FK proves the identity exists; the composite version FK proves that the pinned version belongs to that identity.
+`SourceVersion`, `FrameworkVersion`, `ModelVersion`, and other `*Version` records have their own version IDs under stable entity IDs; they are not separate polymorphic registry targets. A versioned endpoint is represented as `(entity_id, entity_type, version_id)`. The registry FK proves the identity exists; the composite version FK proves that the pinned version belongs to that identity.
 
 Rust validates all inputs and emits a typed error. SQLite FKs, a versioned `(predicate, subject_type, object_type)` allowlist, required-pin triggers, and structural junction constraints provide a second integrity boundary. A predicate/type pair not present in the allowlist is invalid. No relation is accepted only because its UI label or JSON string looks valid.
 
@@ -73,7 +73,8 @@ Lifecycle is not epistemic outcome. In particular, `supported`, `validated`, `re
 | `Segment` | Active → archived/replaced; locator changes preserve old Extract pins and record correction. |
 | `Extract` | Draft → reviewed → accepted/rejected → superseded/retracted; each transform/correction is a new record. |
 | `SourceClaim` | Attributed → challenged/retracted; source assertion remains distinct from app assessment or research finding. |
-| `Concept`, `Principle` | Proposed → reviewed → accepted/supported/contested/deprecated. Meaning change creates a new version; assessment does not change provenance. |
+| `Concept` | Proposed → reviewed → accepted/deprecated. Meaning change creates a new version; scientific support is not a Concept lifecycle state. |
+| `Principle` | Proposed → reviewed → active/contested/deprecated. Meaning change creates a new version; supporting/contradicting evidence remains separately assessable. |
 | `Framework` / `FrameworkVersion` | Framework draft → reviewed → published → retired; version draft → reviewed → published/withdrawn. Published composition immutable. |
 | `LearnerProfile` | Active → archived; archival does not erase attempts/competency history. |
 | `LearningObjective` / version | Draft → active → retired; version is immutable; criteria change creates a new version. |
