@@ -553,7 +553,7 @@ pub fn create_origin(
              VALUES (?1, 'model_version', ?2, ?3, ?4, ?5, ?6)",
             params![origin_id, version_id, request.origin_project_id, request.rationale.trim(), request.recorded_by, now],
         )?,
-    }?;
+    };
     query_origin(conn, &origin_id)
 }
 
@@ -895,7 +895,7 @@ pub fn create_adaptation(
                 now
             ],
         )?,
-    }?;
+    };
     tx.execute(
         "INSERT INTO research_lineage
             (id, transfer_id, adaptation_id, origin_id, origin_project_id,
@@ -1111,7 +1111,6 @@ fn query_origin(conn: &Connection, origin_id: &str) -> Result<KnowledgeTransferO
                 row.get(3)?,
                 row.get(4)?,
                 row.get(5)?,
-                row.get(6)?,
             ))
         },
     )?;
@@ -1672,8 +1671,8 @@ pub fn workspace(conn: &Connection) -> Result<TransferWorkspaceDto> {
                    AND r.state = 'eligible'
                  ORDER BY e.reviewed_at_us DESC",
             )?;
-            stmt.query_map([origin_id], |row| row.get(0))?
-                .collect::<rusqlite::Result<Vec<String>>>()?
+            let rows = stmt.query_map([origin_id], |row| row.get(0))?;
+            rows.collect::<rusqlite::Result<Vec<String>>>()?
         } else {
             Vec::new()
         };
@@ -2054,9 +2053,8 @@ fn append_acquisition_provenance(
 
 fn query_strings(conn: &Connection, sql: &str) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(sql)?;
-    Ok(stmt
-        .query_map([], |row| row.get(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?)
+    let rows = stmt.query_map([], |row| row.get(0))?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 fn find_origin_id(conn: &Connection, artifact: &TransferArtifactRef) -> Result<Option<String>> {
