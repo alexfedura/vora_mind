@@ -1809,16 +1809,12 @@ pub fn provenance_preview(
 ) -> Result<TransferProvenancePreviewDto> {
     let origin = query_origin(conn, origin_id)?;
     let info = artifact_info(conn, &origin.artifact)?;
-    let mut scope = String::new();
-    let mut applicability = String::new();
-    let mut uncertainty = String::new();
-    let mut limitations = String::new();
     let mut validation_scope = Vec::new();
     let mut provenance = Vec::new();
 
-    match &origin.artifact {
+    let (scope, applicability, uncertainty, limitations) = match &origin.artifact {
         TransferArtifactRef::FindingVersion { version_id, .. } => {
-            (scope, applicability, uncertainty, limitations) = conn.query_row(
+            let values = conn.query_row(
                 "SELECT scope, applicability, uncertainty, limitations
                  FROM analysis_finding_versions WHERE id = ?1",
                 [version_id],
@@ -1886,9 +1882,10 @@ pub fn provenance_preview(
                     })
                     .collect::<Result<Vec<_>>>()?,
             );
+            values
         }
         TransferArtifactRef::ModelVersion { version_id, .. } => {
-            (scope, applicability, uncertainty, limitations) = conn.query_row(
+            let values = conn.query_row(
                 "SELECT v.scope, v.human_specification,
                         COALESCE((SELECT group_concat(a.statement, '; ')
                                   FROM model_version_assumptions a
@@ -1994,9 +1991,10 @@ pub fn provenance_preview(
                     details: format!("Scope: {validation_scope_text}; population: {population}; method: {method}"),
                 });
             }
+            values
         }
         TransferArtifactRef::FrameworkVersion { version_id, .. } => {
-            (scope, applicability, uncertainty, limitations) = conn.query_row(
+            let values = conn.query_row(
                 "SELECT v.description, v.status, '', v.change_rationale
                  FROM knowledge_framework_versions v WHERE v.id = ?1",
                 [version_id],
@@ -2031,32 +2029,35 @@ pub fn provenance_preview(
                     })
                     .collect::<Result<Vec<_>>>()?,
             );
+            values
         }
         TransferArtifactRef::ConceptVersion {
             concept_id,
             version_id,
         } => {
-            (scope, applicability, uncertainty, limitations) = conn.query_row(
+            let values = conn.query_row(
                 "SELECT v.definition, v.created_in_project_id, '', v.rationale
                  FROM knowledge_concept_versions v WHERE v.id = ?1 AND v.concept_id = ?2",
                 params![version_id, concept_id],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )?;
             append_acquisition_provenance(conn, "concept_id", concept_id, &mut provenance)?;
+            values
         }
         TransferArtifactRef::PrincipleVersion {
             principle_id,
             version_id,
         } => {
-            (scope, applicability, uncertainty, limitations) = conn.query_row(
+            let values = conn.query_row(
                 "SELECT v.statement, v.created_in_project_id, '', v.rationale
                  FROM knowledge_principle_versions v WHERE v.id = ?1 AND v.principle_id = ?2",
                 params![version_id, principle_id],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )?;
             append_acquisition_provenance(conn, "principle_id", principle_id, &mut provenance)?;
+            values
         }
-    }
+    };
 
     Ok(TransferProvenancePreviewDto {
         origin,
