@@ -1802,6 +1802,11 @@ fn validate_replication_request(
             "A replication must pin at least one exact dataset version and role."
         ));
     }
+    if request.analysis_evidence_ids.is_empty() && request.model_evidence_ids.is_empty() {
+        return Err(anyhow!(
+            "A replication result requires at least one underlying evidence record."
+        ));
+    }
     exists(
         conn,
         "SELECT EXISTS(SELECT 1 FROM research_projects WHERE id = ?1)",
@@ -1859,16 +1864,58 @@ fn validate_replication_request(
         }
     }
     for evidence_id in &request.analysis_evidence_ids {
-        let project: Option<String> = conn
+        let evidence: Option<(
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )> = conn
             .query_row(
-                "SELECT project_id FROM analysis_evidence WHERE id = ?1",
+                "SELECT project_id, artifact_experiment_run_id, artifact_dataset_version_id,
+                        artifact_analysis_output_id, artifact_observation_id
+                 FROM analysis_evidence WHERE id = ?1",
                 [evidence_id],
-                |row| row.get(0),
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
             )
             .optional()?;
-        if project.as_deref() != Some(request.project_id.as_str()) {
+        let Some((project, artifact_run, artifact_dataset, artifact_output, observation)) =
+            evidence
+        else {
+            return Err(anyhow!("Replication Analysis evidence was not found."));
+        };
+        let dataset_pinned = artifact_dataset.as_ref().is_some_and(|dataset_id| {
+            request
+                .datasets
+                .iter()
+                .any(|dataset| dataset.dataset_version_id == *dataset_id)
+        });
+        let output_from_original = if let Some(output_id) = artifact_output {
+            conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM analysis_outputs
+                 WHERE id = ?1 AND run_id = ?2)",
+                params![output_id, request.original_experiment_run_id],
+                |row| row.get(0),
+            )?
+        } else {
+            false
+        };
+        if project != request.project_id
+            || (artifact_run.as_deref() != Some(request.original_experiment_run_id.as_str())
+                && !dataset_pinned
+                && !output_from_original
+                && observation.is_none())
+        {
             return Err(anyhow!(
-                "Replication Analysis evidence must belong to the replication project."
+                "Replication Analysis evidence must belong to the project and cite the original run, a pinned dataset, or its analysis output."
             ));
         }
     }
