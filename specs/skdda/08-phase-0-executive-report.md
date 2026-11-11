@@ -3,6 +3,8 @@
 **Decision requested:** Approve the Phase 0 architecture and bounded Phase 1 preparation scope below before implementation begins.  
 **Implementation status:** No SKDDA feature or migration was implemented as part of this package.
 
+> **Phase 0 closeout note (2026-11-11):** This executive report is the original decision request, not the final contract. The logical decisions and migration architecture are now recorded in [09-phase-0-domain-contracts.md](09-phase-0-domain-contracts.md) through [13-phase-0-migration-and-transaction-contract.md](13-phase-0-migration-and-transaction-contract.md), with decision records in [adr/](adr/README.md). Those documents supersede the open technical choices in this report and in the earlier proposed contract documents. Product/scientific-owner ratification, deployed-database compatibility evidence, and implementation approval remain outstanding; no Phase 1 code or migrations were started.
+
 ## 1. Executive summary
 
 Vora Mind has a real local-first application foundation and several useful knowledge-work primitives, but it is not yet a unified scientific research system. Source provenance, spatial boards/versioning, question triage, a hypothesis/Lab workflow, chart/market persistence, Trace, Forge and worker operations all exist as distinct domains. Some are reusable; none should be promoted to complete scientific infrastructure just because its name resembles a target entity.
@@ -123,3 +125,9 @@ Not verified by runtime execution: user DB count, DB integrity, installed-app UI
 6. [Lifecycle and versioning specification](06-lifecycle-versioning-specification.md)
 7. [Migration strategy](07-migration-strategy.md)
 8. [Phase 0 executive report](08-phase-0-executive-report.md)
+9. [Phase 0 canonical domain contracts](09-phase-0-domain-contracts.md)
+10. [Phase 0 entity relationship diagram](10-phase-0-entity-relationship-diagram.md)
+11. [Phase 0 relationship and lifecycle contracts](11-phase-0-relationship-and-lifecycle-contracts.md)
+12. [Phase 0 Rust/TypeScript contract plan](12-phase-0-rust-typescript-contract-plan.md)
+13. [Phase 0 migration and transaction contract](13-phase-0-migration-and-transaction-contract.md)
+14. [Phase 0 ADR index](adr/README.md)
