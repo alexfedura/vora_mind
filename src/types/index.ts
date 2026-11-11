@@ -2035,6 +2035,10 @@ export interface CreateFindingRelationReq {
 
 export type ModelChangeClass = "refinement" | "extension" | "revision" | "replacement";
 export type ModelRelationKind = "contributes_to" | "contradicts" | "qualifies" | "tested_in";
+export type ModelContributionKind =
+  | ModelRelationKind
+  | "dataset_use"
+  | "evidenced_by";
 export type ModelEvidencePolarity = "supports" | "contradicts" | "qualifies" | "neutral";
 export type ModelArtifactRef =
   | { kind: "analysis_output"; id: string }
@@ -2171,6 +2175,22 @@ export interface ModelExperimentRelationReq {
   rationale: string;
 }
 
+export type ModelContributionTarget =
+  | { kind: "hypothesis_version"; id: string }
+  | { kind: "finding_version"; id: string }
+  | { kind: "experiment"; designVersionId: string; experimentRunId: string | null }
+  | { kind: "dataset"; datasetVersionId: string; role: DatasetRole; splitGroupId: string | null }
+  | { kind: "evidence"; id: string };
+
+export interface ModelContributionDto {
+  id: string;
+  relationKind: ModelContributionKind;
+  target: ModelContributionTarget;
+  rationale: string;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
 export interface CreateModelVersionReq {
   projectId: string;
   modelId: string;
@@ -2216,6 +2236,7 @@ export interface ModelVersionDto {
   parameters: ModelParameterDto[];
   artifacts: ModelArtifactDto[];
   impacts: ModelImpactReq[];
+  contributions: ModelContributionDto[];
   hypotheses: ModelRelationReq[];
   findings: ModelRelationReq[];
   experiments: ModelExperimentRelationReq[];

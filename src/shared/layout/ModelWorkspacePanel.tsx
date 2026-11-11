@@ -658,6 +658,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
                   <p>Hypotheses: {JSON.stringify(version.hypotheses)} · findings: {JSON.stringify(version.findings)}</p>
                   <p>Experiments: {JSON.stringify(version.experiments)} · exact dataset uses: {JSON.stringify(version.datasetUses)}</p>
                   <p>Evidence IDs: {version.evidenceIds.join(", ") || "none"}</p>
+                  <p>Persisted contribution records: {JSON.stringify(version.contributions)}</p>
                 </div>
               </details>
             ))}
