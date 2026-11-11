@@ -100,6 +100,7 @@ CREATE TABLE assessment_rubric_versions (
     version_no INTEGER NOT NULL CHECK (version_no > 0),
     learning_project_id TEXT NOT NULL,
     framework_version_id TEXT NOT NULL,
+    pass_threshold REAL NOT NULL CHECK (pass_threshold >= 0 AND pass_threshold <= 1),
     status TEXT NOT NULL CHECK (status IN ('draft', 'review', 'published', 'deprecated')),
     created_by TEXT,
     created_at_us INTEGER NOT NULL,
@@ -548,6 +549,7 @@ WHEN OLD.status = 'published' AND (
     NEW.rubric_id <> OLD.rubric_id OR NEW.version_no <> OLD.version_no
     OR NEW.learning_project_id <> OLD.learning_project_id
     OR NEW.framework_version_id <> OLD.framework_version_id
+    OR NEW.pass_threshold <> OLD.pass_threshold
     OR NEW.created_by IS NOT OLD.created_by OR NEW.created_at_us <> OLD.created_at_us
     OR NEW.published_at_us IS NOT OLD.published_at_us
 )
@@ -642,6 +644,23 @@ WHEN NOT EXISTS (
 )
 BEGIN
     SELECT RAISE(ABORT, 'attempt evaluation must use the submitted attempt rubric version');
+END;
+CREATE TRIGGER attempt_evaluation_correction_guard
+BEFORE INSERT ON attempt_evaluations
+WHEN (
+    (NEW.revision_no = 1 AND NEW.correction_of_id IS NOT NULL)
+    OR (NEW.revision_no > 1 AND (
+        NEW.correction_of_id IS NULL
+        OR NOT EXISTS (
+            SELECT 1 FROM attempt_evaluations previous
+            WHERE previous.id = NEW.correction_of_id
+              AND previous.attempt_id = NEW.attempt_id
+              AND previous.revision_no = NEW.revision_no - 1
+        )
+    ))
+)
+BEGIN
+    SELECT RAISE(ABORT, 'evaluation corrections must explicitly supersede the immediately preceding revision');
 END;
 CREATE TRIGGER attempt_evaluation_no_update
 BEFORE UPDATE ON attempt_evaluations
@@ -758,6 +777,16 @@ WHEN NOT EXISTS (
 BEGIN
     SELECT RAISE(ABORT, 'reproduction score must match its exact rubric criterion');
 END;
+CREATE TRIGGER reproduction_evaluation_scores_no_update
+BEFORE UPDATE ON reproduction_evaluation_scores
+BEGIN
+    SELECT RAISE(ABORT, 'reproduction evaluation scores are immutable');
+END;
+CREATE TRIGGER reproduction_evaluation_scores_no_delete
+BEFORE DELETE ON reproduction_evaluation_scores
+BEGIN
+    SELECT RAISE(ABORT, 'reproduction evaluation scores cannot be deleted');
+END;
 
 CREATE TRIGGER competency_record_no_update
 BEFORE UPDATE ON competency_records
@@ -797,4 +826,44 @@ WHEN NOT EXISTS (
 )
 BEGIN
     SELECT RAISE(ABORT, 'reproduction evidence must use the same learner and learning project');
+END;
+CREATE TRIGGER competency_record_children_no_update
+BEFORE UPDATE ON competency_record_criteria
+BEGIN
+    SELECT RAISE(ABORT, 'competency record criteria are immutable');
+END;
+CREATE TRIGGER competency_record_children_no_delete
+BEFORE DELETE ON competency_record_criteria
+BEGIN
+    SELECT RAISE(ABORT, 'competency record criteria cannot be deleted');
+END;
+CREATE TRIGGER competency_record_attempts_no_update
+BEFORE UPDATE ON competency_record_attempt_evaluations
+BEGIN
+    SELECT RAISE(ABORT, 'competency record assessment evidence is immutable');
+END;
+CREATE TRIGGER competency_record_attempts_no_delete
+BEFORE DELETE ON competency_record_attempt_evaluations
+BEGIN
+    SELECT RAISE(ABORT, 'competency record assessment evidence cannot be deleted');
+END;
+CREATE TRIGGER competency_record_reproductions_no_update
+BEFORE UPDATE ON competency_record_reproduction_evaluations
+BEGIN
+    SELECT RAISE(ABORT, 'competency record reproduction evidence is immutable');
+END;
+CREATE TRIGGER competency_record_reproductions_no_delete
+BEFORE DELETE ON competency_record_reproduction_evaluations
+BEGIN
+    SELECT RAISE(ABORT, 'competency record reproduction evidence cannot be deleted');
+END;
+CREATE TRIGGER competency_record_objectives_no_update
+BEFORE UPDATE ON competency_record_objectives
+BEGIN
+    SELECT RAISE(ABORT, 'competency record objective links are immutable');
+END;
+CREATE TRIGGER competency_record_objectives_no_delete
+BEFORE DELETE ON competency_record_objectives
+BEGIN
+    SELECT RAISE(ABORT, 'competency record objective links cannot be deleted');
 END;
