@@ -2,6 +2,7 @@ extern crate self as vora_lib;
 
 pub mod experiment;
 pub mod analysis;
+pub mod learning;
 pub mod model;
 pub mod forge;
 pub mod mind;
@@ -2538,6 +2539,23 @@ pub fn run() {
             model::ipc::model_create_validation,
             model::ipc::model_finalize_validation,
             model::ipc::model_create_replication,
+            learning::ipc::learning_get_workspace,
+            learning::ipc::learning_create_learner,
+            learning::ipc::learning_create_project,
+            learning::ipc::learning_create_objective,
+            learning::ipc::learning_create_assessment_version,
+            learning::ipc::learning_review_assessment,
+            learning::ipc::learning_transition_assessment_version,
+            learning::ipc::learning_create_attempt,
+            learning::ipc::learning_save_attempt_response,
+            learning::ipc::learning_submit_attempt,
+            learning::ipc::learning_evaluate_attempt,
+            learning::ipc::learning_create_competency,
+            learning::ipc::learning_create_mastery_rule,
+            learning::ipc::learning_evaluate_competency,
+            learning::ipc::learning_create_reproduction_task,
+            learning::ipc::learning_submit_reproduction,
+            learning::ipc::learning_evaluate_reproduction,
             triage_question,
             untriage_question,
             archive_question,
