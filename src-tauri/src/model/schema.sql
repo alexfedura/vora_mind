@@ -153,19 +153,25 @@ CREATE TABLE model_version_impacts (
 );
 
 CREATE TABLE model_version_hypotheses (
+    id TEXT NOT NULL UNIQUE,
     model_version_id TEXT NOT NULL REFERENCES model_versions(id) ON DELETE RESTRICT,
     hypothesis_version_id TEXT NOT NULL
         REFERENCES hypothesis_definition_versions(id) ON DELETE RESTRICT,
     relation_kind TEXT NOT NULL CHECK (relation_kind IN ('contributes_to', 'contradicts')),
     rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+    created_by TEXT,
+    created_at_us INTEGER NOT NULL,
     PRIMARY KEY (model_version_id, hypothesis_version_id, relation_kind)
 );
 
 CREATE TABLE model_version_findings (
+    id TEXT NOT NULL UNIQUE,
     model_version_id TEXT NOT NULL REFERENCES model_versions(id) ON DELETE RESTRICT,
     finding_version_id TEXT NOT NULL REFERENCES analysis_finding_versions(id) ON DELETE RESTRICT,
     relation_kind TEXT NOT NULL CHECK (relation_kind IN ('contributes_to', 'contradicts', 'qualifies')),
     rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+    created_by TEXT,
+    created_at_us INTEGER NOT NULL,
     PRIMARY KEY (model_version_id, finding_version_id, relation_kind)
 );
 
@@ -176,6 +182,8 @@ CREATE TABLE model_version_experiments (
     experiment_run_id TEXT REFERENCES experiment_runs(id) ON DELETE RESTRICT,
     relation_kind TEXT NOT NULL CHECK (relation_kind IN ('contributes_to', 'tested_in')),
     rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+    created_by TEXT,
+    created_at_us INTEGER NOT NULL,
     CHECK (relation_kind <> 'tested_in' OR experiment_run_id IS NOT NULL),
     UNIQUE (model_version_id, design_version_id, experiment_run_id, relation_kind)
 );
@@ -189,6 +197,8 @@ CREATE TABLE model_version_dataset_uses (
     )),
     split_group_id TEXT,
     rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+    created_by TEXT,
+    created_at_us INTEGER NOT NULL,
     FOREIGN KEY (split_group_id, dataset_version_id)
         REFERENCES experiment_dataset_split_groups(id, dataset_version_id) ON DELETE RESTRICT,
     UNIQUE (model_version_id, dataset_version_id, role, split_group_id)
@@ -224,10 +234,13 @@ CREATE TABLE model_evidence (
 CREATE INDEX idx_model_evidence_version ON model_evidence(model_version_id, created_at_us);
 
 CREATE TABLE model_version_evidence (
+    id TEXT PRIMARY KEY,
     model_version_id TEXT NOT NULL REFERENCES model_versions(id) ON DELETE RESTRICT,
     evidence_id TEXT NOT NULL REFERENCES model_evidence(id) ON DELETE RESTRICT,
     rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
-    PRIMARY KEY (model_version_id, evidence_id)
+    created_by TEXT,
+    created_at_us INTEGER NOT NULL,
+    UNIQUE (model_version_id, evidence_id)
 );
 
 CREATE TABLE model_evaluations (
