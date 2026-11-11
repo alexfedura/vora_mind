@@ -110,7 +110,7 @@ CREATE TABLE assessment_rubric_versions (
     FOREIGN KEY (rubric_id, learning_project_id, framework_version_id)
         REFERENCES assessment_rubrics(id, learning_project_id, framework_version_id)
         ON DELETE RESTRICT,
-    CHECK ((status = 'published') = (published_at_us IS NOT NULL))
+    CHECK ((status IN ('published', 'deprecated')) = (published_at_us IS NOT NULL))
 );
 
 CREATE TABLE assessment_rubric_criteria (
@@ -167,7 +167,7 @@ CREATE TABLE assessment_versions (
     FOREIGN KEY (rubric_version_id, learning_project_id, framework_version_id)
         REFERENCES assessment_rubric_versions(id, learning_project_id, framework_version_id)
         ON DELETE RESTRICT,
-    CHECK ((status = 'published') = (published_at_us IS NOT NULL))
+    CHECK ((status IN ('published', 'deprecated')) = (published_at_us IS NOT NULL))
 );
 
 CREATE TABLE assessment_questions (
@@ -371,7 +371,8 @@ CREATE TABLE reproduction_submissions (
     submitted_at_us INTEGER NOT NULL,
     CHECK (
         (artifact_uri IS NOT NULL AND length(trim(artifact_uri)) > 0
-         AND artifact_sha256 IS NOT NULL AND length(artifact_sha256) = 64)
+         AND artifact_sha256 IS NOT NULL AND length(artifact_sha256) = 64
+         AND artifact_sha256 NOT GLOB '*[^0-9a-fA-F]*')
         OR (result_json IS NOT NULL AND result_json <> '{}')
     ),
     CHECK ((artifact_uri IS NULL) = (artifact_sha256 IS NULL))
@@ -541,6 +542,11 @@ CREATE TRIGGER assessment_version_objectives_no_delete
 BEFORE DELETE ON assessment_version_objectives
 BEGIN
     SELECT RAISE(ABORT, 'assessment objective links cannot be deleted');
+END;
+CREATE TRIGGER assessment_version_objectives_no_update
+BEFORE UPDATE ON assessment_version_objectives
+BEGIN
+    SELECT RAISE(ABORT, 'assessment objective links are immutable');
 END;
 
 CREATE TRIGGER rubric_version_published_no_content_update
@@ -808,6 +814,12 @@ WHEN NOT EXISTS (
       AND cr.learner_id = a.learner_id
       AND cr.learning_project_id = a.learning_project_id
       AND cr.framework_version_id = a.framework_version_id
+      AND EXISTS (
+          SELECT 1 FROM assessment_version_objectives avo
+          JOIN competency_criteria cc ON cc.objective_version_id = avo.objective_version_id
+          WHERE avo.assessment_version_id = a.assessment_version_id
+            AND cc.competency_id = cr.competency_id
+      )
 )
 BEGIN
     SELECT RAISE(ABORT, 'competency evidence must use the same learner and learning project');
@@ -823,6 +835,11 @@ WHEN NOT EXISTS (
       AND cr.learner_id = s.learner_id
       AND cr.learning_project_id = t.learning_project_id
       AND cr.framework_version_id = t.framework_version_id
+      AND EXISTS (
+          SELECT 1 FROM competency_criteria cc
+          WHERE cc.competency_id = cr.competency_id
+            AND cc.objective_version_id = t.objective_version_id
+      )
 )
 BEGIN
     SELECT RAISE(ABORT, 'reproduction evidence must use the same learner and learning project');
@@ -866,4 +883,25 @@ CREATE TRIGGER competency_record_objectives_no_delete
 BEFORE DELETE ON competency_record_objectives
 BEGIN
     SELECT RAISE(ABORT, 'competency record objective links cannot be deleted');
+END;
+CREATE TRIGGER competency_record_criterion_match
+BEFORE INSERT ON competency_record_criteria
+WHEN NOT EXISTS (
+    SELECT 1 FROM competency_records cr
+    JOIN competency_criteria cc ON cc.competency_id = cr.competency_id
+    WHERE cr.id = NEW.competency_record_id AND cc.id = NEW.competency_criterion_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'competency record criterion must belong to its competency');
+END;
+CREATE TRIGGER competency_record_objective_match
+BEFORE INSERT ON competency_record_objectives
+WHEN NOT EXISTS (
+    SELECT 1 FROM competency_records cr
+    JOIN competency_criteria cc ON cc.competency_id = cr.competency_id
+    WHERE cr.id = NEW.competency_record_id
+      AND cc.objective_version_id = NEW.objective_version_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'competency record objective must belong to its competency');
 END;
