@@ -150,14 +150,16 @@ fn query_design_version(conn: &Connection, version_id: &str) -> Result<Experimen
             let preregistration_id: Option<String> = row.get(14)?;
             let preregistration = preregistration_id
                 .map(|id| {
-                    Ok::<ExperimentPreregistrationDto, rusqlite::Error>(ExperimentPreregistrationDto {
-                        id,
-                        design_version_id: row.get(0)?,
-                        specification_sha256: row.get(15)?,
-                        reviewer_id: row.get(16)?,
-                        rationale: row.get(17)?,
-                        preregistered_at_us: row.get(18)?,
-                    })
+                    Ok::<ExperimentPreregistrationDto, rusqlite::Error>(
+                        ExperimentPreregistrationDto {
+                            id,
+                            design_version_id: row.get(0)?,
+                            specification_sha256: row.get(15)?,
+                            reviewer_id: row.get(16)?,
+                            rationale: row.get(17)?,
+                            preregistered_at_us: row.get(18)?,
+                        },
+                    )
                 })
                 .transpose()?;
             Ok(ExperimentDesignVersionDto {
@@ -1519,7 +1521,10 @@ pub fn add_run_log(
         [&req.run_id],
         |row| row.get(0),
     )?;
-    if ExperimentRunStatus::parse(&status).map_err(invalid)?.is_terminal() {
+    if ExperimentRunStatus::parse(&status)
+        .map_err(invalid)?
+        .is_terminal()
+    {
         return Err(invalid(
             "Run logs cannot be appended after a run is terminal.",
         ));

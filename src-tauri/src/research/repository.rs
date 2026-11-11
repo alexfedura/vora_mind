@@ -2261,6 +2261,9 @@ pub fn transition_research_design(
     actor_id: Option<&str>,
     now: i64,
 ) -> Result<ResearchExperimentDesignVersionDto> {
+    if next_status == "preregistered" {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
     let tx = conn.unchecked_transaction()?;
     let current: String = tx.query_row(
         "SELECT lifecycle_status FROM research_experiment_design_versions WHERE id = ?1",
