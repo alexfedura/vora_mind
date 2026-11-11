@@ -231,7 +231,7 @@ fn assert_transferable(artifact: &TransferArtifactRef, info: &ArtifactInfo) -> R
     let allowed = match artifact.kind() {
         TransferArtifactKind::FindingVersion => matches!(
             info.lifecycle_status.as_str(),
-            "accepted" | "contested" | "unsupported" | "inconclusive"
+            "accepted" | "contested" | "unsupported" | "inconclusive" | "superseded"
         ),
         TransferArtifactKind::ConceptVersion | TransferArtifactKind::PrincipleVersion => {
             info.lifecycle_status == "reviewed"
@@ -1571,7 +1571,7 @@ pub fn workspace(conn: &Connection) -> Result<TransferWorkspaceDto> {
              WHERE e.id = (SELECT e2.id FROM analysis_finding_events e2
                            WHERE e2.finding_version_id = v.id
                            ORDER BY e2.occurred_at_us DESC, e2.id DESC LIMIT 1)
-               AND e.status IN ('accepted', 'contested', 'unsupported', 'inconclusive')
+               AND e.status IN ('accepted', 'contested', 'unsupported', 'inconclusive', 'superseded')
              ORDER BY v.created_at_us DESC",
         )?;
         artifact_refs.extend(

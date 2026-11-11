@@ -329,7 +329,7 @@ WHEN NOT (
           AND (SELECT e.status FROM analysis_finding_events e
                WHERE e.finding_version_id = v.id
                ORDER BY e.occurred_at_us DESC, e.id DESC LIMIT 1)
-              IN ('accepted', 'contested', 'inconclusive', 'unsupported')
+               IN ('accepted', 'contested', 'inconclusive', 'unsupported', 'superseded')
     ))
     OR (NEW.artifact_kind = 'concept_version' AND EXISTS (
         SELECT 1 FROM knowledge_concept_versions v
