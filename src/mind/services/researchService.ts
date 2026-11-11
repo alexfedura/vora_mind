@@ -13,6 +13,7 @@ import type {
   CreatePhenomenonReq,
   CreatePriorKnowledgeAssessmentReq,
   CreateResearchDesignReq,
+  CreateLinkedResearchDesignReq,
   CreateResearchDomainReq,
   CreateResearchGapReq,
   CreateResearchProjectReq,
@@ -146,6 +147,8 @@ export const researchService = {
     invoke<void>("research_add_hypothesis_evidence", { request }),
   createDesign: (request: CreateResearchDesignReq) =>
     invoke<ResearchExperimentDesignVersionDto>("research_create_design", { request }),
+  createLinkedDesign: (request: CreateLinkedResearchDesignReq) =>
+    invoke<ResearchExperimentDesignVersionDto>("research_create_linked_design", { request }),
   transitionDesign: (
     designVersionId: string,
     nextStatus: ResearchDesignStatus,

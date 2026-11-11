@@ -1135,6 +1135,17 @@ export interface CreateResearchDesignReq {
   createdBy: string | null;
 }
 
+export interface CreateLinkedResearchDesignReq {
+  projectId: string;
+  title: string;
+  description: string;
+  protocol: string;
+  hypothesisVersionId: string;
+  relationshipKind: HypothesisDesignRelation;
+  rationale: string;
+  createdBy: string | null;
+}
+
 export interface LinkHypothesisDesignReq {
   hypothesisVersionId: string;
   designVersionId: string;
