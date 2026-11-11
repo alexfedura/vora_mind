@@ -224,23 +224,18 @@ export const ResearchWorkspacePage: React.FC = () => {
     if (!selectedSource) return;
     const target = event.currentTarget;
     const form = new FormData(target);
-    await act(async () => {
-      const review = await researchService.createLiteratureReview({
+    await act(() => researchService.createReviewedLiteratureReview({
         projectId,
         title: String(form.get("title") ?? ""),
         searchScope: String(form.get("scope") ?? ""),
-        createdBy: null,
-      });
-      await researchService.addLiteratureSource({
-        literatureReviewId: review.id,
         sourceId: selectedSource.sourceId,
         sourceVersionId: selectedSource.sourceVersionId,
         sourceLocationId: selectedSource.sourceLocationId,
         sourceClaimId: selectedSource.sourceClaimId,
         citationNote: String(form.get("citationNote") ?? ""),
-      });
-      await researchService.reviewLiteratureReview(review.id, null);
-    });
+        createdBy: null,
+        reviewerId: null,
+      }));
     target.reset();
   };
 
