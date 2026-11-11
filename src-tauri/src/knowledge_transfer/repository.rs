@@ -1583,6 +1583,301 @@ pub fn workspace(conn: &Connection) -> Result<TransferWorkspaceDto> {
     })
 }
 
+pub fn provenance_preview(
+    conn: &Connection,
+    origin_id: &str,
+) -> Result<TransferProvenancePreviewDto> {
+    let origin = query_origin(conn, origin_id)?;
+    let info = artifact_info(conn, &origin.artifact)?;
+    let mut scope = String::new();
+    let mut applicability = String::new();
+    let mut uncertainty = String::new();
+    let mut limitations = String::new();
+    let mut validation_scope = Vec::new();
+    let mut provenance = Vec::new();
+
+    match &origin.artifact {
+        TransferArtifactRef::FindingVersion { version_id, .. } => {
+            (scope, applicability, uncertainty, limitations) = conn.query_row(
+                "SELECT scope, applicability, uncertainty, limitations
+                 FROM analysis_finding_versions WHERE id = ?1",
+                [version_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+            let mut evidence_stmt = conn.prepare(
+                "SELECT e.id, e.polarity, e.scope, e.limitations,
+                        COALESCE(e.artifact_analysis_output_id, e.artifact_experiment_run_id,
+                                 e.artifact_dataset_version_id, e.artifact_observation_id,
+                                 e.artifact_source_segment_id, e.artifact_source_claim_id)
+                 FROM analysis_finding_version_evidence l
+                 JOIN analysis_evidence e ON e.id = l.evidence_id
+                 WHERE l.finding_version_id = ?1 ORDER BY e.created_at_us, e.id",
+            )?;
+            provenance.extend(
+                evidence_stmt
+                    .query_map([version_id], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                            row.get::<_, String>(4)?,
+                        ))
+                    })?
+                    .map(|row| {
+                        let (id, polarity, evidence_scope, evidence_limitations, artifact_id) = row?;
+                        Ok(TransferProvenanceRecordDto {
+                            record_kind: "evidence".to_string(),
+                            record_id: id,
+                            label: format!("Evidence: {polarity}"),
+                            relationship: "finding_evidence".to_string(),
+                            details: format!(
+                                "Scope: {evidence_scope}; limitations: {evidence_limitations}; artifact: {artifact_id}"
+                            ),
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            );
+            let mut run_stmt = conn.prepare(
+                "SELECT r.id, COALESCE(e.lifecycle_status, 'not_started')
+                 FROM analysis_finding_version_runs l
+                 JOIN analysis_runs r ON r.id = l.run_id
+                 LEFT JOIN analysis_run_events e ON e.id = (
+                     SELECT e2.id FROM analysis_run_events e2
+                     WHERE e2.run_id = r.id
+                     ORDER BY e2.occurred_at_us DESC, e2.id DESC LIMIT 1
+                 )
+                 WHERE l.finding_version_id = ?1 ORDER BY r.created_at_us, r.id",
+            )?;
+            provenance.extend(
+                run_stmt
+                    .query_map([version_id], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                        ))
+                    })?
+                    .map(|row| {
+                        let (run_id, status) = row?;
+                        Ok(TransferProvenanceRecordDto {
+                            record_kind: "analysis_run".to_string(),
+                            record_id: run_id,
+                            label: format!("Analysis run: {status}"),
+                            relationship: "finding_run".to_string(),
+                            details: "Exact run associated with this finding version.".to_string(),
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            );
+        }
+        TransferArtifactRef::ModelVersion { version_id, .. } => {
+            (scope, applicability, uncertainty, limitations) = conn.query_row(
+                "SELECT v.scope, v.scope, v.assumptions_json, v.change_rationale
+                 FROM model_versions v WHERE v.id = ?1",
+                [version_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+            let mut evidence_stmt = conn.prepare(
+                "SELECT e.id, e.polarity, e.scope, e.limitations,
+                        COALESCE(e.artifact_analysis_output_id, e.artifact_experiment_run_id,
+                                 e.artifact_dataset_version_id, e.artifact_observation_id,
+                                 e.artifact_source_segment_id, e.artifact_source_claim_id,
+                                 e.artifact_finding_version_id)
+                 FROM model_evidence e WHERE e.model_version_id = ?1
+                 ORDER BY e.created_at_us, e.id",
+            )?;
+            provenance.extend(
+                evidence_stmt
+                    .query_map([version_id], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                            row.get::<_, String>(4)?,
+                        ))
+                    })?
+                    .map(|row| {
+                        let (id, polarity, evidence_scope, evidence_limitations, artifact_id) = row?;
+                        Ok(TransferProvenanceRecordDto {
+                            record_kind: "model_evidence".to_string(),
+                            record_id: id,
+                            label: format!("Model evidence: {polarity}"),
+                            relationship: "model_version_evidence".to_string(),
+                            details: format!(
+                                "Scope: {evidence_scope}; limitations: {evidence_limitations}; artifact: {artifact_id}"
+                            ),
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            );
+            let mut evaluation_stmt = conn.prepare(
+                "SELECT e.id, e.role, e.dataset_version_id, m.metric_value, m.units
+                 FROM model_evaluations e
+                 LEFT JOIN model_evaluation_metrics m ON m.evaluation_id = e.id
+                 WHERE e.model_version_id = ?1 ORDER BY e.evaluated_at_us, e.id",
+            )?;
+            let rows = evaluation_stmt
+                .query_map([version_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            for (evaluation_id, role, dataset_version_id, metric, units) in rows {
+                provenance.push(TransferProvenanceRecordDto {
+                    record_kind: "model_evaluation".to_string(),
+                    record_id: evaluation_id,
+                    label: format!("Model evaluation ({role})"),
+                    relationship: "model_version_evaluation".to_string(),
+                    details: format!(
+                        "Dataset version: {dataset_version_id}; metric: {} {}",
+                        metric.unwrap_or_else(|| "not recorded".to_string()),
+                        units.unwrap_or_default()
+                    ),
+                });
+            }
+            let mut validation_stmt = conn.prepare(
+                "SELECT v.id, v.scope, v.population_scope, v.evaluation_method,
+                        COALESCE(e.outcome, 'not_evaluated')
+                 FROM model_validations v
+                 LEFT JOIN model_validation_events e ON e.validation_id = v.id
+                 WHERE v.target_model_version_id = ?1 ORDER BY v.created_at_us, v.id",
+            )?;
+            let validation_rows = validation_stmt
+                .query_map([version_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            for (validation_id, validation_scope_text, population, method, outcome) in
+                validation_rows
+            {
+                validation_scope.push(format!("{validation_scope_text} / {population} ({outcome})"));
+                provenance.push(TransferProvenanceRecordDto {
+                    record_kind: "validation".to_string(),
+                    record_id: validation_id,
+                    label: format!("Validation: {outcome}"),
+                    relationship: "model_validation".to_string(),
+                    details: format!("Scope: {validation_scope_text}; population: {population}; method: {method}"),
+                });
+            }
+        }
+        TransferArtifactRef::FrameworkVersion { version_id, .. } => {
+            (scope, applicability, uncertainty, limitations) = conn.query_row(
+                "SELECT v.description, v.status, '', v.change_rationale
+                 FROM knowledge_framework_versions v WHERE v.id = ?1",
+                [version_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+            let mut item_stmt = conn.prepare(
+                "SELECT item_kind,
+                        COALESCE(source_claim_id, concept_id, principle_id, procedure_id),
+                        membership_role, rationale
+                 FROM framework_version_items WHERE framework_version_id = ?1
+                 ORDER BY item_order, id",
+            )?;
+            provenance.extend(
+                item_stmt
+                    .query_map([version_id], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                        ))
+                    })?
+                    .map(|row| {
+                        let (kind, item_id, role, rationale) = row?;
+                        Ok(TransferProvenanceRecordDto {
+                            record_kind: kind.clone(),
+                            record_id: item_id,
+                            label: format!("Framework member: {kind} ({role})"),
+                            relationship: "framework_membership".to_string(),
+                            details: rationale,
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            );
+        }
+        TransferArtifactRef::ConceptVersion { concept_id, version_id } => {
+            (scope, applicability, uncertainty, limitations) = conn.query_row(
+                "SELECT v.definition, v.created_in_project_id, '', v.rationale
+                 FROM knowledge_concept_versions v WHERE v.id = ?1 AND v.concept_id = ?2",
+                params![version_id, concept_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+            append_acquisition_provenance(conn, "concept_id", concept_id, &mut provenance)?;
+        }
+        TransferArtifactRef::PrincipleVersion { principle_id, version_id } => {
+            (scope, applicability, uncertainty, limitations) = conn.query_row(
+                "SELECT v.statement, v.created_in_project_id, '', v.rationale
+                 FROM knowledge_principle_versions v WHERE v.id = ?1 AND v.principle_id = ?2",
+                params![version_id, principle_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+            append_acquisition_provenance(conn, "principle_id", principle_id, &mut provenance)?;
+        }
+    }
+
+    Ok(TransferProvenancePreviewDto {
+        origin,
+        title: info.title,
+        version_no: info.version_no,
+        lifecycle_status: info.lifecycle_status,
+        scope,
+        applicability,
+        uncertainty,
+        limitations,
+        validation_scope,
+        provenance,
+    })
+}
+
+fn append_acquisition_provenance(
+    conn: &Connection,
+    target_column: &str,
+    target_id: &str,
+    provenance: &mut Vec<TransferProvenanceRecordDto>,
+) -> Result<()> {
+    let sql = format!(
+        "SELECT id, event_kind, reason, occurred_at_us FROM acquisition_provenance_events
+         WHERE {target_column} = ?1 ORDER BY occurred_at_us, id"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    provenance.extend(
+        stmt.query_map([target_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })?
+        .map(|row| {
+            let (id, event_kind, reason, occurred_at_us) = row?;
+            Ok(TransferProvenanceRecordDto {
+                record_kind: "acquisition_provenance".to_string(),
+                record_id: id,
+                label: event_kind,
+                relationship: "knowledge_origin".to_string(),
+                details: format!("{reason} (at {occurred_at_us})"),
+            })
+        })
+        .collect::<Result<Vec<_>>>()?,
+    );
+    Ok(())
+}
+
 fn query_strings(conn: &Connection, sql: &str) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(sql)?;
     Ok(stmt
