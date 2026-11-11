@@ -351,7 +351,9 @@ mod tests {
         let payload = serde_json::to_value(&layered_node).unwrap();
         assert_eq!(payload["zIndex"], 7);
         assert_eq!(
-            serde_json::from_value::<NodeInput>(payload).unwrap().z_index,
+            serde_json::from_value::<NodeInput>(payload)
+                .unwrap()
+                .z_index,
             Some(7)
         );
 
@@ -405,8 +407,8 @@ mod tests {
             Vec::new(),
         )
         .unwrap();
-        let updated = SnapshotResolver::resolve(&connection, "board-1", &updated_snapshot_id)
-            .unwrap();
+        let updated =
+            SnapshotResolver::resolve(&connection, "board-1", &updated_snapshot_id).unwrap();
         assert_eq!(updated.placements.get("path-1").unwrap().z_index, 12);
     }
 

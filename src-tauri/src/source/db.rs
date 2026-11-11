@@ -44,7 +44,9 @@ fn apply_acquisition_migration(conn: &Connection) -> Result<(), rusqlite::Error>
 
     if current_version == 0 {
         let applied_count: i64 =
-            tx.query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| row.get(0))?;
+            tx.query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })?;
         if applied_count != 0 {
             return Err(rusqlite::Error::InvalidQuery);
         }

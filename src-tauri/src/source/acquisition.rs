@@ -822,10 +822,7 @@ pub fn create_source_location(
             return Err("time ranges require timeStartMs and timeEndMs".into())
         }
         SourceLocationKind::TextAnchor
-            if req
-                .stable_selector
-                .as_deref()
-                .map_or(true, str::is_empty) =>
+            if req.stable_selector.as_deref().map_or(true, str::is_empty) =>
         {
             return Err("text anchors require a stableSelector".into())
         }
@@ -900,10 +897,7 @@ pub fn list_extractions(
     repository::list_extractions(conn, source_version_id).map_err(|error| error.to_string())
 }
 
-pub fn review_extraction(
-    conn: &Connection,
-    req: ReviewExtractionReq,
-) -> Result<(), String> {
+pub fn review_extraction(conn: &Connection, req: ReviewExtractionReq) -> Result<(), String> {
     if req.review_status == ExtractionReviewStatus::Unreviewed {
         return Err("reviewStatus must be a completed review outcome".into());
     }
@@ -963,17 +957,13 @@ pub fn create_knowledge_item(
     validate_required(&req.title, "title")?;
     validate_required(&req.content, "content")?;
     if req.kind == KnowledgeItemKind::SourceClaim {
-        return Err("source claims must be created from an accepted source-claim extraction".into());
+        return Err(
+            "source claims must be created from an accepted source-claim extraction".into(),
+        );
     }
     let id = new_id();
-    repository::create_knowledge_item(
-        conn,
-        &id,
-        &req,
-        actor_id,
-        now_ts_us(),
-    )
-    .map_err(|error| error.to_string())
+    repository::create_knowledge_item(conn, &id, &req, actor_id, now_ts_us())
+        .map_err(|error| error.to_string())
 }
 
 pub fn create_claim_relation(
@@ -1019,14 +1009,8 @@ pub fn create_framework(
     validate_required(&req.title, "title")?;
     let framework_id = new_id();
     let version_id = new_id();
-    repository::create_framework(
-        conn,
-        &framework_id,
-        &version_id,
-        &req,
-        now_ts_us(),
-    )
-    .map_err(|error| error.to_string())
+    repository::create_framework(conn, &framework_id, &version_id, &req, now_ts_us())
+        .map_err(|error| error.to_string())
 }
 
 pub fn list_frameworks(conn: &Connection) -> Result<Vec<FrameworkDto>, String> {
@@ -1054,7 +1038,9 @@ pub fn create_framework_version(
 ) -> Result<FrameworkVersionDto, String> {
     validate_required(&req.change_rationale, "changeRationale")?;
     if req.affected_claim_ids.is_empty() && req.assumption_claim_ids.is_empty() {
-        return Err("a framework change must link at least one affected claim or assumption".into());
+        return Err(
+            "a framework change must link at least one affected claim or assumption".into(),
+        );
     }
     repository::create_framework_version(conn, &req, &new_id(), now_ts_us())
         .map_err(|error| error.to_string())
@@ -1098,27 +1084,15 @@ pub fn update_framework_version(
     req: UpdateFrameworkVersionReq,
 ) -> Result<(), String> {
     validate_required(&req.title, "title")?;
-    repository::update_framework_version(conn, &req, now_ts_us())
+    repository::update_framework_version(conn, &req, now_ts_us()).map_err(|error| error.to_string())
+}
+
+pub fn review_framework_version(conn: &Connection, req: ReviewFrameworkReq) -> Result<(), String> {
+    repository::review_framework_version(conn, &req, &new_id(), now_ts_us())
         .map_err(|error| error.to_string())
 }
 
-pub fn review_framework_version(
-    conn: &Connection,
-    req: ReviewFrameworkReq,
-) -> Result<(), String> {
-    repository::review_framework_version(
-        conn,
-        &req,
-        &new_id(),
-        now_ts_us(),
-    )
-    .map_err(|error| error.to_string())
-}
-
-pub fn publish_framework_version(
-    conn: &Connection,
-    version_id: &str,
-) -> Result<(), String> {
+pub fn publish_framework_version(conn: &Connection, version_id: &str) -> Result<(), String> {
     repository::publish_framework_version(conn, version_id, now_ts_us())
         .map_err(|error| error.to_string())
 }
@@ -1186,11 +1160,7 @@ mod tests {
         .expect("create source version")
     }
 
-    fn location(
-        conn: &Connection,
-        source_id: &str,
-        source_version_id: &str,
-    ) -> SourceLocationDto {
+    fn location(conn: &Connection, source_id: &str, source_version_id: &str) -> SourceLocationDto {
         create_source_location(
             conn,
             CreateSourceLocationReq {
@@ -1329,7 +1299,10 @@ mod tests {
             replacement.parent_extraction_id.as_deref(),
             Some(original.id.as_str())
         );
-        assert_eq!(replacement.review_status, ExtractionReviewStatus::Unreviewed);
+        assert_eq!(
+            replacement.review_status,
+            ExtractionReviewStatus::Unreviewed
+        );
 
         let history = list_extractions(&conn, &source_version.id).unwrap();
         let retained_original = history.iter().find(|item| item.id == original.id).unwrap();
@@ -1358,9 +1331,9 @@ mod tests {
             AcquisitionProvenanceTargetKind::SourceClaim,
             &claim.id
         )
-            .unwrap()
-            .iter()
-            .any(|event| event.event_kind == "source_claim_created"));
+        .unwrap()
+        .iter()
+        .any(|event| event.event_kind == "source_claim_created"));
     }
 
     #[test]
@@ -1472,7 +1445,9 @@ mod tests {
             },
         )
         .unwrap();
-        let ordered = list_framework_versions(&conn, &framework.id).unwrap()[0].items.clone();
+        let ordered = list_framework_versions(&conn, &framework.id).unwrap()[0]
+            .items
+            .clone();
         assert_eq!(ordered[0].item_id, second_claim.id);
         assert_eq!(ordered[0].item_order, 0);
 
@@ -1565,9 +1540,11 @@ mod tests {
 
         init_schema(&conn).expect("apply additive acquisition migration");
         let source_title: String = conn
-            .query_row("SELECT title FROM sources WHERE id = 'SRC-legacy'", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT title FROM sources WHERE id = 'SRC-legacy'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         let extract_content: String = conn
             .query_row(
@@ -1580,11 +1557,9 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM source_versions", [], |row| row.get(0))
             .unwrap();
         let new_extract_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM knowledge_extractions",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT COUNT(*) FROM knowledge_extractions", [], |row| {
+                row.get(0)
+            })
             .unwrap();
 
         assert_eq!(source_title, "Legacy source");
@@ -1595,10 +1570,7 @@ mod tests {
 
     #[test]
     fn provenance_relations_survive_database_reopen() {
-        let path = std::env::temp_dir().join(format!(
-            "vora-acquisition-{}.sqlite",
-            Uuid::now_v7()
-        ));
+        let path = std::env::temp_dir().join(format!("vora-acquisition-{}.sqlite", Uuid::now_v7()));
         let (source_id, version_id, extraction_id, claim_id) = {
             let conn = Connection::open(&path).expect("create persistent test database");
             init_schema(&conn).expect("initialize persistent test database");
@@ -1624,27 +1596,28 @@ mod tests {
                 },
             )
             .unwrap();
-            (
-                source_id,
-                source_version.id,
-                extraction.id,
-                claim.id,
-            )
+            (source_id, source_version.id, extraction.id, claim.id)
         };
 
         {
             let conn = Connection::open(&path).expect("reopen persistent test database");
             init_schema(&conn).expect("verify migration on database reopen");
             assert_eq!(list_source_versions(&conn, &source_id).unwrap().len(), 1);
-            assert_eq!(list_extractions(&conn, &version_id).unwrap()[0].id, extraction_id);
-            assert_eq!(list_source_claims(&conn, &source_id).unwrap()[0].id, claim_id);
+            assert_eq!(
+                list_extractions(&conn, &version_id).unwrap()[0].id,
+                extraction_id
+            );
+            assert_eq!(
+                list_source_claims(&conn, &source_id).unwrap()[0].id,
+                claim_id
+            );
             assert!(!list_provenance(
                 &conn,
                 AcquisitionProvenanceTargetKind::SourceClaim,
                 &claim_id
             )
-                .unwrap()
-                .is_empty());
+            .unwrap()
+            .is_empty());
         }
 
         std::fs::remove_file(path).expect("remove persistent test database");

@@ -3,13 +3,12 @@ use tauri::State;
 use crate::mind::canvas_db::AppState;
 
 use super::acquisition::{
-    self, AcquisitionProvenanceTargetKind, AddFrameworkItemReq, CreateFrameworkReq,
-    CreateFrameworkVersionReq, FrameworkReviewDto,
-    CreateKnowledgeExtractionReq, CreateKnowledgeItemReq, CreateSourceClaimReq,
-    CreateSourceLocationReq, CreateSourceVersionReq, CorrectExtractionReq,
-    KnowledgeExtractionDto, KnowledgeItemDto, ProvenanceEventDto, PublishFrameworkVersionReq,
-    ReorderFrameworkItemsReq, ReviewExtractionReq, ReviewFrameworkReq, SourceClaimDto, SourceLocationDto,
-    SourceVersionDto, UpdateFrameworkVersionReq,
+    self, AcquisitionProvenanceTargetKind, AddFrameworkItemReq, CorrectExtractionReq,
+    CreateFrameworkReq, CreateFrameworkVersionReq, CreateKnowledgeExtractionReq,
+    CreateKnowledgeItemReq, CreateSourceClaimReq, CreateSourceLocationReq, CreateSourceVersionReq,
+    FrameworkReviewDto, KnowledgeExtractionDto, KnowledgeItemDto, ProvenanceEventDto,
+    PublishFrameworkVersionReq, ReorderFrameworkItemsReq, ReviewExtractionReq, ReviewFrameworkReq,
+    SourceClaimDto, SourceLocationDto, SourceVersionDto, UpdateFrameworkVersionReq,
 };
 #[tauri::command]
 pub fn src_list_source_versions(
@@ -102,9 +101,7 @@ pub fn src_create_source_claim(
 }
 
 #[tauri::command]
-pub fn src_list_knowledge_items(
-    state: State<AppState>,
-) -> Result<Vec<KnowledgeItemDto>, String> {
+pub fn src_list_knowledge_items(state: State<AppState>) -> Result<Vec<KnowledgeItemDto>, String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;
     acquisition::list_knowledge_items(&conn)
 }
@@ -190,10 +187,7 @@ pub fn src_add_framework_item(
 }
 
 #[tauri::command]
-pub fn src_remove_framework_item(
-    item_id: String,
-    state: State<AppState>,
-) -> Result<(), String> {
+pub fn src_remove_framework_item(item_id: String, state: State<AppState>) -> Result<(), String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;
     acquisition::remove_framework_item(&conn, &item_id)
 }
@@ -243,4 +237,3 @@ pub fn src_list_provenance(
     let conn = state.db.lock().map_err(|error| error.to_string())?;
     acquisition::list_provenance(&conn, target_kind, &target_id)
 }
-

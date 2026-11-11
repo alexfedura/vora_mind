@@ -310,7 +310,9 @@ fn parse_card_version(version: &str) -> Result<(String, i32, i32, i32), String> 
             || (part.len() > 1 && part.starts_with('0'))
             || !part.bytes().all(|byte| byte.is_ascii_digit())
         {
-            return Err("Card version must use three numeric components, such as v0.1.1".to_string());
+            return Err(
+                "Card version must use three numeric components, such as v0.1.1".to_string(),
+            );
         }
         parsed[index] = part
             .parse::<i32>()
@@ -565,13 +567,8 @@ fn fork_board_from_version(
         return Err("Board title must contain between 1 and 80 characters".to_string());
     }
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
-    mind::canvas_db::fork_board_from_version(
-        &mut conn,
-        &source_board_id,
-        &version_id,
-        title,
-    )
-    .map_err(|error| error.to_string())
+    mind::canvas_db::fork_board_from_version(&mut conn, &source_board_id, &version_id, title)
+        .map_err(|error| error.to_string())
 }
 
 fn task_flow_now() -> Result<i64, String> {
@@ -809,7 +806,9 @@ fn create_board_version(
             .map_err(|error| error.to_string())?
             .is_empty()
     {
-        return Err("A custom version tag can only be used for the first Board version.".to_string());
+        return Err(
+            "A custom version tag can only be used for the first Board version.".to_string(),
+        );
     }
     mind::canvas_db::create_board_version(
         &mut conn,
@@ -819,13 +818,12 @@ fn create_board_version(
         custom_version.as_deref(),
         snapshot,
     )
-        .map_err(|error| match error {
-            rusqlite::Error::InvalidQuery => {
-                "That version label already exists on this Board. Choose another increment."
-                    .to_string()
-            }
-            other => other.to_string(),
-        })
+    .map_err(|error| match error {
+        rusqlite::Error::InvalidQuery => {
+            "That version label already exists on this Board. Choose another increment.".to_string()
+        }
+        other => other.to_string(),
+    })
 }
 
 #[tauri::command]
@@ -1208,14 +1206,21 @@ fn send_highlight_to_library(
         )
         .map_err(|error| error.to_string())?;
     if !board_exists {
-        return Err("Select or create a Board before sending a highlight to the Library.".to_string());
+        return Err(
+            "Select or create a Board before sending a highlight to the Library.".to_string(),
+        );
     }
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|error| error.to_string())?
         .as_millis() as i64;
     let card_id = format!("card_{}", uuid::Uuid::now_v7());
-    let title = content.chars().take(80).collect::<String>().trim().to_string();
+    let title = content
+        .chars()
+        .take(80)
+        .collect::<String>()
+        .trim()
+        .to_string();
     let working_content = serde_json::json!({
         "title": title,
         "content": content,
@@ -1432,7 +1437,10 @@ fn has_card_versions(state: State<AppState>, id: String) -> Result<bool, String>
 }
 
 #[tauri::command]
-fn get_card_versions(state: State<AppState>, id: String) -> Result<Vec<CardVersionSummary>, String> {
+fn get_card_versions(
+    state: State<AppState>,
+    id: String,
+) -> Result<Vec<CardVersionSummary>, String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;
     let is_card: bool = conn
         .query_row(
@@ -1610,7 +1618,10 @@ fn save_card_direct(
             || lineage.start_time < 0.0
             || lineage.end_time <= lineage.start_time
         {
-            return Err("Media card lineage requires a valid source file and increasing time range.".to_string());
+            return Err(
+                "Media card lineage requires a valid source file and increasing time range."
+                    .to_string(),
+            );
         }
         let source_exists: bool = tx
             .query_row(
@@ -1640,22 +1651,12 @@ fn save_card_direct(
             "start_time".to_string(),
             serde_json::json!(lineage.start_time),
         );
-        card_metadata.insert(
-            "end_time".to_string(),
-            serde_json::json!(lineage.end_time),
-        );
+        card_metadata.insert("end_time".to_string(), serde_json::json!(lineage.end_time));
     }
-    let metadata = (!card_metadata.is_empty())
-        .then(|| serde_json::Value::Object(card_metadata).to_string());
+    let metadata =
+        (!card_metadata.is_empty()).then(|| serde_json::Value::Object(card_metadata).to_string());
     let rows_updated = store_card_working_content(
-        &tx,
-        &board_id,
-        &id,
-        &title,
-        &content,
-        &version,
-        now,
-        metadata,
+        &tx, &board_id, &id, &title, &content, &version, now, metadata,
     )
     .map_err(|error| error.to_string())?;
     if rows_updated == 0 {

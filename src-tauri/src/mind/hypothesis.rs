@@ -357,8 +357,12 @@ fn create_child_hypothesis_in_db(
     now: i64,
 ) -> std::result::Result<Hypothesis, String> {
     let transaction = conn.transaction().map_err(|error| error.to_string())?;
-    let (inquiry_id, parent_verdict, source_card_id, source_highlight_id):
-        (String, Option<String>, Option<String>, Option<String>) = transaction
+    let (inquiry_id, parent_verdict, source_card_id, source_highlight_id): (
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) = transaction
         .query_row(
             "SELECT inquiry_id, verdict, source_card_id, source_highlight_id
              FROM hypotheses WHERE id = ?1",
@@ -1779,10 +1783,10 @@ mod tests {
         add_data_entry_in_db, add_hypothesis_insight_in_db, build_hypothesis_analysis_prompt,
         create_child_hypothesis_in_db, create_hypothesis_from_source_in_db,
         delete_data_entry_in_db, delete_hypothesis_insight_in_db, graduate_to_library_in_db,
-        init_schema, link_snapshot_to_hypothesis_in_db,
-        list_data_entries, list_hypotheses, list_hypothesis_insights, list_hypothesis_snapshots,
-        promote_inquiry, record_hypothesis_execution_in_db, record_verdict_in_db,
-        save_checklist_schema_in_db, save_hypothesis_protocol_in_db, save_protocol_flowchart_in_db,
+        init_schema, link_snapshot_to_hypothesis_in_db, list_data_entries, list_hypotheses,
+        list_hypothesis_insights, list_hypothesis_snapshots, promote_inquiry,
+        record_hypothesis_execution_in_db, record_verdict_in_db, save_checklist_schema_in_db,
+        save_hypothesis_protocol_in_db, save_protocol_flowchart_in_db,
         unlink_snapshot_from_hypothesis_in_db, update_protocol_completion_in_db, LinkedDefinition,
     };
     use crate::mind::questions::{

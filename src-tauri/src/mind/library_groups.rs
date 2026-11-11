@@ -561,9 +561,14 @@ mod tests {
     fn groups_are_global_persisted_and_can_be_trashed_and_restored() {
         let mut conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
-        let created =
-            create_item_group(&mut conn, "Shared group", "0.1.0", "group", sample_snapshot())
-                .unwrap();
+        let created = create_item_group(
+            &mut conn,
+            "Shared group",
+            "0.1.0",
+            "group",
+            sample_snapshot(),
+        )
+        .unwrap();
 
         let groups = list_item_groups(&conn).unwrap();
         assert_eq!(groups.len(), 1);
@@ -805,10 +810,14 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
         assert!(create_item_group(&mut conn, "Group", "0.1", "group", sample_snapshot()).is_err());
-        assert!(
-            create_item_group(&mut conn, "Invalid type", "0.1.0", "invalid", sample_snapshot())
-                .is_err()
-        );
+        assert!(create_item_group(
+            &mut conn,
+            "Invalid type",
+            "0.1.0",
+            "invalid",
+            sample_snapshot()
+        )
+        .is_err());
         let empty = super::LibraryItemGroupSnapshot {
             item_type: "group".to_string(),
             nodes: Vec::new(),

@@ -1545,7 +1545,8 @@ pub fn checkout_board_version(
                         "content": card.content,
                         "version": card.version
                     }
-                }).to_string()
+                })
+                .to_string()
             ],
         )?;
         if changed == 0 {
@@ -2285,8 +2286,7 @@ mod board_version_tests {
                 |row| row.get(0),
             )
             .unwrap();
-        let stored_metadata: serde_json::Value =
-            serde_json::from_str(&stored_metadata).unwrap();
+        let stored_metadata: serde_json::Value = serde_json::from_str(&stored_metadata).unwrap();
         assert_eq!(stored_metadata["source_file_id"], "video-file-id");
         assert_eq!(stored_metadata["start_time"], 323.0);
         assert_eq!(

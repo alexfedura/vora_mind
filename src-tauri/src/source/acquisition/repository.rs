@@ -129,7 +129,8 @@ fn map_source_location(row: &Row<'_>) -> RepoResult<SourceLocationDto> {
         source_version_id: row.get(2)?,
         legacy_segment_id: row.get(3)?,
         label: row.get(4)?,
-        location_kind: SourceLocationKind::parse(&kind).map_err(|_| rusqlite::Error::InvalidQuery)?,
+        location_kind: SourceLocationKind::parse(&kind)
+            .map_err(|_| rusqlite::Error::InvalidQuery)?,
         page_start: row.get(6)?,
         page_end: row.get(7)?,
         paragraph_start: row.get(8)?,
@@ -317,7 +318,14 @@ pub fn review_extraction(
         "INSERT INTO extraction_reviews
             (id, extraction_id, review_status, reviewer_id, reviewed_at_us, rationale)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![Uuid::now_v7().to_string(), extraction_id, review_status, reviewer_id, now, rationale],
+        params![
+            Uuid::now_v7().to_string(),
+            extraction_id,
+            review_status,
+            reviewer_id,
+            now,
+            rationale
+        ],
     )?;
     let after = get_extraction(&tx, extraction_id)?;
     let before_json = serde_json::to_string(&before).map_err(|_| rusqlite::Error::InvalidQuery)?;
@@ -587,14 +595,46 @@ pub fn create_claim_relation(
     let table_and_column = match (&req.target_kind, &req.relation_kind) {
         (
             KnowledgeItemKind::SourceClaim,
-            ClaimRelationKind::Supports | ClaimRelationKind::Contradicts | ClaimRelationKind::Qualifies,
-        ) => ("source_claim_relations", "subject_claim_id", "object_claim_id"),
-        (KnowledgeItemKind::Concept, ClaimRelationKind::Defines | ClaimRelationKind::Supports | ClaimRelationKind::Contradicts | ClaimRelationKind::Qualifies) =>
-            ("source_claim_concept_relations", "source_claim_id", "concept_id"),
-        (KnowledgeItemKind::Principle, ClaimRelationKind::Supports | ClaimRelationKind::Contradicts | ClaimRelationKind::Qualifies) =>
-            ("source_claim_principle_relations", "source_claim_id", "principle_id"),
-        (KnowledgeItemKind::Procedure, ClaimRelationKind::Describes | ClaimRelationKind::Supports | ClaimRelationKind::Contradicts | ClaimRelationKind::Qualifies) =>
-            ("source_claim_procedure_relations", "source_claim_id", "procedure_id"),
+            ClaimRelationKind::Supports
+            | ClaimRelationKind::Contradicts
+            | ClaimRelationKind::Qualifies,
+        ) => (
+            "source_claim_relations",
+            "subject_claim_id",
+            "object_claim_id",
+        ),
+        (
+            KnowledgeItemKind::Concept,
+            ClaimRelationKind::Defines
+            | ClaimRelationKind::Supports
+            | ClaimRelationKind::Contradicts
+            | ClaimRelationKind::Qualifies,
+        ) => (
+            "source_claim_concept_relations",
+            "source_claim_id",
+            "concept_id",
+        ),
+        (
+            KnowledgeItemKind::Principle,
+            ClaimRelationKind::Supports
+            | ClaimRelationKind::Contradicts
+            | ClaimRelationKind::Qualifies,
+        ) => (
+            "source_claim_principle_relations",
+            "source_claim_id",
+            "principle_id",
+        ),
+        (
+            KnowledgeItemKind::Procedure,
+            ClaimRelationKind::Describes
+            | ClaimRelationKind::Supports
+            | ClaimRelationKind::Contradicts
+            | ClaimRelationKind::Qualifies,
+        ) => (
+            "source_claim_procedure_relations",
+            "source_claim_id",
+            "procedure_id",
+        ),
         _ => return Err(rusqlite::Error::InvalidQuery),
     };
     let tx = conn.unchecked_transaction()?;
@@ -651,10 +691,7 @@ pub fn list_claim_relations(
     rows.collect()
 }
 
-pub fn list_source_claims(
-    conn: &Connection,
-    source_id: &str,
-) -> RepoResult<Vec<SourceClaimDto>> {
+pub fn list_source_claims(conn: &Connection, source_id: &str) -> RepoResult<Vec<SourceClaimDto>> {
     let mut statement = conn.prepare(
         "SELECT id, source_id, source_version_id, extraction_id, statement,
                 asserted_by, scope, created_at_us
@@ -898,9 +935,7 @@ pub fn list_framework_versions(
         "SELECT {FRAMEWORK_VERSION_COLUMNS} FROM knowledge_framework_versions
          WHERE framework_id = ?1 ORDER BY version_no DESC"
     ))?;
-    let rows = statement.query_map([framework_id], |row| {
-        map_framework_version(conn, row)
-    })?;
+    let rows = statement.query_map([framework_id], |row| map_framework_version(conn, row))?;
     let versions = rows.collect();
     versions
 }
@@ -1150,7 +1185,9 @@ pub fn reorder_framework_items(
         rows
     };
     if existing_item_ids.len() != ordered_item_ids.len()
-        || existing_item_ids.iter().any(|id| !ordered_item_ids.contains(id))
+        || existing_item_ids
+            .iter()
+            .any(|id| !ordered_item_ids.contains(id))
     {
         return Err(rusqlite::Error::InvalidQuery);
     }
@@ -1212,7 +1249,10 @@ pub fn remove_framework_item(conn: &Connection, item_id: &str) -> RepoResult<()>
     if status != "draft" {
         return Err(rusqlite::Error::InvalidQuery);
     }
-    tx.execute("DELETE FROM framework_version_items WHERE id = ?1", [item_id])?;
+    tx.execute(
+        "DELETE FROM framework_version_items WHERE id = ?1",
+        [item_id],
+    )?;
     record_event(
         &tx,
         "framework_version",
@@ -1310,11 +1350,7 @@ pub fn review_framework_version(
     tx.commit()
 }
 
-pub fn publish_framework_version(
-    conn: &Connection,
-    version_id: &str,
-    now: i64,
-) -> RepoResult<()> {
+pub fn publish_framework_version(conn: &Connection, version_id: &str, now: i64) -> RepoResult<()> {
     let tx = conn.unchecked_transaction()?;
     let version: (String, i64, String) = tx.query_row(
         "SELECT framework_id, version_no, status
