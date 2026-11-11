@@ -249,6 +249,9 @@ CREATE INDEX idx_research_lineage_origin
     ON research_lineage(origin_project_id, origin_id, occurred_at_us);
 CREATE INDEX idx_research_lineage_recipient
     ON research_lineage(receiving_project_id, occurred_at_us);
+CREATE UNIQUE INDEX idx_research_lineage_single_adoption
+    ON research_lineage(transfer_id, relation_kind)
+    WHERE adaptation_id IS NULL;
 
 CREATE TABLE downstream_usage (
     id TEXT PRIMARY KEY,
@@ -323,15 +326,10 @@ WHEN NOT (
         SELECT 1 FROM analysis_finding_versions v
         JOIN analysis_findings f ON f.id = v.finding_id
         WHERE v.id = NEW.finding_version_id AND f.project_id = NEW.origin_project_id
-          AND EXISTS (
-              SELECT 1 FROM analysis_finding_events e
-              WHERE e.finding_version_id = v.id
-                AND e.status IN ('accepted', 'contested', 'inconclusive', 'unsupported')
-          )
-          AND NOT EXISTS (
-              SELECT 1 FROM analysis_finding_events e
-              WHERE e.finding_version_id = v.id AND e.status IN ('draft', 'review', 'retracted')
-          )
+          AND (SELECT e.status FROM analysis_finding_events e
+               WHERE e.finding_version_id = v.id
+               ORDER BY e.occurred_at_us DESC, e.id DESC LIMIT 1)
+              IN ('accepted', 'contested', 'inconclusive', 'unsupported')
     ))
     OR (NEW.artifact_kind = 'concept_version' AND EXISTS (
         SELECT 1 FROM knowledge_concept_versions v
