@@ -142,12 +142,6 @@ pub fn create_model(conn: &mut Connection, request: &CreateModelReq) -> Result<M
         ],
     )?;
     tx.execute(
-        "INSERT INTO model_version_events
-            (id, model_version_id, lifecycle_status, rationale, actor_id, occurred_at_us)
-         VALUES (?1, ?2, 'draft', 'Immutable version created.', ?3, ?4)",
-        params![id(), model_version_id, request.created_by, created_at],
-    )?;
-    tx.execute(
         "INSERT INTO model_status_events (id, model_id, status, rationale, actor_id, occurred_at_us)
          VALUES (?1, ?2, 'proposed', 'Model identity created.', ?3, ?4)",
         params![id(), model_id, request.created_by, now],
@@ -351,6 +345,12 @@ pub fn create_model_version(
             request.created_by,
             created_at
         ],
+    )?;
+    tx.execute(
+        "INSERT INTO model_version_events
+            (id, model_version_id, lifecycle_status, rationale, actor_id, occurred_at_us)
+         VALUES (?1, ?2, 'draft', 'Immutable version created.', ?3, ?4)",
+        params![id(), model_version_id, request.created_by, created_at],
     )?;
 
     for parent in &request.parents {
