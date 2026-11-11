@@ -13,7 +13,6 @@ import type {
   ExperimentDatasetAssetDto,
   ExperimentDatasetDto,
   ExperimentDatasetSplitGroupDto,
-  ExperimentDatasetTransformationDto,
   ExperimentDatasetVersionDto,
   ExperimentDesignVersionDto,
   ExperimentRunDto,
