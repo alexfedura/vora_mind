@@ -747,3 +747,320 @@ fn query_gap(conn: &Connection, id: &str) -> Result<ResearchGapDto> {
     Ok(gap)
 }
 
+pub fn create_question(
+    conn: &mut Connection,
+    req: &CreateResearchQuestionReq,
+    id: &str,
+    now: i64,
+) -> Result<ResearchQuestionDto> {
+    let tx = conn.transaction()?;
+    let legacy_ms = now / 1_000;
+    tx.execute(
+        "INSERT INTO questions (id, title, description, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, 'parked', ?4, ?4)",
+        params![id, req.title.trim(), req.description, legacy_ms],
+    )?;
+    let ownership = if req.project_id.is_some() {
+        "project"
+    } else {
+        "unassigned"
+    };
+    tx.execute(
+        "INSERT INTO research_questions
+            (id, project_id, research_gap_id, domain_id, lifecycle_status,
+             ownership_state, migration_note, rationale, created_by, mapped_at_us)
+         VALUES (?1, ?2, ?3, ?4, 'draft', ?5, NULL, ?6, ?7, ?8)",
+        params![
+            id,
+            req.project_id,
+            req.research_gap_id,
+            req.domain_id,
+            ownership,
+            req.rationale,
+            req.created_by,
+            now
+        ],
+    )?;
+    insert_event(
+        &tx,
+        "question",
+        id,
+        "draft",
+        req.created_by.as_deref(),
+        &req.rationale,
+        now,
+    )?;
+    tx.commit()?;
+    query_question(conn, id)
+}
+
+pub fn transition_question(
+    conn: &Connection,
+    question_id: &str,
+    next_status: ResearchQuestionStatus,
+    actor_id: Option<&str>,
+    rationale: &str,
+    now: i64,
+) -> Result<ResearchQuestionDto> {
+    let tx = conn.unchecked_transaction()?;
+    let current: String = tx.query_row(
+        "SELECT lifecycle_status FROM research_questions WHERE id = ?1",
+        [question_id],
+        |row| row.get(0),
+    )?;
+    let next = next_status.as_str();
+    let allowed = matches!(
+        (current.as_str(), next),
+        ("draft", "review" | "rejected" | "deferred")
+            | ("review", "accepted" | "rejected" | "deferred" | "draft")
+            | ("accepted", "deferred" | "refined" | "superseded")
+            | ("deferred", "draft" | "review" | "accepted" | "rejected")
+    );
+    if !allowed {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    tx.execute(
+        "UPDATE research_questions SET lifecycle_status = ?1, rationale = ?2 WHERE id = ?3",
+        params![next, rationale, question_id],
+    )?;
+    insert_event(&tx, "question", question_id, next, actor_id, rationale, now)?;
+    tx.commit()?;
+    query_question(conn, question_id)
+}
+
+pub fn refine_question(
+    conn: &mut Connection,
+    parent_question_id: &str,
+    title: &str,
+    description: &str,
+    rationale: &str,
+    actor_id: Option<&str>,
+    derived_id: &str,
+    now: i64,
+) -> Result<ResearchQuestionDto> {
+    let tx = conn.transaction()?;
+    let parent = tx.query_row(
+        "SELECT q.project_id, q.research_gap_id, q.domain_id, q.ownership_state
+         FROM research_questions q WHERE q.id = ?1 AND q.lifecycle_status = 'accepted'",
+        [parent_question_id],
+        |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        },
+    )?;
+    let legacy_ms = now / 1_000;
+    tx.execute(
+        "INSERT INTO questions (id, title, description, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, 'parked', ?4, ?4)",
+        params![derived_id, title.trim(), description, legacy_ms],
+    )?;
+    tx.execute(
+        "INSERT INTO research_questions
+            (id, project_id, research_gap_id, domain_id, lifecycle_status,
+             ownership_state, migration_note, rationale, created_by, mapped_at_us)
+         VALUES (?1, ?2, ?3, ?4, 'draft', ?5, NULL, ?6, ?7, ?8)",
+        params![
+            derived_id,
+            parent.0,
+            parent.1,
+            parent.2,
+            parent.3,
+            rationale,
+            actor_id,
+            now
+        ],
+    )?;
+    tx.execute(
+        "INSERT INTO research_question_lineage
+            (id, parent_question_id, derived_question_id, relation_kind, rationale, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, 'refined_from', ?4, ?5, ?6)",
+        params![
+            Uuid::now_v7().to_string(),
+            parent_question_id,
+            derived_id,
+            rationale,
+            actor_id,
+            now
+        ],
+    )?;
+    tx.execute(
+        "UPDATE research_questions SET lifecycle_status = 'refined', rationale = ?1
+         WHERE id = ?2",
+        params![rationale, parent_question_id],
+    )?;
+    insert_event(
+        &tx,
+        "question",
+        parent_question_id,
+        "refined",
+        actor_id,
+        rationale,
+        now,
+    )?;
+    insert_event(&tx, "question", derived_id, "draft", actor_id, rationale, now)?;
+    tx.commit()?;
+    query_question(conn, derived_id)
+}
+
+pub fn link_question_lineage(
+    conn: &Connection,
+    parent_question_id: &str,
+    derived_question_id: &str,
+    relation_kind: ResearchQuestionRelation,
+    rationale: &str,
+    actor_id: Option<&str>,
+    id: &str,
+    now: i64,
+) -> Result<ResearchQuestionLineageDto> {
+    let tx = conn.unchecked_transaction()?;
+    let same_project = tx.query_row(
+        "SELECT (parent.project_id IS derived.project_id)
+         FROM research_questions parent, research_questions derived
+         WHERE parent.id = ?1 AND derived.id = ?2",
+        params![parent_question_id, derived_question_id],
+        |row| row.get::<_, bool>(0),
+    )?;
+    if !same_project || parent_question_id == derived_question_id {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let creates_cycle: bool = tx.query_row(
+        "WITH RECURSIVE descendants(id) AS (
+            SELECT derived_question_id FROM research_question_lineage WHERE parent_question_id = ?1
+            UNION
+            SELECT l.derived_question_id FROM research_question_lineage l
+            JOIN descendants d ON l.parent_question_id = d.id
+         )
+         SELECT EXISTS(SELECT 1 FROM descendants WHERE id = ?2)",
+        params![derived_question_id, parent_question_id],
+        |row| row.get(0),
+    )?;
+    if creates_cycle {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    tx.execute(
+        "INSERT INTO research_question_lineage
+            (id, parent_question_id, derived_question_id, relation_kind, rationale, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            id,
+            parent_question_id,
+            derived_question_id,
+            relation_kind.as_str(),
+            rationale,
+            actor_id,
+            now
+        ],
+    )?;
+    insert_event(
+        &tx,
+        "question",
+        derived_question_id,
+        relation_kind.as_str(),
+        actor_id,
+        rationale,
+        now,
+    )?;
+    tx.commit()?;
+    Ok(ResearchQuestionLineageDto {
+        id: id.into(),
+        parent_question_id: parent_question_id.into(),
+        derived_question_id: derived_question_id.into(),
+        relation_kind,
+        rationale: rationale.into(),
+        created_by: actor_id.map(str::to_string),
+        created_at_us: now,
+    })
+}
+
+fn query_question(conn: &Connection, id: &str) -> Result<ResearchQuestionDto> {
+    conn.query_row(
+        "SELECT r.id, q.title, q.description, r.project_id, r.research_gap_id, r.domain_id,
+                r.lifecycle_status, r.ownership_state, r.migration_note, r.rationale,
+                q.status, q.created_at, q.updated_at
+         FROM research_questions r JOIN questions q ON q.id = r.id WHERE r.id = ?1",
+        [id],
+        |row| {
+            let status = row.get::<_, String>(6)?;
+            Ok(ResearchQuestionDto {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                description: row.get(2)?,
+                project_id: row.get(3)?,
+                research_gap_id: row.get(4)?,
+                domain_id: row.get(5)?,
+                lifecycle_status: match status.as_str() {
+                    "draft" => ResearchQuestionStatus::Draft,
+                    "review" => ResearchQuestionStatus::Review,
+                    "accepted" => ResearchQuestionStatus::Accepted,
+                    "rejected" => ResearchQuestionStatus::Rejected,
+                    "deferred" => ResearchQuestionStatus::Deferred,
+                    "refined" => ResearchQuestionStatus::Refined,
+                    "superseded" => ResearchQuestionStatus::Superseded,
+                    _ => ResearchQuestionStatus::LegacyUnassessed,
+                },
+                ownership_state: row.get(7)?,
+                migration_note: row.get(8)?,
+                rationale: row.get(9)?,
+                legacy_status: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
+            })
+        },
+    )
+}
+
+pub fn create_phenomenon(
+    conn: &Connection,
+    req: &CreatePhenomenonReq,
+    id: &str,
+    now: i64,
+) -> Result<PhenomenonDto> {
+    conn.execute(
+        "INSERT INTO research_phenomena
+            (id, project_id, domain_id, title, description, population_scope,
+             context, temporal_boundary, lifecycle_status, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'identified', ?9, ?10)",
+        params![
+            id,
+            req.project_id,
+            req.domain_id,
+            req.title.trim(),
+            req.description,
+            req.population_scope,
+            req.context,
+            req.temporal_boundary,
+            req.created_by,
+            now
+        ],
+    )?;
+    query_phenomenon(conn, id)
+}
+
+fn query_phenomenon(conn: &Connection, id: &str) -> Result<PhenomenonDto> {
+    conn.query_row(
+        "SELECT id, project_id, domain_id, title, description, population_scope,
+                context, temporal_boundary, lifecycle_status, created_by, created_at_us
+         FROM research_phenomena WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(PhenomenonDto {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                domain_id: row.get(2)?,
+                title: row.get(3)?,
+                description: row.get(4)?,
+                population_scope: row.get(5)?,
+                context: row.get(6)?,
+                temporal_boundary: row.get(7)?,
+                lifecycle_status: row.get(8)?,
+                created_by: row.get(9)?,
+                created_at_us: row.get(10)?,
+            })
+        },
+    )
+}
+
