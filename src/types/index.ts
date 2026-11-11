@@ -248,6 +248,17 @@ export type FrameworkChangeClass =
   | "revision"
   | "replacement";
 export type FrameworkReviewStatus = "approved" | "changes_requested" | "rejected";
+export type AcquisitionProvenanceTargetKind =
+  | "source"
+  | "source_version"
+  | "source_location"
+  | "extraction"
+  | "source_claim"
+  | "concept"
+  | "principle"
+  | "procedure"
+  | "framework"
+  | "framework_version";
 export type FrameworkMembershipRole =
   | "core"
   | "supporting"
@@ -464,6 +475,15 @@ export interface FrameworkVersionDto {
   items: FrameworkVersionItemDto[];
 }
 
+export interface FrameworkReviewDto {
+  id: string;
+  frameworkVersionId: string;
+  reviewStatus: FrameworkReviewStatus;
+  reviewerId: string | null;
+  rationale: string;
+  reviewedAtUs: number;
+}
+
 export interface CreateFrameworkReq {
   title: string;
   description: string | null;
@@ -508,7 +528,7 @@ export interface ReviewFrameworkReq {
 
 export interface ProvenanceEventDto {
   id: string;
-  targetKind: string;
+  targetKind: AcquisitionProvenanceTargetKind;
   targetId: string;
   eventKind: string;
   actorId: string | null;

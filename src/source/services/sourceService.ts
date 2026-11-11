@@ -4,6 +4,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AcquisitionProvenanceTargetKind,
   AddFrameworkItemReq,
   ClaimRelationDto,
   CorrectExtractionReq,
@@ -16,6 +17,7 @@ import type {
   CreateSourceLocationReq,
   CreateSourceVersionReq,
   FrameworkDto,
+  FrameworkReviewDto,
   FrameworkVersionDto,
   KnowledgeExtractionDto,
   KnowledgeItemDto,
@@ -323,6 +325,12 @@ export async function srcListFrameworkVersions(frameworkId: string): Promise<Fra
   return invoke<FrameworkVersionDto[]>("src_list_framework_versions", { frameworkId });
 }
 
+export async function srcListFrameworkReviews(
+  frameworkVersionId: string,
+): Promise<FrameworkReviewDto[]> {
+  return invoke<FrameworkReviewDto[]>("src_list_framework_reviews", { frameworkVersionId });
+}
+
 export async function srcCreateFrameworkVersion(
   req: CreateFrameworkVersionReq,
 ): Promise<FrameworkVersionDto> {
@@ -356,7 +364,7 @@ export async function srcPublishFrameworkVersion(frameworkVersionId: string): Pr
 }
 
 export async function srcListProvenance(
-  targetKind: string,
+  targetKind: AcquisitionProvenanceTargetKind,
   targetId: string,
 ): Promise<ProvenanceEventDto[]> {
   return invoke<ProvenanceEventDto[]>("src_list_provenance", { targetKind, targetId });
