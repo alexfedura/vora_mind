@@ -1085,6 +1085,76 @@ pub fn add_framework_item(
     Ok(item_id.to_string())
 }
 
+pub fn reorder_framework_items(
+    conn: &Connection,
+    framework_version_id: &str,
+    ordered_item_ids: &[String],
+    now: i64,
+) -> RepoResult<()> {
+    let tx = conn.unchecked_transaction()?;
+    let status: String = tx.query_row(
+        "SELECT status FROM knowledge_framework_versions WHERE id = ?1",
+        [framework_version_id],
+        |row| row.get(0),
+    )?;
+    if status != "draft" {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    let existing_item_ids = {
+        let mut statement = tx.prepare(
+            "SELECT id FROM framework_version_items
+             WHERE framework_version_id = ?1 ORDER BY item_order, id",
+        )?;
+        statement
+            .query_map([framework_version_id], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    if existing_item_ids.len() != ordered_item_ids.len()
+        || existing_item_ids.iter().any(|id| !ordered_item_ids.contains(id))
+    {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let before_json =
+        serde_json::to_string(&existing_item_ids).map_err(|_| rusqlite::Error::InvalidQuery)?;
+    let after_json =
+        serde_json::to_string(ordered_item_ids).map_err(|_| rusqlite::Error::InvalidQuery)?;
+    let max_order: i64 = tx.query_row(
+        "SELECT COALESCE(MAX(item_order), 0) FROM framework_version_items
+         WHERE framework_version_id = ?1",
+        [framework_version_id],
+        |row| row.get(0),
+    )?;
+    let offset = max_order
+        .checked_add(ordered_item_ids.len() as i64)
+        .and_then(|value| value.checked_add(1))
+        .ok_or(rusqlite::Error::InvalidQuery)?;
+    tx.execute(
+        "UPDATE framework_version_items SET item_order = item_order + ?1
+         WHERE framework_version_id = ?2",
+        params![offset, framework_version_id],
+    )?;
+    for (index, item_id) in ordered_item_ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE framework_version_items SET item_order = ?1
+             WHERE id = ?2 AND framework_version_id = ?3",
+            params![index as i64, item_id, framework_version_id],
+        )?;
+    }
+    record_event(
+        &tx,
+        "framework_version",
+        framework_version_id,
+        "items_reordered",
+        None,
+        now,
+        "draft framework membership order changed",
+        Some(&before_json),
+        Some(&after_json),
+    )?;
+    tx.commit()
+}
+
 pub fn remove_framework_item(conn: &Connection, item_id: &str) -> RepoResult<()> {
     let tx = conn.unchecked_transaction()?;
     let version_id: String = tx.query_row(
