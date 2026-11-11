@@ -1802,6 +1802,58 @@ pub fn get_dataset_samples(
     })
 }
 
+fn query_dataset_transformation(
+    conn: &Connection,
+    transformation_id: &str,
+) -> Result<ExperimentDatasetTransformationDto> {
+    let mut transformation = conn.query_row(
+        "SELECT id, output_dataset_version_id, method, parameters_json,
+                provenance_json, created_by, created_at_us
+         FROM experiment_dataset_transformations WHERE id = ?1",
+        [transformation_id],
+        |row| {
+            let parameters_json: String = row.get(3)?;
+            let provenance_json: String = row.get(4)?;
+            Ok(ExperimentDatasetTransformationDto {
+                id: row.get(0)?,
+                output_dataset_version_id: row.get(1)?,
+                method: row.get(2)?,
+                parameters: serde_json::from_str(&parameters_json).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        3,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?,
+                provenance: serde_json::from_str(&provenance_json).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        4,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?,
+                inputs: Vec::new(),
+                created_by: row.get(5)?,
+                created_at_us: row.get(6)?,
+            })
+        },
+    )?;
+    let mut statement = conn.prepare(
+        "SELECT input_dataset_version_id, input_role
+         FROM experiment_dataset_transformation_inputs
+         WHERE transformation_id = ?1 ORDER BY input_dataset_version_id",
+    )?;
+    transformation.inputs = statement
+        .query_map([transformation_id], |row| {
+            Ok(DatasetTransformationInputDto {
+                dataset_version_id: row.get(0)?,
+                role: parse_dataset_role(&row.get::<_, String>(1)?)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(transformation)
+}
+
 pub fn workspace(conn: &Connection, project_id: &str) -> Result<ExperimentWorkspaceDto> {
     let design_ids = {
         let mut statement = conn.prepare(
@@ -1860,10 +1912,27 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<ExperimentWorksp
         .iter()
         .map(|id| query_split_group(conn, id))
         .collect::<Result<Vec<_>>>()?;
+    let transformation_ids = {
+        let mut statement = conn.prepare(
+            "SELECT t.id FROM experiment_dataset_transformations t
+             JOIN experiment_dataset_versions v ON v.id = t.output_dataset_version_id
+             JOIN experiment_datasets d ON d.id = v.dataset_id
+             WHERE d.project_id = ?1 ORDER BY t.created_at_us, t.id",
+        )?;
+        let rows = statement
+            .query_map([project_id], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
+    };
+    let transformations = transformation_ids
+        .iter()
+        .map(|id| query_dataset_transformation(conn, id))
+        .collect::<Result<Vec<_>>>()?;
     Ok(ExperimentWorkspaceDto {
         design_versions,
         runs,
         datasets,
         split_groups,
+        transformations,
     })
 }
