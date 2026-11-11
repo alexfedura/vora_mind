@@ -1672,7 +1672,11 @@ pub fn provenance_preview(
         }
         TransferArtifactRef::ModelVersion { version_id, .. } => {
             (scope, applicability, uncertainty, limitations) = conn.query_row(
-                "SELECT v.scope, v.scope, v.assumptions_json, v.change_rationale
+                "SELECT v.scope, v.human_specification,
+                        COALESCE((SELECT group_concat(a.statement, '; ')
+                                  FROM model_version_assumptions a
+                                  WHERE a.model_version_id = v.id), ''),
+                        v.change_rationale
                  FROM model_versions v WHERE v.id = ?1",
                 [version_id],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
@@ -1712,9 +1716,9 @@ pub fn provenance_preview(
                     .collect::<Result<Vec<_>>>()?,
             );
             let mut evaluation_stmt = conn.prepare(
-                "SELECT e.id, e.role, e.dataset_version_id, m.metric_value, m.units
+                "SELECT e.id, e.role, e.dataset_version_id, m.effect_estimate, m.unit
                  FROM model_evaluations e
-                 LEFT JOIN model_evaluation_metrics m ON m.evaluation_id = e.id
+                 LEFT JOIN analysis_metrics m ON m.id = e.analysis_metric_id
                  WHERE e.model_version_id = ?1 ORDER BY e.evaluated_at_us, e.id",
             )?;
             let rows = evaluation_stmt
