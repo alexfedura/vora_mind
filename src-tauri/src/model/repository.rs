@@ -2644,6 +2644,28 @@ mod tests {
                 2
             );
 
+            let mut later_request = version_request("project-b", &model.id);
+            later_request.change_class = ModelChangeClass::Extension;
+            later_request.change_rationale =
+                "Add a capability after the recorded evaluation.".to_string();
+            later_request.parents = vec![ModelParentReq {
+                version_id: successor.id.clone(),
+                rationale: "Preserve the evaluated predecessor.".to_string(),
+            }];
+            later_request.impacts = vec![ModelImpactReq {
+                target: ModelImpactTarget::Assumption {
+                    assumption_key: "scope".to_string(),
+                },
+                impact_kind: ModelImpactKind::Changed,
+                previous_statement: Some("Applies only to the declared population.".to_string()),
+                current_statement: Some(
+                    "Applies to the declared population and its extension.".to_string(),
+                ),
+                rationale: "Record the declared scope extension.".to_string(),
+            }];
+            create_model_version(&mut conn, &later_request)
+                .expect("create a later immutable version");
+
             let legacy_hypothesis_id = "legacy-hypothesis";
             conn.execute(
                 "INSERT INTO research_hypotheses
@@ -2678,7 +2700,7 @@ mod tests {
             let state = workspace(&conn, "project-b").expect("load model workspace after restart");
             assert_eq!(state.models.len(), 1);
             assert!(state.models.iter().any(|model| model.id == model_id));
-            assert_eq!(state.versions.len(), 2);
+            assert_eq!(state.versions.len(), 3);
             assert!(state
                 .versions
                 .iter()
@@ -2692,6 +2714,10 @@ mod tests {
                 .iter()
                 .any(|evidence| evidence.id == evidence_id));
             assert_eq!(state.evaluations.len(), 1);
+            assert_eq!(
+                state.evaluations[0].model_version_id,
+                successor_version_id
+            );
             assert_eq!(state.validations.len(), 1);
             assert_eq!(state.replications.len(), 2);
             assert!(state
@@ -2737,6 +2763,8 @@ mod tests {
         let mut request = version_request("project", &model.id);
         request.change_class = ModelChangeClass::Extension;
         assert!(create_model_version(&mut conn, &request).is_err());
+        request.change_class = ModelChangeClass::Replacement;
+        assert!(create_model_version(&mut conn, &request).is_err());
         request.change_class = ModelChangeClass::Revision;
         request.impacts.clear();
         assert!(create_model_version(&mut conn, &request).is_err());
@@ -2750,5 +2778,27 @@ mod tests {
             rationale: "Invalid without previous value.".to_string(),
         }];
         assert!(create_model_version(&mut conn, &request).is_err());
+
+        request = version_request("project", &model.id);
+        let version = create_model_version(&mut conn, &request).expect("create baseline");
+        let mut validation_request = CreateModelValidationReq {
+            project_id: "project".to_string(),
+            target: ModelValidationTarget::ModelVersion(version.id),
+            criteria: vec![],
+            scope: "scope".to_string(),
+            population_scope: "population".to_string(),
+            evaluation_method: "method".to_string(),
+            evaluator_identity: "reviewer".to_string(),
+            independence_state: "unknown".to_string(),
+            independence_rationale: String::new(),
+            conflict_of_interest: "None declared.".to_string(),
+            created_by: None,
+        };
+        assert!(create_validation(&mut conn, &validation_request).is_err());
+        validation_request.criteria = vec![serde_json::json!({"criterion": "threshold"})];
+        validation_request.conflict_of_interest.clear();
+        assert!(create_validation(&mut conn, &validation_request).is_err());
+        validation_request.conflict_of_interest = "None declared.".to_string();
+        assert!(create_validation(&mut conn, &validation_request).is_err());
     }
 }
