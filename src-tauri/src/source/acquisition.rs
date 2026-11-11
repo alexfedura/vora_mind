@@ -894,6 +894,14 @@ pub fn list_framework_versions(
     repository::list_framework_versions(conn, framework_id).map_err(|error| error.to_string())
 }
 
+pub fn list_framework_reviews(
+    conn: &Connection,
+    framework_version_id: &str,
+) -> Result<Vec<FrameworkReviewDto>, String> {
+    repository::list_framework_reviews(conn, framework_version_id)
+        .map_err(|error| error.to_string())
+}
+
 pub fn create_framework_version(
     conn: &Connection,
     req: CreateFrameworkVersionReq,
@@ -984,10 +992,10 @@ pub fn publish_framework_version(
 
 pub fn list_provenance(
     conn: &Connection,
-    target_kind: &str,
+    target_kind: AcquisitionProvenanceTargetKind,
     target_id: &str,
 ) -> Result<Vec<ProvenanceEventDto>, String> {
-    repository::list_provenance(conn, target_kind, target_id).map_err(|error| error.to_string())
+    repository::list_provenance(conn, &target_kind, target_id).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
