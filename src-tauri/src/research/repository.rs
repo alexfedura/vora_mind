@@ -42,7 +42,11 @@ pub fn initialize_schema(conn: &Connection) -> Result<()> {
             tx.execute(
                 "INSERT INTO research_schema_migrations (version, migration_id, checksum, applied_at_us)
                  VALUES (?1, 'research-domain-v1', ?2, ?3)",
-                params![RESEARCH_SCHEMA_VERSION, checksum, now_ts_us()?],
+                params![
+                    RESEARCH_SCHEMA_VERSION,
+                    checksum,
+                    now_ts_us().map_err(|_| rusqlite::Error::InvalidQuery)?
+                ],
             )?;
         }
     }
@@ -763,18 +767,20 @@ fn query_gap(conn: &Connection, id: &str) -> Result<ResearchGapDto> {
             "SELECT literature_review_id FROM research_gap_literature_reviews
              WHERE gap_id = ?1 ORDER BY literature_review_id",
         )?;
-        statement
+        let rows = statement
             .query_map([id], |row| row.get(0))?
-            .collect::<Result<Vec<_>>>()?
+            .collect::<Result<Vec<_>>>()?;
+        rows
     };
     gap.prior_assessment_ids = {
         let mut statement = conn.prepare(
             "SELECT assessment_id FROM research_gap_prior_assessments
              WHERE gap_id = ?1 ORDER BY assessment_id",
         )?;
-        statement
+        let rows = statement
             .query_map([id], |row| row.get(0))?
-            .collect::<Result<Vec<_>>>()?
+            .collect::<Result<Vec<_>>>()?;
+        rows
     };
     gap.has_reviewed_exception = conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM research_gap_review_exceptions
@@ -2378,7 +2384,7 @@ pub fn workspace(conn: &Connection) -> Result<ResearchWorkspaceDto> {
                     rationale, created_by, created_at_us
              FROM research_question_lineage ORDER BY created_at_us, id",
         )?;
-        statement
+        let rows = statement
             .query_map([], |row| {
                 let relation = row.get::<_, String>(3)?;
                 Ok(ResearchQuestionLineageDto {
@@ -2395,7 +2401,8 @@ pub fn workspace(conn: &Connection) -> Result<ResearchWorkspaceDto> {
                     created_at_us: row.get(6)?,
                 })
             })?
-            .collect::<Result<Vec<_>>>()?
+            .collect::<Result<Vec<_>>>()?;
+        rows
     };
     let phenomenon_ids = query_ids(
         conn,
