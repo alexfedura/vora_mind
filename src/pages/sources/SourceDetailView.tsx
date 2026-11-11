@@ -1,6 +1,7 @@
 import React from "react";
 import { SourceBundle } from "@/source/services/sourceService";
 import { SegmentTreeItem } from "./SegmentTreeItem";
+import { AcquisitionWorkspace } from "./AcquisitionWorkspace";
 import { formatDuration, getSourceIcon } from "./sourceUtils";
 import {
   FolderOpen,
@@ -181,18 +182,17 @@ export const SourceDetailView: React.FC<SourceDetailViewProps> = ({
         )}
       </div>
 
-      {/* Segment detail placeholder for SRC-6 */}
       {selectedSegmentId && (
         <div className="p-4 rounded-xl bg-[#141720] border border-amber-500/20 text-xs text-gray-400 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-amber-400 font-semibold">Selected Segment:</span>
+            <span className="text-amber-400 font-semibold">Selected legacy segment:</span>
             <span className="font-mono text-gray-200">{selectedSegmentId}</span>
           </div>
-          <span className="text-[11px] text-gray-500">
-            Extracts management view incoming in SRC-6
-          </span>
+          <span className="text-[11px] text-gray-500">Legacy extraction history is preserved separately.</span>
         </div>
       )}
+
+      <AcquisitionWorkspace source={currentSource} segments={bundle.segment_tree} />
     </div>
   );
 };
