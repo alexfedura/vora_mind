@@ -246,11 +246,13 @@ export function LearningWorkspacePanel(): React.JSX.Element {
       createdBy: null,
     });
 
-  const createMasteryRule = (form: FormData): Promise<unknown> =>
-    learningService.createMasteryRule({
-      masteryRuleId: String(form.get("masteryRuleId") ?? "") || null,
+  const createMasteryRule = (form: FormData): Promise<unknown> => {
+    const masteryRuleId = String(form.get("masteryRuleId") ?? "") || null;
+    const existingRule = workspace?.masteryRules.find((rule) => rule.id === masteryRuleId);
+    return learningService.createMasteryRule({
+      masteryRuleId,
       competencyId: String(form.get("competencyId") ?? ""),
-      title: String(form.get("title") ?? ""),
+      title: existingRule?.title ?? String(form.get("title") ?? ""),
       minimumAverageScore: Number(form.get("minimumAverageScore")) / 100,
       minimumEvaluatedAttempts: Number(form.get("minimumAttempts")),
       allRequiredCriteria: true,
@@ -258,6 +260,7 @@ export function LearningWorkspacePanel(): React.JSX.Element {
       requiredReproductionOutcome: "pass",
       createdBy: null,
     });
+  };
 
   const evaluateCompetency = (form: FormData): Promise<unknown> =>
     learningService.evaluateCompetency({
@@ -581,7 +584,7 @@ export function LearningWorkspacePanel(): React.JSX.Element {
                         ))}
                       </select>
                     </Field>
-                    <Field label="Mastery rule title"><input className={fieldClass} name="title" required /></Field>
+                    <Field label="Rule title (for a new identity)"><input className={fieldClass} name="title" required /></Field>
                     <div className="grid grid-cols-2 gap-2">
                       <Field label="Minimum average (%)"><input className={fieldClass} type="number" min="0" max="100" name="minimumAverageScore" defaultValue="70" required /></Field>
                       <Field label="Evaluated attempts"><input className={fieldClass} type="number" min="1" step="1" name="minimumAttempts" defaultValue="1" required /></Field>
