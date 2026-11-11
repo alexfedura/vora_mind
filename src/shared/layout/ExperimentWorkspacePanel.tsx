@@ -271,8 +271,12 @@ function parseSpecification(form: FormData): ExperimentDesignSpecificationDto {
   const targetHypothesis = String(form.get("targetHypothesisVersionId") ?? "");
   const targetModel = String(form.get("targetModelVersionId") ?? "");
   const datasetVersionId = String(form.get("datasetVersionId") ?? "");
-  const datasetRole = String(form.get("datasetRole") ?? "training");
-  if (datasetVersionId && !isDatasetRole(datasetRole)) throw new Error("Select a supported dataset role.");
+  const datasetRoleValue = String(form.get("datasetRole") ?? "training");
+  let datasetRole: DatasetRole = "training";
+  if (datasetVersionId) {
+    if (!isDatasetRole(datasetRoleValue)) throw new Error("Select a supported dataset role.");
+    datasetRole = datasetRoleValue;
+  }
   const plannedSampleSizeRaw = String(form.get("plannedSampleSize") ?? "");
   const plannedSampleSize = plannedSampleSizeRaw ? Number(plannedSampleSizeRaw) : null;
   if (plannedSampleSize !== null && (!Number.isSafeInteger(plannedSampleSize) || plannedSampleSize <= 0)) {
