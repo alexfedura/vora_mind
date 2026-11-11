@@ -150,7 +150,7 @@ fn query_design_version(conn: &Connection, version_id: &str) -> Result<Experimen
             let preregistration_id: Option<String> = row.get(14)?;
             let preregistration = preregistration_id
                 .map(|id| {
-                    Ok(ExperimentPreregistrationDto {
+                    Ok::<ExperimentPreregistrationDto, rusqlite::Error>(ExperimentPreregistrationDto {
                         id,
                         design_version_id: row.get(0)?,
                         specification_sha256: row.get(15)?,
@@ -675,9 +675,10 @@ fn query_dataset(conn: &Connection, dataset_id: &str) -> Result<ExperimentDatase
             "SELECT id FROM experiment_dataset_versions
              WHERE dataset_id = ?1 ORDER BY version_no",
         )?;
-        statement
+        let rows = statement
             .query_map([dataset_id], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     dataset.versions = version_ids
         .iter()
@@ -1518,7 +1519,7 @@ pub fn add_run_log(
         [&req.run_id],
         |row| row.get(0),
     )?;
-    if ExperimentRunStatus::parse(&status)?.is_terminal() {
+    if ExperimentRunStatus::parse(&status).map_err(invalid)?.is_terminal() {
         return Err(invalid(
             "Run logs cannot be appended after a run is terminal.",
         ));
@@ -1765,9 +1766,10 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<ExperimentWorksp
              JOIN research_experiment_designs d ON d.id = v.design_id
              WHERE d.project_id = ?1 ORDER BY d.created_at_us, v.version_no",
         )?;
-        statement
+        let rows = statement
             .query_map([project_id], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     let design_versions = design_ids
         .iter()
@@ -1777,9 +1779,10 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<ExperimentWorksp
         let mut statement = conn.prepare(
             "SELECT id FROM experiment_runs WHERE project_id = ?1 ORDER BY created_at_us, id",
         )?;
-        statement
+        let rows = statement
             .query_map([project_id], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     let runs = run_ids
         .iter()
@@ -1789,9 +1792,10 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<ExperimentWorksp
         let mut statement = conn.prepare(
             "SELECT id FROM experiment_datasets WHERE project_id = ?1 ORDER BY created_at_us, id",
         )?;
-        statement
+        let rows = statement
             .query_map([project_id], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     let datasets = dataset_ids
         .iter()
@@ -1804,9 +1808,10 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<ExperimentWorksp
              JOIN experiment_datasets d ON d.id = v.dataset_id
              WHERE d.project_id = ?1 ORDER BY g.created_at_us, g.id",
         )?;
-        statement
+        let rows = statement
             .query_map([project_id], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     let split_groups = split_group_ids
         .iter()
