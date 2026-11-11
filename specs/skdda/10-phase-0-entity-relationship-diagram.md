@@ -83,7 +83,6 @@ erDiagram
     SCIENTIFIC_ENTITY ||--o{ SCIENTIFIC_RELATION : object
     SCIENTIFIC_VERSION ||--o{ SCIENTIFIC_RELATION : "optional exact endpoint pin"
     SCIENTIFIC_ENTITY ||--o{ PROVENANCE_EVENT : target
-    WORKSPACE_ASSET ||--o{ SCIENTIFIC_ENTITY : "referenced by owner subtype"
 ```
 
 ## 2. Important typed references
