@@ -1993,29 +1993,53 @@ pub fn add_hypothesis_evidence(
         }
     }
     let polarity = req.polarity.as_str();
+    let tx = conn.unchecked_transaction()?;
     if let Some(claim_id) = req.source_claim_id.as_deref() {
-        conn.execute(
+        tx.execute(
             "INSERT INTO hypothesis_source_claim_evidence
                 (id, hypothesis_version_id, source_claim_id, polarity, rationale, created_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![id, req.hypothesis_version_id, claim_id, polarity, req.rationale, req.created_by, now],
         )?;
     } else if let Some(observation_id) = req.observation_id.as_deref() {
-        conn.execute(
+        tx.execute(
             "INSERT INTO hypothesis_observation_evidence
                 (id, hypothesis_version_id, observation_id, polarity, rationale, created_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![id, req.hypothesis_version_id, observation_id, polarity, req.rationale, req.created_by, now],
         )?;
     } else if let Some(pattern_id) = req.pattern_id.as_deref() {
-        conn.execute(
+        tx.execute(
             "INSERT INTO hypothesis_pattern_evidence
                 (id, hypothesis_version_id, pattern_id, polarity, rationale, created_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![id, req.hypothesis_version_id, pattern_id, polarity, req.rationale, req.created_by, now],
         )?;
     }
-    Ok(())
+    let hypothesis_id: String = tx.query_row(
+        "SELECT hypothesis_id FROM hypothesis_definition_versions WHERE id = ?1",
+        [&req.hypothesis_version_id],
+        |row| row.get(0),
+    )?;
+    insert_event(
+        &tx,
+        "hypothesis_version",
+        &req.hypothesis_version_id,
+        &format!("evidence_{polarity}"),
+        req.created_by.as_deref(),
+        &req.rationale,
+        now,
+    )?;
+    insert_event(
+        &tx,
+        "hypothesis",
+        &hypothesis_id,
+        "evidence_added",
+        req.created_by.as_deref(),
+        &req.rationale,
+        now,
+    )?;
+    tx.commit()
 }
 
 pub fn create_research_design(
