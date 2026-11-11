@@ -80,7 +80,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     [sourceVersions, selectedSourceKey],
   );
   const projectQuestions = (workspace?.questions ?? []).filter(
-    (question) => question.projectId === projectId,
+    (question) => question.projectId === questionProjectId,
   );
   const projectPhenomena = (workspace?.phenomena ?? []).filter(
     (phenomenon) => phenomenon.projectId === projectId,
@@ -543,10 +543,10 @@ export const ResearchWorkspacePage: React.FC = () => {
                 <select className={inputClass} name="evidenceId">
                   <option value="">Create without evidence (cannot accept yet)</option>
                   <optgroup label="Prior-knowledge assessments">
-                    {projectAssessments.filter((item) => item.lifecycleStatus === "reviewed").map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                    {projectAssessments.filter((item) => item.lifecycleStatus === "reviewed").map((item) => <option key={item.id} value={item.id}>{item.title} · {isoDate(item.createdAtUs)}</option>)}
                   </optgroup>
                   <optgroup label="Literature reviews">
-                    {projectReviews.filter((item) => item.lifecycleStatus === "reviewed").map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                    {projectReviews.filter((item) => item.lifecycleStatus === "reviewed").map((item) => <option key={item.id} value={item.id}>{item.title} · {isoDate(item.createdAtUs)}</option>)}
                   </optgroup>
                 </select>
               </Field>
@@ -568,8 +568,8 @@ export const ResearchWorkspacePage: React.FC = () => {
                     </select>
                     <select className="min-w-[200px] flex-1 rounded border border-[#343741] bg-[#17191f] px-2 py-1 text-xs text-white" name="evidenceId">
                       <option value="">Add reviewed evidence…</option>
-                      {projectAssessments.filter((item) => item.lifecycleStatus === "reviewed").map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-                      {projectReviews.filter((item) => item.lifecycleStatus === "reviewed").map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                      {projectAssessments.filter((item) => item.lifecycleStatus === "reviewed").map((item) => <option key={item.id} value={item.id}>{item.title} · {isoDate(item.createdAtUs)}</option>)}
+                      {projectReviews.filter((item) => item.lifecycleStatus === "reviewed").map((item) => <option key={item.id} value={item.id}>{item.title} · {isoDate(item.createdAtUs)}</option>)}
                     </select>
                     <button className="rounded border border-[#343741] px-2 py-1 text-xs text-gray-300">Attach evidence</button>
                   </form>
@@ -753,7 +753,7 @@ export const ResearchWorkspacePage: React.FC = () => {
                       {definition && (
                         <>
                           <p className="mt-1 text-xs text-gray-400">H0: {definition.statementH0}</p>
-                          <p className="mt-1 text-[11px] text-gray-500">Question {hypothesis.researchQuestionId} · definition v{definition.versionNo} · {definition.lifecycleStatus} · {definition.variables.length} operational variable(s)</p>
+                          <p className="mt-1 text-[11px] text-gray-500">Question {hypothesis.researchQuestionId} · created {isoDate(hypothesis.createdAtUs)} · definition v{definition.versionNo} · {definition.lifecycleStatus} · {definition.variables.length} operational variable(s)</p>
                           <p className="mt-1 text-[11px] text-gray-500">Falsification: {definition.falsificationCriteria}</p>
                           {hypothesis.evidence.map((evidence, index) => (
                             <p key={`${evidence.targetId}-${index}`} className="mt-1 text-[11px] text-gray-400">
