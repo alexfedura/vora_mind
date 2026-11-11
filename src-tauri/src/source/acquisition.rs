@@ -1220,7 +1220,11 @@ mod tests {
         .unwrap();
         assert_eq!(claim.source_version_id, source_version.id);
         assert_eq!(claim.extraction_id, replacement.id);
-        assert!(list_provenance(&conn, "source_claim", &claim.id)
+        assert!(list_provenance(
+            &conn,
+            AcquisitionProvenanceTargetKind::SourceClaim,
+            &claim.id
+        )
             .unwrap()
             .iter()
             .any(|event| event.event_kind == "source_claim_created"));
@@ -1501,7 +1505,11 @@ mod tests {
             assert_eq!(list_source_versions(&conn, &source_id).unwrap().len(), 1);
             assert_eq!(list_extractions(&conn, &version_id).unwrap()[0].id, extraction_id);
             assert_eq!(list_source_claims(&conn, &source_id).unwrap()[0].id, claim_id);
-            assert!(!list_provenance(&conn, "source_claim", &claim_id)
+            assert!(!list_provenance(
+                &conn,
+                AcquisitionProvenanceTargetKind::SourceClaim,
+                &claim_id
+            )
                 .unwrap()
                 .is_empty());
         }
