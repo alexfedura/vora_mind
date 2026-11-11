@@ -1064,3 +1064,300 @@ fn query_phenomenon(conn: &Connection, id: &str) -> Result<PhenomenonDto> {
     )
 }
 
+pub fn create_observation_plan(
+    conn: &mut Connection,
+    req: &CreateObservationPlanReq,
+    plan_id: &str,
+    version_id: &str,
+    now: i64,
+) -> Result<ObservationPlanDto> {
+    let tx = conn.transaction()?;
+    let phenomenon_matches: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM research_phenomena
+         WHERE id = ?1 AND project_id = ?2)",
+        params![req.phenomenon_id, req.project_id],
+        |row| row.get(0),
+    )?;
+    if !phenomenon_matches {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    tx.execute(
+        "INSERT INTO observation_plans
+            (id, project_id, phenomenon_id, title, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            plan_id,
+            req.project_id,
+            req.phenomenon_id,
+            req.title.trim(),
+            req.created_by,
+            now
+        ],
+    )?;
+    tx.execute(
+        "INSERT INTO observation_plan_versions
+            (id, plan_id, version_no, measurement_method, sample_frame,
+             conditions_template, inclusion_rules, lifecycle_status, created_by, created_at_us)
+         VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6, 'draft', ?7, ?8)",
+        params![
+            version_id,
+            plan_id,
+            req.measurement_method,
+            req.sample_frame,
+            req.conditions_template,
+            req.inclusion_rules,
+            req.created_by,
+            now
+        ],
+    )?;
+    insert_event(
+        &tx,
+        "observation_plan",
+        plan_id,
+        "draft_version_created",
+        req.created_by.as_deref(),
+        "",
+        now,
+    )?;
+    tx.commit()?;
+    query_observation_plan(conn, plan_id)
+}
+
+pub fn review_observation_plan(
+    conn: &Connection,
+    version_id: &str,
+    preregister: bool,
+    actor_id: Option<&str>,
+    now: i64,
+) -> Result<ObservationPlanVersionDto> {
+    let next_status = if preregister { "preregistered" } else { "reviewed" };
+    let tx = conn.unchecked_transaction()?;
+    let changed = tx.execute(
+        "UPDATE observation_plan_versions SET lifecycle_status = ?1,
+            preregistered_at_us = ?2
+         WHERE id = ?3 AND lifecycle_status = 'draft'",
+        params![next_status, if preregister { Some(now) } else { None }, version_id],
+    )?;
+    if changed != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let plan_id: String = tx.query_row(
+        "SELECT plan_id FROM observation_plan_versions WHERE id = ?1",
+        [version_id],
+        |row| row.get(0),
+    )?;
+    insert_event(
+        &tx,
+        "observation_plan",
+        &plan_id,
+        next_status,
+        actor_id,
+        "",
+        now,
+    )?;
+    tx.commit()?;
+    query_observation_plan_version(conn, version_id)
+}
+
+fn query_observation_plan(conn: &Connection, plan_id: &str) -> Result<ObservationPlanDto> {
+    let mut plan = conn.query_row(
+        "SELECT id, project_id, phenomenon_id, title, created_by, created_at_us
+         FROM observation_plans WHERE id = ?1",
+        [plan_id],
+        |row| {
+            Ok(ObservationPlanDto {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                phenomenon_id: row.get(2)?,
+                title: row.get(3)?,
+                created_by: row.get(4)?,
+                created_at_us: row.get(5)?,
+                versions: Vec::new(),
+            })
+        },
+    )?;
+    let mut statement = conn.prepare(
+        "SELECT id FROM observation_plan_versions WHERE plan_id = ?1 ORDER BY version_no",
+    )?;
+    let version_ids = statement
+        .query_map([plan_id], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>>>()?;
+    for version_id in version_ids {
+        plan.versions
+            .push(query_observation_plan_version(conn, &version_id)?);
+    }
+    Ok(plan)
+}
+
+fn query_observation_plan_version(
+    conn: &Connection,
+    version_id: &str,
+) -> Result<ObservationPlanVersionDto> {
+    conn.query_row(
+        "SELECT id, plan_id, version_no, measurement_method, sample_frame,
+                conditions_template, inclusion_rules, lifecycle_status, created_by,
+                created_at_us, preregistered_at_us
+         FROM observation_plan_versions WHERE id = ?1",
+        [version_id],
+        |row| {
+            Ok(ObservationPlanVersionDto {
+                id: row.get(0)?,
+                plan_id: row.get(1)?,
+                version_no: row.get(2)?,
+                measurement_method: row.get(3)?,
+                sample_frame: row.get(4)?,
+                conditions_template: row.get(5)?,
+                inclusion_rules: row.get(6)?,
+                lifecycle_status: row.get(7)?,
+                created_by: row.get(8)?,
+                created_at_us: row.get(9)?,
+                preregistered_at_us: row.get(10)?,
+            })
+        },
+    )
+}
+
+pub fn create_dataset_version_reference(
+    conn: &Connection,
+    req: &CreateDatasetVersionReferenceReq,
+    id: &str,
+    now: i64,
+) -> Result<DatasetVersionReferenceDto> {
+    conn.execute(
+        "INSERT INTO research_dataset_version_references
+            (id, project_id, title, version_label, external_uri, content_sha256,
+             source_version_id, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            id,
+            req.project_id,
+            req.title.trim(),
+            req.version_label.trim(),
+            req.external_uri,
+            req.content_sha256,
+            req.source_version_id,
+            req.created_by,
+            now
+        ],
+    )?;
+    query_dataset_version(conn, id)
+}
+
+fn query_dataset_version(conn: &Connection, id: &str) -> Result<DatasetVersionReferenceDto> {
+    conn.query_row(
+        "SELECT id, project_id, title, version_label, external_uri, content_sha256,
+                source_version_id, created_by, created_at_us
+         FROM research_dataset_version_references WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(DatasetVersionReferenceDto {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                title: row.get(2)?,
+                version_label: row.get(3)?,
+                external_uri: row.get(4)?,
+                content_sha256: row.get(5)?,
+                source_version_id: row.get(6)?,
+                created_by: row.get(7)?,
+                created_at_us: row.get(8)?,
+            })
+        },
+    )
+}
+
+pub fn create_observation(
+    conn: &Connection,
+    req: &CreateObservationReq,
+    id: &str,
+    now: i64,
+) -> Result<ObservationDto> {
+    let plan_matches: bool = conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM observation_plans p
+            JOIN research_phenomena f ON f.id = p.phenomenon_id
+            JOIN observation_plan_versions v ON v.plan_id = p.id AND v.id = ?3
+            WHERE p.id = ?1 AND p.project_id = ?2 AND f.id = ?4
+              AND f.project_id = ?2 AND v.lifecycle_status IN ('reviewed', 'preregistered')
+         )",
+        params![
+            req.plan_id,
+            req.project_id,
+            req.plan_version_id,
+            req.phenomenon_id
+        ],
+        |row| row.get(0),
+    )?;
+    if !plan_matches {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    if let Some(dataset_ref) = req.dataset_version_reference_id.as_deref() {
+        let matches_project: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM research_dataset_version_references
+             WHERE id = ?1 AND project_id = ?2)",
+            params![dataset_ref, req.project_id],
+            |row| row.get(0),
+        )?;
+        if !matches_project {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+    }
+    conn.execute(
+        "INSERT INTO research_observations
+            (id, project_id, phenomenon_id, plan_id, plan_version_id,
+             dataset_version_reference_id, measured_at_us, value_decimal, value_state,
+             unit, measurement_method, conditions, sample_identifier, quality_status,
+             created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'unreviewed', ?14, ?15)",
+        params![
+            id,
+            req.project_id,
+            req.phenomenon_id,
+            req.plan_id,
+            req.plan_version_id,
+            req.dataset_version_reference_id,
+            req.measured_at_us,
+            req.value_decimal,
+            req.value_state,
+            req.unit,
+            req.measurement_method,
+            req.conditions,
+            req.sample_identifier,
+            req.created_by,
+            now
+        ],
+    )?;
+    query_observation(conn, id)
+}
+
+fn query_observation(conn: &Connection, id: &str) -> Result<ObservationDto> {
+    conn.query_row(
+        "SELECT id, project_id, phenomenon_id, plan_id, plan_version_id,
+                dataset_version_reference_id, measured_at_us, value_decimal, value_state,
+                unit, measurement_method, conditions, sample_identifier, quality_status,
+                supersedes_observation_id, created_by, created_at_us
+         FROM research_observations WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(ObservationDto {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                phenomenon_id: row.get(2)?,
+                plan_id: row.get(3)?,
+                plan_version_id: row.get(4)?,
+                dataset_version_reference_id: row.get(5)?,
+                measured_at_us: row.get(6)?,
+                value_decimal: row.get(7)?,
+                value_state: row.get(8)?,
+                unit: row.get(9)?,
+                measurement_method: row.get(10)?,
+                conditions: row.get(11)?,
+                sample_identifier: row.get(12)?,
+                quality_status: row.get(13)?,
+                supersedes_observation_id: row.get(14)?,
+                created_by: row.get(15)?,
+                created_at_us: row.get(16)?,
+            })
+        },
+    )
+}
+
