@@ -2091,6 +2091,7 @@ pub fn query_run(conn: &Connection, run_id: &str) -> Result<AnalysisRunDto> {
         String,
         String,
         String,
+        String,
         Option<String>,
         i64,
         String,
