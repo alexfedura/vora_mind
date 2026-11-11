@@ -587,21 +587,21 @@ pub fn create_claim_relation(
         (
             KnowledgeItemKind::SourceClaim,
             ClaimRelationKind::Supports | ClaimRelationKind::Contradicts | ClaimRelationKind::Qualifies,
-        ) => ("source_claim_relations", "object_claim_id"),
+        ) => ("source_claim_relations", "subject_claim_id", "object_claim_id"),
         (KnowledgeItemKind::Concept, ClaimRelationKind::Defines | ClaimRelationKind::Supports | ClaimRelationKind::Contradicts | ClaimRelationKind::Qualifies) =>
-            ("source_claim_concept_relations", "concept_id"),
+            ("source_claim_concept_relations", "source_claim_id", "concept_id"),
         (KnowledgeItemKind::Principle, ClaimRelationKind::Supports | ClaimRelationKind::Contradicts | ClaimRelationKind::Qualifies) =>
-            ("source_claim_principle_relations", "principle_id"),
+            ("source_claim_principle_relations", "source_claim_id", "principle_id"),
         (KnowledgeItemKind::Procedure, ClaimRelationKind::Describes | ClaimRelationKind::Supports | ClaimRelationKind::Contradicts | ClaimRelationKind::Qualifies) =>
-            ("source_claim_procedure_relations", "procedure_id"),
+            ("source_claim_procedure_relations", "source_claim_id", "procedure_id"),
         _ => return Err(rusqlite::Error::InvalidQuery),
     };
     let tx = conn.unchecked_transaction()?;
     tx.execute(
         &format!(
-            "INSERT INTO {} (id, source_claim_id, {}, relation_kind, rationale, created_by, created_at_us)
+            "INSERT INTO {} (id, {}, {}, relation_kind, rationale, created_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            table_and_column.0, table_and_column.1
+            table_and_column.0, table_and_column.1, table_and_column.2
         ),
         params![
             id,
@@ -869,15 +869,48 @@ pub fn create_framework_version(
             now
         ],
     )?;
-    tx.execute(
-        "INSERT INTO framework_version_items
-            (id, framework_version_id, item_kind, source_claim_id, concept_id, principle_id,
-             procedure_id, membership_role, item_order, rationale, created_at_us)
-         SELECT lower(hex(randomblob(16))), ?1, item_kind, source_claim_id, concept_id,
-                principle_id, procedure_id, membership_role, item_order, rationale, ?2
-         FROM framework_version_items WHERE framework_version_id = ?3",
-        params![version_id, now, parent.0],
-    )?;
+    let parent_items = {
+        let mut statement = tx.prepare(
+            "SELECT item_kind, source_claim_id, concept_id, principle_id, procedure_id,
+                    membership_role, item_order, rationale
+             FROM framework_version_items WHERE framework_version_id = ?1 ORDER BY item_order",
+        )?;
+        statement
+            .query_map([&parent.0], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, i64>(6)?,
+                    row.get::<_, String>(7)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    for (kind, claim, concept, principle, procedure, role, order, rationale) in parent_items {
+        tx.execute(
+            "INSERT INTO framework_version_items
+                (id, framework_version_id, item_kind, source_claim_id, concept_id,
+                 principle_id, procedure_id, membership_role, item_order, rationale, created_at_us)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                Uuid::now_v7().to_string(),
+                version_id,
+                kind,
+                claim,
+                concept,
+                principle,
+                procedure,
+                role,
+                order,
+                rationale,
+                now
+            ],
+        )?;
+    }
     for (claim_id, link_kind) in req
         .affected_claim_ids
         .iter()
