@@ -376,12 +376,13 @@ CREATE TABLE model_replication_model_evidence (
     PRIMARY KEY (replication_id, evidence_id)
 );
 
-CREATE TRIGGER model_version_dataset_uses_require_sealed
-BEFORE INSERT ON model_version_dataset_uses
-WHEN (SELECT lifecycle_status FROM experiment_dataset_versions
+CREATE TRIGGER model_contribution_dataset_require_sealed
+BEFORE INSERT ON model_contributions
+WHEN NEW.relation_kind = 'dataset_use'
+ AND (SELECT lifecycle_status FROM experiment_dataset_versions
       WHERE id = NEW.dataset_version_id) <> 'sealed'
 BEGIN
-    SELECT RAISE(ABORT, 'model dataset uses require a sealed dataset version');
+    SELECT RAISE(ABORT, 'model dataset contributions require a sealed dataset version');
 END;
 CREATE TRIGGER model_evaluation_exact_pins
 BEFORE INSERT ON model_evaluations
@@ -410,15 +411,15 @@ WHEN NOT EXISTS (
 BEGIN
     SELECT RAISE(ABORT, 'model evaluation must pin a completed run, exact input, dataset, role, split, and metric');
 END;
-CREATE TRIGGER model_experiment_run_design_match
-BEFORE INSERT ON model_version_experiments
+CREATE TRIGGER model_contribution_experiment_run_design_match
+BEFORE INSERT ON model_contributions
 WHEN NEW.experiment_run_id IS NOT NULL
  AND NOT EXISTS (
      SELECT 1 FROM experiment_runs
      WHERE id = NEW.experiment_run_id AND design_version_id = NEW.design_version_id
  )
 BEGIN
-    SELECT RAISE(ABORT, 'model experiment relation must pin the run design version');
+    SELECT RAISE(ABORT, 'model experiment contribution must pin the run design version');
 END;
 CREATE TRIGGER model_replication_original_pin
 BEFORE INSERT ON model_replications
@@ -438,19 +439,9 @@ WHEN (SELECT lifecycle_status FROM experiment_dataset_versions
 BEGIN
     SELECT RAISE(ABORT, 'replication dataset pins require sealed versions');
 END;
-CREATE TRIGGER model_replication_evidence_version_match
-BEFORE INSERT ON model_replication_model_evidence
-WHEN NOT EXISTS (
-    SELECT 1 FROM model_replications r
-    JOIN model_evidence e ON e.id = NEW.evidence_id
-    WHERE r.id = NEW.replication_id AND r.model_version_id = e.model_version_id
-)
-BEGIN
-    SELECT RAISE(ABORT, 'replication evidence must target the replicated model version');
-END;
-CREATE TRIGGER model_version_evidence_identity_match
-BEFORE INSERT ON model_version_evidence
-WHEN NOT EXISTS (
+CREATE TRIGGER model_contribution_evidence_identity_match
+BEFORE INSERT ON model_contributions
+WHEN NEW.evidence_id IS NOT NULL AND NOT EXISTS (
     SELECT 1
     FROM model_versions target
     JOIN model_evidence e ON e.id = NEW.evidence_id
@@ -460,6 +451,16 @@ WHEN NOT EXISTS (
 )
 BEGIN
     SELECT RAISE(ABORT, 'model evidence contributions must remain within one model identity');
+END;
+CREATE TRIGGER model_replication_evidence_version_match
+BEFORE INSERT ON model_replication_model_evidence
+WHEN NOT EXISTS (
+    SELECT 1 FROM model_replications r
+    JOIN model_evidence e ON e.id = NEW.evidence_id
+    WHERE r.id = NEW.replication_id AND r.model_version_id = e.model_version_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'replication evidence must target the replicated model version');
 END;
 
 CREATE TRIGGER model_identity_no_update
@@ -562,45 +563,15 @@ BEFORE DELETE ON model_version_impacts
 BEGIN
     SELECT RAISE(ABORT, 'model version impact records cannot be deleted');
 END;
-CREATE TRIGGER model_version_hypotheses_no_update
-BEFORE UPDATE ON model_version_hypotheses
+CREATE TRIGGER model_contributions_no_update
+BEFORE UPDATE ON model_contributions
 BEGIN
-    SELECT RAISE(ABORT, 'model hypothesis relations are immutable');
+    SELECT RAISE(ABORT, 'model contributions are immutable');
 END;
-CREATE TRIGGER model_version_hypotheses_no_delete
-BEFORE DELETE ON model_version_hypotheses
+CREATE TRIGGER model_contributions_no_delete
+BEFORE DELETE ON model_contributions
 BEGIN
-    SELECT RAISE(ABORT, 'model hypothesis relations cannot be deleted');
-END;
-CREATE TRIGGER model_version_findings_no_update
-BEFORE UPDATE ON model_version_findings
-BEGIN
-    SELECT RAISE(ABORT, 'model finding relations are immutable');
-END;
-CREATE TRIGGER model_version_findings_no_delete
-BEFORE DELETE ON model_version_findings
-BEGIN
-    SELECT RAISE(ABORT, 'model finding relations cannot be deleted');
-END;
-CREATE TRIGGER model_version_experiments_no_update
-BEFORE UPDATE ON model_version_experiments
-BEGIN
-    SELECT RAISE(ABORT, 'model experiment relations are immutable');
-END;
-CREATE TRIGGER model_version_experiments_no_delete
-BEFORE DELETE ON model_version_experiments
-BEGIN
-    SELECT RAISE(ABORT, 'model experiment relations cannot be deleted');
-END;
-CREATE TRIGGER model_version_dataset_uses_no_update
-BEFORE UPDATE ON model_version_dataset_uses
-BEGIN
-    SELECT RAISE(ABORT, 'model dataset uses are immutable');
-END;
-CREATE TRIGGER model_version_dataset_uses_no_delete
-BEFORE DELETE ON model_version_dataset_uses
-BEGIN
-    SELECT RAISE(ABORT, 'model dataset uses cannot be deleted');
+    SELECT RAISE(ABORT, 'model contributions cannot be deleted');
 END;
 CREATE TRIGGER model_evidence_no_update
 BEFORE UPDATE ON model_evidence
@@ -611,16 +582,6 @@ CREATE TRIGGER model_evidence_no_delete
 BEFORE DELETE ON model_evidence
 BEGIN
     SELECT RAISE(ABORT, 'model evidence cannot be deleted');
-END;
-CREATE TRIGGER model_version_evidence_no_update
-BEFORE UPDATE ON model_version_evidence
-BEGIN
-    SELECT RAISE(ABORT, 'model evidence links are immutable');
-END;
-CREATE TRIGGER model_version_evidence_no_delete
-BEFORE DELETE ON model_version_evidence
-BEGIN
-    SELECT RAISE(ABORT, 'model evidence links cannot be deleted');
 END;
 CREATE TRIGGER model_validation_analysis_evidence_no_update
 BEFORE UPDATE ON model_validation_analysis_evidence

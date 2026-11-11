@@ -444,15 +444,15 @@ pub fn create_model_version(
             ));
         }
         tx.execute(
-            "INSERT INTO model_version_hypotheses
-                (id, model_version_id, hypothesis_version_id, relation_kind, rationale,
+            "INSERT INTO model_contributions
+                (id, model_version_id, relation_kind, hypothesis_version_id, rationale,
                  created_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 id(),
                 model_version_id,
-                relation.target_id,
                 relation.relation_kind.as_str(),
+                relation.target_id,
                 relation.rationale.trim(),
                 request.created_by,
                 created_at
@@ -464,15 +464,15 @@ pub fn create_model_version(
             return Err(anyhow!("A finding cannot use the tested_in relation."));
         }
         tx.execute(
-            "INSERT INTO model_version_findings
-                (id, model_version_id, finding_version_id, relation_kind, rationale,
+            "INSERT INTO model_contributions
+                (id, model_version_id, relation_kind, finding_version_id, rationale,
                  created_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 id(),
                 model_version_id,
-                relation.target_id,
                 relation.relation_kind.as_str(),
+                relation.target_id,
                 relation.rationale.trim(),
                 request.created_by,
                 created_at
@@ -508,7 +508,7 @@ pub fn create_model_version(
             }
         }
         tx.execute(
-            "INSERT INTO model_version_experiments
+            "INSERT INTO model_contributions
                 (id, model_version_id, design_version_id, experiment_run_id, relation_kind,
                  rationale, created_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -539,10 +539,11 @@ pub fn create_model_version(
             ));
         }
         tx.execute(
-            "INSERT INTO model_version_dataset_uses
-                (id, model_version_id, dataset_version_id, role, split_group_id, rationale,
+            "INSERT INTO model_contributions
+                (id, model_version_id, relation_kind, dataset_version_id, dataset_role,
+                 split_group_id, rationale,
                  created_by, created_at_us)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             VALUES (?1, ?2, 'dataset_use', ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 id(),
                 model_version_id,
@@ -565,9 +566,10 @@ pub fn create_model_version(
             return Err(anyhow!("Model evidence reference was not found."));
         }
         tx.execute(
-            "INSERT INTO model_version_evidence
-                (id, model_version_id, evidence_id, rationale, created_by, created_at_us)
-             VALUES (?1, ?2, ?3, 'Referenced during immutable model-version creation.', ?4, ?5)",
+            "INSERT INTO model_contributions
+                (id, model_version_id, relation_kind, evidence_id, rationale, created_by, created_at_us)
+             VALUES (?1, ?2, 'evidenced_by', ?3,
+                 'Referenced during immutable model-version creation.', ?4, ?5)",
             params![id(), model_version_id, evidence_id, request.created_by, created_at],
         )?;
     }
