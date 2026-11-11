@@ -71,6 +71,8 @@ transfer. Stop before Knowledge Transfer.
   independent reproduction evaluations declared for that competency. No
   research finding, framework scientific validation, content view, time spent,
   checklist, activity completion, or UI percentage can satisfy a rule.
+- Inconclusive assessment evaluations remain in the history but do not count
+  toward the mastery score, attempt minimum, or criterion thresholds.
 - Re-evaluation creates a new CompetencyRecord. Historical outcomes and inputs
   remain immutable.
 - `LearnerProgress` is a typed query projection computed from attempts,

@@ -962,6 +962,7 @@ pub fn evaluate_competency(
          FROM attempt_evaluations e
          JOIN assessment_attempts a ON a.id = e.attempt_id
          WHERE a.learning_project_id = ?1 AND a.learner_id = ?2
+           AND e.outcome <> 'inconclusive'
            AND a.framework_version_id = ?3 AND a.status = 'submitted'
            AND EXISTS (
                SELECT 1 FROM assessment_version_objectives avo
@@ -1006,6 +1007,7 @@ pub fn evaluate_competency(
                   ON rc.id = s.rubric_criterion_id
                  AND rc.objective_version_id = ?4
                 WHERE a.learning_project_id = ?1 AND a.learner_id = ?2
+                  AND e.outcome <> 'inconclusive'
                   AND a.framework_version_id = ?3 AND a.status = 'submitted'
                   AND s.score / rc.max_points >= ?5
                   AND NOT EXISTS (
@@ -2488,6 +2490,23 @@ mod tests {
         .expect("append evaluation correction");
         assert_eq!(corrected.revision_no, 2);
         assert_eq!(corrected.correction_of_id.as_deref(), Some(first.id.as_str()));
+        let inconclusive = evaluate_attempt(
+            &mut conn,
+            &EvaluateAssessmentAttemptReq {
+                attempt_id: attempt.id.clone(),
+                correction_of_id: Some(corrected.id.clone()),
+                evaluator_id: "reviewer".to_string(),
+                outcome: AssessmentOutcome::Inconclusive,
+                criterion_scores: vec![EvaluationCriterionScoreDto {
+                    rubric_criterion_id: assessment.rubric_criteria[0].id.clone(),
+                    score: 1.0,
+                }],
+                rationale: "Evidence does not support a determinate assessment.".to_string(),
+                feedback: "An inconclusive result is retained but does not award mastery.".to_string(),
+            },
+        )
+        .expect("record inconclusive evaluation correction");
+        assert_eq!(inconclusive.revision_no, 3);
 
         let competency = create_competency(
             &mut conn,
@@ -2531,7 +2550,7 @@ mod tests {
         )
         .expect("evaluate explicit mastery rule");
         assert_eq!(mastery_record.outcome, MasteryOutcome::NotMastered);
-        assert_eq!(mastery_record.attempt_evaluation_ids, vec![corrected.id.clone()]);
+        assert!(mastery_record.attempt_evaluation_ids.is_empty());
         assert_eq!(
             mastery_record.reproduction_evaluation_ids,
             vec![reproduction_evaluation.id]
@@ -2556,9 +2575,10 @@ mod tests {
         let stored = query_attempt(&conn, &attempt.id).expect("read attempt history");
         assert_eq!(stored.status, "submitted");
         assert_eq!(stored.framework_version_id, "framework-a-v1");
-        assert_eq!(stored.evaluations.len(), 2);
+        assert_eq!(stored.evaluations.len(), 3);
         assert_eq!(stored.evaluations[0].id, first.id);
         assert_eq!(stored.evaluations[1].id, corrected.id);
+        assert_eq!(stored.evaluations[2].id, inconclusive.id);
     }
 }
 
