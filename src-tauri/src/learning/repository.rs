@@ -955,7 +955,7 @@ pub fn evaluate_competency(
     if rule.0 != request.competency_id {
         return Err(anyhow!("Mastery rule version targets a different competency."));
     }
-    let criteria = query_competency(conn, &request.competency_id)?.criteria;
+    let criteria = query_competency(&tx, &request.competency_id)?.criteria;
     let mut statement = tx.prepare(
         "SELECT e.id, e.attempt_id, e.score, e.outcome
          FROM attempt_evaluations e
@@ -2030,11 +2030,13 @@ fn query_ids(conn: &Connection, sql: &str, parent_id: &str) -> Result<Vec<String
 }
 
 fn query_progress(conn: &Connection) -> Result<Vec<LearnerProgressDto>> {
-    let objective_ids = query_ids(
-        conn,
-        "SELECT id FROM learning_objective_versions ORDER BY learning_project_id, id",
-        "",
-    )?;
+    let objective_ids = {
+        let mut statement =
+            conn.prepare("SELECT id FROM learning_objective_versions ORDER BY learning_project_id, id")?;
+        statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
     let mut progress = Vec::new();
     for objective_id in objective_ids {
         let (project_id, learner_id): (String, String) = conn.query_row(
