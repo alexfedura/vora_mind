@@ -469,6 +469,13 @@ pub struct AddFrameworkItemReq {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ReorderFrameworkItemsReq {
+    pub framework_version_id: String,
+    pub ordered_item_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateFrameworkVersionReq {
     pub framework_version_id: String,
     pub title: String,
@@ -857,6 +864,27 @@ pub fn add_framework_item(conn: &Connection, req: AddFrameworkItemReq) -> Result
 
 pub fn remove_framework_item(conn: &Connection, item_id: &str) -> Result<(), String> {
     repository::remove_framework_item(conn, item_id).map_err(|error| error.to_string())
+}
+
+pub fn reorder_framework_items(
+    conn: &Connection,
+    req: ReorderFrameworkItemsReq,
+) -> Result<(), String> {
+    if req.ordered_item_ids.is_empty() {
+        return Err("a framework version must retain at least one ordered member".into());
+    }
+    let unique_ids: std::collections::HashSet<&str> =
+        req.ordered_item_ids.iter().map(String::as_str).collect();
+    if unique_ids.len() != req.ordered_item_ids.len() {
+        return Err("framework item order contains duplicate item IDs".into());
+    }
+    repository::reorder_framework_items(
+        conn,
+        &req.framework_version_id,
+        &req.ordered_item_ids,
+        now_ts_us(),
+    )
+    .map_err(|error| error.to_string())
 }
 
 pub fn update_framework_version(
