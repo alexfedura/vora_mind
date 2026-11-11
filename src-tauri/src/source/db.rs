@@ -1,16 +1,108 @@
 use rusqlite::Connection;
+use sha2::{Digest, Sha256};
 
 use super::model::*;
 use super::revision;
 
 // ── Schema bootstrap ─────────────────────────────────────────────
 
-/// Idempotently apply the source-module schema on the given connection.
-/// Safe to call multiple times; all statements are IF NOT EXISTS.
+const ACQUISITION_SCHEMA: &str = include_str!("../../schema_acquisition.sql");
+const ACQUISITION_MIGRATION_ID: &str = "knowledge_acquisition_v1";
+
+/// Initialize the legacy source schema and apply its additive acquisition migration.
 pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(include_str!("../../schema_source.sql"))?;
     migrate_segments_tree(conn)?;
+    apply_acquisition_migration(conn)?;
     Ok(())
+}
+
+fn apply_acquisition_migration(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.pragma_update(None, "foreign_keys", true)?;
+    let foreign_keys: i64 = conn.pragma_query_value(None, "foreign_keys", |row| row.get(0))?;
+    if foreign_keys != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    validate_legacy_source_schema(conn)?;
+    let current_version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if current_version > 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    let checksum = format!("{:x}", Sha256::digest(ACQUISITION_SCHEMA.as_bytes()));
+    let tx = conn.unchecked_transaction()?;
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            migration_id TEXT NOT NULL UNIQUE,
+            checksum TEXT NOT NULL,
+            applied_at_us INTEGER NOT NULL,
+            app_version TEXT NOT NULL
+        );",
+    )?;
+
+    if current_version == 0 {
+        let applied_count: i64 =
+            tx.query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| row.get(0))?;
+        if applied_count != 0 {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+
+        tx.execute_batch(ACQUISITION_SCHEMA)?;
+        tx.execute(
+            "INSERT INTO schema_migrations
+                (version, migration_id, checksum, applied_at_us, app_version)
+             VALUES (1, ?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                ACQUISITION_MIGRATION_ID,
+                checksum,
+                now_ts_us(),
+                env!("CARGO_PKG_VERSION")
+            ],
+        )?;
+        tx.pragma_update(None, "user_version", 1)?;
+    } else {
+        let (migration_id, applied_checksum): (String, String) = tx.query_row(
+            "SELECT migration_id, checksum FROM schema_migrations WHERE version = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        if migration_id != ACQUISITION_MIGRATION_ID || applied_checksum != checksum {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+    }
+
+    tx.commit()
+}
+
+fn validate_legacy_source_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
+    for (table, required_columns) in [
+        ("sources", &["id", "kind", "title"][..]),
+        ("segments", &["id", "source_id", "label"][..]),
+        ("extracts", &["id", "segment_id", "content"][..]),
+        ("links", &["id", "extract_id", "target_id"][..]),
+        ("source_revisions", &["id", "entity_kind", "entity_id"][..]),
+    ] {
+        let mut statement = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+        let columns = statement
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?;
+        if required_columns
+            .iter()
+            .any(|required| !columns.iter().any(|column| column == required))
+        {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+    }
+    Ok(())
+}
+
+pub fn now_ts_us() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_micros().min(i64::MAX as u128) as i64)
+        .unwrap_or_default()
 }
 
 /// Idempotent: add hierarchy columns to segments if missing.
