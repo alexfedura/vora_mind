@@ -126,14 +126,8 @@ pub fn experiment_get_dataset_samples(
     limit: i64,
 ) -> Result<DatasetSamplePageDto, String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;
-    repository::get_dataset_samples(
-        &conn,
-        &dataset_version_id,
-        query.as_deref(),
-        offset,
-        limit,
-    )
-    .map_err(|error| error.to_string())
+    repository::get_dataset_samples(&conn, &dataset_version_id, query.as_deref(), offset, limit)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

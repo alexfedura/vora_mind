@@ -58,8 +58,7 @@ pub fn initialize_schema(conn: &Connection) -> Result<()> {
              applied_at_us INTEGER NOT NULL
          );",
     )?;
-    let foreign_keys_enabled: i64 =
-        conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
+    let foreign_keys_enabled: i64 = conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
     if foreign_keys_enabled != 1 {
         return Err(invalid(
             "SQLite foreign-key enforcement is required for Experiment writes.",
@@ -205,7 +204,9 @@ fn validate_design_targets(
             |row| row.get(0),
         )?;
         if question_project.as_deref() != Some(project_id) {
-            return Err(invalid("The target research question belongs to another or unassigned project."));
+            return Err(invalid(
+                "The target research question belongs to another or unassigned project.",
+            ));
         }
     }
     if let Some(hypothesis_version_id) = specification.target_hypothesis_version_id.as_deref() {
@@ -218,7 +219,9 @@ fn validate_design_targets(
             |row| row.get(0),
         )?;
         if hypothesis_project != project_id {
-            return Err(invalid("The target hypothesis version belongs to another project."));
+            return Err(invalid(
+                "The target hypothesis version belongs to another project.",
+            ));
         }
     }
     Ok(())
@@ -233,7 +236,9 @@ fn insert_design_dataset_pins(
     let mut seen = std::collections::HashSet::new();
     for pin in pins {
         if !seen.insert((pin.dataset_version_id.as_str(), pin.role.as_str())) {
-            return Err(invalid("A dataset version and role can only be pinned once."));
+            return Err(invalid(
+                "A dataset version and role can only be pinned once.",
+            ));
         }
         let (dataset_project, status): (String, String) = tx.query_row(
             "SELECT d.project_id, v.lifecycle_status
@@ -244,7 +249,9 @@ fn insert_design_dataset_pins(
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
         if dataset_project != project_id {
-            return Err(invalid("Design dataset pins must belong to the same research project."));
+            return Err(invalid(
+                "Design dataset pins must belong to the same research project.",
+            ));
         }
         if status != "sealed" {
             return Err(invalid("A design can only pin a sealed dataset version."));
@@ -253,7 +260,12 @@ fn insert_design_dataset_pins(
             "INSERT INTO experiment_design_dataset_pins
                 (design_version_id, dataset_version_id, role, rationale)
              VALUES (?1, ?2, ?3, ?4)",
-            params![version_id, pin.dataset_version_id, pin.role.as_str(), pin.rationale],
+            params![
+                version_id,
+                pin.dataset_version_id,
+                pin.role.as_str(),
+                pin.rationale
+            ],
         )?;
     }
     Ok(())
@@ -263,9 +275,13 @@ pub fn create_design_version(
     conn: &mut Connection,
     req: &CreateExperimentDesignVersionReq,
 ) -> Result<ExperimentDesignVersionDto> {
-    if req.title.trim().is_empty() || req.description.trim().is_empty() || req.protocol.trim().is_empty()
+    if req.title.trim().is_empty()
+        || req.description.trim().is_empty()
+        || req.protocol.trim().is_empty()
     {
-        return Err(invalid("Design title, description, and intended protocol are required."));
+        return Err(invalid(
+            "Design title, description, and intended protocol are required.",
+        ));
     }
     let specification_json = json_string(&req.specification)?;
     let specification_sha256 = sha256_text(&specification_json);
@@ -293,29 +309,39 @@ pub fn create_design_version(
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )?;
             if project_id != req.project_id {
-                return Err(invalid("A design revision must remain in its original project."));
+                return Err(invalid(
+                    "A design revision must remain in its original project.",
+                ));
             }
             if latest_version_id != parent_id {
-                return Err(invalid("A design revision must be based on the latest version."));
+                return Err(invalid(
+                    "A design revision must be based on the latest version.",
+                ));
             }
             if req.design_id.as_deref().is_some_and(|id| id != design_id) {
-                return Err(invalid("The supplied design identity does not match the parent version."));
+                return Err(invalid(
+                    "The supplied design identity does not match the parent version.",
+                ));
             }
-            (
-                design_id,
-                parent_version_no + 1,
-                Some(parent_id.to_owned()),
-            )
+            (design_id, parent_version_no + 1, Some(parent_id.to_owned()))
         } else {
             if req.design_id.is_some() {
-                return Err(invalid("A new design cannot provide an existing design identity."));
+                return Err(invalid(
+                    "A new design cannot provide an existing design identity.",
+                ));
             }
             let design_id = new_id();
             tx.execute(
                 "INSERT INTO research_experiment_designs
                     (id, project_id, title, created_by, created_at_us)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![design_id, req.project_id, req.title.trim(), req.created_by, now],
+                params![
+                    design_id,
+                    req.project_id,
+                    req.title.trim(),
+                    req.created_by,
+                    now
+                ],
             )?;
             (design_id, 1, None)
         };
@@ -364,12 +390,13 @@ pub fn create_design_version(
             ],
         )?;
     }
-    insert_design_dataset_pins(&tx, &version_id, &req.project_id, &req.specification.datasets)?;
-    if let Some(hypothesis_version_id) = req
-        .specification
-        .target_hypothesis_version_id
-        .as_deref()
-    {
+    insert_design_dataset_pins(
+        &tx,
+        &version_id,
+        &req.project_id,
+        &req.specification.datasets,
+    )?;
+    if let Some(hypothesis_version_id) = req.specification.target_hypothesis_version_id.as_deref() {
         tx.execute(
             "INSERT INTO hypothesis_design_links
                 (hypothesis_version_id, design_version_id, relationship_kind,
@@ -413,7 +440,9 @@ pub fn preregister_design(
     }
     let version = query_design_version(conn, &req.design_version_id)?;
     if version.lifecycle_status != crate::research::ResearchDesignStatus::Review {
-        return Err(invalid("Only a reviewed draft design can be preregistered."));
+        return Err(invalid(
+            "Only a reviewed draft design can be preregistered.",
+        ));
     }
     let specification = version
         .specification
@@ -465,7 +494,9 @@ pub fn preregister_design(
         params![now, req.design_version_id],
     )?;
     if tx.changes() != 1 {
-        return Err(invalid("Design preregistration state changed; reload and retry."));
+        return Err(invalid(
+            "Design preregistration state changed; reload and retry.",
+        ));
     }
     tx.execute(
         "INSERT INTO research_provenance_events
@@ -483,10 +514,15 @@ pub fn preregister_design(
     query_design_version(conn, &req.design_version_id)
 }
 
-pub fn create_dataset(conn: &mut Connection, req: &CreateDatasetReq) -> Result<ExperimentDatasetDto> {
+pub fn create_dataset(
+    conn: &mut Connection,
+    req: &CreateDatasetReq,
+) -> Result<ExperimentDatasetDto> {
     let title = req.title.trim();
     if title.is_empty() || title.len() > 200 {
-        return Err(invalid("Dataset title must contain between 1 and 200 characters."));
+        return Err(invalid(
+            "Dataset title must contain between 1 and 200 characters.",
+        ));
     }
     let now = now_ts_us().map_err(invalid)?;
     let id = new_id();
@@ -494,7 +530,14 @@ pub fn create_dataset(conn: &mut Connection, req: &CreateDatasetReq) -> Result<E
         "INSERT INTO experiment_datasets
             (id, project_id, title, description, created_by, created_at_us)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![id, req.project_id, title, req.description, req.created_by, now],
+        params![
+            id,
+            req.project_id,
+            title,
+            req.description,
+            req.created_by,
+            now
+        ],
     )?;
     query_dataset(conn, &id)
 }
@@ -538,7 +581,10 @@ pub fn create_dataset_version(
     query_dataset_version(conn, &id)
 }
 
-fn query_dataset_version(conn: &Connection, version_id: &str) -> Result<ExperimentDatasetVersionDto> {
+fn query_dataset_version(
+    conn: &Connection,
+    version_id: &str,
+) -> Result<ExperimentDatasetVersionDto> {
     let mut version = conn.query_row(
         "SELECT id, dataset_id, version_no, sample_schema_json, expected_sample_count,
                 lifecycle_status, content_sha256, created_by, created_at_us, sealed_at_us,
@@ -574,11 +620,17 @@ fn query_dataset_version(conn: &Connection, version_id: &str) -> Result<Experime
     Ok(version)
 }
 
-pub fn get_dataset_version(conn: &Connection, version_id: &str) -> Result<ExperimentDatasetVersionDto> {
+pub fn get_dataset_version(
+    conn: &Connection,
+    version_id: &str,
+) -> Result<ExperimentDatasetVersionDto> {
     query_dataset_version(conn, version_id)
 }
 
-fn query_dataset_assets(conn: &Connection, version_id: &str) -> Result<Vec<ExperimentDatasetAssetDto>> {
+fn query_dataset_assets(
+    conn: &Connection,
+    version_id: &str,
+) -> Result<Vec<ExperimentDatasetAssetDto>> {
     let mut statement = conn.prepare(
         "SELECT id, dataset_version_id, storage_key, original_name, media_type,
                 byte_length, content_sha256
@@ -634,10 +686,7 @@ fn query_dataset(conn: &Connection, dataset_id: &str) -> Result<ExperimentDatase
     Ok(dataset)
 }
 
-pub fn add_dataset_samples(
-    conn: &mut Connection,
-    req: &AddDatasetSamplesReq,
-) -> Result<i64> {
+pub fn add_dataset_samples(conn: &mut Connection, req: &AddDatasetSamplesReq) -> Result<i64> {
     let tx = conn.transaction()?;
     let (schema_json, expected_count, status): (String, i64, String) = tx.query_row(
         "SELECT sample_schema_json, expected_sample_count, lifecycle_status
@@ -646,7 +695,9 @@ pub fn add_dataset_samples(
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )?;
     if status != "staged" {
-        return Err(invalid("Samples can only be added to staged dataset versions."));
+        return Err(invalid(
+            "Samples can only be added to staged dataset versions.",
+        ));
     }
     let schema: DatasetSampleSchemaDto = serde_json::from_str(&schema_json)?;
     let current_count: i64 = tx.query_row(
@@ -654,7 +705,8 @@ pub fn add_dataset_samples(
         [&req.dataset_version_id],
         |row| row.get(0),
     )?;
-    if current_count + i64::try_from(req.samples.len()).map_err(|error| invalid(error.to_string()))?
+    if current_count
+        + i64::try_from(req.samples.len()).map_err(|error| invalid(error.to_string()))?
         > expected_count
     {
         return Err(invalid("Dataset samples exceed the declared sample count."));
@@ -669,7 +721,9 @@ pub fn add_dataset_samples(
             ));
         }
         if !seen.insert(base.sample_id.as_str()) {
-            return Err(invalid("Sample IDs must be unique within the dataset version."));
+            return Err(invalid(
+                "Sample IDs must be unique within the dataset version.",
+            ));
         }
         tx.execute(
             "INSERT INTO experiment_dataset_samples
@@ -696,7 +750,9 @@ pub fn add_dataset_split_group(
     req: &AddDatasetSplitGroupReq,
 ) -> Result<ExperimentDatasetSplitGroupDto> {
     if req.split_group_key.trim().is_empty() || req.assignments.is_empty() {
-        return Err(invalid("A split group requires a name and at least one sample assignment."));
+        return Err(invalid(
+            "A split group requires a name and at least one sample assignment.",
+        ));
     }
     let mut seen = std::collections::HashSet::new();
     if req
@@ -715,7 +771,9 @@ pub fn add_dataset_split_group(
         |row| row.get(0),
     )?;
     if status != "staged" {
-        return Err(invalid("Split groups can only be added to staged dataset versions."));
+        return Err(invalid(
+            "Split groups can only be added to staged dataset versions.",
+        ));
     }
     let group_id = new_id();
     let now = now_ts_us().map_err(invalid)?;
@@ -885,7 +943,9 @@ pub fn prepare_dataset_asset(
         .is_some_and(|expected| expected != content_sha256)
     {
         fs::remove_file(&staged_path)?;
-        return Err(invalid("Dataset asset checksum does not match the supplied checksum."));
+        return Err(invalid(
+            "Dataset asset checksum does not match the supplied checksum.",
+        ));
     }
     if let Err(error) = fs::rename(&staged_path, &final_path) {
         let _ = fs::remove_file(&staged_path);
@@ -894,7 +954,10 @@ pub fn prepare_dataset_asset(
     Ok(PreparedDatasetAsset {
         id,
         dataset_version_id: req.dataset_version_id.clone(),
-        storage_key: format!("dataset-assets/{}", final_path.file_name().unwrap_or_default().to_string_lossy()),
+        storage_key: format!(
+            "dataset-assets/{}",
+            final_path.file_name().unwrap_or_default().to_string_lossy()
+        ),
         staged_path,
         final_path,
         original_name: req.original_name.trim().to_owned(),
@@ -1001,7 +1064,10 @@ pub fn dataset_seal_material(conn: &Connection, version_id: &str) -> Result<Data
     })
 }
 
-pub fn verify_dataset_assets(assets_root: &Path, assets: &[ExperimentDatasetAssetDto]) -> Result<()> {
+pub fn verify_dataset_assets(
+    assets_root: &Path,
+    assets: &[ExperimentDatasetAssetDto],
+) -> Result<()> {
     for asset in assets {
         let path = assets_root.join(&asset.storage_key);
         let (byte_length, content_sha256) = hash_file(&path)?;
@@ -1079,7 +1145,9 @@ pub fn seal_dataset_version(
         params![content_sha256, now, version_id, expected_staged_revision],
     )?;
     if tx.changes() != 1 {
-        return Err(invalid("Dataset version sealing raced with another update."));
+        return Err(invalid(
+            "Dataset version sealing raced with another update.",
+        ));
     }
     tx.commit()?;
     query_dataset_version(conn, version_id)
@@ -1097,7 +1165,9 @@ pub fn create_dataset_transformation(
     let mut seen = std::collections::HashSet::new();
     for input in &req.inputs {
         if !seen.insert(input.dataset_version_id.as_str()) {
-            return Err(invalid("A transformation input version can only be declared once."));
+            return Err(invalid(
+                "A transformation input version can only be declared once.",
+            ));
         }
         let status: String = conn.query_row(
             "SELECT lifecycle_status FROM experiment_dataset_versions WHERE id = ?1",
@@ -1105,10 +1175,14 @@ pub fn create_dataset_transformation(
             |row| row.get(0),
         )?;
         if status != "sealed" {
-            return Err(invalid("Transformations require sealed input dataset versions."));
+            return Err(invalid(
+                "Transformations require sealed input dataset versions.",
+            ));
         }
         if input.dataset_version_id == req.output_dataset_version_id {
-            return Err(invalid("A dataset transformation cannot consume its own output version."));
+            return Err(invalid(
+                "A dataset transformation cannot consume its own output version.",
+            ));
         }
     }
     let tx = conn.transaction()?;
@@ -1118,7 +1192,9 @@ pub fn create_dataset_transformation(
         |row| row.get(0),
     )?;
     if output_status != "staged" {
-        return Err(invalid("A transformation output must be a staged dataset version."));
+        return Err(invalid(
+            "A transformation output must be a staged dataset version.",
+        ));
     }
     let id = new_id();
     tx.execute(
@@ -1167,7 +1243,16 @@ fn insert_run_event(
         "INSERT INTO experiment_run_events
             (id, run_id, event_kind, from_status, to_status, actor_id, details, occurred_at_us)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![new_id(), run_id, event_kind, from_status, to_status, actor_id, details, now],
+        params![
+            new_id(),
+            run_id,
+            event_kind,
+            from_status,
+            to_status,
+            actor_id,
+            details,
+            now
+        ],
     )?;
     Ok(())
 }
@@ -1177,7 +1262,9 @@ pub fn create_run(conn: &mut Connection, req: &CreateExperimentRunReq) -> Result
     if design.lifecycle_status != crate::research::ResearchDesignStatus::Preregistered
         || design.preregistration.is_none()
     {
-        return Err(invalid("Runs can only use an actively preregistered design version."));
+        return Err(invalid(
+            "Runs can only use an actively preregistered design version.",
+        ));
     }
     let specification = design
         .specification
@@ -1211,7 +1298,13 @@ pub fn create_run(conn: &mut Connection, req: &CreateExperimentRunReq) -> Result
         "INSERT INTO experiment_runs
             (id, project_id, design_version_id, lifecycle_status, created_by, created_at_us)
          VALUES (?1, ?2, ?3, 'created', ?4, ?5)",
-        params![run_id, design.project_id, req.design_version_id, req.created_by, now],
+        params![
+            run_id,
+            design.project_id,
+            req.design_version_id,
+            req.created_by,
+            now
+        ],
     )?;
     for pin in &req.dataset_pins {
         let (dataset_project, status): (String, String) = tx.query_row(
@@ -1234,7 +1327,16 @@ pub fn create_run(conn: &mut Connection, req: &CreateExperimentRunReq) -> Result
             params![run_id, pin.dataset_version_id, pin.role.as_str()],
         )?;
     }
-    insert_run_event(&tx, &run_id, "created", None, Some("created"), req.created_by.as_deref(), "", now)?;
+    insert_run_event(
+        &tx,
+        &run_id,
+        "created",
+        None,
+        Some("created"),
+        req.created_by.as_deref(),
+        "",
+        now,
+    )?;
     tx.commit()?;
     query_run(conn, &run_id)
 }
@@ -1272,7 +1374,9 @@ pub fn transition_run(
         return Err(invalid("Failed runs require failure details."));
     }
     if !req.output_dataset_pins.is_empty() && next != "completed" {
-        return Err(invalid("Output dataset versions may only be pinned when completing a run."));
+        return Err(invalid(
+            "Output dataset versions may only be pinned when completing a run.",
+        ));
     }
     if next == "completed" {
         for pin in &req.output_dataset_pins {
@@ -1358,7 +1462,9 @@ pub fn add_run_deviation(
     req: &AddExperimentRunDeviationReq,
 ) -> Result<ExperimentRunDeviationDto> {
     if req.description.trim().is_empty() || req.rationale.trim().is_empty() {
-        return Err(invalid("Run deviations require a description and rationale."));
+        return Err(invalid(
+            "Run deviations require a description and rationale.",
+        ));
     }
     let now = now_ts_us().map_err(invalid)?;
     let tx = conn.transaction()?;
@@ -1368,7 +1474,9 @@ pub fn add_run_deviation(
         |row| row.get(0),
     )?;
     if status != "running" {
-        return Err(invalid("Deviations must be recorded while the run is executing."));
+        return Err(invalid(
+            "Deviations must be recorded while the run is executing.",
+        ));
     }
     let id = new_id();
     tx.execute(
@@ -1411,7 +1519,9 @@ pub fn add_run_log(
         |row| row.get(0),
     )?;
     if ExperimentRunStatus::parse(&status)?.is_terminal() {
-        return Err(invalid("Run logs cannot be appended after a run is terminal."));
+        return Err(invalid(
+            "Run logs cannot be appended after a run is terminal.",
+        ));
     }
     let id = new_id();
     tx.execute(
@@ -1453,14 +1563,15 @@ fn query_run(conn: &Connection, run_id: &str) -> Result<ExperimentRunDto> {
                 id: row.get(0)?,
                 project_id: row.get(1)?,
                 design_version_id: row.get(2)?,
-                lifecycle_status: ExperimentRunStatus::parse(&row.get::<_, String>(3)?)
-                    .map_err(|error| {
+                lifecycle_status: ExperimentRunStatus::parse(&row.get::<_, String>(3)?).map_err(
+                    |error| {
                         rusqlite::Error::FromSqlConversionFailure(
                             3,
                             rusqlite::types::Type::Text,
                             Box::new(std::io::Error::other(error)),
                         )
-                    })?,
+                    },
+                )?,
                 created_by: row.get(4)?,
                 created_at_us: row.get(5)?,
                 started_at_us: row.get(6)?,
@@ -1481,7 +1592,10 @@ fn query_run(conn: &Connection, run_id: &str) -> Result<ExperimentRunDto> {
     Ok(run)
 }
 
-fn query_run_dataset_pins(conn: &Connection, run_id: &str) -> Result<Vec<ExperimentRunDatasetPinDto>> {
+fn query_run_dataset_pins(
+    conn: &Connection,
+    run_id: &str,
+) -> Result<Vec<ExperimentRunDatasetPinDto>> {
     let mut statement = conn.prepare(
         "SELECT p.dataset_version_id, d.id, d.title, v.version_no, p.role, p.usage_kind
          FROM experiment_run_dataset_pins p
@@ -1608,7 +1722,9 @@ pub fn get_dataset_samples(
     limit: i64,
 ) -> Result<DatasetSamplePageDto> {
     if offset < 0 || !(1..=500).contains(&limit) {
-        return Err(invalid("Sample page offset must be non-negative and limit must be 1..=500."));
+        return Err(invalid(
+            "Sample page offset must be non-negative and limit must be 1..=500.",
+        ));
     }
     let total_count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM experiment_dataset_samples
@@ -1703,4 +1819,3 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<ExperimentWorksp
         split_groups,
     })
 }
-

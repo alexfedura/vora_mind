@@ -373,10 +373,7 @@ impl ExperimentDesignSpecificationDto {
             ),
             ("multiplicity strategy", self.multiplicity_strategy.as_str()),
             ("deviations policy", self.deviations_policy.as_str()),
-            (
-                "code identity",
-                self.code_environment.code_uri.as_str(),
-            ),
+            ("code identity", self.code_environment.code_uri.as_str()),
             (
                 "environment identity",
                 self.code_environment.environment.as_str(),
@@ -390,7 +387,10 @@ impl ExperimentDesignSpecificationDto {
                 return Err(format!("A preregistered design requires {field}."));
             }
         }
-        if !self.primary_outcomes.iter().any(|outcome| !outcome.trim().is_empty())
+        if !self
+            .primary_outcomes
+            .iter()
+            .any(|outcome| !outcome.trim().is_empty())
             || self.outcomes.is_empty()
         {
             return Err(
@@ -417,7 +417,8 @@ impl ExperimentDesignSpecificationDto {
                 return Err("Operational definitions require a name and definition.".into());
             }
         }
-        if self.study_type == StudyType::MarketBacktest || self.study_type == StudyType::MarketForward
+        if self.study_type == StudyType::MarketBacktest
+            || self.study_type == StudyType::MarketForward
         {
             let market = self
                 .market_context
@@ -795,20 +796,14 @@ pub fn validate_decimal(value: &str) -> Result<(), String> {
     if bytes.is_empty() {
         return Err("decimal value cannot be empty".into());
     }
-    let digits = bytes
-        .iter()
-        .filter(|byte| byte.is_ascii_digit())
-        .count();
+    let digits = bytes.iter().filter(|byte| byte.is_ascii_digit()).count();
     let valid = digits > 0
-        && bytes
-            .iter()
-            .enumerate()
-            .all(|(index, byte)| match byte {
-                b'0'..=b'9' => true,
-                b'-' | b'+' => index == 0,
-                b'.' => bytes.iter().filter(|candidate| **candidate == b'.').count() == 1,
-                _ => false,
-            });
+        && bytes.iter().enumerate().all(|(index, byte)| match byte {
+            b'0'..=b'9' => true,
+            b'-' | b'+' => index == 0,
+            b'.' => bytes.iter().filter(|candidate| **candidate == b'.').count() == 1,
+            _ => false,
+        });
     if !valid {
         return Err(format!("invalid canonical decimal: {value}"));
     }
@@ -847,7 +842,10 @@ pub fn validate_sample(
     for field in &schema.fields {
         let value = base.values.get(&field.key);
         if value.is_none() && field.required {
-            return Err(format!("required dataset sample field '{}' is missing", field.key));
+            return Err(format!(
+                "required dataset sample field '{}' is missing",
+                field.key
+            ));
         }
         if let Some(value) = value {
             validate_sample_value(field, value)?;
@@ -893,12 +891,22 @@ fn validate_sample_value(
 ) -> Result<(), String> {
     let valid_kind = matches!(
         (value, &field.value_kind),
-        (DatasetSampleValue::Decimal { .. }, DatasetSampleValueKind::Decimal)
-            | (DatasetSampleValue::Integer { .. }, DatasetSampleValueKind::Integer)
-            | (DatasetSampleValue::Text { .. }, DatasetSampleValueKind::Text)
-            | (DatasetSampleValue::Category { .. }, DatasetSampleValueKind::Category)
-            | (DatasetSampleValue::Boolean { .. }, DatasetSampleValueKind::Boolean)
-            | (DatasetSampleValue::Missing { .. }, _)
+        (
+            DatasetSampleValue::Decimal { .. },
+            DatasetSampleValueKind::Decimal
+        ) | (
+            DatasetSampleValue::Integer { .. },
+            DatasetSampleValueKind::Integer
+        ) | (
+            DatasetSampleValue::Text { .. },
+            DatasetSampleValueKind::Text
+        ) | (
+            DatasetSampleValue::Category { .. },
+            DatasetSampleValueKind::Category
+        ) | (
+            DatasetSampleValue::Boolean { .. },
+            DatasetSampleValueKind::Boolean
+        ) | (DatasetSampleValue::Missing { .. }, _)
     );
     if !valid_kind {
         return Err(format!(
@@ -916,7 +924,11 @@ fn validate_sample_value(
             if let Some(uncertainty) = uncertainty {
                 validate_decimal(uncertainty)?;
             }
-            if unit.trim().is_empty() || field.unit.as_deref().is_some_and(|expected| expected != unit)
+            if unit.trim().is_empty()
+                || field
+                    .unit
+                    .as_deref()
+                    .is_some_and(|expected| expected != unit)
             {
                 return Err(format!(
                     "dataset sample field '{}' has an invalid or mismatched unit",
@@ -925,7 +937,11 @@ fn validate_sample_value(
             }
         }
         DatasetSampleValue::Integer { unit, .. } => {
-            if field.unit.as_deref().is_some_and(|expected| unit.as_deref() != Some(expected)) {
+            if field
+                .unit
+                .as_deref()
+                .is_some_and(|expected| unit.as_deref() != Some(expected))
+            {
                 return Err(format!(
                     "dataset sample field '{}' has a mismatched unit",
                     field.key
@@ -933,7 +949,11 @@ fn validate_sample_value(
             }
         }
         DatasetSampleValue::Missing { unit, .. } => {
-            if field.unit.as_deref().is_some_and(|expected| unit.as_deref() != Some(expected)) {
+            if field
+                .unit
+                .as_deref()
+                .is_some_and(|expected| unit.as_deref() != Some(expected))
+            {
                 return Err(format!(
                     "missing dataset sample field '{}' has a mismatched unit",
                     field.key
