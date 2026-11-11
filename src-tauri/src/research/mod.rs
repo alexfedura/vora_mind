@@ -1127,6 +1127,22 @@ pub fn create_project(
         .map_err(|error| error.to_string())
 }
 
+pub fn transition_project(
+    conn: &Connection,
+    project_id: &str,
+    next_status: ResearchProjectStatus,
+    actor_id: Option<&str>,
+) -> Result<ResearchProjectDto, String> {
+    repository::transition_project(
+        conn,
+        project_id,
+        next_status,
+        actor_id,
+        now_ts_us()?,
+    )
+    .map_err(|error| error.to_string())
+}
+
 pub fn create_domain(
     conn: &mut Connection,
     req: CreateResearchDomainReq,
