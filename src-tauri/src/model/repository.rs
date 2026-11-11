@@ -1491,3 +1491,294 @@ fn query_validations(conn: &Connection, project_id: &str) -> Result<Vec<ModelVal
     )?;
     ids.iter().map(|validation_id| query_validation(conn, validation_id)).collect()
 }
+
+pub fn create_replication(
+    conn: &mut Connection,
+    request: &CreateModelReplicationReq,
+) -> Result<ModelReplicationDto> {
+    validate_replication_request(conn, request)?;
+    let design_version_id: String = conn.query_row(
+        "SELECT design_version_id FROM experiment_runs WHERE id = ?1",
+        [&request.original_experiment_run_id],
+        |row| row.get(0),
+    )?;
+    let replication_id = id();
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    tx.execute(
+        "INSERT INTO model_replications
+            (id, project_id, model_version_id, original_experiment_run_id,
+             original_design_version_id, replication_kind, independent_team_operator,
+             protocol_context, dataset_context_json, outcome, result_summary,
+             deviations_json, provenance_json, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+        params![
+            replication_id,
+            request.project_id,
+            request.model_version_id,
+            request.original_experiment_run_id,
+            design_version_id,
+            request.replication_kind,
+            request.independent_team_operator.trim(),
+            request.protocol_context.trim(),
+            json(&request.dataset_context)?,
+            request.outcome,
+            request.result_summary.trim(),
+            json(&request.deviations)?,
+            json(&request.provenance)?,
+            request.created_by,
+            now_us()?
+        ],
+    )?;
+    for dataset in &request.datasets {
+        tx.execute(
+            "INSERT INTO model_replication_datasets
+                (replication_id, dataset_version_id, role, split_group_id)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                replication_id,
+                dataset.dataset_version_id,
+                dataset.role,
+                dataset.split_group_id
+            ],
+        )?;
+    }
+    for evidence_id in &request.analysis_evidence_ids {
+        tx.execute(
+            "INSERT INTO model_replication_analysis_evidence (replication_id, evidence_id)
+             VALUES (?1, ?2)",
+            params![replication_id, evidence_id],
+        )?;
+    }
+    for evidence_id in &request.model_evidence_ids {
+        tx.execute(
+            "INSERT INTO model_replication_model_evidence (replication_id, evidence_id)
+             VALUES (?1, ?2)",
+            params![replication_id, evidence_id],
+        )?;
+    }
+    tx.commit()?;
+    query_replication(conn, &replication_id)
+}
+
+fn validate_replication_request(
+    conn: &Connection,
+    request: &CreateModelReplicationReq,
+) -> Result<()> {
+    for (value, label) in [
+        (&request.independent_team_operator, "Independent team/operator"),
+        (&request.protocol_context, "Replication protocol context"),
+        (&request.result_summary, "Replication result summary"),
+    ] {
+        required(value, label)?;
+    }
+    if !matches!(
+        request.replication_kind.as_str(),
+        "direct" | "conceptual"
+    ) {
+        return Err(anyhow!("Replication kind must be direct or conceptual."));
+    }
+    if !matches!(
+        request.outcome.as_str(),
+        "supports" | "contradicts" | "mixed" | "inconclusive"
+    ) {
+        return Err(anyhow!("Invalid replication outcome."));
+    }
+    if !request.dataset_context.is_object() || !request.provenance.is_object() {
+        return Err(anyhow!(
+            "Replication dataset context and provenance must be JSON objects."
+        ));
+    }
+    exists(
+        conn,
+        "SELECT EXISTS(SELECT 1 FROM research_projects WHERE id = ?1)",
+        &request.project_id,
+        "Replication project was not found.",
+    )?;
+    exists(
+        conn,
+        "SELECT EXISTS(SELECT 1 FROM model_versions WHERE id = ?1)",
+        &request.model_version_id,
+        "Replication model version was not found.",
+    )?;
+    let original_status: Option<String> = conn
+        .query_row(
+            "SELECT lifecycle_status FROM experiment_runs
+             WHERE id = ?1",
+            [&request.original_experiment_run_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(status) = original_status else {
+        return Err(anyhow!("Original experiment run was not found."));
+    };
+    if !matches!(
+        status.as_str(),
+        "completed" | "inconclusive"
+    ) {
+        return Err(anyhow!(
+            "Replication requires a completed or inconclusive original experiment run."
+        ));
+    }
+    for dataset in &request.datasets {
+        validate_dataset_role(&dataset.role)?;
+        let sealed: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM experiment_dataset_versions
+             WHERE id = ?1 AND lifecycle_status = 'sealed')",
+            [&dataset.dataset_version_id],
+            |row| row.get(0),
+        )?;
+        if !sealed {
+            return Err(anyhow!("Replication datasets must pin sealed versions."));
+        }
+        let split_group: Option<String> = conn
+            .query_row(
+                "SELECT id FROM experiment_dataset_split_groups
+                 WHERE id = ?1 AND dataset_version_id = ?2",
+                params![dataset.split_group_id, dataset.dataset_version_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if dataset.split_group_id.is_some() && split_group != dataset.split_group_id {
+            return Err(anyhow!(
+                "Replication split group must belong to its exact dataset version."
+            ));
+        }
+    }
+    for evidence_id in &request.analysis_evidence_ids {
+        let project: Option<String> = conn
+            .query_row(
+                "SELECT project_id FROM analysis_evidence WHERE id = ?1",
+                [evidence_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if project.as_deref() != Some(request.project_id.as_str()) {
+            return Err(anyhow!(
+                "Replication Analysis evidence must belong to the replication project."
+            ));
+        }
+    }
+    for evidence_id in &request.model_evidence_ids {
+        let version: Option<String> = conn
+            .query_row(
+                "SELECT model_version_id FROM model_evidence WHERE id = ?1",
+                [evidence_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if version.as_deref() != Some(request.model_version_id.as_str()) {
+            return Err(anyhow!(
+                "Replication model evidence must target the exact replicated version."
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn query_replication(conn: &Connection, replication_id: &str) -> Result<ModelReplicationDto> {
+    let row = conn.query_row(
+        "SELECT id, project_id, model_version_id, original_experiment_run_id,
+                original_design_version_id, replication_kind, independent_team_operator,
+                protocol_context, dataset_context_json, outcome, result_summary,
+                deviations_json, provenance_json, created_by, created_at_us
+         FROM model_replications WHERE id = ?1",
+        [replication_id],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, String>(8)?,
+                row.get::<_, String>(9)?,
+                row.get::<_, String>(10)?,
+                row.get::<_, String>(11)?,
+                row.get::<_, String>(12)?,
+                row.get::<_, Option<String>>(13)?,
+                row.get::<_, i64>(14)?,
+            ))
+        },
+    )?;
+    let mut statement = conn.prepare(
+        "SELECT dataset_version_id, role, split_group_id
+         FROM model_replication_datasets WHERE replication_id = ?1
+         ORDER BY role, dataset_version_id",
+    )?;
+    let datasets = statement
+        .query_map([replication_id], |row| {
+            Ok(ModelReplicationDatasetReq {
+                dataset_version_id: row.get(0)?,
+                role: row.get(1)?,
+                split_group_id: row.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(ModelReplicationDto {
+        id: row.0,
+        project_id: row.1,
+        model_version_id: row.2,
+        original_experiment_run_id: row.3,
+        original_design_version_id: row.4,
+        replication_kind: row.5,
+        independent_team_operator: row.6,
+        protocol_context: row.7,
+        dataset_context: parse_json(&row.8)?,
+        outcome: row.9,
+        result_summary: row.10,
+        deviations: parse_json(&row.11)?,
+        provenance: parse_json(&row.12)?,
+        datasets,
+        analysis_evidence_ids: query_ids(
+            conn,
+            "SELECT evidence_id FROM model_replication_analysis_evidence
+             WHERE replication_id = ?1 ORDER BY evidence_id",
+            replication_id,
+        )?,
+        model_evidence_ids: query_ids(
+            conn,
+            "SELECT evidence_id FROM model_replication_model_evidence
+             WHERE replication_id = ?1 ORDER BY evidence_id",
+            replication_id,
+        )?,
+        created_by: row.13,
+        created_at_us: row.14,
+    })
+}
+
+fn query_replications(conn: &Connection, project_id: &str) -> Result<Vec<ModelReplicationDto>> {
+    let ids = query_ids(
+        conn,
+        "SELECT id FROM model_replications WHERE project_id = ?1 ORDER BY created_at_us, id",
+        project_id,
+    )?;
+    ids.iter().map(|replication_id| query_replication(conn, replication_id)).collect()
+}
+
+fn query_evidence_list(conn: &Connection) -> Result<Vec<ModelEvidenceDto>> {
+    let mut statement = conn.prepare("SELECT id FROM model_evidence ORDER BY created_at_us, id")?;
+    let ids = statement
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    ids.iter().map(|evidence_id| query_evidence(conn, evidence_id)).collect()
+}
+
+pub fn workspace(conn: &Connection, project_id: &str) -> Result<ModelWorkspaceDto> {
+    exists(
+        conn,
+        "SELECT EXISTS(SELECT 1 FROM research_projects WHERE id = ?1)",
+        project_id,
+        "Research project was not found.",
+    )?;
+    Ok(ModelWorkspaceDto {
+        models: query_all_models(conn)?,
+        versions: query_all_versions(conn)?,
+        evidence: query_evidence_list(conn)?,
+        evaluations: query_evaluations(conn, project_id)?,
+        validations: query_validations(conn, project_id)?,
+        replications: query_replications(conn, project_id)?,
+    })
+}
