@@ -12,6 +12,8 @@ Every scientific entity has one identity-registry row and exactly one concrete o
 erDiagram
     WORKSPACE ||--o{ SCIENTIFIC_ENTITY : scopes
     RESEARCH_PROJECT ||--o{ SCIENTIFIC_ENTITY : owns
+    WORKSPACE ||--o{ WORKSPACE_ASSET : stores
+    WORKSPACE ||--o{ SCHEMA_MIGRATION : tracks
     SCIENTIFIC_ENTITY ||--o| RESEARCH_PROJECT : "typed subtype"
     SCIENTIFIC_ENTITY ||--o| RESEARCH_DOMAIN : "typed subtype"
 
@@ -29,6 +31,7 @@ erDiagram
     SCIENTIFIC_ENTITY ||--o| COMPETENCY : "typed subtype"
     SCIENTIFIC_ENTITY ||--o| COMPETENCY_RECORD : "typed subtype"
     SCIENTIFIC_ENTITY ||--o| LEARNER_PROFILE : "typed subtype"
+    SCIENTIFIC_ENTITY ||--o| REPRODUCTION_RECORD : "typed subtype"
 
     SCIENTIFIC_ENTITY ||--o| RESEARCH_GAP : "typed subtype"
     SCIENTIFIC_ENTITY ||--o| RESEARCH_QUESTION : "typed subtype"
@@ -83,6 +86,16 @@ erDiagram
     SCIENTIFIC_ENTITY ||--o{ SCIENTIFIC_RELATION : object
     SCIENTIFIC_VERSION ||--o{ SCIENTIFIC_RELATION : "optional exact endpoint pin"
     SCIENTIFIC_ENTITY ||--o{ PROVENANCE_EVENT : target
+
+    WORKSPACE ||--o{ CANVAS_BOARD : presents
+    CANVAS_BOARD ||--o{ CANVAS_OBJECT : contains
+    CANVAS_BOARD ||--o{ CANVAS_PLACEMENT : positions
+    CANVAS_BOARD ||--o{ CANVAS_VISUAL_EDGE : draws
+    CANVAS_BOARD ||--o{ CANVAS_VIEW_STATE : configures
+    CANVAS_BOARD ||--o{ CANVAS_SNAPSHOT : captures
+    CANVAS_OBJECT ||--o{ CANVAS_SCIENTIFIC_REF : references
+    SCIENTIFIC_ENTITY ||--o{ CANVAS_SCIENTIFIC_REF : target
+    SCIENTIFIC_VERSION ||--o{ CANVAS_SCIENTIFIC_REF : "optional exact pin"
 ```
 
 ## 2. Important typed references
@@ -110,6 +123,7 @@ erDiagram
     COMPETENCY ||--o{ COMPETENCY_RECORD : recorded_for
     LEARNER_PROFILE ||--o{ COMPETENCY_RECORD : learner
     ASSESSMENT_ATTEMPT ||--o{ COMPETENCY_RECORD : supports
+    REPRODUCTION_RECORD ||--o{ COMPETENCY_RECORD : supports
 
     RESEARCH_PROJECT ||--o{ RESEARCH_GAP : frames
     RESEARCH_GAP ||--o{ RESEARCH_QUESTION : motivates
@@ -155,6 +169,7 @@ erDiagram
 - `SCIENTIFIC_RELATION_RULE` is a versioned controlled allowlist of predicate, subject type, object type, required-version-pin flags, and any cardinality/scope rule. A relation with an unlisted tuple is rejected by SQLite and Rust.
 - Structural links (`FRAMEWORK_MEMBERSHIP`, `ASSESSMENT_OBJECTIVE`, `RUN_INPUT`, `ANALYSIS_INPUT`) are concrete junctions with direct FK constraints and required composite uniqueness. They carry ordering/role/slot fields as needed. They do not replace the scientific relation graph.
 - `WORKSPACE_ASSET` is a persistence-owned content manifest. The diagram does not mean every file is copied into SQLite or that external paths are portable without a package contract.
+- Canvas objects, placements, edges, view state, snapshots, and scientific references are presentation records. Removing one never deletes a scientific endpoint or relation.
 - `SCIENTIFIC_RELATION` rows are not Canvas edges. A canvas projection references the relation ID and is removable without retracting the canonical assertion.
 - All arrows to scientific identity/version rows imply restrictive deletion. Archival/retraction is represented by status/event history, not `ON DELETE CASCADE`.
 
