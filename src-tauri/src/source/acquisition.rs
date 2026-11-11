@@ -902,3 +902,413 @@ pub fn list_provenance(
 ) -> Result<Vec<ProvenanceEventDto>, String> {
     repository::list_provenance(conn, target_kind, target_id).map_err(|error| error.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::{
+        db::{self, init_schema},
+        model::{Source, SourceKind},
+    };
+    use rusqlite::Connection;
+
+    fn connection() -> Connection {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        init_schema(&conn).expect("initialize source schema");
+        conn
+    }
+
+    fn source(conn: &Connection) -> String {
+        db::create_source(
+            conn,
+            Source {
+                id: String::new(),
+                kind: SourceKind::Doc,
+                path: Some("https://example.test/paper".into()),
+                title: "Test paper".into(),
+                author: Some("A. Author".into()),
+                language: Some("en".into()),
+                duration_sec: None,
+                page_count: Some(12),
+                metadata_json: "{}".into(),
+                notes: String::new(),
+                status: String::new(),
+                created_at: 0,
+                updated_at: 0,
+            },
+        )
+        .expect("create legacy source")
+    }
+
+    fn version(conn: &Connection, source_id: &str, label: &str) -> SourceVersionDto {
+        create_source_version(
+            conn,
+            CreateSourceVersionReq {
+                source_id: source_id.into(),
+                capture_kind: SourceCaptureKind::Edition,
+                edition_label: Some(label.into()),
+                canonical_uri: Some("https://example.test/paper".into()),
+                captured_at_us: None,
+                content_sha256: None,
+                external_asset_ref: None,
+                metadata_json: None,
+            },
+            Some("test"),
+        )
+        .expect("create source version")
+    }
+
+    fn location(
+        conn: &Connection,
+        source_id: &str,
+        source_version_id: &str,
+    ) -> SourceLocationDto {
+        create_source_location(
+            conn,
+            CreateSourceLocationReq {
+                source_id: source_id.into(),
+                source_version_id: source_version_id.into(),
+                legacy_segment_id: None,
+                label: "Page 3, paragraph 2".into(),
+                location_kind: SourceLocationKind::Paragraph,
+                page_start: Some(3),
+                page_end: Some(3),
+                paragraph_start: Some(2),
+                paragraph_end: Some(2),
+                line_start: None,
+                line_end: None,
+                time_start_ms: None,
+                time_end_ms: None,
+                stable_selector: Some("page=3&paragraph=2".into()),
+                locator_text: Some("An exact cited passage.".into()),
+                notes: None,
+                parent_segment_id: None,
+                order_index: Some(0),
+            },
+        )
+        .expect("create version-specific location")
+    }
+
+    fn extraction(
+        conn: &Connection,
+        source_id: &str,
+        source_version_id: &str,
+        source_segment_id: &str,
+        kind: ExtractionKind,
+        content: &str,
+    ) -> KnowledgeExtractionDto {
+        create_extraction(
+            conn,
+            CreateKnowledgeExtractionReq {
+                source_id: source_id.into(),
+                source_version_id: source_version_id.into(),
+                source_segment_id: source_segment_id.into(),
+                kind,
+                content: content.into(),
+                language: Some("en".into()),
+                parent_extraction_id: None,
+                tool_identity: Some("test-tool".into()),
+                tool_version: Some("1.0".into()),
+                prompt_config_identity: Some("test-prompt".into()),
+                confidence_decimal: Some("0.8".into()),
+                uncertainty: Some("Manual verification required".into()),
+                created_by: Some("machine:test".into()),
+            },
+        )
+        .expect("create extraction")
+    }
+
+    fn accept_extraction(extraction_id: &str) -> ReviewExtractionReq {
+        ReviewExtractionReq {
+            extraction_id: extraction_id.into(),
+            review_status: ExtractionReviewStatus::Accepted,
+            reviewer_id: Some("reviewer:test".into()),
+            rationale: Some("The extraction matches the cited passage.".into()),
+        }
+    }
+
+    #[test]
+    fn source_versions_and_citations_pin_the_exact_version() {
+        let conn = connection();
+        let source_id = source(&conn);
+        let first = version(&conn, &source_id, "edition one");
+        let second = version(&conn, &source_id, "edition two");
+        let first_location = location(&conn, &source_id, &first.id);
+        let second_location = location(&conn, &source_id, &second.id);
+
+        assert_ne!(first.id, second.id);
+        assert_eq!(list_source_versions(&conn, &source_id).unwrap().len(), 2);
+        assert_eq!(
+            list_source_locations(&conn, &first.id).unwrap()[0].id,
+            first_location.id
+        );
+        assert_eq!(
+            list_source_locations(&conn, &second.id).unwrap()[0].source_version_id,
+            second.id
+        );
+
+        let extract = extraction(
+            &conn,
+            &source_id,
+            &first.id,
+            &first_location.id,
+            ExtractionKind::Quote,
+            "Quoted text",
+        );
+        assert_eq!(extract.source_version_id, first.id);
+        assert_eq!(extract.source_segment_id, first_location.id);
+        assert_eq!(extract.review_status, ExtractionReviewStatus::Unreviewed);
+    }
+
+    #[test]
+    fn extraction_review_and_correction_preserve_original_and_gate_source_claims() {
+        let conn = connection();
+        let source_id = source(&conn);
+        let source_version = version(&conn, &source_id, "v1");
+        let location = location(&conn, &source_id, &source_version.id);
+        let original = extraction(
+            &conn,
+            &source_id,
+            &source_version.id,
+            &location.id,
+            ExtractionKind::SourceClaim,
+            "Original source proposition.",
+        );
+
+        assert!(create_source_claim(
+            &conn,
+            CreateSourceClaimReq {
+                extraction_id: original.id.clone(),
+                statement: original.content.clone(),
+                asserted_by: Some("A. Author".into()),
+                scope: None,
+            },
+        )
+        .is_err());
+
+        let replacement = correct_extraction(
+            &conn,
+            CorrectExtractionReq {
+                extraction_id: original.id.clone(),
+                content: "Corrected source proposition.".into(),
+                reason: "Corrected transcription.".into(),
+                actor_id: Some("reviewer:test".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(replacement.parent_extraction_id.as_deref(), Some(&original.id));
+        assert_eq!(replacement.review_status, ExtractionReviewStatus::Unreviewed);
+
+        let history = list_extractions(&conn, &source_version.id).unwrap();
+        let retained_original = history.iter().find(|item| item.id == original.id).unwrap();
+        assert_eq!(retained_original.content, "Original source proposition.");
+        assert_eq!(retained_original.superseded_by_id.as_deref(), Some(&replacement.id));
+        assert_eq!(history.len(), 2);
+
+        review_extraction(&conn, accept_extraction(&replacement.id)).unwrap();
+        let claim = create_source_claim(
+            &conn,
+            CreateSourceClaimReq {
+                extraction_id: replacement.id.clone(),
+                statement: replacement.content.clone(),
+                asserted_by: Some("A. Author".into()),
+                scope: Some("Test scope".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(claim.source_version_id, source_version.id);
+        assert_eq!(claim.extraction_id, replacement.id);
+        assert!(list_provenance(&conn, "source_claim", &claim.id)
+            .unwrap()
+            .iter()
+            .any(|event| event.event_kind == "source_claim_created"));
+    }
+
+    #[test]
+    fn contradictory_source_claims_coexist_and_framework_publication_is_immutable() {
+        let conn = connection();
+        let source_id = source(&conn);
+        let source_version = version(&conn, &source_id, "v1");
+        let location = location(&conn, &source_id, &source_version.id);
+
+        let first = extraction(
+            &conn,
+            &source_id,
+            &source_version.id,
+            &location.id,
+            ExtractionKind::SourceClaim,
+            "The method increases the measured outcome.",
+        );
+        let second = extraction(
+            &conn,
+            &source_id,
+            &source_version.id,
+            &location.id,
+            ExtractionKind::SourceClaim,
+            "The method does not increase the measured outcome.",
+        );
+        review_extraction(&conn, accept_extraction(&first.id)).unwrap();
+        review_extraction(&conn, accept_extraction(&second.id)).unwrap();
+        let first_claim = create_source_claim(
+            &conn,
+            CreateSourceClaimReq {
+                extraction_id: first.id,
+                statement: "The method increases the measured outcome.".into(),
+                asserted_by: None,
+                scope: None,
+            },
+        )
+        .unwrap();
+        let second_claim = create_source_claim(
+            &conn,
+            CreateSourceClaimReq {
+                extraction_id: second.id,
+                statement: "The method does not increase the measured outcome.".into(),
+                asserted_by: None,
+                scope: None,
+            },
+        )
+        .unwrap();
+        create_claim_relation(
+            &conn,
+            CreateClaimRelationReq {
+                source_claim_id: first_claim.id.clone(),
+                target_kind: KnowledgeItemKind::SourceClaim,
+                target_id: second_claim.id.clone(),
+                relation_kind: ClaimRelationKind::Contradicts,
+                rationale: Some("The source propositions disagree.".into()),
+                created_by: Some("reviewer:test".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(list_source_claims(&conn, &source_id).unwrap().len(), 2);
+        assert!(list_claim_relations(&conn, &first_claim.id)
+            .unwrap()
+            .iter()
+            .any(|relation| relation.target_id == second_claim.id
+                && relation.relation_kind == ClaimRelationKind::Contradicts));
+
+        let framework = create_framework(
+            &conn,
+            CreateFrameworkReq {
+                title: "Test framework".into(),
+                description: None,
+                created_by: Some("user:test".into()),
+            },
+        )
+        .unwrap();
+        let initial_version = list_framework_versions(&conn, &framework.id).unwrap()[0].clone();
+        add_framework_item(
+            &conn,
+            AddFrameworkItemReq {
+                framework_version_id: initial_version.id.clone(),
+                item_kind: KnowledgeItemKind::SourceClaim,
+                item_id: first_claim.id.clone(),
+                membership_role: "core".into(),
+                item_order: 0,
+                rationale: None,
+            },
+        )
+        .unwrap();
+        review_framework_version(
+            &conn,
+            ReviewFrameworkReq {
+                framework_version_id: initial_version.id.clone(),
+                review_status: "approved".into(),
+                reviewer_id: Some("reviewer:test".into()),
+                rationale: None,
+            },
+        )
+        .unwrap();
+        publish_framework_version(&conn, &initial_version.id).unwrap();
+        assert!(update_framework_version(
+            &conn,
+            UpdateFrameworkVersionReq {
+                framework_version_id: initial_version.id.clone(),
+                title: "Must not change".into(),
+                description: String::new(),
+            },
+        )
+        .is_err());
+
+        let next = create_framework_version(
+            &conn,
+            CreateFrameworkVersionReq {
+                framework_id: framework.id.clone(),
+                change_class: "revision".into(),
+                change_rationale: "Retain the conflicting source claim in a new draft.".into(),
+                affected_claim_ids: vec![first_claim.id.clone()],
+                assumption_claim_ids: vec![second_claim.id.clone()],
+                created_by: Some("user:test".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(next.parent_version_id.as_deref(), Some(&initial_version.id));
+        assert_eq!(next.items.len(), 1);
+        assert_eq!(
+            list_framework_versions(&conn, &framework.id).unwrap().len(),
+            2
+        );
+    }
+
+    #[test]
+    fn additive_migration_preserves_legacy_source_rows_without_guessing_versions() {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        conn.execute_batch(include_str!("../../schema_source.sql"))
+            .expect("create legacy source schema");
+        conn.execute(
+            "INSERT INTO sources (id, kind, title, created_at, updated_at)
+             VALUES ('SRC-legacy', 'doc', 'Legacy source', 1, 2)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO segments (id, source_id, label, created_at, updated_at)
+             VALUES ('SEG-legacy', 'SRC-legacy', 'Legacy page', 1, 2)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO extracts (id, segment_id, transform_kind, content, created_at, updated_at)
+             VALUES ('EXT-legacy', 'SEG-legacy', 'quoted', 'Legacy quote', 1, 2)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO source_revisions
+                (id, entity_kind, entity_id, revision_type, after_json, created_at)
+             VALUES ('REV-legacy', 'source', 'SRC-legacy', 'create', '{}', 1)",
+            [],
+        )
+        .unwrap();
+
+        init_schema(&conn).expect("apply additive acquisition migration");
+        let source_title: String = conn
+            .query_row("SELECT title FROM sources WHERE id = 'SRC-legacy'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let extract_content: String = conn
+            .query_row(
+                "SELECT content FROM extracts WHERE id = 'EXT-legacy'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let version_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM source_versions", [], |row| row.get(0))
+            .unwrap();
+        let new_extract_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM knowledge_extractions",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(source_title, "Legacy source");
+        assert_eq!(extract_content, "Legacy quote");
+        assert_eq!(version_count, 0);
+        assert_eq!(new_extract_count, 0);
+    }
+}
