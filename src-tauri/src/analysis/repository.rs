@@ -427,9 +427,8 @@ fn query_definition_version(
              WHERE definition_version_id = ?1
              ORDER BY metric_definition_version_id",
         )?;
-        statement
-            .query_map([version_id], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+        let rows = statement.query_map([version_id], |row| row.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
     let status: String = conn.query_row(
         "SELECT status FROM analysis_definition_events
@@ -599,7 +598,12 @@ pub fn create_definition_version(
     if req.specification.required_input_roles.is_empty() {
         return Err(anyhow!("At least one exact dataset role must be declared."));
     }
-    let roles: HashSet<_> = req.specification.required_input_roles.iter().collect();
+    let roles: HashSet<_> = req
+        .specification
+        .required_input_roles
+        .iter()
+        .map(DatasetRole::as_str)
+        .collect();
     if roles.len() != req.specification.required_input_roles.len() {
         return Err(anyhow!("Required dataset roles must be unique."));
     }
