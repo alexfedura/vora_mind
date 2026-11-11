@@ -935,12 +935,6 @@ pub fn create_framework_version(
     version_id: &str,
     now: i64,
 ) -> RepoResult<FrameworkVersionDto> {
-    if !matches!(
-        req.change_class.as_str(),
-        "refinement" | "extension" | "revision" | "replacement"
-    ) {
-        return Err(rusqlite::Error::InvalidQuery);
-    }
     let tx = conn.unchecked_transaction()?;
     let parent = tx
         .query_row(
@@ -976,7 +970,7 @@ pub fn create_framework_version(
             parent.0,
             parent.2,
             parent.3,
-            req.change_class,
+            req.change_class.as_str(),
             req.change_rationale,
             req.created_by,
             now
@@ -1063,7 +1057,7 @@ pub fn create_framework_version(
         parent_version_id: Some(parent.0),
         title: parent.2,
         description: parent.3,
-        status: "draft".to_string(),
+        status: FrameworkVersionStatus::Draft,
         change_class: Some(req.change_class.clone()),
         change_rationale: Some(req.change_rationale.clone()),
         created_by: req.created_by.clone(),
@@ -1108,7 +1102,7 @@ pub fn add_framework_item(
             req.framework_version_id,
             fk_columns.1,
             req.item_id,
-            req.membership_role,
+            req.membership_role.as_str(),
             req.item_order,
             req.rationale.as_deref().unwrap_or_default(),
             now
@@ -1293,7 +1287,7 @@ pub fn review_framework_version(
         params![
             review_id,
             req.framework_version_id,
-            req.review_status,
+            req.review_status.as_str(),
             req.reviewer_id,
             req.rationale.as_deref().unwrap_or_default(),
             now
@@ -1308,7 +1302,7 @@ pub fn review_framework_version(
         now,
         req.rationale.as_deref().unwrap_or_default(),
         Some(&status),
-        Some(&req.review_status),
+        Some(req.review_status.as_str()),
     )?;
     tx.commit()
 }
