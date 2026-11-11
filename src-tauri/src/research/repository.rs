@@ -2624,3 +2624,425 @@ fn query_ids(conn: &Connection, sql: &str) -> Result<Vec<String>> {
     let rows = statement.query_map([], |row| row.get(0))?;
     rows.collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn initialized_connection() -> Connection {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        crate::mind::portable_db::initialize_workspace_schema(&conn)
+            .expect("initialize complete workspace schema");
+        conn
+    }
+
+    fn project(conn: &mut Connection, title: &str) -> ResearchProjectDto {
+        create_project(
+            conn,
+            &CreateResearchProjectReq {
+                title: title.into(),
+                aim: "Test research aim".into(),
+                pathways: vec![ResearchPathwayKey::FirstPrinciplesDiscovery],
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create project")
+    }
+
+    fn accepted_question(conn: &mut Connection, project_id: &str) -> ResearchQuestionDto {
+        let question = create_question(
+            conn,
+            &CreateResearchQuestionReq {
+                project_id: Some(project_id.into()),
+                research_gap_id: None,
+                domain_id: None,
+                title: "Does treatment change outcome?".into(),
+                description: "Test question".into(),
+                rationale: "It is answerable".into(),
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create question");
+        transition_question(
+            conn,
+            &question.id,
+            ResearchQuestionStatus::Review,
+            None,
+            "Ready for review",
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("submit question");
+        transition_question(
+            conn,
+            &question.id,
+            ResearchQuestionStatus::Accepted,
+            None,
+            "Accepted",
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("accept question")
+    }
+
+    fn typed_hypothesis(
+        conn: &mut Connection,
+        project_id: &str,
+        question_id: &str,
+    ) -> ResearchHypothesisDto {
+        create_typed_hypothesis(
+            conn,
+            &CreateTypedHypothesisReq {
+                project_id: project_id.into(),
+                research_question_id: question_id.into(),
+                parent_hypothesis_id: None,
+                lineage_rationale: None,
+                statement_h0: "The treatment has no effect.".into(),
+                statement_h1: "The treatment changes the outcome.".into(),
+                population_scope: "Adults".into(),
+                research_scope: "This study".into(),
+                expected_direction: "non_directional".into(),
+                expected_effect_decimal: None,
+                expected_effect_unit: None,
+                falsification_criteria: "Reject if observed effect exceeds stated threshold.".into(),
+                assumptions: "Measurements are comparable.".into(),
+                variables: vec![
+                    HypothesisVariableInput {
+                        role: HypothesisVariableRole::Independent,
+                        name: "Treatment dose".into(),
+                        operational_definition: "Dose in milligrams".into(),
+                        value_kind: HypothesisValueKind::Continuous,
+                        unit: Some("mg".into()),
+                        measurement_method: "Dose record".into(),
+                    },
+                    HypothesisVariableInput {
+                        role: HypothesisVariableRole::Dependent,
+                        name: "Outcome".into(),
+                        operational_definition: "Score at follow-up".into(),
+                        value_kind: HypothesisValueKind::Continuous,
+                        unit: Some("points".into()),
+                        measurement_method: "Validated scale".into(),
+                    },
+                ],
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            &Uuid::now_v7().to_string(),
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create typed hypothesis")
+    }
+
+    #[test]
+    fn migration_preserves_legacy_questions_and_hypotheses_as_unassessed() {
+        let conn = initialized_connection();
+        conn.execute(
+            "INSERT INTO questions (id, title, description, created_at, updated_at)
+             VALUES ('legacy-question', 'Legacy question', 'Original detail', 10, 20)",
+            [],
+        )
+        .expect("insert legacy question");
+        conn.execute(
+            "INSERT INTO hypotheses
+                (id, inquiry_id, statement_h1, statement_h0, independent_var, dependent_var,
+                 metric, success_threshold, status, created_at, updated_at)
+             VALUES ('legacy-hypothesis', 'legacy-question', 'Legacy H1', 'Legacy H0',
+                     'x', 'y', 'metric', 'threshold', 'testing', 10, 20)",
+            [],
+        )
+        .expect("insert legacy hypothesis");
+
+        let workspace = super::super::workspace(&conn).expect("load Research workspace");
+        let question = workspace
+            .questions
+            .iter()
+            .find(|question| question.id == "legacy-question")
+            .expect("mapped legacy question");
+        assert_eq!(question.lifecycle_status, ResearchQuestionStatus::LegacyUnassessed);
+        assert_eq!(question.ownership_state, "unassigned");
+        assert_eq!(question.project_id, None);
+        assert_eq!(question.title, "Legacy question");
+
+        let hypothesis = workspace
+            .hypotheses
+            .iter()
+            .find(|hypothesis| hypothesis.legacy_hypothesis_id.as_deref() == Some("legacy-hypothesis"))
+            .expect("mapped legacy hypothesis");
+        assert_eq!(hypothesis.lifecycle_status, ResearchHypothesisStatus::LegacyUntyped);
+        assert!(hypothesis.definitions.is_empty());
+        assert_eq!(hypothesis.project_id, None);
+        assert_eq!(hypothesis.research_question_id.as_deref(), Some("legacy-question"));
+    }
+
+    #[test]
+    fn accepted_gaps_require_reviewed_prior_knowledge_evidence() {
+        let mut conn = initialized_connection();
+        let project = project(&mut conn, "Evidence gated project");
+        let gap = create_gap(
+            &conn,
+            &CreateResearchGapReq {
+                project_id: project.id.clone(),
+                domain_id: None,
+                title: "Unanswered question".into(),
+                statement: "Prior work does not resolve this outcome.".into(),
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create gap");
+        transition_gap(
+            &conn,
+            &gap.id,
+            ResearchGapStatus::Assessed,
+            None,
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("assess gap");
+        assert!(transition_gap(
+            &conn,
+            &gap.id,
+            ResearchGapStatus::Accepted,
+            None,
+            now_ts_us().expect("timestamp"),
+        )
+        .is_err());
+
+        let assessment = create_prior_assessment(
+            &conn,
+            &CreatePriorKnowledgeAssessmentReq {
+                project_id: project.id.clone(),
+                title: "Prior-knowledge assessment".into(),
+                assessment: "The known literature leaves the stated outcome unresolved.".into(),
+                framework_version_id: None,
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create assessment");
+        review_prior_assessment(
+            &conn,
+            &assessment.id,
+            Some("reviewer"),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("review assessment");
+        add_gap_evidence(
+            &conn,
+            &AddGapEvidenceReq {
+                gap_id: gap.id.clone(),
+                literature_review_id: None,
+                prior_assessment_id: Some(assessment.id),
+            },
+        )
+        .expect("attach prior assessment");
+        let accepted = transition_gap(
+            &conn,
+            &gap.id,
+            ResearchGapStatus::Accepted,
+            None,
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("accept evidence-backed gap");
+        assert_eq!(accepted.lifecycle_status, ResearchGapStatus::Accepted);
+        assert_eq!(accepted.prior_assessment_ids.len(), 1);
+    }
+
+    #[test]
+    fn questions_keep_lineage_and_competing_hypotheses_keep_typed_definitions() {
+        let mut conn = initialized_connection();
+        let project = project(&mut conn, "Lineage project");
+        let parent = accepted_question(&mut conn, &project.id);
+        let child = refine_question(
+            &mut conn,
+            &parent.id,
+            "Does the dose change the outcome in subgroup A?",
+            "A refined question.",
+            "Narrowed to the target subgroup.",
+            None,
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("refine question");
+        assert_eq!(child.lifecycle_status, ResearchQuestionStatus::Draft);
+        let lineage_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM research_question_lineage
+                 WHERE parent_question_id = ?1 AND derived_question_id = ?2
+                   AND relation_kind = 'refined_from'",
+                params![parent.id, child.id],
+                |row| row.get(0),
+            )
+            .expect("read question lineage");
+        assert_eq!(lineage_count, 1);
+
+        let parent_hypothesis = typed_hypothesis(&mut conn, &project.id, &parent.id);
+        let competing = typed_hypothesis(&mut conn, &project.id, &parent.id);
+        link_competing_hypotheses(
+            &conn,
+            &LinkCompetingHypothesesReq {
+                hypothesis_id: parent_hypothesis.id.clone(),
+                competing_hypothesis_id: competing.id.clone(),
+                rationale: "Different predicted mechanism.".into(),
+                created_by: None,
+            },
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("link competing hypotheses");
+        assert_eq!(parent_hypothesis.definitions[0].variables.len(), 2);
+        assert_eq!(
+            query_hypothesis(&conn, &parent_hypothesis.id)
+                .expect("read hypothesis")
+                .competing_hypothesis_ids,
+            vec![competing.id.clone()]
+        );
+
+        for _ in 0..2 {
+            let design = create_research_design(
+                &mut conn,
+                &CreateResearchDesignReq {
+                    project_id: project.id.clone(),
+                    title: "Design version".into(),
+                    description: "Design only".into(),
+                    protocol: "Protocol outline".into(),
+                    created_by: None,
+                },
+                &Uuid::now_v7().to_string(),
+                &Uuid::now_v7().to_string(),
+                now_ts_us().expect("timestamp"),
+            )
+            .expect("create design");
+            link_hypothesis_design(
+                &conn,
+                &LinkHypothesisDesignReq {
+                    hypothesis_version_id: parent_hypothesis.definitions[0].id.clone(),
+                    design_version_id: design.id,
+                    relationship_kind: "tests".into(),
+                    rationale: "Design targets this hypothesis.".into(),
+                    created_by: None,
+                },
+                now_ts_us().expect("timestamp"),
+            )
+            .expect("link design");
+        }
+        let design_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM hypothesis_design_links WHERE hypothesis_version_id = ?1",
+                [&parent_hypothesis.definitions[0].id],
+                |row| row.get(0),
+            )
+            .expect("count linked designs");
+        assert_eq!(design_count, 2);
+    }
+
+    #[test]
+    fn observation_plans_and_records_are_distinct_from_patterns() {
+        let mut conn = initialized_connection();
+        let project = project(&mut conn, "Observation project");
+        let phenomenon = create_phenomenon(
+            &conn,
+            &CreatePhenomenonReq {
+                project_id: project.id.clone(),
+                domain_id: None,
+                title: "Measured phenomenon".into(),
+                description: "A measurable event.".into(),
+                population_scope: "Samples".into(),
+                context: "Controlled context".into(),
+                temporal_boundary: "One session".into(),
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create phenomenon");
+        let plan = create_observation_plan(
+            &mut conn,
+            &CreateObservationPlanReq {
+                project_id: project.id.clone(),
+                phenomenon_id: phenomenon.id.clone(),
+                title: "Measurement plan".into(),
+                measurement_method: "Sensor".into(),
+                sample_frame: "Ten samples".into(),
+                conditions_template: "Room temperature".into(),
+                inclusion_rules: "Valid readings only".into(),
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create plan");
+        let reviewed_plan = review_observation_plan(
+            &conn,
+            &plan.versions[0].id,
+            false,
+            None,
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("review plan");
+        let observation = create_observation(
+            &conn,
+            &CreateObservationReq {
+                project_id: project.id.clone(),
+                phenomenon_id: phenomenon.id.clone(),
+                plan_id: plan.id.clone(),
+                plan_version_id: reviewed_plan.id,
+                dataset_version_reference_id: None,
+                measured_at_us: now_ts_us().expect("timestamp"),
+                value_decimal: Some("4.2".into()),
+                value_state: "observed".into(),
+                unit: Some("units".into()),
+                measurement_method: "Sensor".into(),
+                conditions: "Room temperature".into(),
+                sample_identifier: Some("sample-1".into()),
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create observation");
+        let pattern = create_pattern(
+            &mut conn,
+            &CreatePatternReq {
+                project_id: project.id,
+                title: "Increasing trend".into(),
+                statement: "Values increased across samples.".into(),
+                analysis_method: "Ordered comparison".into(),
+                uncertainty: "Only one sample in this fixture.".into(),
+                observation_ids: vec![observation.id.clone()],
+                dataset_version_reference_ids: Vec::new(),
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create pattern");
+        assert_eq!(pattern.observation_ids, vec![observation.id]);
+        assert_ne!(pattern.id, phenomenon.id);
+    }
+
+    #[test]
+    fn research_records_survive_database_reopen() {
+        let path = std::env::temp_dir().join(format!("vora-research-{}.db", Uuid::now_v7()));
+        {
+            let conn = Connection::open(&path).expect("open file-backed database");
+            crate::mind::portable_db::initialize_workspace_schema(&conn)
+                .expect("initialize file-backed schema");
+            let mut conn = conn;
+            let project = project(&mut conn, "Persistent project");
+            assert!(!project.id.is_empty());
+        }
+        {
+            let conn = Connection::open(&path).expect("reopen file-backed database");
+            crate::mind::portable_db::initialize_workspace_schema(&conn)
+                .expect("reopen schema");
+            let workspace = super::super::workspace(&conn).expect("reload workspace");
+            assert!(workspace.projects.iter().any(|item| item.title == "Persistent project"));
+        }
+        std::fs::remove_file(path).expect("remove temporary database");
+    }
+}
