@@ -178,7 +178,7 @@ impl ModelImpactKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum ModelImpactTarget {
     SourceClaim {
         claim_id: String,
