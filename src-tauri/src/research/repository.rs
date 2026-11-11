@@ -1879,6 +1879,50 @@ pub fn link_competing_hypotheses(
     tx.commit()
 }
 
+pub fn add_hypothesis_model_reference(
+    conn: &Connection,
+    req: &AddHypothesisModelReferenceReq,
+    id: &str,
+    now: i64,
+) -> Result<HypothesisModelReferenceDto> {
+    conn.execute(
+        "INSERT INTO hypothesis_model_references
+            (id, hypothesis_id, model_id, model_version_id, label, rationale,
+             resolution_status, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'unresolved', ?7, ?8)",
+        params![
+            id,
+            req.hypothesis_id,
+            req.model_id.trim(),
+            req.model_version_id.trim(),
+            req.label.trim(),
+            req.rationale,
+            req.created_by,
+            now
+        ],
+    )?;
+    let tx = conn.unchecked_transaction()?;
+    insert_event(
+        &tx,
+        "hypothesis",
+        &req.hypothesis_id,
+        "model_reference_added",
+        req.created_by.as_deref(),
+        &req.rationale,
+        now,
+    )?;
+    tx.commit()?;
+    Ok(HypothesisModelReferenceDto {
+        id: id.into(),
+        hypothesis_id: req.hypothesis_id.clone(),
+        model_id: req.model_id.trim().into(),
+        model_version_id: req.model_version_id.trim().into(),
+        label: req.label.trim().into(),
+        rationale: req.rationale.clone(),
+        resolution_status: "unresolved".into(),
+    })
+}
+
 pub fn add_hypothesis_evidence(
     conn: &Connection,
     req: &AddHypothesisEvidenceReq,
@@ -2134,6 +2178,7 @@ fn query_hypothesis(conn: &Connection, hypothesis_id: &str) -> Result<ResearchHy
                 },
                 definitions: Vec::new(),
                 competing_hypothesis_ids: Vec::new(),
+                model_references: Vec::new(),
                 created_by: row.get(7)?,
                 created_at_us: row.get(8)?,
             })
@@ -2157,6 +2202,23 @@ fn query_hypothesis(conn: &Connection, hypothesis_id: &str) -> Result<ResearchHy
     )?;
     hypothesis.competing_hypothesis_ids = competitors
         .query_map([hypothesis_id], |row| row.get(0))?
+        .collect::<Result<Vec<_>>>()?;
+    let mut model_references = conn.prepare(
+        "SELECT id, hypothesis_id, model_id, model_version_id, label, rationale, resolution_status
+         FROM hypothesis_model_references WHERE hypothesis_id = ?1 ORDER BY created_at_us, id",
+    )?;
+    hypothesis.model_references = model_references
+        .query_map([hypothesis_id], |row| {
+            Ok(HypothesisModelReferenceDto {
+                id: row.get(0)?,
+                hypothesis_id: row.get(1)?,
+                model_id: row.get(2)?,
+                model_version_id: row.get(3)?,
+                label: row.get(4)?,
+                rationale: row.get(5)?,
+                resolution_status: row.get(6)?,
+            })
+        })?
         .collect::<Result<Vec<_>>>()?;
     Ok(hypothesis)
 }
