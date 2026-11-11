@@ -53,6 +53,13 @@ export const researchService = {
   getWorkspace: () => invoke<ResearchWorkspaceDto>("research_get_workspace"),
   createProject: (request: CreateResearchProjectReq) =>
     invoke<ResearchProjectDto>("research_create_project", { request }),
+  transitionProject: (
+    projectId: string,
+    nextStatus: ResearchProjectDto["lifecycleStatus"],
+    actorId: string | null,
+  ) => invoke<ResearchProjectDto>("research_transition_project", {
+    projectId, nextStatus, actorId,
+  }),
   createDomain: (request: CreateResearchDomainReq) =>
     invoke<ResearchDomainDto>("research_create_domain", { request }),
   assignDomain: (projectId: string, domainId: string, rationale: string) =>
