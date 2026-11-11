@@ -679,16 +679,16 @@ pub fn add_gap_evidence(conn: &Connection, req: &AddGapEvidenceReq) -> Result<()
 pub fn review_gap_exception(
     conn: &Connection,
     req: &ReviewGapExceptionReq,
+    id: &str,
     now: i64,
 ) -> Result<()> {
-    conn.execute(
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
         "INSERT INTO research_gap_review_exceptions
-            (gap_id, rationale, reviewer_id, review_decision, reviewed_at_us)
-         VALUES (?1, ?2, ?3, ?4, ?5)
-         ON CONFLICT(gap_id) DO UPDATE SET
-            rationale = excluded.rationale, reviewer_id = excluded.reviewer_id,
-            review_decision = excluded.review_decision, reviewed_at_us = excluded.reviewed_at_us",
+            (id, gap_id, rationale, reviewer_id, review_decision, reviewed_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![
+            id,
             req.gap_id,
             req.rationale.trim(),
             req.reviewer_id,
@@ -696,7 +696,20 @@ pub fn review_gap_exception(
             now
         ],
     )?;
-    Ok(())
+    insert_event(
+        &tx,
+        "gap",
+        &req.gap_id,
+        if req.review_decision == GapReviewDecision::Accepted {
+            "exception_accepted"
+        } else {
+            "exception_rejected"
+        },
+        req.reviewer_id.as_deref(),
+        &req.rationale,
+        now,
+    )?;
+    tx.commit()
 }
 
 pub fn transition_gap(
