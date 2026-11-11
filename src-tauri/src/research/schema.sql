@@ -505,6 +505,18 @@ CREATE TABLE hypothesis_competitions (
     CHECK (hypothesis_id <> competing_hypothesis_id)
 );
 
+CREATE TABLE research_hypothesis_lineage (
+    id TEXT PRIMARY KEY,
+    parent_hypothesis_id TEXT NOT NULL REFERENCES research_hypotheses(id) ON DELETE RESTRICT,
+    derived_hypothesis_id TEXT NOT NULL REFERENCES research_hypotheses(id) ON DELETE RESTRICT,
+    relation_kind TEXT NOT NULL CHECK (relation_kind IN ('derived_from', 'refined_from', 'supersedes')),
+    rationale TEXT NOT NULL,
+    created_by TEXT,
+    created_at_us INTEGER NOT NULL,
+    CHECK (parent_hypothesis_id <> derived_hypothesis_id),
+    UNIQUE (parent_hypothesis_id, derived_hypothesis_id, relation_kind)
+);
+
 CREATE TABLE hypothesis_model_references (
     id TEXT PRIMARY KEY,
     hypothesis_id TEXT NOT NULL REFERENCES research_hypotheses(id) ON DELETE RESTRICT,
