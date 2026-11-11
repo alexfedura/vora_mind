@@ -1580,3 +1580,416 @@ export interface CreateDatasetTransformationReq {
   inputs: DatasetTransformationInputReq[];
   createdBy: string | null;
 }
+
+export type AnalysisApplicability<T> =
+  | { state: "applicable"; details: T }
+  | { state: "not_applicable"; reason: string }
+  | { state: "not_assessed"; rationale: string | null };
+
+export interface StatisticalIntegrityPlanDto {
+  overfitting: AnalysisApplicability<{
+    trainingTuningSeparation: string;
+    parameterSearchSpace: string;
+    modelSelectionProcess: string;
+    complexityReporting: string;
+    sensitivityReporting: string;
+  }>;
+  dataLeakage: AnalysisApplicability<{
+    dataCutoffs: string;
+    transformationOrder: string;
+    featureSelectionProvenance: string;
+    evaluationDataIsolation: string;
+  }>;
+  selectionBias: AnalysisApplicability<{
+    samplingFrame: string;
+    inclusionRules: string;
+    exclusionRules: string;
+    filteredAndMissingCases: string;
+    survivorPopulation: string;
+  }>;
+  lookAhead: AnalysisApplicability<{
+    featureAvailabilityPolicy: string;
+    predictionTimestampPolicy: string;
+    decisionTimestampPolicy: string;
+  }>;
+  multipleTesting: AnalysisApplicability<{
+    testFamily: string;
+    correctionMethod: string | null;
+    noCorrectionJustification: string | null;
+  }>;
+  datasetSeparation: AnalysisApplicability<{
+    requireDisjointSplits: boolean;
+    selectionRationale: string;
+  }>;
+  outOfSample: AnalysisApplicability<{
+    evaluationPeriod: string;
+    evaluationPopulation: string;
+    modelSelectionUsage: "not_used" | "used_for_selection" | "partially_used";
+  }>;
+  walkForward: AnalysisApplicability<{
+    windows: Array<{
+      label: string;
+      trainingStartAtUs: number;
+      trainingEndAtUs: number;
+      validationStartAtUs: number;
+      validationEndAtUs: number;
+      testStartAtUs: number;
+      testEndAtUs: number;
+    }>;
+    refitCadence: string;
+    aggregationMethod: string;
+  }>;
+  forwardTesting: AnalysisApplicability<{
+    executionKind: "prospective" | "paper" | "live";
+    actualExecutionConditions: string;
+    costsAndFees: string;
+  }>;
+  reproducibility: AnalysisApplicability<{
+    protocolVersion: string;
+    rawInputChecksumsRequired: boolean;
+    transformationLineageRequired: boolean;
+    codeAndEnvironmentRequired: boolean;
+    parametersAndSeedsRequired: boolean;
+    timestampsAndDeviationsRequired: boolean;
+  }>;
+}
+
+export interface AnalysisDefinitionSpecificationDto {
+  protocolVersion: string;
+  requiredInputRoles: DatasetRole[];
+  parametersSchema: Record<string, unknown>;
+  integrity: StatisticalIntegrityPlanDto;
+}
+
+export type AnalysisVerificationStatus = "passed" | "failed";
+export type AnalysisDefinitionStatus = "draft" | "review" | "locked" | "retired";
+export type AnalysisRunStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "inconclusive";
+export type AnalysisLogSeverity = "info" | "warning" | "error";
+export type AnalysisIntegritySeverity = "warning" | "blocking";
+export type EvidencePolarity = "supports" | "contradicts" | "qualifies" | "neutral";
+export type EvidenceStatus =
+  | "recorded"
+  | "assessed"
+  | "accepted"
+  | "contested"
+  | "rejected"
+  | "superseded"
+  | "retracted";
+export type FindingConclusionKind = "result" | "null_result" | "contradictory" | "inconclusive";
+export type FindingStatus =
+  | "draft"
+  | "review"
+  | "accepted"
+  | "contested"
+  | "unsupported"
+  | "inconclusive"
+  | "superseded"
+  | "retracted";
+export type FindingRelationKind = "contests" | "contradicts" | "qualifies" | "supersedes";
+
+export interface AnalysisMethodVersionDto {
+  id: string;
+  methodId: string;
+  projectId: string;
+  name: string;
+  versionNo: number;
+  versionLabel: string;
+  codeUri: string;
+  codeRevision: string;
+  dependencyLockSha256: string | null;
+  environment: Record<string, unknown>;
+  assumptions: string[];
+  testSuiteUri: string;
+  testSuiteSha256: string;
+  testsTotal: number;
+  testsPassed: number;
+  verificationStatus: AnalysisVerificationStatus;
+  contentSha256: string;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface MetricDefinitionVersionDto {
+  id: string;
+  metricDefinitionId: string;
+  projectId: string;
+  key: string;
+  name: string;
+  versionNo: number;
+  versionLabel: string;
+  formula: string;
+  unit: string;
+  testSuiteUri: string;
+  testSuiteSha256: string;
+  testsTotal: number;
+  testsPassed: number;
+  verificationStatus: AnalysisVerificationStatus;
+  contentSha256: string;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface AnalysisDefinitionVersionDto {
+  id: string;
+  definitionId: string;
+  projectId: string;
+  versionNo: number;
+  title: string;
+  versionLabel: string;
+  parentVersionId: string | null;
+  changeRationale: string | null;
+  methodVersionId: string;
+  metricDefinitionVersionIds: string[];
+  specification: AnalysisDefinitionSpecificationDto;
+  specificationSha256: string;
+  lifecycleStatus: AnalysisDefinitionStatus;
+  createdBy: string | null;
+  createdAtUs: number;
+  lockedAtUs: number | null;
+}
+
+export interface AnalysisInputSampleDto {
+  sampleId: string;
+  splitKey: string | null;
+  featureAvailableAtUs: number | null;
+  predictionAtUs: number | null;
+  decisionAtUs: number | null;
+  outcomeAvailableAtUs: number | null;
+}
+
+export interface AnalysisInputDto {
+  id: string;
+  datasetVersionId: string;
+  datasetChecksum: string;
+  role: DatasetRole;
+  splitGroupId: string | null;
+  sampleCount: number;
+  transformationLineage: unknown;
+  samples: AnalysisInputSampleDto[];
+}
+
+export interface AnalysisIntegrityFindingDto {
+  id: string;
+  category: string;
+  code: string;
+  severity: AnalysisIntegritySeverity;
+  message: string;
+}
+
+export interface AnalysisOutputDto {
+  id: string;
+  outputKey: string;
+  outputKind: string;
+  title: string;
+  payload: unknown;
+  payloadSha256: string;
+  artifactUri: string | null;
+  artifactSha256: string | null;
+  mediaType: string | null;
+  byteLength: number | null;
+  createdAtUs: number;
+}
+
+export type UncertaintyReportDto =
+  | { kind: "interval"; interval: { lower: string; upper: string; level: string } }
+  | { kind: "not_meaningful"; reason: string };
+
+export interface MissingDataReportDto {
+  policy: string;
+  missingCount: number;
+  rationale: string;
+}
+
+export interface AnalysisMetricDto {
+  id: string;
+  outputId: string;
+  metricDefinitionVersionId: string;
+  methodVersionId: string;
+  estimand: string;
+  sampleSize: number;
+  effectEstimate: string;
+  unit: string;
+  uncertainty: UncertaintyReportDto;
+  assumptions: string[];
+  exclusions: string[];
+  missingData: MissingDataReportDto;
+  multiplicityTreatment: string;
+  pValue: string | null;
+}
+
+export interface AnalysisRunLogDto {
+  id: string;
+  severity: AnalysisLogSeverity;
+  message: string;
+  details: unknown;
+  recordedBy: string | null;
+  recordedAtUs: number;
+}
+
+export interface AnalysisErrorDto {
+  id: string;
+  errorKind: string;
+  message: string;
+  details: unknown;
+  recordedAtUs: number;
+}
+
+export interface AnalysisDeviationDto {
+  id: string;
+  description: string;
+  rationale: string;
+  impactAssessment: string;
+  recordedBy: string | null;
+  recordedAtUs: number;
+}
+
+export interface AnalysisRunDto {
+  id: string;
+  projectId: string;
+  definitionVersionId: string;
+  lifecycleStatus: AnalysisRunStatus;
+  parameters: Record<string, unknown>;
+  environment: Record<string, unknown>;
+  randomSeeds: string[];
+  protocolVersion: string;
+  createdBy: string | null;
+  createdAtUs: number;
+  startedAtUs: number | null;
+  endedAtUs: number | null;
+  completionSummary: string | null;
+  failureSummary: string | null;
+  inputs: AnalysisInputDto[];
+  integrityFindings: AnalysisIntegrityFindingDto[];
+  outputs: AnalysisOutputDto[];
+  metrics: AnalysisMetricDto[];
+  logs: AnalysisRunLogDto[];
+  errors: AnalysisErrorDto[];
+  deviations: AnalysisDeviationDto[];
+}
+
+export type PropositionRefDto =
+  | { kind: "source_claim"; id: string }
+  | { kind: "hypothesis_version"; id: string }
+  | { kind: "finding_version"; id: string };
+
+export type EvidenceArtifactRefDto =
+  | { kind: "analysis_output"; id: string }
+  | { kind: "experiment_run"; id: string }
+  | { kind: "dataset_version"; id: string }
+  | { kind: "research_observation"; id: string }
+  | { kind: "source_version_segment"; id: string }
+  | { kind: "source_claim"; id: string };
+
+export interface EvidenceEventDto {
+  id: string;
+  status: EvidenceStatus;
+  rationale: string;
+  actorId: string | null;
+  occurredAtUs: number;
+}
+
+export interface EvidenceDto {
+  id: string;
+  projectId: string;
+  proposition: PropositionRefDto;
+  artifact: EvidenceArtifactRefDto;
+  polarity: EvidencePolarity;
+  scope: string;
+  qualityRationale: string;
+  limitations: string;
+  provenance: Record<string, unknown>;
+  createdBy: string | null;
+  createdAtUs: number;
+  status: EvidenceStatus;
+  events: EvidenceEventDto[];
+}
+
+export interface FindingEvidenceLinkDto {
+  evidenceId: string;
+  synthesisPolarity: EvidencePolarity;
+  rationale: string;
+}
+
+export interface FindingEventDto {
+  id: string;
+  status: FindingStatus;
+  rationale: string;
+  actorId: string | null;
+  occurredAtUs: number;
+}
+
+export interface FindingRelationDto {
+  id: string;
+  targetVersionId: string;
+  relationKind: FindingRelationKind;
+  rationale: string;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface FindingVersionDto {
+  id: string;
+  findingId: string;
+  projectId: string;
+  versionNo: number;
+  parentVersionId: string | null;
+  changeRationale: string | null;
+  title: string;
+  statement: string;
+  proposition: PropositionRefDto;
+  scope: string;
+  applicability: string;
+  uncertainty: string;
+  limitations: string;
+  conclusionKind: FindingConclusionKind;
+  analysisRunIds: string[];
+  evidence: FindingEvidenceLinkDto[];
+  status: FindingStatus;
+  events: FindingEventDto[];
+  relations: FindingRelationDto[];
+  contentSha256: string;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface AnalysisWorkspaceDto {
+  methods: AnalysisMethodVersionDto[];
+  metrics: MetricDefinitionVersionDto[];
+  definitions: AnalysisDefinitionVersionDto[];
+  runs: AnalysisRunDto[];
+  evidence: EvidenceDto[];
+  findings: FindingVersionDto[];
+}
+
+export interface CreateEvidenceReq {
+  projectId: string;
+  proposition: PropositionRefDto;
+  artifact: EvidenceArtifactRefDto;
+  polarity: EvidencePolarity;
+  scope: string;
+  qualityRationale: string;
+  limitations: string;
+  provenance: Record<string, unknown>;
+  createdBy: string | null;
+}
+
+export interface TransitionEvidenceReq {
+  evidenceId: string;
+  nextStatus: EvidenceStatus;
+  rationale: string;
+  actorId: string | null;
+}
+
+export interface TransitionFindingReq {
+  versionId: string;
+  nextStatus: FindingStatus;
+  rationale: string;
+  actorId: string | null;
+}
+
