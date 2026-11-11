@@ -629,6 +629,17 @@ pub fn get_dataset_version(
     query_dataset_version(conn, version_id)
 }
 
+pub fn run_dataset_version_ids(conn: &Connection, run_id: &str) -> Result<Vec<String>> {
+    let mut statement = conn.prepare(
+        "SELECT dataset_version_id FROM experiment_run_dataset_pins
+         WHERE run_id = ?1 ORDER BY usage_kind, dataset_version_id",
+    )?;
+    let rows = statement
+        .query_map([run_id], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
 fn query_dataset_assets(
     conn: &Connection,
     version_id: &str,
