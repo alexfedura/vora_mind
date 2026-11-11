@@ -16,6 +16,7 @@ import type {
   ModelParameterReq,
   ModelReplicationDatasetReq,
   ModelRelationReq,
+  ModelValidationTarget,
   ModelWorkspaceDto,
 } from "@/types";
 
@@ -207,6 +208,15 @@ function replicationOutcome(value: string): "supports" | "contradicts" | "mixed"
   }
 }
 
+function validationTarget(kind: string, id: string): ModelValidationTarget {
+  switch (kind) {
+    case "model_version": return { kind, id };
+    case "finding_version": return { kind, id };
+    case "source_claim": return { kind, id };
+    default: throw new Error("Choose a supported validation target.");
+  }
+}
+
 function ModelFormLabel({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
   return <label className="block space-y-1 text-xs text-gray-400"><span>{title}</span>{children}</label>;
 }
@@ -221,6 +231,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
   const [compareLeftId, setCompareLeftId] = useState("");
   const [compareRightId, setCompareRightId] = useState("");
   const [evaluationRunId, setEvaluationRunId] = useState("");
+  const [validationId, setValidationId] = useState("");
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!projectId) {
@@ -268,6 +279,22 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
   const comparisonLeft = workspace?.versions.find((version) => version.id === compareLeftId);
   const comparisonRight = workspace?.versions.find((version) => version.id === compareRightId);
   const selectedAnalysisRun = analysis?.runs.find((run) => run.id === evaluationRunId);
+  const selectedValidation = workspace?.validations.find((validation) => validation.id === validationId);
+
+  const validationEvidence = useMemo(() => {
+    if (!selectedValidation) return [];
+    if (selectedValidation.target.kind === "model_version") {
+      return modelEvidenceForTarget(workspace?.evidence ?? [], selectedValidation.target.id);
+    }
+    return (analysis?.evidence ?? []).filter((item) => {
+      if (selectedValidation.target.kind === "finding_version") {
+        return item.proposition.kind === "finding_version"
+          && item.proposition.id === selectedValidation.target.id;
+      }
+      return item.proposition.kind === "source_claim"
+        && item.proposition.id === selectedValidation.target.id;
+    }).map((item) => ({ id: item.id, polarity: item.polarity, scope: item.scope }));
+  }, [analysis, selectedValidation, workspace]);
 
   const createModel = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -404,10 +431,12 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
   const createValidation = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
-    const modelVersionId = String(values.get("modelVersionId") ?? "");
     await perform(() => modelService.createValidation({
       projectId,
-      target: { kind: "model_version", id: modelVersionId },
+      target: validationTarget(
+        String(values.get("targetKind") ?? ""),
+        String(values.get("targetId") ?? ""),
+      ),
       criteria: [String(values.get("criterion") ?? "")],
       scope: String(values.get("scope") ?? ""),
       populationScope: String(values.get("populationScope") ?? ""),
@@ -423,18 +452,18 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
   const finalizeValidation = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
-    const modelEvidenceIds = values.getAll("modelEvidenceIds").map(String);
-    if (modelEvidenceIds.length === 0) {
-      setError("Select model evidence before recording a validation outcome.");
+    const evidenceIds = values.getAll("evidenceIds").map(String);
+    if (!selectedValidation || evidenceIds.length === 0) {
+      setError("Select a planned validation and at least one target-matched evidence record.");
       return;
     }
     await perform(() => modelService.finalizeValidation({
-      validationId: String(values.get("validationId") ?? ""),
+      validationId: selectedValidation.id,
       outcome: validationOutcome(String(values.get("outcome") ?? "inconclusive")),
       rationale: String(values.get("rationale") ?? ""),
       deviations: [String(values.get("deviations") ?? "")].filter((value) => value.trim().length > 0),
-      analysisEvidenceIds: [],
-      modelEvidenceIds,
+      analysisEvidenceIds: selectedValidation.target.kind === "model_version" ? [] : evidenceIds,
+      modelEvidenceIds: selectedValidation.target.kind === "model_version" ? evidenceIds : [],
       actorId: null,
     }));
   };
@@ -711,8 +740,19 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
 
         <form onSubmit={(event) => void createValidation(event)} className="space-y-2 rounded-lg border border-[#343741] p-3">
           <h4 className="text-sm font-medium text-gray-200">Predeclare a scoped validation</h4>
-          <select className={fieldClass} name="modelVersionId" required defaultValue="">
-            <option value="">Target ModelVersion</option>
+          <select className={fieldClass} name="targetKind" required defaultValue="model_version">
+            <option value="model_version">ModelVersion</option>
+            <option value="finding_version">FindingVersion</option>
+            <option value="source_claim">SourceClaim</option>
+          </select>
+          <input className={fieldClass} name="targetId" placeholder="Exact target ID" required />
+          <p className="text-[11px] text-gray-500">For ModelVersion targets, select the exact version ID from the registry; FindingVersion and SourceClaim IDs are validated by the backend.</p>
+          <select className={fieldClass} aria-label="ModelVersion target IDs" onChange={(event) => {
+            const form = event.currentTarget.form;
+            const target = form?.elements.namedItem("targetId");
+            if (target instanceof HTMLInputElement) target.value = event.target.value;
+          }}>
+            <option value="">Select a model version</option>
             {modelVersions.map((version) => <option key={version.id} value={version.id}>{version.modelId} · v{version.versionNo}</option>)}
           </select>
           <input className={fieldClass} name="criterion" placeholder="Predeclared criterion" required />
@@ -730,7 +770,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
       <div className="grid gap-4 lg:grid-cols-2">
         <form onSubmit={(event) => void finalizeValidation(event)} className="space-y-2 rounded-lg border border-[#343741] p-3">
           <h4 className="text-sm font-medium text-gray-200">Record validation result</h4>
-          <select className={fieldClass} name="validationId" required defaultValue="">
+          <select className={fieldClass} name="validationId" required value={validationId} onChange={(event) => setValidationId(event.target.value)}>
             <option value="">Planned validation</option>
             {(workspace?.validations ?? []).filter((validation) => validation.outcome === null).map((validation) => (
               <option key={validation.id} value={validation.id}>{validation.evaluatorIdentity} · {validation.scope}</option>
@@ -739,10 +779,10 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
           <select className={fieldClass} name="outcome"><option value="pass">Pass</option><option value="fail">Fail</option><option value="inconclusive">Inconclusive</option></select>
           <textarea className={fieldClass} name="rationale" placeholder="Outcome rationale" required />
           <textarea className={fieldClass} name="deviations" placeholder="Deviations (if any)" />
-          <select className={fieldClass} name="modelEvidenceIds" multiple size={3} required>
-            {modelEvidence.map((item) => <option key={item.id} value={item.id}>{item.polarity} · {item.id}</option>)}
+          <select className={fieldClass} name="evidenceIds" multiple size={3} required>
+            {validationEvidence.map((item) => <option key={item.id} value={item.id}>{item.polarity} · {item.id}</option>)}
           </select>
-          <button className={buttonClass} disabled={busy || modelEvidence.length === 0}>Finalize once</button>
+          <button className={buttonClass} disabled={busy || validationEvidence.length === 0}>Finalize once</button>
         </form>
 
         <form onSubmit={(event) => void createReplication(event)} className="space-y-2 rounded-lg border border-[#343741] p-3">
