@@ -166,8 +166,7 @@ CREATE TABLE experiment_sample_split_assignments (
         REFERENCES experiment_dataset_split_groups(id, dataset_version_id) ON DELETE RESTRICT,
     FOREIGN KEY (dataset_version_id, sample_id)
         REFERENCES experiment_dataset_samples(dataset_version_id, sample_id) ON DELETE RESTRICT,
-    UNIQUE (split_group_id, sample_id),
-    UNIQUE (split_group_id, role, split_key, sample_id)
+    UNIQUE (split_group_id, sample_id, role, split_key)
 );
 CREATE INDEX idx_experiment_split_assignments_role
     ON experiment_sample_split_assignments(split_group_id, role, split_key);
@@ -390,6 +389,18 @@ BEFORE INSERT ON experiment_sample_split_assignments
 WHEN (SELECT lifecycle_status FROM experiment_dataset_versions WHERE id = NEW.dataset_version_id) <> 'staged'
 BEGIN
     SELECT RAISE(ABORT, 'split assignments can only be added to staged dataset versions');
+END;
+CREATE TRIGGER experiment_split_assignment_disjoint_guard
+BEFORE INSERT ON experiment_sample_split_assignments
+WHEN (SELECT require_disjoint FROM experiment_dataset_split_groups
+      WHERE id = NEW.split_group_id) = 1
+ AND EXISTS (
+    SELECT 1 FROM experiment_sample_split_assignments existing
+    WHERE existing.split_group_id = NEW.split_group_id
+      AND existing.sample_id = NEW.sample_id
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'sample split assignments must be disjoint for this split group');
 END;
 CREATE TRIGGER experiment_split_assignment_no_update
 BEFORE UPDATE ON experiment_sample_split_assignments
