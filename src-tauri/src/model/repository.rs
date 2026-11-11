@@ -2235,8 +2235,8 @@ mod tests {
             "INSERT INTO experiment_dataset_versions
                 (id, dataset_id, version_no, schema_id, schema_version, sample_schema_json,
                  expected_sample_count, lifecycle_status, content_sha256, created_at_us, sealed_at_us)
-             VALUES (?1, ?2, 1, 'test-schema', 1, '{}', 1, 'sealed', ?3, 1, 1)",
-            params![dataset_version_id, dataset_id, "0".repeat(64)],
+             VALUES (?1, ?2, 1, 'test-schema', 1, '{}', 1, 'staged', NULL, 1, NULL)",
+            params![dataset_version_id, dataset_id],
         )
         .expect("insert sealed dataset version");
         conn.execute(
@@ -2246,6 +2246,13 @@ mod tests {
             params![format!("sample-{project_id}"), dataset_version_id],
         )
         .expect("insert dataset sample");
+        conn.execute(
+            "UPDATE experiment_dataset_versions
+             SET lifecycle_status = 'sealed', content_sha256 = ?2, sealed_at_us = 2
+             WHERE id = ?1",
+            params![dataset_version_id, "0".repeat(64)],
+        )
+        .expect("seal dataset version");
         dataset_version_id
     }
 
