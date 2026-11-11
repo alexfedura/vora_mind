@@ -50,6 +50,7 @@ CREATE TABLE learning_objective_versions (
     created_at_us INTEGER NOT NULL,
     UNIQUE (objective_id, version_no),
     UNIQUE (id, objective_id),
+    UNIQUE (id, learning_project_id, framework_version_id),
     UNIQUE (id, learning_project_id, framework_id, framework_version_id),
     FOREIGN KEY (objective_id, learning_project_id)
         REFERENCES learning_objectives(id, learning_project_id) ON DELETE RESTRICT,
@@ -115,13 +116,22 @@ CREATE TABLE assessment_rubric_criteria (
     id TEXT PRIMARY KEY,
     rubric_version_id TEXT NOT NULL
         REFERENCES assessment_rubric_versions(id) ON DELETE RESTRICT,
-    objective_version_id TEXT NOT NULL
-        REFERENCES learning_objective_versions(id) ON DELETE RESTRICT,
+    learning_project_id TEXT NOT NULL,
+    framework_id TEXT NOT NULL,
+    framework_version_id TEXT NOT NULL,
+    objective_version_id TEXT NOT NULL,
     criterion_key TEXT NOT NULL CHECK (length(trim(criterion_key)) > 0),
     description TEXT NOT NULL CHECK (length(trim(description)) > 0),
     max_points REAL NOT NULL CHECK (max_points > 0),
     UNIQUE (rubric_version_id, criterion_key),
-    UNIQUE (id, rubric_version_id)
+    UNIQUE (id, rubric_version_id),
+    FOREIGN KEY (rubric_version_id, learning_project_id, framework_version_id)
+        REFERENCES assessment_rubric_versions(id, learning_project_id, framework_version_id)
+        ON DELETE RESTRICT,
+    FOREIGN KEY (objective_version_id, learning_project_id, framework_id, framework_version_id)
+        REFERENCES learning_objective_versions(
+            id, learning_project_id, framework_id, framework_version_id
+        ) ON DELETE RESTRICT
 );
 
 CREATE TABLE assessments (
@@ -284,6 +294,7 @@ CREATE TABLE competency_criteria (
     id TEXT PRIMARY KEY,
     competency_id TEXT NOT NULL,
     learning_project_id TEXT NOT NULL,
+    framework_id TEXT NOT NULL,
     framework_version_id TEXT NOT NULL,
     objective_version_id TEXT NOT NULL,
     criterion TEXT NOT NULL CHECK (length(trim(criterion)) > 0),
@@ -291,9 +302,10 @@ CREATE TABLE competency_criteria (
     required INTEGER NOT NULL CHECK (required IN (0, 1)),
     FOREIGN KEY (competency_id, learning_project_id, framework_version_id)
         REFERENCES competencies(id, learning_project_id, framework_version_id) ON DELETE RESTRICT,
-    FOREIGN KEY (objective_version_id, learning_project_id, framework_version_id)
-        REFERENCES learning_objective_versions(id, learning_project_id, framework_version_id)
-        ON DELETE RESTRICT
+    FOREIGN KEY (objective_version_id, learning_project_id, framework_id, framework_version_id)
+        REFERENCES learning_objective_versions(
+            id, learning_project_id, framework_id, framework_version_id
+        ) ON DELETE RESTRICT
 );
 
 CREATE TABLE mastery_rules (
