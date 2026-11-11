@@ -809,3 +809,643 @@ pub fn transition_definition(
     tx.commit()?;
     query_definition_version(conn, &req.version_id)
 }
+
+fn definition_status(conn: &Connection, version_id: &str) -> Result<String> {
+    Ok(conn.query_row(
+        "SELECT status FROM analysis_definition_events
+         WHERE definition_version_id = ?1
+         ORDER BY occurred_at_us DESC, id DESC LIMIT 1",
+        [version_id],
+        |row| row.get(0),
+    )?)
+}
+
+fn insert_control<T: Serialize>(
+    tx: &Transaction<'_>,
+    run_id: &str,
+    category: &str,
+    control: &Applicability<T>,
+) -> Result<()> {
+    let (state, rationale, details) = match control {
+        Applicability::Applicable { details } => {
+            ("applicable", String::new(), json(details)?)
+        }
+        Applicability::NotApplicable { reason } => {
+            ("not_applicable", reason.trim().to_string(), "{}".to_string())
+        }
+        Applicability::NotAssessed { rationale } => (
+            "not_assessed",
+            rationale.as_deref().unwrap_or_default().trim().to_string(),
+            "{}".to_string(),
+        ),
+    };
+    tx.execute(
+        "INSERT INTO analysis_run_integrity_declarations
+            (run_id, category, applicability, rationale, details_json)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![run_id, category, state, rationale, details],
+    )?;
+    if state == "not_assessed" {
+        insert_integrity_finding(
+            tx,
+            run_id,
+            category,
+            &format!("control_not_assessed:{category}"),
+            AnalysisIntegritySeverity::Warning,
+            &format!("{category} safeguard was explicitly left not assessed."),
+        )?;
+    }
+    Ok(())
+}
+
+fn insert_integrity_finding(
+    tx: &Transaction<'_>,
+    run_id: &str,
+    category: &str,
+    code: &str,
+    severity: AnalysisIntegritySeverity,
+    message: &str,
+) -> Result<()> {
+    tx.execute(
+        "INSERT INTO analysis_integrity_findings
+            (id, run_id, category, code, severity, message)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![id(), run_id, category, code, severity.as_str(), message],
+    )?;
+    Ok(())
+}
+
+fn transformation_lineage(conn: &Connection, version_id: &str) -> Result<serde_json::Value> {
+    let mut pending = vec![version_id.to_string()];
+    let mut visited = HashSet::new();
+    let mut lineage = Vec::new();
+    while let Some(output_version_id) = pending.pop() {
+        if !visited.insert(output_version_id.clone()) {
+            return Err(anyhow!(
+                "Dataset transformation lineage contains a cycle at {output_version_id}."
+            ));
+        }
+        let transformation: Option<(String, String, String, String)> = conn
+            .query_row(
+                "SELECT id, method, parameters_json, provenance_json
+                 FROM experiment_dataset_transformations
+                 WHERE output_dataset_version_id = ?1",
+                [&output_version_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()?;
+        if let Some((transformation_id, method, parameters, provenance)) = transformation {
+            let inputs = {
+                let mut statement = conn.prepare(
+                    "SELECT input_dataset_version_id, input_role
+                     FROM experiment_dataset_transformation_inputs
+                     WHERE transformation_id = ?1
+                     ORDER BY input_dataset_version_id, input_role",
+                )?;
+                statement
+                    .query_map([&transformation_id], |row| {
+                        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                    })?
+                    .collect::<rusqlite::Result<Vec<_>>>()?
+            };
+            for (input_version_id, _) in &inputs {
+                pending.push(input_version_id.clone());
+            }
+            lineage.push(serde_json::json!({
+                "transformationId": transformation_id,
+                "outputDatasetVersionId": output_version_id,
+                "method": method,
+                "parameters": parse_json::<serde_json::Value>(&parameters)?,
+                "provenance": parse_json::<serde_json::Value>(&provenance)?,
+                "inputs": inputs.into_iter().map(|(dataset_version_id, role)| {
+                    serde_json::json!({ "datasetVersionId": dataset_version_id, "role": role })
+                }).collect::<Vec<_>>()
+            }));
+        }
+    }
+    lineage.reverse();
+    Ok(serde_json::Value::Array(lineage))
+}
+
+fn expected_role(role: DatasetRole) -> &'static str {
+    role.as_str()
+}
+
+fn add_role(set: &mut BTreeSet<String>, role: &DatasetRole) {
+    set.insert(role.as_str().to_string());
+}
+
+fn validate_temporal_sample(
+    sample: &AnalysisInputSampleReq,
+    look_ahead_applicable: bool,
+) -> Result<()> {
+    match (
+        sample.feature_available_at_us,
+        sample.prediction_at_us,
+        sample.decision_at_us,
+    ) {
+        (Some(feature), Some(prediction), Some(decision)) => {
+            if feature > prediction {
+                return Err(anyhow!(
+                    "Temporal leakage detected for sample {}: a feature became available after prediction.",
+                    sample.sample_id
+                ));
+            }
+            if prediction > decision {
+                return Err(anyhow!(
+                    "Sample {} has a prediction timestamp after its decision timestamp.",
+                    sample.sample_id
+                ));
+            }
+            if sample
+                .outcome_available_at_us
+                .is_some_and(|outcome| outcome < prediction)
+            {
+                return Err(anyhow!(
+                    "Sample {} has an outcome available before its prediction timestamp.",
+                    sample.sample_id
+                ));
+            }
+        }
+        _ if look_ahead_applicable => {
+            return Err(anyhow!(
+                "Look-ahead control is applicable; sample {} requires feature-availability, prediction, and decision timestamps.",
+                sample.sample_id
+            ));
+        }
+        _ => {
+            if sample.outcome_available_at_us.is_some() {
+                return Err(anyhow!(
+                    "Sample {} cannot declare outcome availability without feature, prediction, and decision timestamps.",
+                    sample.sample_id
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_split_and_get_key(
+    tx: &Transaction<'_>,
+    input: &AnalysisInputReq,
+    sample_id: &str,
+    disjoint_required: bool,
+) -> Result<Option<String>> {
+    let Some(split_group_id) = input.split_group_id.as_deref() else {
+        if disjoint_required
+            && matches!(
+                input.role,
+                DatasetRole::Training | DatasetRole::Validation | DatasetRole::Test
+            )
+        {
+            return Err(anyhow!(
+                "A declared disjoint split requires an explicit persisted split group."
+            ));
+        }
+        return Ok(None);
+    };
+    let group: Option<(String, bool)> = tx
+        .query_row(
+            "SELECT dataset_version_id, require_disjoint
+             FROM experiment_dataset_split_groups WHERE id = ?1",
+            [split_group_id],
+            |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)),
+        )
+        .optional()?;
+    match group {
+        Some((version_id, is_disjoint)) if version_id == input.dataset_version_id => {
+            if disjoint_required && !is_disjoint {
+                return Err(anyhow!(
+                    "This split group does not enforce the required disjointness."
+                ));
+            }
+        }
+        Some(_) => return Err(anyhow!("The split group belongs to another dataset version.")),
+        None => return Err(anyhow!("The requested dataset split group does not exist.")),
+    }
+    let assignment: Option<String> = tx
+        .query_row(
+            "SELECT split_key FROM experiment_sample_split_assignments
+             WHERE split_group_id = ?1 AND dataset_version_id = ?2
+               AND sample_id = ?3 AND role = ?4",
+            params![
+                split_group_id,
+                input.dataset_version_id,
+                sample_id,
+                expected_role(input.role)
+            ],
+            |row| row.get(0),
+        )
+        .optional()?;
+    assignment
+        .map(Some)
+        .ok_or_else(|| anyhow!("Sample {sample_id} is not assigned to the declared split role."))
+}
+
+fn validate_input(
+    tx: &Transaction<'_>,
+    project_id: &str,
+    input: &AnalysisInputReq,
+    look_ahead_applicable: bool,
+    disjoint_required: bool,
+) -> Result<(String, serde_json::Value, Vec<(AnalysisInputSampleReq, Option<String>)>)> {
+    if input.samples.is_empty() {
+        return Err(anyhow!("Every analysis input must pin at least one sample."));
+    }
+    let (dataset_project_id, lifecycle_status, checksum): (String, String, Option<String>) =
+        tx.query_row(
+            "SELECT d.project_id, v.lifecycle_status, v.content_sha256
+             FROM experiment_dataset_versions v
+             JOIN experiment_datasets d ON d.id = v.dataset_id
+             WHERE v.id = ?1",
+            [&input.dataset_version_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+    if dataset_project_id != project_id {
+        return Err(anyhow!(
+            "Analysis input dataset belongs to a different project."
+        ));
+    }
+    if lifecycle_status != "sealed" {
+        return Err(anyhow!("Analysis inputs must pin sealed dataset versions."));
+    }
+    let checksum =
+        checksum.ok_or_else(|| anyhow!("Sealed dataset version is missing its checksum."))?;
+    valid_sha256(&checksum, "Dataset checksum")?;
+
+    let mut seen_samples = HashSet::new();
+    let mut assignments = Vec::with_capacity(input.samples.len());
+    for sample in &input.samples {
+        nonempty(&sample.sample_id, "Analysis sample ID")?;
+        if !seen_samples.insert(sample.sample_id.as_str()) {
+            return Err(anyhow!(
+                "Sample {} is repeated in one analysis input.",
+                sample.sample_id
+            ));
+        }
+        validate_temporal_sample(sample, look_ahead_applicable)?;
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM experiment_dataset_samples
+             WHERE dataset_version_id = ?1 AND sample_id = ?2)",
+            params![input.dataset_version_id, sample.sample_id],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            return Err(anyhow!(
+                "Sample {} is not part of the exact pinned dataset version.",
+                sample.sample_id
+            ));
+        }
+        let split_key =
+            validate_split_and_get_key(tx, input, &sample.sample_id, disjoint_required)?;
+        assignments.push((sample.clone(), split_key));
+    }
+    let lineage = transformation_lineage(tx, &input.dataset_version_id)?;
+    Ok((checksum, lineage, assignments))
+}
+
+fn control_is_not_assessed<T>(control: &Applicability<T>) -> bool {
+    matches!(control, Applicability::NotAssessed { .. })
+}
+
+fn insert_integrity_declarations(
+    tx: &Transaction<'_>,
+    run_id: &str,
+    plan: &StatisticalIntegrityPlanDto,
+) -> Result<()> {
+    insert_control(tx, run_id, "overfitting", &plan.overfitting)?;
+    insert_control(tx, run_id, "data_leakage", &plan.data_leakage)?;
+    insert_control(tx, run_id, "selection_bias", &plan.selection_bias)?;
+    insert_control(tx, run_id, "look_ahead", &plan.look_ahead)?;
+    insert_control(tx, run_id, "multiple_testing", &plan.multiple_testing)?;
+    insert_control(tx, run_id, "dataset_separation", &plan.dataset_separation)?;
+    insert_control(tx, run_id, "out_of_sample", &plan.out_of_sample)?;
+    insert_control(tx, run_id, "walk_forward", &plan.walk_forward)?;
+    insert_control(tx, run_id, "forward_testing", &plan.forward_testing)?;
+    insert_control(tx, run_id, "reproducibility", &plan.reproducibility)?;
+    Ok(())
+}
+
+fn insert_run_event(
+    tx: &Transaction<'_>,
+    run_id: &str,
+    status: AnalysisRunStatus,
+    summary: &str,
+    failure_summary: &str,
+    actor_id: Option<&str>,
+    now: i64,
+) -> Result<()> {
+    tx.execute(
+        "INSERT INTO analysis_run_events
+            (id, run_id, lifecycle_status, summary, failure_summary, actor_id, occurred_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            id(),
+            run_id,
+            status.as_str(),
+            summary.trim(),
+            failure_summary.trim(),
+            actor_id,
+            now
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<AnalysisRunDto> {
+    if !req.parameters.is_object() || !req.environment.is_object() {
+        return Err(anyhow!("Analysis parameters and environment must be JSON objects."));
+    }
+    let mut seeds_seen = HashSet::new();
+    if req.random_seeds.iter().any(|seed| seed.trim().is_empty() || !seeds_seen.insert(seed)) {
+        return Err(anyhow!("Random seeds must be non-empty and unique."));
+    }
+    if req.inputs.is_empty() {
+        return Err(anyhow!("An analysis run must pin at least one dataset input."));
+    }
+    let now = now_us()?;
+    let run_id = id();
+    let tx = conn.transaction()?;
+
+    let definition: AnalysisDefinitionVersionDto =
+        query_definition_version(&tx, &req.definition_version_id)?;
+    if definition.lifecycle_status != AnalysisDefinitionStatus::Locked {
+        return Err(anyhow!("Analysis run requires a locked definition version."));
+    }
+    let method = query_method_version(&tx, &definition.method_version_id)?;
+    if method.verification_status != AnalysisVerificationStatus::Passed {
+        return Err(anyhow!("Analysis method test report has not passed."));
+    }
+    if method.environment != req.environment && req.environment.as_object().is_none_or(|value| value.is_empty()) {
+        return Err(anyhow!("Run environment must be recorded."));
+    }
+    let project_id = definition.project_id.clone();
+    if let Applicability::Applicable { details } = &definition.specification.integrity.reproducibility {
+        if details.parameters_and_seeds_required && req.random_seeds.is_empty() {
+            return Err(anyhow!(
+                "The reproducibility safeguard requires at least one declared random seed."
+            ));
+        }
+    }
+    let look_ahead_applicable = matches!(
+        definition.specification.integrity.look_ahead,
+        Applicability::Applicable { .. }
+    );
+    let disjoint_required = match &definition.specification.integrity.dataset_separation {
+        Applicability::Applicable { details } => details.require_disjoint_splits,
+        _ => false,
+    };
+
+    let mut actual_roles = BTreeSet::new();
+    let mut inputs_seen = HashSet::new();
+    let mut selected_by_version: HashMap<(String, String), String> = HashMap::new();
+    let mut checked_inputs = Vec::with_capacity(req.inputs.len());
+    for input in &req.inputs {
+        add_role(&mut actual_roles, &input.role);
+        if !inputs_seen.insert((input.dataset_version_id.as_str(), input.role.as_str())) {
+            return Err(anyhow!(
+                "Dataset version and role input pins must be unique."
+            ));
+        }
+        let (checksum, lineage, assignments) = validate_input(
+            &tx,
+            &project_id,
+            input,
+            look_ahead_applicable,
+            disjoint_required,
+        )?;
+        if disjoint_required {
+            for (sample, _) in &assignments {
+                let key = (input.dataset_version_id.clone(), sample.sample_id.clone());
+                if let Some(previous_role) =
+                    selected_by_version.insert(key, input.role.as_str().to_string())
+                {
+                    if previous_role != input.role.as_str() {
+                        return Err(anyhow!(
+                            "Disjoint dataset separation is violated by sample {} appearing in multiple roles.",
+                            sample.sample_id
+                        ));
+                    }
+                }
+            }
+        }
+        checked_inputs.push((input, checksum, lineage, assignments));
+    }
+    let required_roles: BTreeSet<String> = definition
+        .specification
+        .required_input_roles
+        .iter()
+        .map(|role| role.as_str().to_string())
+        .collect();
+    if actual_roles != required_roles {
+        return Err(anyhow!(
+            "Analysis inputs must match the locked required dataset roles exactly."
+        ));
+    }
+    if let Applicability::Applicable { details } = &definition.specification.integrity.out_of_sample {
+        if !actual_roles.contains("test") {
+            return Err(anyhow!(
+                "Applicable out-of-sample evaluation requires a pinned test-role input."
+            ));
+        }
+        if details.model_selection_usage != ModelSelectionUsage::NotUsed {
+            insert_integrity_finding(
+                &tx,
+                &run_id,
+                "out_of_sample",
+                "evaluation_role_used_for_selection",
+                AnalysisIntegritySeverity::Warning,
+                "The declared test/evaluation data was used for model selection; it is not an untouched out-of-sample evaluation.",
+            )?;
+        }
+    }
+    if matches!(
+        definition.specification.integrity.walk_forward,
+        Applicability::Applicable { .. }
+    ) && !["training", "validation", "test"]
+        .iter()
+        .all(|role| actual_roles.contains(*role))
+    {
+        return Err(anyhow!(
+            "Applicable walk-forward analysis requires training, validation, and test roles."
+        ));
+    }
+    if let Applicability::Applicable { details } = &definition.specification.integrity.forward_testing {
+        let required_role = match details.execution_kind {
+            ForwardExecutionKind::Prospective => "prospective",
+            ForwardExecutionKind::Paper | ForwardExecutionKind::Live => "forward",
+        };
+        if !actual_roles.contains(required_role) {
+            return Err(anyhow!(
+                "Forward testing requires a {required_role} dataset role."
+            ));
+        }
+    }
+
+    let created_at_us = now;
+    tx.execute(
+        "INSERT INTO analysis_runs
+            (id, project_id, definition_version_id, parameters_json, environment_json,
+             random_seeds_json, protocol_version, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            run_id,
+            project_id,
+            req.definition_version_id,
+            json(&req.parameters)?,
+            json(&req.environment)?,
+            json(&req.random_seeds)?,
+            definition.specification.protocol_version,
+            req.created_by,
+            created_at_us
+        ],
+    )?;
+    insert_run_event(
+        &tx,
+        &run_id,
+        AnalysisRunStatus::Queued,
+        "Analysis run queued.",
+        "",
+        req.created_by.as_deref(),
+        now,
+    )?;
+    insert_integrity_declarations(
+        &tx,
+        &run_id,
+        &definition.specification.integrity,
+    )?;
+
+    for (input, checksum, lineage, assignments) in checked_inputs {
+        let input_id = id();
+        let manifest_json = json(&(
+            &input.dataset_version_id,
+            input.role.as_str(),
+            &checksum,
+            &lineage,
+            &assignments,
+        ))?;
+        tx.execute(
+            "INSERT INTO analysis_run_inputs
+                (id, run_id, dataset_version_id, role, split_group_id, dataset_checksum,
+                 sample_count, transformation_lineage_json, input_manifest_sha256)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                input_id,
+                run_id,
+                input.dataset_version_id,
+                input.role.as_str(),
+                input.split_group_id,
+                checksum,
+                assignments.len() as i64,
+                json(&lineage)?,
+                sha256(manifest_json.as_bytes())
+            ],
+        )?;
+        for (sample, split_key) in assignments {
+            tx.execute(
+                "INSERT INTO analysis_run_input_samples
+                    (input_id, dataset_version_id, sample_id, split_key,
+                     feature_available_at_us, prediction_at_us, decision_at_us,
+                     outcome_available_at_us)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    input_id,
+                    input.dataset_version_id,
+                    sample.sample_id,
+                    split_key,
+                    sample.feature_available_at_us,
+                    sample.prediction_at_us,
+                    sample.decision_at_us,
+                    sample.outcome_available_at_us
+                ],
+            )?;
+        }
+    }
+    tx.commit()?;
+    query_run(conn, &run_id)
+}
+
+pub fn start_run(
+    conn: &mut Connection,
+    run_id: &str,
+    actor_id: Option<&str>,
+) -> Result<AnalysisRunDto> {
+    let now = now_us()?;
+    let tx = conn.transaction()?;
+    insert_run_event(
+        &tx,
+        run_id,
+        AnalysisRunStatus::Running,
+        "External analysis execution started.",
+        "",
+        actor_id,
+        now,
+    )?;
+    tx.commit()?;
+    query_run(conn, run_id)
+}
+
+pub fn add_run_log(
+    conn: &mut Connection,
+    req: &AddAnalysisRunLogReq,
+) -> Result<AnalysisRunLogDto> {
+    nonempty(&req.message, "Analysis log message")?;
+    let log_id = id();
+    let recorded_at_us = now_us()?;
+    conn.execute(
+        "INSERT INTO analysis_run_logs
+            (id, run_id, severity, message, details_json, recorded_by, recorded_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            log_id,
+            req.run_id,
+            req.severity.as_str(),
+            req.message.trim(),
+            json(&req.details)?,
+            req.recorded_by,
+            recorded_at_us
+        ],
+    )?;
+    Ok(AnalysisRunLogDto {
+        id: log_id,
+        severity: req.severity.clone(),
+        message: req.message.trim().to_string(),
+        details: req.details.clone(),
+        recorded_by: req.recorded_by.clone(),
+        recorded_at_us,
+    })
+}
+
+pub fn add_run_deviation(
+    conn: &mut Connection,
+    run_id: &str,
+    req: &AnalysisDeviationReq,
+) -> Result<AnalysisDeviationDto> {
+    nonempty(&req.description, "Deviation description")?;
+    nonempty(&req.rationale, "Deviation rationale")?;
+    nonempty(&req.impact_assessment, "Deviation impact assessment")?;
+    let deviation_id = id();
+    let recorded_at_us = now_us()?;
+    conn.execute(
+        "INSERT INTO analysis_run_deviations
+            (id, run_id, description, rationale, impact_assessment, recorded_by, recorded_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            deviation_id,
+            run_id,
+            req.description.trim(),
+            req.rationale.trim(),
+            req.impact_assessment.trim(),
+            req.recorded_by,
+            recorded_at_us
+        ],
+    )?;
+    Ok(AnalysisDeviationDto {
+        id: deviation_id,
+        description: req.description.trim().to_string(),
+        rationale: req.rationale.trim().to_string(),
+        impact_assessment: req.impact_assessment.trim().to_string(),
+        recorded_by: req.recorded_by.clone(),
+        recorded_at_us,
+    })
+}
