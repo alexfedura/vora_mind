@@ -18,6 +18,17 @@ pub fn research_create_project(
 }
 
 #[tauri::command]
+pub fn research_transition_project(
+    state: State<AppState>,
+    project_id: String,
+    next_status: ResearchProjectStatus,
+    actor_id: Option<String>,
+) -> Result<ResearchProjectDto, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    transition_project(&conn, &project_id, next_status, actor_id.as_deref())
+}
+
+#[tauri::command]
 pub fn research_create_domain(
     state: State<AppState>,
     request: CreateResearchDomainReq,

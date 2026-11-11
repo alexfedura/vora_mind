@@ -230,6 +230,39 @@ pub fn create_project(
     query_project(conn, id)
 }
 
+pub fn transition_project(
+    conn: &Connection,
+    project_id: &str,
+    next_status: ResearchProjectStatus,
+    actor_id: Option<&str>,
+    now: i64,
+) -> Result<ResearchProjectDto> {
+    let tx = conn.unchecked_transaction()?;
+    let current: String = tx.query_row(
+        "SELECT lifecycle_status FROM research_projects WHERE id = ?1",
+        [project_id],
+        |row| row.get(0),
+    )?;
+    let next = next_status.as_str();
+    let allowed = matches!(
+        (current.as_str(), next),
+        ("proposed", "active" | "archived")
+            | ("active", "paused" | "completed" | "archived")
+            | ("paused", "active" | "completed" | "archived")
+            | ("completed", "archived")
+    );
+    if !allowed {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    tx.execute(
+        "UPDATE research_projects SET lifecycle_status = ?1, updated_at_us = ?2 WHERE id = ?3",
+        params![next, now, project_id],
+    )?;
+    insert_event(&tx, "project", project_id, next, actor_id, "", now)?;
+    tx.commit()?;
+    query_project(conn, project_id)
+}
+
 pub fn create_domain(
     conn: &Connection,
     req: &CreateResearchDomainReq,

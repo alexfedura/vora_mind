@@ -2459,6 +2459,7 @@ pub fn run() {
             delete_question,
             research::ipc::research_get_workspace,
             research::ipc::research_create_project,
+            research::ipc::research_transition_project,
             research::ipc::research_create_domain,
             research::ipc::research_assign_domain,
             research::ipc::research_adopt_framework_version,
