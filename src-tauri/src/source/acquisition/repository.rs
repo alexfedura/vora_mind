@@ -680,19 +680,28 @@ pub fn list_knowledge_items(conn: &Connection) -> RepoResult<Vec<KnowledgeItemDt
         "SELECT id, kind, title, content, lifecycle, source_claim_id, relation_kind, created_at_us
          FROM (
             SELECT c.id, 'concept' AS kind, c.title, c.definition AS content, c.lifecycle,
-                   r.source_claim_id, r.relation_kind, c.created_at_us
+                   (SELECT r.source_claim_id FROM source_claim_concept_relations r
+                    WHERE r.concept_id = c.id ORDER BY r.created_at_us, r.id LIMIT 1),
+                   (SELECT r.relation_kind FROM source_claim_concept_relations r
+                    WHERE r.concept_id = c.id ORDER BY r.created_at_us, r.id LIMIT 1),
+                   c.created_at_us
             FROM knowledge_concepts c
-            LEFT JOIN source_claim_concept_relations r ON r.concept_id = c.id
             UNION ALL
             SELECT p.id, 'principle', p.title, p.statement, p.lifecycle,
-                   r.source_claim_id, r.relation_kind, p.created_at_us
+                   (SELECT r.source_claim_id FROM source_claim_principle_relations r
+                    WHERE r.principle_id = p.id ORDER BY r.created_at_us, r.id LIMIT 1),
+                   (SELECT r.relation_kind FROM source_claim_principle_relations r
+                    WHERE r.principle_id = p.id ORDER BY r.created_at_us, r.id LIMIT 1),
+                   p.created_at_us
             FROM knowledge_principles p
-            LEFT JOIN source_claim_principle_relations r ON r.principle_id = p.id
             UNION ALL
-            SELECT p.id, 'procedure', p.title, p.description, p.lifecycle,
-                   r.source_claim_id, r.relation_kind, p.created_at_us
-            FROM knowledge_procedures p
-            LEFT JOIN source_claim_procedure_relations r ON r.procedure_id = p.id
+            SELECT pr.id, 'procedure', pr.title, pr.description, pr.lifecycle,
+                   (SELECT r.source_claim_id FROM source_claim_procedure_relations r
+                    WHERE r.procedure_id = pr.id ORDER BY r.created_at_us, r.id LIMIT 1),
+                   (SELECT r.relation_kind FROM source_claim_procedure_relations r
+                    WHERE r.procedure_id = pr.id ORDER BY r.created_at_us, r.id LIMIT 1),
+                   pr.created_at_us
+            FROM knowledge_procedures pr
          )
          ORDER BY created_at_us, id, source_claim_id",
     )?;
