@@ -607,6 +607,7 @@ pub struct AnalysisInputDto {
 #[serde(rename_all = "camelCase")]
 pub struct AnalysisOutputDto {
     pub id: String,
+    pub output_key: String,
     pub output_kind: String,
     pub title: String,
     pub payload: serde_json::Value,
