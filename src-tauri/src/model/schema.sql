@@ -36,7 +36,6 @@ CREATE TABLE model_versions (
     expected_implications TEXT NOT NULL CHECK (length(trim(expected_implications)) > 0),
     human_specification TEXT NOT NULL CHECK (length(trim(human_specification)) > 0),
     machine_specification_json TEXT NOT NULL CHECK (json_valid(machine_specification_json)),
-    assumptions_json TEXT NOT NULL CHECK (json_valid(assumptions_json)),
     scope TEXT NOT NULL CHECK (length(trim(scope)) > 0),
     dependencies_json TEXT NOT NULL CHECK (json_valid(dependencies_json)),
     environment_json TEXT NOT NULL CHECK (json_valid(environment_json)),
