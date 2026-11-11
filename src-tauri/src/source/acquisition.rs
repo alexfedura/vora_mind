@@ -1245,6 +1245,33 @@ mod tests {
             },
         )
         .unwrap();
+        let second_item_id = add_framework_item(
+            &conn,
+            AddFrameworkItemReq {
+                framework_version_id: initial_version.id.clone(),
+                item_kind: KnowledgeItemKind::SourceClaim,
+                item_id: second_claim.id.clone(),
+                membership_role: "counterpoint".into(),
+                item_order: 1,
+                rationale: None,
+            },
+        )
+        .unwrap();
+        let first_item_id = list_framework_versions(&conn, &framework.id).unwrap()[0].items[0]
+            .id
+            .clone();
+        reorder_framework_items(
+            &conn,
+            ReorderFrameworkItemsReq {
+                framework_version_id: initial_version.id.clone(),
+                ordered_item_ids: vec![second_item_id, first_item_id],
+            },
+        )
+        .unwrap();
+        let ordered = list_framework_versions(&conn, &framework.id).unwrap()[0].items.clone();
+        assert_eq!(ordered[0].item_id, second_claim.id);
+        assert_eq!(ordered[0].item_order, 0);
+
         review_framework_version(
             &conn,
             ReviewFrameworkReq {
@@ -1265,6 +1292,18 @@ mod tests {
             },
         )
         .is_err());
+        assert!(add_framework_item(
+            &conn,
+            AddFrameworkItemReq {
+                framework_version_id: initial_version.id.clone(),
+                item_kind: KnowledgeItemKind::SourceClaim,
+                item_id: first_claim.id.clone(),
+                membership_role: "example".into(),
+                item_order: 2,
+                rationale: None,
+            },
+        )
+        .is_err());
 
         let next = create_framework_version(
             &conn,
@@ -1282,7 +1321,7 @@ mod tests {
             next.parent_version_id.as_deref(),
             Some(initial_version.id.as_str())
         );
-        assert_eq!(next.items.len(), 1);
+        assert_eq!(next.items.len(), 2);
         assert_eq!(
             list_framework_versions(&conn, &framework.id).unwrap().len(),
             2
@@ -1348,5 +1387,58 @@ mod tests {
         assert_eq!(extract_content, "Legacy quote");
         assert_eq!(version_count, 0);
         assert_eq!(new_extract_count, 0);
+    }
+
+    #[test]
+    fn provenance_relations_survive_database_reopen() {
+        let path = std::env::temp_dir().join(format!(
+            "vora-acquisition-{}.sqlite",
+            Uuid::now_v7()
+        ));
+        let (source_id, version_id, extraction_id, claim_id) = {
+            let conn = Connection::open(&path).expect("create persistent test database");
+            init_schema(&conn).expect("initialize persistent test database");
+            let source_id = source(&conn);
+            let source_version = version(&conn, &source_id, "v1");
+            let location = location(&conn, &source_id, &source_version.id);
+            let extraction = extraction(
+                &conn,
+                &source_id,
+                &source_version.id,
+                &location.id,
+                ExtractionKind::SourceClaim,
+                "A persisted source assertion.",
+            );
+            review_extraction(&conn, accept_extraction(&extraction.id)).unwrap();
+            let claim = create_source_claim(
+                &conn,
+                CreateSourceClaimReq {
+                    extraction_id: extraction.id.clone(),
+                    statement: extraction.content.clone(),
+                    asserted_by: Some("A. Author".into()),
+                    scope: None,
+                },
+            )
+            .unwrap();
+            (
+                source_id,
+                source_version.id,
+                extraction.id,
+                claim.id,
+            )
+        };
+
+        {
+            let conn = Connection::open(&path).expect("reopen persistent test database");
+            init_schema(&conn).expect("verify migration on database reopen");
+            assert_eq!(list_source_versions(&conn, &source_id).unwrap().len(), 1);
+            assert_eq!(list_extractions(&conn, &version_id).unwrap()[0].id, extraction_id);
+            assert_eq!(list_source_claims(&conn, &source_id).unwrap()[0].id, claim_id);
+            assert!(!list_provenance(&conn, "source_claim", &claim_id)
+                .unwrap()
+                .is_empty());
+        }
+
+        std::fs::remove_file(path).expect("remove persistent test database");
     }
 }
