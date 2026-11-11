@@ -23,7 +23,6 @@ impl SourceCaptureKind {
 
     pub fn parse(value: &str) -> Result<Self, String> {
         match value {
-            "source_claim" => Ok(Self::SourceClaim),
             "edition" => Ok(Self::Edition),
             "retrieval" => Ok(Self::Retrieval),
             _ => Err(format!("invalid source capture kind: {value}")),
@@ -154,6 +153,7 @@ impl KnowledgeItemKind {
 
     pub fn parse(value: &str) -> Result<Self, String> {
         match value {
+            "source_claim" => Ok(Self::SourceClaim),
             "concept" => Ok(Self::Concept),
             "principle" => Ok(Self::Principle),
             "procedure" => Ok(Self::Procedure),
