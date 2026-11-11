@@ -2091,8 +2091,6 @@ export interface ModelDto {
   events: ModelLifecycleEventDto[];
   createdBy: string | null;
   createdAtUs: number;
-  lifecycleStatus: ModelVersionLifecycleStatus;
-  lifecycleEvents: ModelLifecycleEventDto[];
 }
 
 export interface ModelSpecificationDto {
@@ -2226,6 +2224,8 @@ export interface ModelVersionDto {
   contentSha256: string;
   createdBy: string | null;
   createdAtUs: number;
+  lifecycleStatus: ModelVersionLifecycleStatus;
+  lifecycleEvents: ModelLifecycleEventDto[];
 }
 
 export interface CreateModelEvidenceReq {

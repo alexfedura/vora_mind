@@ -14,6 +14,8 @@ import type {
   ModelValidationDto,
   ModelVersionDto,
   ModelWorkspaceDto,
+  TransitionModelReq,
+  TransitionModelVersionReq,
 } from "@/types";
 
 export const modelService = {
@@ -21,8 +23,12 @@ export const modelService = {
     invoke<ModelWorkspaceDto>("model_get_workspace", { projectId }),
   create: (request: CreateModelReq) =>
     invoke<ModelDto>("model_create", { request }),
+  transition: (request: TransitionModelReq) =>
+    invoke<ModelDto>("model_transition", { request }),
   createVersion: (request: CreateModelVersionReq) =>
     invoke<ModelVersionDto>("model_create_version", { request }),
+  transitionVersion: (request: TransitionModelVersionReq) =>
+    invoke<ModelVersionDto>("model_transition_version", { request }),
   createEvidence: (request: CreateModelEvidenceReq) =>
     invoke<ModelEvidenceDto>("model_create_evidence", { request }),
   createEvaluation: (request: CreateModelEvaluationReq) =>
