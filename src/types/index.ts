@@ -2818,6 +2818,18 @@ export interface TransferArtifactCatalogDto {
   eligibilityIds: string[];
 }
 
+export interface KnowledgeVersionDto {
+  kind: KnowledgeVersionKind;
+  entityId: string;
+  versionId: string;
+  projectId: string;
+  title: string;
+  content: string;
+  rationale: string;
+  status: string;
+  parentVersionId: string | null;
+}
+
 export interface KnowledgeTransferOriginDto {
   id: string;
   artifact: TransferArtifactRef;
@@ -2935,6 +2947,7 @@ export interface TransferProvenancePreviewDto {
 export interface TransferWorkspaceDto {
   projects: ResearchTransferProjectDto[];
   artifacts: TransferArtifactCatalogDto[];
+  knowledgeVersions: KnowledgeVersionDto[];
   origins: KnowledgeTransferOriginDto[];
   eligibilities: TransferEligibilityDto[];
   transfers: KnowledgeTransferDto[];

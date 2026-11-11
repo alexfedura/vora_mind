@@ -1686,6 +1686,61 @@ pub fn workspace(conn: &Connection) -> Result<TransferWorkspaceDto> {
             eligibility_ids,
         });
     }
+    let mut knowledge_versions = Vec::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT v.concept_id, v.id, v.created_in_project_id, v.title, v.definition,
+                    v.rationale, v.parent_version_id,
+                    COALESCE((SELECT e.status FROM knowledge_concept_version_events e
+                              WHERE e.version_id = v.id
+                              ORDER BY e.occurred_at_us DESC, e.id DESC LIMIT 1), 'unreviewed')
+             FROM knowledge_concept_versions v
+             ORDER BY v.created_at_us DESC, v.id",
+        )?;
+        knowledge_versions.extend(
+            stmt.query_map([], |row| {
+                Ok(KnowledgeVersionDto {
+                    kind: KnowledgeVersionKind::Concept,
+                    entity_id: row.get(0)?,
+                    version_id: row.get(1)?,
+                    project_id: row.get(2)?,
+                    title: row.get(3)?,
+                    content: row.get(4)?,
+                    rationale: row.get(5)?,
+                    parent_version_id: row.get(6)?,
+                    status: row.get(7)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
+        );
+    }
+    {
+        let mut stmt = conn.prepare(
+            "SELECT v.principle_id, v.id, v.created_in_project_id, v.title, v.statement,
+                    v.rationale, v.parent_version_id,
+                    COALESCE((SELECT e.status FROM knowledge_principle_version_events e
+                              WHERE e.version_id = v.id
+                              ORDER BY e.occurred_at_us DESC, e.id DESC LIMIT 1), 'unreviewed')
+             FROM knowledge_principle_versions v
+             ORDER BY v.created_at_us DESC, v.id",
+        )?;
+        knowledge_versions.extend(
+            stmt.query_map([], |row| {
+                Ok(KnowledgeVersionDto {
+                    kind: KnowledgeVersionKind::Principle,
+                    entity_id: row.get(0)?,
+                    version_id: row.get(1)?,
+                    project_id: row.get(2)?,
+                    title: row.get(3)?,
+                    content: row.get(4)?,
+                    rationale: row.get(5)?,
+                    parent_version_id: row.get(6)?,
+                    status: row.get(7)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
+        );
+    }
 
     let origin_ids = query_strings(
         conn,
@@ -1738,6 +1793,7 @@ pub fn workspace(conn: &Connection) -> Result<TransferWorkspaceDto> {
     Ok(TransferWorkspaceDto {
         projects,
         artifacts,
+        knowledge_versions,
         origins,
         eligibilities,
         transfers,

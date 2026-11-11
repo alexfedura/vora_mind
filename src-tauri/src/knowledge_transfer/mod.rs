@@ -243,6 +243,20 @@ pub struct TransferArtifactCatalogDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct KnowledgeVersionDto {
+    pub kind: KnowledgeVersionKind,
+    pub entity_id: String,
+    pub version_id: String,
+    pub project_id: String,
+    pub title: String,
+    pub content: String,
+    pub rationale: String,
+    pub status: String,
+    pub parent_version_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct KnowledgeTransferOriginDto {
     pub id: String,
     pub artifact: TransferArtifactRef,
@@ -406,6 +420,7 @@ pub struct TransferProvenancePreviewDto {
 pub struct TransferWorkspaceDto {
     pub projects: Vec<ResearchProjectDto>,
     pub artifacts: Vec<TransferArtifactCatalogDto>,
+    pub knowledge_versions: Vec<KnowledgeVersionDto>,
     pub origins: Vec<KnowledgeTransferOriginDto>,
     pub eligibilities: Vec<TransferEligibilityDto>,
     pub transfers: Vec<KnowledgeTransferDto>,
