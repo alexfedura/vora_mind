@@ -3305,3 +3305,583 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<AnalysisWorkspac
         findings: findings_for_project(conn, project_id)?,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::experiment::{
+        AddDatasetSamplesReq, AddDatasetSplitGroupReq, CreateDatasetReq, CreateDatasetVersionReq,
+        DataSampleDto, DatasetFieldDefinitionDto, DatasetSampleDto, DatasetSampleSchemaDto,
+        DatasetSampleValueKind, DatasetSplitAssignmentReq,
+    };
+    use std::collections::BTreeMap;
+    use std::fs;
+
+    fn test_project(conn: &Connection, project_id: &str) {
+        conn.execute(
+            "INSERT INTO research_projects
+                (id, title, aim, lifecycle_status, created_by, created_at_us, updated_at_us)
+             VALUES (?1, 'Analysis integration project', '', 'active', NULL, 1, 1)",
+            [project_id],
+        )
+        .expect("insert test project");
+    }
+
+    fn integrity_plan() -> StatisticalIntegrityPlanDto {
+        StatisticalIntegrityPlanDto {
+            overfitting: Applicability::NotAssessed { rationale: None },
+            data_leakage: Applicability::NotAssessed { rationale: None },
+            selection_bias: Applicability::NotAssessed { rationale: None },
+            look_ahead: Applicability::Applicable {
+                details: LookAheadSafeguardDto {
+                    feature_availability_policy: "Features available by prediction time only."
+                        .to_string(),
+                    prediction_timestamp_policy: "UTC timestamp at prediction.".to_string(),
+                    decision_timestamp_policy: "UTC timestamp at decision.".to_string(),
+                },
+            },
+            multiple_testing: Applicability::NotAssessed { rationale: None },
+            dataset_separation: Applicability::Applicable {
+                details: DatasetSeparationSafeguardDto {
+                    require_disjoint_splits: true,
+                    selection_rationale: "Split membership is frozen in the dataset version."
+                        .to_string(),
+                },
+            },
+            out_of_sample: Applicability::NotAssessed { rationale: None },
+            walk_forward: Applicability::NotAssessed { rationale: None },
+            forward_testing: Applicability::NotAssessed { rationale: None },
+            reproducibility: Applicability::Applicable {
+                details: ReproducibilitySafeguardDto {
+                    protocol_version: "analysis-test-1".to_string(),
+                    raw_input_checksums_required: true,
+                    transformation_lineage_required: true,
+                    code_and_environment_required: true,
+                    parameters_and_seeds_required: true,
+                    timestamps_and_deviations_required: true,
+                },
+            },
+        }
+    }
+
+    fn create_locked_definition(
+        conn: &mut Connection,
+        project_id: &str,
+    ) -> (AnalysisDefinitionVersionDto, MetricDefinitionVersionDto) {
+        let method = create_method_version(
+            conn,
+            &CreateAnalysisMethodVersionReq {
+                project_id: project_id.to_string(),
+                method_id: None,
+                name: "Test estimator".to_string(),
+                version_label: "1.0".to_string(),
+                code_uri: "file:///analysis.py".to_string(),
+                code_revision: "git:abc123".to_string(),
+                dependency_lock_sha256: None,
+                environment: serde_json::json!({"python": "3.12"}),
+                assumptions: vec!["Independent observations.".to_string()],
+                test_suite_uri: "file:///tests/test_analysis.py".to_string(),
+                test_suite_sha256: "a".repeat(64),
+                tests_total: 4,
+                tests_passed: 4,
+                created_by: Some("reviewer".to_string()),
+            },
+        )
+        .expect("create method version");
+        let metric = create_metric_definition_version(
+            conn,
+            &CreateMetricDefinitionVersionReq {
+                project_id: project_id.to_string(),
+                metric_definition_id: None,
+                key: "mean_difference".to_string(),
+                name: "Mean difference".to_string(),
+                version_label: "1.0".to_string(),
+                formula: "mean(treatment) - mean(control)".to_string(),
+                unit: "score".to_string(),
+                test_suite_uri: "file:///tests/test_metric.py".to_string(),
+                test_suite_sha256: "c".repeat(64),
+                tests_total: 3,
+                tests_passed: 3,
+                created_by: Some("reviewer".to_string()),
+            },
+        )
+        .expect("create metric version");
+        let definition = create_definition_version(
+            conn,
+            &CreateAnalysisDefinitionVersionReq {
+                project_id: project_id.to_string(),
+                definition_id: None,
+                parent_version_id: None,
+                title: "Treatment effect".to_string(),
+                version_label: "1.0".to_string(),
+                change_rationale: String::new(),
+                method_version_id: method.id,
+                metric_definition_version_ids: vec![metric.id.clone()],
+                specification: AnalysisDefinitionSpecificationDto {
+                    protocol_version: "analysis-test-1".to_string(),
+                    required_input_roles: vec![DatasetRole::Exploratory],
+                    parameters_schema: serde_json::json!({
+                        "type": "object",
+                        "properties": {"threshold": {"type": "number"}},
+                        "required": ["threshold"],
+                        "additionalProperties": false
+                    }),
+                    integrity: integrity_plan(),
+                },
+                created_by: Some("reviewer".to_string()),
+            },
+        )
+        .expect("create definition version");
+        transition_definition(
+            conn,
+            &TransitionAnalysisDefinitionReq {
+                version_id: definition.id.clone(),
+                next_status: AnalysisDefinitionStatus::Review,
+                rationale: "Ready for review.".to_string(),
+                actor_id: Some("reviewer".to_string()),
+            },
+        )
+        .expect("submit definition for review");
+        let definition = transition_definition(
+            conn,
+            &TransitionAnalysisDefinitionReq {
+                version_id: definition.id,
+                next_status: AnalysisDefinitionStatus::Locked,
+                rationale: "Method and metric versions passed their declared tests.".to_string(),
+                actor_id: Some("reviewer".to_string()),
+            },
+        )
+        .expect("lock definition");
+        (definition, metric)
+    }
+
+    fn create_dataset(conn: &mut Connection, project_id: &str) -> String {
+        let dataset = crate::experiment::repository::create_dataset(
+            conn,
+            &CreateDatasetReq {
+                project_id: project_id.to_string(),
+                title: "Analysis input".to_string(),
+                description: String::new(),
+                created_by: None,
+            },
+        )
+        .expect("create dataset");
+        let version = crate::experiment::repository::create_dataset_version(
+            conn,
+            &CreateDatasetVersionReq {
+                dataset_id: dataset.id,
+                schema: DatasetSampleSchemaDto {
+                    schema_id: "analysis-test".to_string(),
+                    schema_version: 1,
+                    fields: vec![DatasetFieldDefinitionDto {
+                        key: "value".to_string(),
+                        value_kind: DatasetSampleValueKind::Decimal,
+                        required: true,
+                        unit: Some("score".to_string()),
+                    }],
+                    allow_additional_fields: false,
+                },
+                expected_sample_count: 1,
+                created_by: None,
+            },
+        )
+        .expect("create dataset version");
+        crate::experiment::repository::add_dataset_samples(
+            conn,
+            &AddDatasetSamplesReq {
+                dataset_version_id: version.id.clone(),
+                samples: vec![DatasetSampleDto::DataSample(DataSampleDto {
+                    sample_id: "sample-1".to_string(),
+                    dataset_version_id: version.id.clone(),
+                    occurred_at_us: Some(110),
+                    entity_ref: None,
+                    values: BTreeMap::from([(
+                        "value".to_string(),
+                        crate::experiment::DatasetSampleValue::Decimal {
+                            value: "2.5".to_string(),
+                            unit: Some("score".to_string()),
+                        },
+                    )]),
+                    provenance: Vec::new(),
+                })],
+            },
+        )
+        .expect("add sample");
+        let split = crate::experiment::repository::add_dataset_split_group(
+            conn,
+            &AddDatasetSplitGroupReq {
+                dataset_version_id: version.id.clone(),
+                split_group_key: "analysis-test-splits".to_string(),
+                require_disjoint: true,
+                assignments: vec![DatasetSplitAssignmentReq {
+                    sample_id: "sample-1".to_string(),
+                    role: DatasetRole::Exploratory,
+                    split_key: "all".to_string(),
+                }],
+            },
+        )
+        .expect("create dataset split group");
+        let material = crate::experiment::repository::dataset_seal_material(conn, &version.id)
+            .expect("load dataset seal material");
+        crate::experiment::repository::seal_dataset_version(
+            conn,
+            &version.id,
+            material.staged_revision,
+            &"d".repeat(64),
+        )
+        .expect("seal dataset version");
+        serde_json::json!({
+            "datasetVersionId": version.id,
+            "splitGroupId": split.id
+        })
+        .to_string()
+    }
+
+    fn create_source_claim(conn: &Connection) -> String {
+        let source_id = id();
+        let version_id = id();
+        let segment_id = id();
+        let extraction_id = id();
+        let claim_id = id();
+        let now = now_us().expect("clock");
+        conn.execute(
+            "INSERT INTO sources (id, kind, title, created_at, updated_at)
+             VALUES (?1, 'document', 'Test source', ?2, ?2)",
+            params![source_id, now],
+        )
+        .expect("insert source");
+        conn.execute(
+            "INSERT INTO source_versions
+                (id, source_id, capture_kind, edition_label, captured_at_us,
+                 metadata_json, created_by, created_at_us)
+             VALUES (?1, ?2, 'edition', '1st edition', ?3, '{}', 'test', ?3)",
+            params![version_id, source_id, now],
+        )
+        .expect("insert source version");
+        conn.execute(
+            "INSERT INTO source_version_segments
+                (id, source_id, source_version_id, label, location_kind, created_at_us)
+             VALUES (?1, ?2, ?3, 'Page 1', 'page', ?4)",
+            params![segment_id, source_id, version_id, now],
+        )
+        .expect("insert source segment");
+        conn.execute(
+            "INSERT INTO knowledge_extractions
+                (id, source_id, source_version_id, source_segment_id, kind, content,
+                 review_status, created_by, created_at_us)
+             VALUES (?1, ?2, ?3, ?4, 'source_claim', 'Claim text',
+                     'unreviewed', 'test', ?5)",
+            params![extraction_id, source_id, version_id, segment_id, now],
+        )
+        .expect("insert source extraction");
+        conn.execute(
+            "INSERT INTO extraction_reviews
+                (id, extraction_id, review_status, reviewer_id, reviewed_at_us, rationale)
+             VALUES (?1, ?2, 'accepted', 'reviewer', ?3, 'Extraction quality reviewed.')",
+            params![id(), extraction_id, now],
+        )
+        .expect("review source extraction");
+        conn.execute(
+            "INSERT INTO source_claims
+                (id, source_id, source_version_id, extraction_id, statement, created_at_us)
+             VALUES (?1, ?2, ?3, ?4, 'Claim text', ?5)",
+            params![claim_id, source_id, version_id, extraction_id, now],
+        )
+        .expect("insert reviewed source claim");
+        claim_id
+    }
+
+    fn create_run_request(
+        definition_version_id: &str,
+        dataset_version_id: &str,
+        split_group_id: &str,
+    ) -> CreateAnalysisRunReq {
+        CreateAnalysisRunReq {
+            definition_version_id: definition_version_id.to_string(),
+            parameters: serde_json::json!({"threshold": 1.0}),
+            environment: serde_json::json!({"runtime": "python 3.12"}),
+            random_seeds: vec!["seed-1".to_string()],
+            inputs: vec![AnalysisInputReq {
+                dataset_version_id: dataset_version_id.to_string(),
+                role: DatasetRole::Exploratory,
+                split_group_id: Some(split_group_id.to_string()),
+                samples: vec![AnalysisInputSampleReq {
+                    sample_id: "sample-1".to_string(),
+                    feature_available_at_us: Some(100),
+                    prediction_at_us: Some(110),
+                    decision_at_us: Some(120),
+                    outcome_available_at_us: Some(130),
+                }],
+            }],
+            created_by: Some("analyst".to_string()),
+        }
+    }
+
+    #[test]
+    fn migration_is_idempotent_and_preserves_analysis_provenance_after_reopen() {
+        let database_path =
+            std::env::temp_dir().join(format!("vora-analysis-{}.sqlite", Uuid::now_v7()));
+        let result = (|| -> Result<()> {
+            let mut conn = Connection::open(&database_path)?;
+            crate::mind::portable_db::initialize_workspace_schema(&conn)?;
+            crate::mind::portable_db::initialize_workspace_schema(&conn)?;
+            let project_id = id();
+            test_project(&conn, &project_id);
+
+            let (definition, metric) = create_locked_definition(&mut conn, &project_id);
+            let dataset_json = create_dataset(&mut conn, &project_id);
+            let dataset_pin: serde_json::Value = parse_json(&dataset_json)?;
+            let dataset_version_id = dataset_pin["datasetVersionId"]
+                .as_str()
+                .ok_or_else(|| anyhow!("dataset version ID missing"))?;
+            let split_group_id = dataset_pin["splitGroupId"]
+                .as_str()
+                .ok_or_else(|| anyhow!("split group ID missing"))?;
+
+            let run_req =
+                create_run_request(&definition.id, dataset_version_id, split_group_id);
+            let queued = create_run(&mut conn, &run_req)?;
+            assert_eq!(queued.lifecycle_status, AnalysisRunStatus::Queued);
+            assert_eq!(queued.inputs[0].dataset_version_id, dataset_version_id);
+            assert_eq!(queued.inputs[0].samples[0].sample_id, "sample-1");
+            assert!(queued.integrity_findings.iter().any(|finding| {
+                finding.code == "control_not_assessed:overfitting"
+            }));
+
+            let running = start_run(&mut conn, &queued.id, Some("analyst"))?;
+            assert_eq!(running.lifecycle_status, AnalysisRunStatus::Running);
+            let completed = finalize_run(
+                &mut conn,
+                &FinalizeAnalysisRunReq {
+                    run_id: queued.id.clone(),
+                    next_status: AnalysisRunStatus::Completed,
+                    summary: "External estimate captured.".to_string(),
+                    outputs: vec![AnalysisOutputReq {
+                        output_key: "estimate".to_string(),
+                        output_kind: "report".to_string(),
+                        title: "Effect estimate".to_string(),
+                        payload: serde_json::json!({"source": "external"}),
+                        artifact_uri: Some("file:///external/estimate.json".to_string()),
+                        artifact_sha256: Some("e".repeat(64)),
+                        media_type: Some("application/json".to_string()),
+                        byte_length: Some(128),
+                    }],
+                    metrics: vec![AnalysisMetricReportDto {
+                        output_key: "estimate".to_string(),
+                        metric_definition_version_id: metric.id.clone(),
+                        estimand: "Mean treatment effect".to_string(),
+                        sample_size: 1,
+                        effect_estimate: "0.5".to_string(),
+                        unit: "score".to_string(),
+                        uncertainty: UncertaintyReportDto::Interval {
+                            interval: AnalysisUncertaintyIntervalDto {
+                                lower: "0.1".to_string(),
+                                upper: "0.8".to_string(),
+                                level: "0.95".to_string(),
+                            },
+                        },
+                        assumptions: vec!["Independent observations.".to_string()],
+                        exclusions: Vec::new(),
+                        missing_data: MissingDataReportDto {
+                            policy: "complete_case".to_string(),
+                            missing_count: 0,
+                            rationale: "No values were missing.".to_string(),
+                        },
+                        multiplicity_treatment: "No correction; single primary metric.".to_string(),
+                        p_value: Some("0.03".to_string()),
+                    }],
+                    errors: Vec::new(),
+                    actor_id: Some("analyst".to_string()),
+                },
+            )?;
+            assert_eq!(completed.lifecycle_status, AnalysisRunStatus::Completed);
+            assert_eq!(completed.metrics[0].sample_size, 1);
+            assert_eq!(completed.inputs[0].dataset_checksum, "d".repeat(64));
+
+            let failed_run = create_run(&mut conn, &run_req)?;
+            start_run(&mut conn, &failed_run.id, Some("analyst"))?;
+            let failed = finalize_run(
+                &mut conn,
+                &FinalizeAnalysisRunReq {
+                    run_id: failed_run.id.clone(),
+                    next_status: AnalysisRunStatus::Failed,
+                    summary: "External analysis failed.".to_string(),
+                    outputs: Vec::new(),
+                    metrics: Vec::new(),
+                    errors: vec![AnalysisErrorReq {
+                        error_kind: "runtime".to_string(),
+                        message: "Numerical solver did not converge.".to_string(),
+                        details: serde_json::json!({"attempt": 1}),
+                    }],
+                    actor_id: Some("analyst".to_string()),
+                },
+            )?;
+            assert_eq!(failed.lifecycle_status, AnalysisRunStatus::Failed);
+            assert_eq!(failed.errors.len(), 1);
+            assert_ne!(completed.id, failed.id);
+
+            let source_claim_id = create_source_claim(&conn);
+            let create_evidence = |polarity| CreateEvidenceReq {
+                project_id: project_id.clone(),
+                proposition: PropositionRefDto::SourceClaim(source_claim_id.clone()),
+                artifact: EvidenceArtifactRefDto::AnalysisOutput(
+                    completed.outputs[0].id.clone(),
+                ),
+                polarity,
+                scope: "The tested population and period.".to_string(),
+                quality_rationale: "Method report and input pins are inspectable.".to_string(),
+                limitations: "External execution is not independently recomputed.".to_string(),
+                provenance: serde_json::json!({"runId": completed.id}),
+                created_by: Some("analyst".to_string()),
+            };
+            let supports = create_evidence(&mut conn, &create_evidence(EvidencePolarity::Supports))?;
+            let contradicts =
+                create_evidence(&mut conn, &create_evidence(EvidencePolarity::Contradicts))?;
+            assert_eq!(supports.polarity, EvidencePolarity::Supports);
+            assert_eq!(contradicts.polarity, EvidencePolarity::Contradicts);
+
+            let finding = create_finding_version(
+                &mut conn,
+                &CreateFindingVersionReq {
+                    project_id: project_id.clone(),
+                    finding_id: None,
+                    parent_version_id: None,
+                    title: "Mixed evidence".to_string(),
+                    statement: "Evidence does not support a settled direction.".to_string(),
+                    proposition: PropositionRefDto::SourceClaim(source_claim_id),
+                    scope: "Test population.".to_string(),
+                    applicability: "Exploratory scope only.".to_string(),
+                    uncertainty: "Wide uncertainty interval.".to_string(),
+                    limitations: "Only one dataset sample.".to_string(),
+                    conclusion_kind: FindingConclusionKind::Contradictory,
+                    analysis_run_ids: vec![completed.id.clone()],
+                    evidence: vec![
+                        FindingEvidenceLinkReq {
+                            evidence_id: supports.id,
+                            synthesis_polarity: EvidencePolarity::Supports,
+                            rationale: "The point estimate aligns.".to_string(),
+                        },
+                        FindingEvidenceLinkReq {
+                            evidence_id: contradicts.id,
+                            synthesis_polarity: EvidencePolarity::Contradicts,
+                            rationale: "The evidence scope limits the claim.".to_string(),
+                        },
+                    ],
+                    change_rationale: String::new(),
+                    created_by: Some("analyst".to_string()),
+                },
+            )?;
+            let reviewed = transition_finding(
+                &mut conn,
+                &TransitionFindingReq {
+                    version_id: finding.id.clone(),
+                    next_status: FindingStatus::Review,
+                    rationale: "Reviewing synthesis.".to_string(),
+                    actor_id: Some("reviewer".to_string()),
+                },
+            )?;
+            assert_eq!(reviewed.status, FindingStatus::Review);
+            let accepted_assessment = transition_finding(
+                &mut conn,
+                &TransitionFindingReq {
+                    version_id: finding.id.clone(),
+                    next_status: FindingStatus::Accepted,
+                    rationale: "Accepted as a scoped finding, not a scientific fact.".to_string(),
+                    actor_id: Some("reviewer".to_string()),
+                },
+            )?;
+            assert_eq!(accepted_assessment.status, FindingStatus::Accepted);
+            let revised = create_finding_version(
+                &mut conn,
+                &CreateFindingVersionReq {
+                    project_id: project_id.clone(),
+                    finding_id: Some(finding.finding_id.clone()),
+                    parent_version_id: Some(finding.id.clone()),
+                    title: "Mixed evidence".to_string(),
+                    statement: "A revised scoped assessment retains both evidence directions."
+                        .to_string(),
+                    proposition: finding.proposition.clone(),
+                    scope: finding.scope.clone(),
+                    applicability: finding.applicability.clone(),
+                    uncertainty: finding.uncertainty.clone(),
+                    limitations: finding.limitations.clone(),
+                    conclusion_kind: FindingConclusionKind::Contradictory,
+                    analysis_run_ids: finding.analysis_run_ids.clone(),
+                    evidence: finding
+                        .evidence
+                        .iter()
+                        .map(|link| FindingEvidenceLinkReq {
+                            evidence_id: link.evidence_id.clone(),
+                            synthesis_polarity: link.synthesis_polarity.clone(),
+                            rationale: link.rationale.clone(),
+                        })
+                        .collect(),
+                    change_rationale: "Clarified scope without resolving conflict.".to_string(),
+                    created_by: Some("analyst".to_string()),
+                },
+            )?;
+            assert_eq!(revised.version_no, 2);
+            assert_eq!(revised.parent_version_id, Some(finding.id.clone()));
+
+            let workspace = workspace(&conn, &project_id)?;
+            assert_eq!(workspace.runs.len(), 2);
+            assert_eq!(workspace.evidence.len(), 2);
+            assert_eq!(workspace.findings.len(), 2);
+
+            drop(conn);
+            let reopened = Connection::open(&database_path)?;
+            crate::mind::portable_db::initialize_workspace_schema(&reopened)?;
+            let reopened_run = query_run(&reopened, &completed.id)?;
+            assert_eq!(reopened_run.outputs[0].payload, serde_json::json!({"source": "external"}));
+            assert_eq!(reopened_run.inputs[0].samples[0].sample_id, "sample-1");
+            assert_eq!(
+                query_finding_version(&reopened, &revised.id)?.parent_version_id,
+                Some(finding.id)
+            );
+            assert_eq!(evidence_for_project(&reopened, &project_id)?.len(), 2);
+            Ok(())
+        })();
+        let _ = fs::remove_file(&database_path);
+        result.expect("analysis migration and lifecycle integration should succeed");
+    }
+
+    #[test]
+    fn temporal_leakage_and_incomplete_statistical_reports_are_rejected() {
+        let mut sample = AnalysisInputSampleReq {
+            sample_id: "sample".to_string(),
+            feature_available_at_us: Some(20),
+            prediction_at_us: Some(10),
+            decision_at_us: Some(30),
+            outcome_available_at_us: Some(40),
+        };
+        assert!(validate_temporal_sample(&sample, true).is_err());
+        sample.feature_available_at_us = None;
+        assert!(validate_temporal_sample(&sample, true).is_err());
+        sample.feature_available_at_us = Some(10);
+        sample.prediction_at_us = Some(20);
+        sample.decision_at_us = Some(30);
+        sample.outcome_available_at_us = Some(25);
+        assert!(validate_temporal_sample(&sample, true).is_err());
+        let report = AnalysisMetricReportDto {
+            output_key: "out".to_string(),
+            metric_definition_version_id: "metric".to_string(),
+            estimand: "Effect".to_string(),
+            sample_size: 1,
+            effect_estimate: "NaN".to_string(),
+            unit: "score".to_string(),
+            uncertainty: UncertaintyReportDto::NotMeaningful {
+                reason: "none".to_string(),
+            },
+            assumptions: Vec::new(),
+            exclusions: Vec::new(),
+            missing_data: MissingDataReportDto {
+                policy: "complete_case".to_string(),
+                missing_count: 0,
+                rationale: "No missing values.".to_string(),
+            },
+            multiplicity_treatment: "single metric".to_string(),
+            p_value: None,
+        };
+        assert!(validate_metric_report(&report, 1).is_err());
+    }
+}
