@@ -86,6 +86,65 @@ pub enum ModelRelationKind {
     TestedIn,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelContributionKind {
+    ContributesTo,
+    Contradicts,
+    Qualifies,
+    TestedIn,
+    DatasetUse,
+    EvidencedBy,
+}
+
+impl ModelContributionKind {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "contributes_to" => Ok(Self::ContributesTo),
+            "contradicts" => Ok(Self::Contradicts),
+            "qualifies" => Ok(Self::Qualifies),
+            "tested_in" => Ok(Self::TestedIn),
+            "dataset_use" => Ok(Self::DatasetUse),
+            "evidenced_by" => Ok(Self::EvidencedBy),
+            _ => Err(format!("invalid model contribution kind: {value}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+pub enum ModelContributionTarget {
+    HypothesisVersion {
+        id: String,
+    },
+    FindingVersion {
+        id: String,
+    },
+    Experiment {
+        design_version_id: String,
+        experiment_run_id: Option<String>,
+    },
+    Dataset {
+        dataset_version_id: String,
+        role: String,
+        split_group_id: Option<String>,
+    },
+    Evidence {
+        id: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelContributionDto {
+    pub id: String,
+    pub relation_kind: ModelContributionKind,
+    pub target: ModelContributionTarget,
+    pub rationale: String,
+    pub created_by: Option<String>,
+    pub created_at_us: i64,
+}
+
 impl ModelRelationKind {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -382,6 +441,7 @@ pub struct ModelVersionDto {
     pub parameters: Vec<ModelParameterDto>,
     pub artifacts: Vec<ModelArtifactDto>,
     pub impacts: Vec<ModelImpactReq>,
+    pub contributions: Vec<ModelContributionDto>,
     pub hypotheses: Vec<ModelRelationReq>,
     pub findings: Vec<ModelRelationReq>,
     pub experiments: Vec<ModelExperimentRelationReq>,
