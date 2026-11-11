@@ -519,6 +519,7 @@ pub fn create_knowledge_item(
             "description",
             ClaimRelationKind::Describes,
         ),
+        KnowledgeItemKind::SourceClaim => return Err(rusqlite::Error::InvalidQuery),
     };
     tx.execute(
         &format!("INSERT INTO {table} (id, title, {content_column}, created_at_us) VALUES (?1, ?2, ?3, ?4)"),
@@ -555,10 +556,11 @@ pub fn create_knowledge_item(
         created_at_us: now,
     };
     let after = serde_json::to_string(&dto).map_err(|_| rusqlite::Error::InvalidQuery)?;
-    let (target_kind, _) = match req.kind {
-        KnowledgeItemKind::Concept => ("concept", "concept_id"),
-        KnowledgeItemKind::Principle => ("principle", "principle_id"),
-        KnowledgeItemKind::Procedure => ("procedure", "procedure_id"),
+    let target_kind = match req.kind {
+        KnowledgeItemKind::Concept => "concept",
+        KnowledgeItemKind::Principle => "principle",
+        KnowledgeItemKind::Procedure => "procedure",
+        KnowledgeItemKind::SourceClaim => return Err(rusqlite::Error::InvalidQuery),
     };
     record_event(
         &tx,
@@ -582,6 +584,10 @@ pub fn create_claim_relation(
     now: i64,
 ) -> RepoResult<String> {
     let table_and_column = match (&req.target_kind, &req.relation_kind) {
+        (
+            KnowledgeItemKind::SourceClaim,
+            ClaimRelationKind::Supports | ClaimRelationKind::Contradicts | ClaimRelationKind::Qualifies,
+        ) => ("source_claim_relations", "object_claim_id"),
         (KnowledgeItemKind::Concept, ClaimRelationKind::Defines | ClaimRelationKind::Supports | ClaimRelationKind::Contradicts | ClaimRelationKind::Qualifies) =>
             ("source_claim_concept_relations", "concept_id"),
         (KnowledgeItemKind::Principle, ClaimRelationKind::Supports | ClaimRelationKind::Contradicts | ClaimRelationKind::Qualifies) =>
@@ -941,7 +947,7 @@ pub fn add_framework_item(
         KnowledgeItemKind::Concept => ("concept_id", "concept"),
         KnowledgeItemKind::Principle => ("principle_id", "principle"),
         KnowledgeItemKind::Procedure => ("procedure_id", "procedure"),
-        _ => ("source_claim_id", "source_claim"),
+        KnowledgeItemKind::SourceClaim => ("source_claim_id", "source_claim"),
     };
     tx.execute(
         &format!(
