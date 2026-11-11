@@ -1164,8 +1164,10 @@ pub fn reorder_framework_items(
         [framework_version_id],
         |row| row.get(0),
     )?;
+    let item_count =
+        i64::try_from(ordered_item_ids.len()).map_err(|_| rusqlite::Error::InvalidQuery)?;
     let offset = max_order
-        .checked_add(ordered_item_ids.len() as i64)
+        .checked_add(item_count)
         .and_then(|value| value.checked_add(1))
         .ok_or(rusqlite::Error::InvalidQuery)?;
     tx.execute(
@@ -1174,10 +1176,11 @@ pub fn reorder_framework_items(
         params![offset, framework_version_id],
     )?;
     for (index, item_id) in ordered_item_ids.iter().enumerate() {
+        let item_order = i64::try_from(index).map_err(|_| rusqlite::Error::InvalidQuery)?;
         tx.execute(
             "UPDATE framework_version_items SET item_order = ?1
              WHERE id = ?2 AND framework_version_id = ?3",
-            params![index as i64, item_id, framework_version_id],
+            params![item_order, item_id, framework_version_id],
         )?;
     }
     record_event(
