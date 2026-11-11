@@ -871,7 +871,11 @@ pub fn create_project(
     if req.pathways.is_empty() {
         return Err("a research project must select at least one pathway".into());
     }
-    let mut keys = req.pathways.iter().map(ResearchPathwayKey::as_str).collect::<Vec<_>>();
+    let mut keys = req
+        .pathways
+        .iter()
+        .map(ResearchPathwayKey::as_str)
+        .collect::<Vec<_>>();
     keys.sort_unstable();
     keys.dedup();
     if keys.len() != req.pathways.len() {
@@ -971,10 +975,7 @@ pub fn review_prior_assessment(
         .map_err(|error| error.to_string())
 }
 
-pub fn create_gap(
-    conn: &Connection,
-    req: CreateResearchGapReq,
-) -> Result<ResearchGapDto, String> {
+pub fn create_gap(conn: &Connection, req: CreateResearchGapReq) -> Result<ResearchGapDto, String> {
     validate_required(&req.title, "research gap title")?;
     validate_required(&req.statement, "research gap statement")?;
     repository::create_gap(conn, &req, &new_id("research_gap"), now_ts_us()?)
@@ -991,16 +992,12 @@ pub fn add_gap_evidence(conn: &Connection, req: AddGapEvidenceReq) -> Result<(),
     repository::add_gap_evidence(conn, &req).map_err(|error| error.to_string())
 }
 
-pub fn review_gap_exception(
-    conn: &Connection,
-    req: ReviewGapExceptionReq,
-) -> Result<(), String> {
+pub fn review_gap_exception(conn: &Connection, req: ReviewGapExceptionReq) -> Result<(), String> {
     validate_required(&req.rationale, "review exception rationale")?;
     if !matches!(req.review_decision.as_str(), "accepted" | "rejected") {
         return Err("review decision must be accepted or rejected".into());
     }
-    repository::review_gap_exception(conn, &req, now_ts_us()?)
-        .map_err(|error| error.to_string())
+    repository::review_gap_exception(conn, &req, now_ts_us()?).map_err(|error| error.to_string())
 }
 
 pub fn transition_gap(
@@ -1119,14 +1116,8 @@ pub fn review_observation_plan(
     preregister: bool,
     actor_id: Option<&str>,
 ) -> Result<ObservationPlanVersionDto, String> {
-    repository::review_observation_plan(
-        conn,
-        plan_version_id,
-        preregister,
-        actor_id,
-        now_ts_us()?,
-    )
-    .map_err(|error| error.to_string())
+    repository::review_observation_plan(conn, plan_version_id, preregister, actor_id, now_ts_us()?)
+        .map_err(|error| error.to_string())
 }
 
 pub fn create_dataset_version_reference(
@@ -1150,33 +1141,40 @@ pub fn create_observation(
 ) -> Result<ObservationDto, String> {
     validate_required(&req.measurement_method, "observation measurement method")?;
     validate_required(&req.conditions, "observation conditions")?;
-    match (req.value_state.as_str(), req.value_decimal.as_deref(), req.unit.as_deref()) {
+    match (
+        req.value_state.as_str(),
+        req.value_decimal.as_deref(),
+        req.unit.as_deref(),
+    ) {
         ("observed", Some(value), Some(unit)) => {
             validate_decimal(value, "observation value")?;
             validate_required(unit, "observation unit")?;
         }
-        ("observed", _, _) => {
-            return Err("observed values require a decimal value and unit".into())
-        }
-        (state, None, _) if matches!(
-            state,
-            "not_measured" | "not_recorded" | "unknown" | "not_applicable" | "withheld" | "invalid"
-        ) => {}
+        ("observed", _, _) => return Err("observed values require a decimal value and unit".into()),
+        (state, None, _)
+            if matches!(
+                state,
+                "not_measured"
+                    | "not_recorded"
+                    | "unknown"
+                    | "not_applicable"
+                    | "withheld"
+                    | "invalid"
+            ) => {}
         _ => return Err("missing observation values require an explicit missingness state".into()),
     }
     repository::create_observation(conn, &req, &new_id("observation"), now_ts_us()?)
         .map_err(|error| error.to_string())
 }
 
-pub fn create_pattern(
-    conn: &mut Connection,
-    req: CreatePatternReq,
-) -> Result<PatternDto, String> {
+pub fn create_pattern(conn: &mut Connection, req: CreatePatternReq) -> Result<PatternDto, String> {
     validate_required(&req.title, "pattern title")?;
     validate_required(&req.statement, "pattern statement")?;
     validate_required(&req.analysis_method, "pattern analysis method")?;
     if req.observation_ids.is_empty() && req.dataset_version_reference_ids.is_empty() {
-        return Err("a pattern must declare at least one observation or dataset-version input".into());
+        return Err(
+            "a pattern must declare at least one observation or dataset-version input".into(),
+        );
     }
     repository::create_pattern(conn, &req, &new_id("pattern"), now_ts_us()?)
         .map_err(|error| error.to_string())
@@ -1267,7 +1265,10 @@ pub fn add_hypothesis_evidence(
     .filter(|value| *value)
     .count();
     if evidence_count != 1 {
-        return Err("hypothesis evidence must name exactly one typed source claim, observation, or pattern".into());
+        return Err(
+            "hypothesis evidence must name exactly one typed source claim, observation, or pattern"
+                .into(),
+        );
     }
     repository::add_hypothesis_evidence(conn, &req, &new_id("hypothesis_evidence"), now_ts_us()?)
         .map_err(|error| error.to_string())
@@ -1297,7 +1298,9 @@ pub fn transition_research_design(
     actor_id: Option<&str>,
 ) -> Result<ResearchExperimentDesignVersionDto, String> {
     if !matches!(next_status, "review" | "preregistered" | "withdrawn") {
-        return Err(format!("unsupported design transition target: {next_status}"));
+        return Err(format!(
+            "unsupported design transition target: {next_status}"
+        ));
     }
     repository::transition_research_design(
         conn,
@@ -1320,17 +1323,16 @@ pub fn link_hypothesis_design(
             req.relationship_kind
         ));
     }
-    repository::link_hypothesis_design(conn, &req, now_ts_us()?)
-        .map_err(|error| error.to_string())
+    repository::link_hypothesis_design(conn, &req, now_ts_us()?).map_err(|error| error.to_string())
 }
 
 fn validate_decimal(value: &str, name: &str) -> Result<(), String> {
     let trimmed = value.trim();
     let bytes = trimmed.as_bytes();
     if bytes.is_empty()
-        || bytes.iter().any(|byte| {
-            !byte.is_ascii_digit() && *byte != b'.' && *byte != b'-'
-        })
+        || bytes
+            .iter()
+            .any(|byte| !byte.is_ascii_digit() && *byte != b'.' && *byte != b'-')
         || bytes.iter().filter(|byte| **byte == b'.').count() > 1
         || bytes.iter().filter(|byte| **byte == b'-').count() > 1
         || bytes.iter().skip(1).any(|byte| *byte == b'-')
@@ -1384,16 +1386,24 @@ fn validate_hypothesis_definition(
         .filter(|variable| variable.role == HypothesisVariableRole::Dependent)
         .count();
     if independent_count == 0 || dependent_count == 0 {
-        return Err("typed hypotheses require at least one independent and one dependent variable".into());
+        return Err(
+            "typed hypotheses require at least one independent and one dependent variable".into(),
+        );
     }
     for variable in variables {
         validate_required(&variable.name, "variable name")?;
-        validate_required(&variable.operational_definition, "variable operational definition")?;
+        validate_required(
+            &variable.operational_definition,
+            "variable operational definition",
+        )?;
         validate_required(&variable.measurement_method, "variable measurement method")?;
         if variable.value_kind == HypothesisValueKind::Continuous
             || variable.value_kind == HypothesisValueKind::Discrete
         {
-            validate_required(variable.unit.as_deref().unwrap_or_default(), "variable unit")?;
+            validate_required(
+                variable.unit.as_deref().unwrap_or_default(),
+                "variable unit",
+            )?;
         }
     }
     Ok(())

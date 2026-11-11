@@ -213,7 +213,15 @@ pub fn create_project(
             params![id, pathway.as_str(), now],
         )?;
     }
-    insert_event(&tx, "project", id, "created", req.created_by.as_deref(), "", now)?;
+    insert_event(
+        &tx,
+        "project",
+        id,
+        "created",
+        req.created_by.as_deref(),
+        "",
+        now,
+    )?;
     tx.commit()?;
     query_project(conn, id)
 }
@@ -388,7 +396,14 @@ pub fn create_literature_review(
         "INSERT INTO literature_reviews
             (id, project_id, title, search_scope, lifecycle_status, created_by, created_at_us)
          VALUES (?1, ?2, ?3, ?4, 'draft', ?5, ?6)",
-        params![id, req.project_id, req.title.trim(), req.search_scope, req.created_by, now],
+        params![
+            id,
+            req.project_id,
+            req.title.trim(),
+            req.search_scope,
+            req.created_by,
+            now
+        ],
     )?;
     query_literature_review(conn, id)
 }
@@ -916,16 +931,7 @@ pub fn refine_question(
             (id, project_id, research_gap_id, domain_id, lifecycle_status,
              ownership_state, migration_note, rationale, created_by, mapped_at_us)
          VALUES (?1, ?2, ?3, ?4, 'draft', ?5, NULL, ?6, ?7, ?8)",
-        params![
-            derived_id,
-            parent.0,
-            parent.1,
-            parent.2,
-            parent.3,
-            rationale,
-            actor_id,
-            now
-        ],
+        params![derived_id, parent.0, parent.1, parent.2, parent.3, rationale, actor_id, now],
     )?;
     tx.execute(
         "INSERT INTO research_question_lineage
@@ -954,7 +960,9 @@ pub fn refine_question(
         rationale,
         now,
     )?;
-    insert_event(&tx, "question", derived_id, "draft", actor_id, rationale, now)?;
+    insert_event(
+        &tx, "question", derived_id, "draft", actor_id, rationale, now,
+    )?;
     tx.commit()?;
     query_question(conn, derived_id)
 }
@@ -1186,13 +1194,21 @@ pub fn review_observation_plan(
     actor_id: Option<&str>,
     now: i64,
 ) -> Result<ObservationPlanVersionDto> {
-    let next_status = if preregister { "preregistered" } else { "reviewed" };
+    let next_status = if preregister {
+        "preregistered"
+    } else {
+        "reviewed"
+    };
     let tx = conn.unchecked_transaction()?;
     let changed = tx.execute(
         "UPDATE observation_plan_versions SET lifecycle_status = ?1,
             preregistered_at_us = ?2
          WHERE id = ?3 AND lifecycle_status = 'draft'",
-        params![next_status, if preregister { Some(now) } else { None }, version_id],
+        params![
+            next_status,
+            if preregister { Some(now) } else { None },
+            version_id
+        ],
     )?;
     if changed != 1 {
         return Err(rusqlite::Error::InvalidQuery);
@@ -1472,7 +1488,15 @@ pub fn create_pattern(
             params![id, dataset_id],
         )?;
     }
-    insert_event(&tx, "pattern", id, "candidate", req.created_by.as_deref(), "", now)?;
+    insert_event(
+        &tx,
+        "pattern",
+        id,
+        "candidate",
+        req.created_by.as_deref(),
+        "",
+        now,
+    )?;
     tx.commit()?;
     query_pattern(conn, id)
 }
@@ -1516,12 +1540,7 @@ fn query_pattern(conn: &Connection, id: &str) -> Result<PatternDto> {
     Ok(pattern)
 }
 
-pub fn create_idea(
-    conn: &Connection,
-    req: &CreateIdeaReq,
-    id: &str,
-    now: i64,
-) -> Result<IdeaDto> {
+pub fn create_idea(conn: &Connection, req: &CreateIdeaReq, id: &str, now: i64) -> Result<IdeaDto> {
     let origin = [
         req.phenomenon_id.as_deref(),
         req.observation_id.as_deref(),
@@ -1643,8 +1662,16 @@ pub fn create_typed_hypothesis(
             req.research_question_id,
             req.statement_h1,
             req.statement_h0,
-            if independent.len() == 1 { independent[0].name.as_str() } else { "" },
-            if dependent.len() == 1 { dependent[0].name.as_str() } else { "" },
+            if independent.len() == 1 {
+                independent[0].name.as_str()
+            } else {
+                ""
+            },
+            if dependent.len() == 1 {
+                dependent[0].name.as_str()
+            } else {
+                ""
+            },
             legacy_ms
         ],
     )?;
@@ -1758,7 +1785,8 @@ pub fn transition_hypothesis(
     let next = next_status.as_str();
     let allowed = matches!(
         (current.as_str(), next),
-        ("draft", "review" | "closed") | ("review", "draft" | "preregistered" | "closed")
+        ("draft", "review" | "closed")
+            | ("review", "draft" | "preregistered" | "closed")
             | ("preregistered", "testing" | "closed")
             | ("testing", "closed")
     );
@@ -1778,7 +1806,12 @@ pub fn transition_hypothesis(
                 sum(CASE WHEN role = 'dependent' THEN 1 ELSE 0 END)
              FROM hypothesis_variables WHERE hypothesis_version_id = ?1",
             [&version_id],
-            |row| Ok((row.get::<_, Option<i64>>(0)?.unwrap_or(0), row.get::<_, Option<i64>>(1)?.unwrap_or(0))),
+            |row| {
+                Ok((
+                    row.get::<_, Option<i64>>(0)?.unwrap_or(0),
+                    row.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                ))
+            },
         )?;
         if variable_counts.0 == 0 || variable_counts.1 == 0 {
             return Err(rusqlite::Error::InvalidQuery);
@@ -1847,9 +1880,8 @@ pub fn add_hypothesis_evidence(
     id: &str,
     now: i64,
 ) -> Result<()> {
-    let (hypothesis_project, evidence_project): (Option<String>, Option<String>) =
-        conn.query_row(
-            "SELECT h.project_id,
+    let (hypothesis_project, evidence_project): (Option<String>, Option<String>) = conn.query_row(
+        "SELECT h.project_id,
                 CASE
                     WHEN ?2 IS NOT NULL THEN (
                         SELECT h.project_id FROM hypothesis_definition_versions v
@@ -1866,14 +1898,14 @@ pub fn add_hypothesis_evidence(
              FROM hypothesis_definition_versions v
              JOIN research_hypotheses h ON h.id = v.hypothesis_id
              WHERE v.id = ?1",
-            params![
-                req.hypothesis_version_id,
-                req.source_claim_id,
-                req.observation_id,
-                req.pattern_id
-            ],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?;
+        params![
+            req.hypothesis_version_id,
+            req.source_claim_id,
+            req.observation_id,
+            req.pattern_id
+        ],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
     if req.source_claim_id.is_none() && hypothesis_project != evidence_project {
         return Err(rusqlite::Error::InvalidQuery);
     }
@@ -1925,7 +1957,13 @@ pub fn create_research_design(
         "INSERT INTO research_experiment_designs
             (id, project_id, title, created_by, created_at_us)
          VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![design_id, req.project_id, req.title.trim(), req.created_by, now],
+        params![
+            design_id,
+            req.project_id,
+            req.title.trim(),
+            req.created_by,
+            now
+        ],
     )?;
     tx.execute(
         "INSERT INTO research_experiment_design_versions
@@ -2193,8 +2231,8 @@ fn query_hypothesis_definition(
 }
 
 pub fn workspace(conn: &Connection) -> Result<ResearchWorkspaceDto> {
-    let mut pathways_statement =
-        conn.prepare("SELECT id, pathway_key, title, description FROM research_pathways ORDER BY id")?;
+    let mut pathways_statement = conn
+        .prepare("SELECT id, pathway_key, title, description FROM research_pathways ORDER BY id")?;
     let pathways = pathways_statement
         .query_map([], |row| {
             let key = row.get::<_, String>(1)?;
@@ -2208,7 +2246,10 @@ pub fn workspace(conn: &Connection) -> Result<ResearchWorkspaceDto> {
         })?
         .collect::<Result<Vec<_>>>()?;
 
-    let project_ids = query_ids(conn, "SELECT id FROM research_projects ORDER BY updated_at_us DESC, id")?;
+    let project_ids = query_ids(
+        conn,
+        "SELECT id FROM research_projects ORDER BY updated_at_us DESC, id",
+    )?;
     let projects = project_ids
         .iter()
         .map(|id| query_project(conn, id))
@@ -2299,24 +2340,34 @@ pub fn workspace(conn: &Connection) -> Result<ResearchWorkspaceDto> {
         })?
         .collect::<Result<Vec<_>>>()?;
 
-    let review_ids = query_ids(conn, "SELECT id FROM literature_reviews ORDER BY created_at_us DESC")?;
+    let review_ids = query_ids(
+        conn,
+        "SELECT id FROM literature_reviews ORDER BY created_at_us DESC",
+    )?;
     let literature_reviews = review_ids
         .iter()
         .map(|id| query_literature_review(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    let assessment_ids =
-        query_ids(conn, "SELECT id FROM prior_knowledge_assessments ORDER BY created_at_us DESC")?;
+    let assessment_ids = query_ids(
+        conn,
+        "SELECT id FROM prior_knowledge_assessments ORDER BY created_at_us DESC",
+    )?;
     let prior_assessments = assessment_ids
         .iter()
         .map(|id| query_prior_assessment(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    let gap_ids = query_ids(conn, "SELECT id FROM research_gaps ORDER BY updated_at_us DESC")?;
+    let gap_ids = query_ids(
+        conn,
+        "SELECT id FROM research_gaps ORDER BY updated_at_us DESC",
+    )?;
     let gaps = gap_ids
         .iter()
         .map(|id| query_gap(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    let question_ids =
-        query_ids(conn, "SELECT id FROM research_questions ORDER BY mapped_at_us DESC")?;
+    let question_ids = query_ids(
+        conn,
+        "SELECT id FROM research_questions ORDER BY mapped_at_us DESC",
+    )?;
     let questions = question_ids
         .iter()
         .map(|id| query_question(conn, id))
@@ -2346,40 +2397,58 @@ pub fn workspace(conn: &Connection) -> Result<ResearchWorkspaceDto> {
             })?
             .collect::<Result<Vec<_>>>()?
     };
-    let phenomenon_ids = query_ids(conn, "SELECT id FROM research_phenomena ORDER BY created_at_us DESC")?;
+    let phenomenon_ids = query_ids(
+        conn,
+        "SELECT id FROM research_phenomena ORDER BY created_at_us DESC",
+    )?;
     let phenomena = phenomenon_ids
         .iter()
         .map(|id| query_phenomenon(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    let plan_ids = query_ids(conn, "SELECT id FROM observation_plans ORDER BY created_at_us DESC")?;
+    let plan_ids = query_ids(
+        conn,
+        "SELECT id FROM observation_plans ORDER BY created_at_us DESC",
+    )?;
     let observation_plans = plan_ids
         .iter()
         .map(|id| query_observation_plan(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    let dataset_ids =
-        query_ids(conn, "SELECT id FROM research_dataset_version_references ORDER BY created_at_us DESC")?;
+    let dataset_ids = query_ids(
+        conn,
+        "SELECT id FROM research_dataset_version_references ORDER BY created_at_us DESC",
+    )?;
     let dataset_versions = dataset_ids
         .iter()
         .map(|id| query_dataset_version(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    let observation_ids =
-        query_ids(conn, "SELECT id FROM research_observations ORDER BY measured_at_us DESC")?;
+    let observation_ids = query_ids(
+        conn,
+        "SELECT id FROM research_observations ORDER BY measured_at_us DESC",
+    )?;
     let observations = observation_ids
         .iter()
         .map(|id| query_observation(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    let pattern_ids = query_ids(conn, "SELECT id FROM research_patterns ORDER BY created_at_us DESC")?;
+    let pattern_ids = query_ids(
+        conn,
+        "SELECT id FROM research_patterns ORDER BY created_at_us DESC",
+    )?;
     let patterns = pattern_ids
         .iter()
         .map(|id| query_pattern(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    let idea_ids = query_ids(conn, "SELECT id FROM research_ideas ORDER BY created_at_us DESC")?;
+    let idea_ids = query_ids(
+        conn,
+        "SELECT id FROM research_ideas ORDER BY created_at_us DESC",
+    )?;
     let ideas = idea_ids
         .iter()
         .map(|id| query_idea(conn, id))
         .collect::<Result<Vec<_>>>()?;
-    let hypothesis_ids =
-        query_ids(conn, "SELECT id FROM research_hypotheses ORDER BY created_at_us DESC")?;
+    let hypothesis_ids = query_ids(
+        conn,
+        "SELECT id FROM research_hypotheses ORDER BY created_at_us DESC",
+    )?;
     let hypotheses = hypothesis_ids
         .iter()
         .map(|id| query_hypothesis(conn, id))
@@ -2421,4 +2490,3 @@ fn query_ids(conn: &Connection, sql: &str) -> Result<Vec<String>> {
     let rows = statement.query_map([], |row| row.get(0))?;
     rows.collect()
 }
-
