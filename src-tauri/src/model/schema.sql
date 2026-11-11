@@ -61,6 +61,19 @@ CREATE TABLE model_version_parents (
     CHECK (version_id <> parent_version_id)
 );
 
+CREATE TABLE model_version_events (
+    id TEXT PRIMARY KEY,
+    model_version_id TEXT NOT NULL REFERENCES model_versions(id) ON DELETE RESTRICT,
+    lifecycle_status TEXT NOT NULL CHECK (
+        lifecycle_status IN ('draft', 'review', 'released', 'superseded', 'withdrawn')
+    ),
+    rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+    actor_id TEXT,
+    occurred_at_us INTEGER NOT NULL
+);
+CREATE INDEX idx_model_version_events
+    ON model_version_events(model_version_id, occurred_at_us, id);
+
 CREATE TABLE model_version_parameters (
     id TEXT PRIMARY KEY,
     model_version_id TEXT NOT NULL REFERENCES model_versions(id) ON DELETE RESTRICT,
@@ -349,10 +362,30 @@ BEFORE DELETE ON scientific_models
 BEGIN
     SELECT RAISE(ABORT, 'model identities cannot be deleted');
 END;
+CREATE TRIGGER model_status_events_no_update
+BEFORE UPDATE ON model_status_events
+BEGIN
+    SELECT RAISE(ABORT, 'model status events are immutable');
+END;
+CREATE TRIGGER model_status_events_no_delete
+BEFORE DELETE ON model_status_events
+BEGIN
+    SELECT RAISE(ABORT, 'model status events cannot be deleted');
+END;
 CREATE TRIGGER model_versions_no_update
 BEFORE UPDATE ON model_versions
 BEGIN
     SELECT RAISE(ABORT, 'model versions are immutable');
+END;
+CREATE TRIGGER model_version_events_no_update
+BEFORE UPDATE ON model_version_events
+BEGIN
+    SELECT RAISE(ABORT, 'model version lifecycle events are immutable');
+END;
+CREATE TRIGGER model_version_events_no_delete
+BEFORE DELETE ON model_version_events
+BEGIN
+    SELECT RAISE(ABORT, 'model version lifecycle events cannot be deleted');
 END;
 CREATE TRIGGER model_versions_no_delete
 BEFORE DELETE ON model_versions
@@ -478,6 +511,56 @@ CREATE TRIGGER model_version_evidence_no_delete
 BEFORE DELETE ON model_version_evidence
 BEGIN
     SELECT RAISE(ABORT, 'model evidence links cannot be deleted');
+END;
+CREATE TRIGGER model_validation_analysis_evidence_no_update
+BEFORE UPDATE ON model_validation_analysis_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'validation evidence links are immutable');
+END;
+CREATE TRIGGER model_validation_analysis_evidence_no_delete
+BEFORE DELETE ON model_validation_analysis_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'validation evidence links cannot be deleted');
+END;
+CREATE TRIGGER model_validation_model_evidence_no_update
+BEFORE UPDATE ON model_validation_model_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'validation evidence links are immutable');
+END;
+CREATE TRIGGER model_validation_model_evidence_no_delete
+BEFORE DELETE ON model_validation_model_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'validation evidence links cannot be deleted');
+END;
+CREATE TRIGGER model_replication_datasets_no_update
+BEFORE UPDATE ON model_replication_datasets
+BEGIN
+    SELECT RAISE(ABORT, 'replication dataset pins are immutable');
+END;
+CREATE TRIGGER model_replication_datasets_no_delete
+BEFORE DELETE ON model_replication_datasets
+BEGIN
+    SELECT RAISE(ABORT, 'replication dataset pins cannot be deleted');
+END;
+CREATE TRIGGER model_replication_analysis_evidence_no_update
+BEFORE UPDATE ON model_replication_analysis_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'replication evidence links are immutable');
+END;
+CREATE TRIGGER model_replication_analysis_evidence_no_delete
+BEFORE DELETE ON model_replication_analysis_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'replication evidence links cannot be deleted');
+END;
+CREATE TRIGGER model_replication_model_evidence_no_update
+BEFORE UPDATE ON model_replication_model_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'replication evidence links are immutable');
+END;
+CREATE TRIGGER model_replication_model_evidence_no_delete
+BEFORE DELETE ON model_replication_model_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'replication evidence links cannot be deleted');
 END;
 CREATE TRIGGER model_evaluations_no_update
 BEFORE UPDATE ON model_evaluations
