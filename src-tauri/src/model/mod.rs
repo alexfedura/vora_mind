@@ -98,6 +98,17 @@ pub enum ModelContributionKind {
 }
 
 impl ModelContributionKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ContributesTo => "contributes_to",
+            Self::Contradicts => "contradicts",
+            Self::Qualifies => "qualifies",
+            Self::TestedIn => "tested_in",
+            Self::DatasetUse => "dataset_use",
+            Self::EvidencedBy => "evidenced_by",
+        }
+    }
+
     fn parse(value: &str) -> Result<Self, String> {
         match value {
             "contributes_to" => Ok(Self::ContributesTo),
@@ -146,6 +157,16 @@ pub struct ModelContributionDto {
 }
 
 impl ModelRelationKind {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "contributes_to" => Ok(Self::ContributesTo),
+            "contradicts" => Ok(Self::Contradicts),
+            "qualifies" => Ok(Self::Qualifies),
+            "tested_in" => Ok(Self::TestedIn),
+            _ => Err(format!("invalid model relation kind: {value}")),
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ContributesTo => "contributes_to",
