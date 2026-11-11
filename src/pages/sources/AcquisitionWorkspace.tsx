@@ -12,6 +12,7 @@ import {
   srcCreateSourceVersion,
   srcListClaimRelations,
   srcListFrameworkVersions,
+  srcListFrameworkReviews,
   srcListFrameworks,
   srcListKnowledgeExtractions,
   srcListKnowledgeItems,
@@ -31,10 +32,12 @@ import {
 import type {
   ClaimRelationDto,
   ClaimRelationKind,
+  AcquisitionProvenanceTargetKind,
   ExtractionKind,
   ExtractionReviewStatus,
   FrameworkChangeClass,
   FrameworkDto,
+  FrameworkReviewDto,
   FrameworkMembershipRole,
   FrameworkReviewStatus,
   FrameworkVersionDto,
@@ -174,6 +177,7 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
   const [frameworks, setFrameworks] = useState<FrameworkDto[]>([]);
   const [frameworkId, setFrameworkId] = useState("");
   const [frameworkVersions, setFrameworkVersions] = useState<FrameworkVersionDto[]>([]);
+  const [frameworkReviews, setFrameworkReviews] = useState<FrameworkReviewDto[]>([]);
   const [frameworkVersionId, setFrameworkVersionId] = useState("");
   const [compareVersionId, setCompareVersionId] = useState("");
   const [selectedLocationId, setSelectedLocationId] = useState("");
@@ -327,6 +331,16 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
       .catch((loadError: unknown) => setError(String(loadError)));
   }, [selectedClaimId]);
 
+  useEffect(() => {
+    if (!selectedFrameworkVersion) {
+      setFrameworkReviews([]);
+      return;
+    }
+    srcListFrameworkReviews(selectedFrameworkVersion.id)
+      .then(setFrameworkReviews)
+      .catch((loadError: unknown) => setError(String(loadError)));
+  }, [selectedFrameworkVersion?.id]);
+
   const runAction = async (action: () => Promise<void>, successMessage: string) => {
     setBusy(true);
     setError(null);
@@ -344,7 +358,7 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
     }
   };
 
-  const showProvenance = async (kind: string, id: string) => {
+  const showProvenance = async (kind: AcquisitionProvenanceTargetKind, id: string) => {
     setError(null);
     setProvenanceTarget(`${kind}: ${id}`);
     try {
@@ -679,6 +693,9 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
             Legacy source records remain unchanged. Versioned citations and extractions below
             are separate, explicitly linked records.
           </p>
+          <button onClick={() => void showProvenance("source", source.id)} className="mt-2 text-[10px] text-sky-300">
+            Source provenance
+          </button>
         </div>
         <div className="flex gap-1 rounded-lg border border-[#2b3343] bg-[#151a23] p-1">
           {(["versions", "knowledge", "frameworks"] as const).map((value) => (
@@ -927,10 +944,12 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                         </p>
                         <p className="mt-1 text-[10px] text-gray-500">
                           {extraction.createdBy} · {formatInstant(extraction.createdAtUs)}
+                          {extraction.confidenceDecimal ? ` · confidence ${extraction.confidenceDecimal}` : ""}
                           {extraction.toolVersion ? ` · tool ${extraction.toolVersion}` : ""}
                           {extraction.parentExtractionId ? ` · parent ${extraction.parentExtractionId}` : ""}
                           {extraction.supersededById ? ` · superseded by ${extraction.supersededById}` : ""}
                         </p>
+                        {extraction.uncertainty && <p className="mt-1 text-[10px] text-amber-300">Uncertainty: {extraction.uncertainty}</p>}
                         {selectedExtractionId === extraction.id && (
                           <form onSubmit={correctExtraction} className="mt-3 grid gap-2">
                             <textarea required value={correctionText} onChange={(event) => setCorrectionText(event.target.value)} rows={2} className="rounded border border-[#394153] bg-[#0c1016] px-2 py-1.5 text-xs" aria-label="Corrected extraction" />
@@ -1105,6 +1124,12 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                           <span className="text-[10px] text-sky-300">{item.itemOrder + 1}. {item.itemKind} · {item.membershipRole}</span>
                           <p className="text-xs text-gray-200">{item.itemTitle}</p>
                           <p className="break-all font-mono text-[10px] text-gray-500">{item.itemId}</p>
+                          <button
+                            onClick={() => void showProvenance(item.itemKind, item.itemId)}
+                            className="mt-1 text-[10px] text-sky-300"
+                          >
+                            Member provenance
+                          </button>
                         </div>
                         {selectedFrameworkVersion.status === "draft" && (
                           <div className="flex shrink-0 gap-2">
@@ -1165,6 +1190,19 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                     </div>
                     <button disabled={busy} className="rounded bg-sky-700 px-3 py-1.5 text-xs">Create successor draft</button>
                   </form>
+                )}
+
+                {frameworkReviews.length > 0 && (
+                  <ol className="mt-3 space-y-1 border-t border-[#2b3343] pt-3">
+                    {frameworkReviews.map((review) => (
+                      <li key={review.id} className="text-[10px] text-gray-400">
+                        Review: <span className="text-gray-200">{review.reviewStatus.replace("_", " ")}</span>
+                        {review.reviewerId ? ` by ${review.reviewerId}` : ""}
+                        {" · "}{formatInstant(review.reviewedAtUs)}
+                        {review.rationale ? ` · ${review.rationale}` : ""}
+                      </li>
+                    ))}
+                  </ol>
                 )}
 
                 <div className="rounded-lg border border-[#293244] bg-[#141923] p-3">
