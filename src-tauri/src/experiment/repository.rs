@@ -937,27 +937,36 @@ pub fn attach_prepared_dataset_asset(
 pub struct DatasetSealMaterial {
     pub version_id: String,
     pub staged_revision: i64,
+    pub lifecycle_status: String,
     pub schema_json: String,
     pub expected_sample_count: i64,
+    pub content_sha256: Option<String>,
     pub samples: Vec<String>,
     pub assets: Vec<ExperimentDatasetAssetDto>,
 }
 
 pub fn dataset_seal_material(conn: &Connection, version_id: &str) -> Result<DatasetSealMaterial> {
-    let (staged_revision, schema_json, expected_sample_count, lifecycle_status): (
+    let (staged_revision, schema_json, expected_sample_count, lifecycle_status, content_sha256): (
         i64,
         String,
         i64,
         String,
+        Option<String>,
     ) = conn.query_row(
-        "SELECT staged_revision, sample_schema_json, expected_sample_count, lifecycle_status
+        "SELECT staged_revision, sample_schema_json, expected_sample_count, lifecycle_status,
+                content_sha256
          FROM experiment_dataset_versions WHERE id = ?1",
         [version_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        },
     )?;
-    if lifecycle_status != "staged" {
-        return Err(invalid("Only staged dataset versions can be sealed."));
-    }
     let mut statement = conn.prepare(
         "SELECT record_json FROM experiment_dataset_samples
          WHERE dataset_version_id = ?1 ORDER BY sample_id",
@@ -979,8 +988,10 @@ pub fn dataset_seal_material(conn: &Connection, version_id: &str) -> Result<Data
     Ok(DatasetSealMaterial {
         version_id: version_id.to_owned(),
         staged_revision,
+        lifecycle_status,
         schema_json,
         expected_sample_count,
+        content_sha256,
         samples,
         assets: query_dataset_assets(conn, version_id)?,
     })
