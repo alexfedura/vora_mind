@@ -2388,12 +2388,6 @@ mod tests {
         )
         .expect("insert analysis output");
         conn.execute(
-            "INSERT INTO analysis_run_events (id, run_id, lifecycle_status, occurred_at_us)
-             VALUES (?1, ?2, 'completed', 3)",
-            params![format!("analysis-completed-{project_id}"), run_id],
-        )
-        .expect("complete analysis run");
-        conn.execute(
             "INSERT INTO analysis_metrics
                 (id, run_id, output_id, metric_definition_version_id, method_version_id,
                  estimand, sample_size, effect_estimate, unit, uncertainty_kind,
@@ -2410,6 +2404,12 @@ mod tests {
             ],
         )
         .expect("insert analysis metric");
+        conn.execute(
+            "INSERT INTO analysis_run_events (id, run_id, lifecycle_status, occurred_at_us)
+             VALUES (?1, ?2, 'completed', 3)",
+            params![format!("analysis-completed-{project_id}"), run_id],
+        )
+        .expect("complete analysis run");
         (run_id, input_id, analysis_metric_id)
     }
 
