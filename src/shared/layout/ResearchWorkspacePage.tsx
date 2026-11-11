@@ -150,7 +150,8 @@ export const ResearchWorkspacePage: React.FC = () => {
 
   const adoptFrameworkVersion = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     const version = workspace?.frameworkVersions.find(
       (item) => item.frameworkVersionId === String(form.get("frameworkVersionId") ?? ""),
     );
@@ -162,7 +163,7 @@ export const ResearchWorkspacePage: React.FC = () => {
       String(form.get("context") ?? ""),
       null,
     ));
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const createPriorAssessment = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -442,12 +443,16 @@ export const ResearchWorkspacePage: React.FC = () => {
     if (!definition) return;
     const kind = String(form.get("evidenceKind") ?? "");
     const id = String(form.get("evidenceId") ?? "");
+    const polarityValue = String(form.get("polarity") ?? "supports");
+    const polarity = polarityValue === "contradicts"
+      ? "contradicts"
+      : polarityValue === "qualifies" ? "qualifies" : "supports";
     await act(() => researchService.addHypothesisEvidence({
       hypothesisVersionId: definition.id,
       sourceClaimId: kind === "source_claim" ? id : null,
       observationId: kind === "observation" ? id : null,
       patternId: kind === "pattern" ? id : null,
-      polarity: String(form.get("polarity") ?? "supports") as "supports" | "contradicts" | "qualifies",
+      polarity,
       rationale: String(form.get("rationale") ?? ""),
       createdBy: null,
     }));
