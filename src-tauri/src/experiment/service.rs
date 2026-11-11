@@ -7,9 +7,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 fn material_checksum(material: &DatasetSealMaterial, assets_root: &Path) -> Result<String> {
-    if material.lifecycle_status == "sealed"
-        && material.content_sha256.as_deref().is_none()
-    {
+    if material.lifecycle_status == "sealed" && material.content_sha256.as_deref().is_none() {
         return Err(ExperimentError::message(
             "Sealed dataset version is missing its manifest checksum.",
         ));

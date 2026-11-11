@@ -153,8 +153,7 @@ pub fn experiment_transition_run(
         .path()
         .app_data_dir()
         .map_err(|error| error.to_string())?;
-    service::transition_run(&state.db, &request, &assets_root)
-        .map_err(|error| error.to_string())
+    service::transition_run(&state.db, &request, &assets_root).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
