@@ -19,6 +19,7 @@ import {
   srcListProvenance,
   srcListSourceClaims,
   srcListSourceLocations,
+  srcListSourceRevisions,
   srcListSourceVersions,
   srcPublishFrameworkVersion,
   srcRemoveFrameworkItem,
@@ -48,6 +49,8 @@ import type {
   SourceClaimDto,
   SourceLocationDto,
   SourceLocationKind,
+  LegacySourceEntityKind,
+  SourceRevisionDto,
   SourceVersionDto,
 } from "@/types";
 
@@ -187,6 +190,8 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
   const [relations, setRelations] = useState<ClaimRelationDto[]>([]);
   const [provenance, setProvenance] = useState<ProvenanceEventDto[]>([]);
   const [provenanceTarget, setProvenanceTarget] = useState("");
+  const [legacyRevisions, setLegacyRevisions] = useState<SourceRevisionDto[]>([]);
+  const [legacyHistoryTarget, setLegacyHistoryTarget] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -366,6 +371,17 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
     } catch (loadError) {
       setError(String(loadError));
       setProvenance([]);
+    }
+  };
+
+  const showLegacyHistory = async (kind: LegacySourceEntityKind, id: string) => {
+    setError(null);
+    setLegacyHistoryTarget(`${kind}: ${id}`);
+    try {
+      setLegacyRevisions(await srcListSourceRevisions(kind, id));
+    } catch (loadError) {
+      setError(String(loadError));
+      setLegacyRevisions([]);
     }
   };
 
@@ -696,6 +712,9 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
           <button onClick={() => void showProvenance("source", source.id)} className="mt-2 text-[10px] text-sky-300">
             Source provenance
           </button>
+          <button onClick={() => void showLegacyHistory("source", source.id)} className="ml-3 mt-2 text-[10px] text-sky-300">
+            Legacy source revisions
+          </button>
         </div>
         <div className="flex gap-1 rounded-lg border border-[#2b3343] bg-[#151a23] p-1">
           {(["versions", "knowledge", "frameworks"] as const).map((value) => (
@@ -877,6 +896,7 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                               {url && <a href={url} target="_blank" rel="noreferrer" className="text-[10px] text-sky-300">Open at citation</a>}
                               <button onClick={() => setSelectedLocationId(location.id)} className="text-[10px] text-amber-300">Use for extraction</button>
                               <button onClick={() => void showProvenance("source_location", location.id)} className="text-[10px] text-sky-300">Provenance</button>
+                              {location.legacySegmentId && <button onClick={() => void showLegacyHistory("segment", location.legacySegmentId!)} className="text-[10px] text-sky-300">Legacy revisions</button>}
                             </div>
                           </div>
                           <p className="mt-1 break-all font-mono text-[10px] text-gray-500">
@@ -1242,6 +1262,30 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
       )}
 
       {renderProvenance()}
+      {legacyHistoryTarget && (
+        <div className="mt-4 rounded-lg border border-violet-800/60 bg-violet-950/20 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <strong className="text-xs text-violet-200">Legacy revision history: {legacyHistoryTarget}</strong>
+            <button onClick={() => setLegacyHistoryTarget("")} className="text-xs text-gray-400 hover:text-white">Close</button>
+          </div>
+          {legacyRevisions.length === 0 ? (
+            <p className="text-xs text-gray-400">No legacy revisions recorded for this item.</p>
+          ) : (
+            <ol className="space-y-2">
+              {legacyRevisions.map((revision) => (
+                <li key={revision.id} className="rounded border border-violet-900/50 p-2 text-xs">
+                  <p className="text-gray-200">{revision.revisionType} · {revision.createdBy} · stored timestamp {revision.createdAt}</p>
+                  {revision.reason && <p className="mt-1 text-gray-400">{revision.reason}</p>}
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-[10px] text-violet-300">Original and corrected values</summary>
+                    <pre className="mt-1 whitespace-pre-wrap break-words text-[10px] text-gray-400">Before: {revision.beforeJson ?? "not recorded"}{"\n"}After: {revision.afterJson}</pre>
+                  </details>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
       {busy && <p className="mt-3 text-[10px] text-gray-500">Saving…</p>}
     </section>
   );
