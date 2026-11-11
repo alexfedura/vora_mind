@@ -2568,6 +2568,12 @@ mod tests {
                 relation_kind: "tested_in".to_string(),
                 rationale: "Exact run assessed this model version.".to_string(),
             }];
+            successor_request.dataset_uses = vec![ModelDatasetUseReq {
+                dataset_version_id: dataset_version_id.clone(),
+                role: "test".to_string(),
+                split_group_id: None,
+                rationale: "Exact sealed evaluation dataset.".to_string(),
+            }];
             let successor = create_model_version(&mut conn, &successor_request)
                 .expect("create replacement in another project");
             assert_eq!(successor.version_no, 2);
@@ -2584,6 +2590,17 @@ mod tests {
                             experiment_run_id: Some(run_id),
                             ..
                         } if run_id == &experiment_run_id
+                    )
+            }));
+            assert!(successor.contributions.iter().any(|contribution| {
+                contribution.relation_kind == ModelContributionKind::DatasetUse
+                    && matches!(
+                        &contribution.target,
+                        ModelContributionTarget::Dataset {
+                            dataset_version_id: id,
+                            role,
+                            ..
+                        } if id == &dataset_version_id && role == "test"
                     )
             }));
 
