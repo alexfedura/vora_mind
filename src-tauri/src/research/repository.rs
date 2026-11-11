@@ -358,3 +358,392 @@ fn query_domain(conn: &Connection, id: &str) -> Result<ResearchDomainDto> {
     )
 }
 
+pub fn create_literature_review(
+    conn: &Connection,
+    req: &CreateLiteratureReviewReq,
+    id: &str,
+    now: i64,
+) -> Result<LiteratureReviewDto> {
+    conn.execute(
+        "INSERT INTO literature_reviews
+            (id, project_id, title, search_scope, lifecycle_status, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, 'draft', ?5, ?6)",
+        params![id, req.project_id, req.title.trim(), req.search_scope, req.created_by, now],
+    )?;
+    query_literature_review(conn, id)
+}
+
+pub fn add_literature_source(
+    conn: &Connection,
+    req: &AddLiteratureSourceReq,
+    id: &str,
+) -> Result<LiteratureReviewSourceDto> {
+    let status: String = conn.query_row(
+        "SELECT lifecycle_status FROM literature_reviews WHERE id = ?1",
+        [&req.literature_review_id],
+        |row| row.get(0),
+    )?;
+    if status != "draft" {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    if let Some(claim_id) = req.source_claim_id.as_deref() {
+        let matches_version: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM source_claims
+             WHERE id = ?1 AND source_id = ?2 AND source_version_id = ?3)",
+            params![claim_id, req.source_id, req.source_version_id],
+            |row| row.get(0),
+        )?;
+        if !matches_version {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+    }
+    conn.execute(
+        "INSERT INTO literature_review_sources
+            (id, literature_review_id, source_id, source_version_id,
+             source_location_id, source_claim_id, citation_note)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            id,
+            req.literature_review_id,
+            req.source_id,
+            req.source_version_id,
+            req.source_location_id,
+            req.source_claim_id,
+            req.citation_note
+        ],
+    )?;
+    Ok(LiteratureReviewSourceDto {
+        id: id.into(),
+        source_id: req.source_id.clone(),
+        source_version_id: req.source_version_id.clone(),
+        source_location_id: req.source_location_id.clone(),
+        source_claim_id: req.source_claim_id.clone(),
+        citation_note: req.citation_note.clone(),
+    })
+}
+
+pub fn review_literature_review(
+    conn: &Connection,
+    review_id: &str,
+    reviewer_id: Option<&str>,
+    now: i64,
+) -> Result<LiteratureReviewDto> {
+    let tx = conn.unchecked_transaction()?;
+    let changed = tx.execute(
+        "UPDATE literature_reviews SET lifecycle_status = 'reviewed',
+            reviewer_id = ?1, reviewed_at_us = ?2
+         WHERE id = ?3 AND lifecycle_status = 'draft'
+           AND EXISTS (
+               SELECT 1 FROM literature_review_sources s WHERE s.literature_review_id = ?3
+           )",
+        params![reviewer_id, now, review_id],
+    )?;
+    if changed != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    insert_event(
+        &tx,
+        "literature_review",
+        review_id,
+        "reviewed",
+        reviewer_id,
+        "",
+        now,
+    )?;
+    tx.commit()?;
+    query_literature_review(conn, review_id)
+}
+
+fn query_literature_review(conn: &Connection, id: &str) -> Result<LiteratureReviewDto> {
+    let mut review = conn.query_row(
+        "SELECT id, project_id, title, search_scope, lifecycle_status,
+                reviewer_id, reviewed_at_us, created_by, created_at_us
+         FROM literature_reviews WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(LiteratureReviewDto {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                title: row.get(2)?,
+                search_scope: row.get(3)?,
+                lifecycle_status: row.get(4)?,
+                reviewer_id: row.get(5)?,
+                reviewed_at_us: row.get(6)?,
+                sources: Vec::new(),
+                created_by: row.get(7)?,
+                created_at_us: row.get(8)?,
+            })
+        },
+    )?;
+    let mut statement = conn.prepare(
+        "SELECT id, source_id, source_version_id, source_location_id, source_claim_id, citation_note
+         FROM literature_review_sources WHERE literature_review_id = ?1 ORDER BY id",
+    )?;
+    review.sources = statement
+        .query_map([id], |row| {
+            Ok(LiteratureReviewSourceDto {
+                id: row.get(0)?,
+                source_id: row.get(1)?,
+                source_version_id: row.get(2)?,
+                source_location_id: row.get(3)?,
+                source_claim_id: row.get(4)?,
+                citation_note: row.get(5)?,
+            })
+        })?
+        .collect::<Result<Vec<_>>>()?;
+    Ok(review)
+}
+
+pub fn create_prior_assessment(
+    conn: &Connection,
+    req: &CreatePriorKnowledgeAssessmentReq,
+    id: &str,
+    now: i64,
+) -> Result<PriorKnowledgeAssessmentDto> {
+    conn.execute(
+        "INSERT INTO prior_knowledge_assessments
+            (id, project_id, title, assessment, framework_version_id, lifecycle_status,
+             created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'draft', ?6, ?7)",
+        params![
+            id,
+            req.project_id,
+            req.title.trim(),
+            req.assessment,
+            req.framework_version_id,
+            req.created_by,
+            now
+        ],
+    )?;
+    query_prior_assessment(conn, id)
+}
+
+pub fn review_prior_assessment(
+    conn: &Connection,
+    id: &str,
+    reviewer_id: Option<&str>,
+    now: i64,
+) -> Result<PriorKnowledgeAssessmentDto> {
+    let tx = conn.unchecked_transaction()?;
+    let changed = tx.execute(
+        "UPDATE prior_knowledge_assessments SET lifecycle_status = 'reviewed',
+            reviewer_id = ?1, reviewed_at_us = ?2
+         WHERE id = ?3 AND lifecycle_status = 'draft'
+           AND length(trim(assessment)) > 0",
+        params![reviewer_id, now, id],
+    )?;
+    if changed != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    insert_event(
+        &tx,
+        "prior_knowledge_assessment",
+        id,
+        "reviewed",
+        reviewer_id,
+        "",
+        now,
+    )?;
+    tx.commit()?;
+    query_prior_assessment(conn, id)
+}
+
+fn query_prior_assessment(conn: &Connection, id: &str) -> Result<PriorKnowledgeAssessmentDto> {
+    conn.query_row(
+        "SELECT id, project_id, title, assessment, framework_version_id, lifecycle_status,
+                reviewer_id, reviewed_at_us, created_by, created_at_us
+         FROM prior_knowledge_assessments WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(PriorKnowledgeAssessmentDto {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                title: row.get(2)?,
+                assessment: row.get(3)?,
+                framework_version_id: row.get(4)?,
+                lifecycle_status: row.get(5)?,
+                reviewer_id: row.get(6)?,
+                reviewed_at_us: row.get(7)?,
+                created_by: row.get(8)?,
+                created_at_us: row.get(9)?,
+            })
+        },
+    )
+}
+
+pub fn create_gap(
+    conn: &Connection,
+    req: &CreateResearchGapReq,
+    id: &str,
+    now: i64,
+) -> Result<ResearchGapDto> {
+    conn.execute(
+        "INSERT INTO research_gaps
+            (id, project_id, domain_id, title, statement, lifecycle_status,
+             created_by, created_at_us, updated_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'candidate', ?6, ?7, ?7)",
+        params![
+            id,
+            req.project_id,
+            req.domain_id,
+            req.title.trim(),
+            req.statement,
+            req.created_by,
+            now
+        ],
+    )?;
+    query_gap(conn, id)
+}
+
+pub fn add_gap_evidence(conn: &Connection, req: &AddGapEvidenceReq) -> Result<()> {
+    let gap_project: String = conn.query_row(
+        "SELECT project_id FROM research_gaps WHERE id = ?1",
+        [&req.gap_id],
+        |row| row.get(0),
+    )?;
+    if let Some(review_id) = req.literature_review_id.as_deref() {
+        let matches_project: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM literature_reviews WHERE id = ?1 AND project_id = ?2)",
+            params![review_id, gap_project],
+            |row| row.get(0),
+        )?;
+        if !matches_project {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        conn.execute(
+            "INSERT INTO research_gap_literature_reviews (gap_id, literature_review_id)
+             VALUES (?1, ?2)",
+            params![req.gap_id, review_id],
+        )?;
+    } else if let Some(assessment_id) = req.prior_assessment_id.as_deref() {
+        let matches_project: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM prior_knowledge_assessments
+             WHERE id = ?1 AND project_id = ?2)",
+            params![assessment_id, gap_project],
+            |row| row.get(0),
+        )?;
+        if !matches_project {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        conn.execute(
+            "INSERT INTO research_gap_prior_assessments (gap_id, assessment_id)
+             VALUES (?1, ?2)",
+            params![req.gap_id, assessment_id],
+        )?;
+    }
+    Ok(())
+}
+
+pub fn review_gap_exception(
+    conn: &Connection,
+    req: &ReviewGapExceptionReq,
+    now: i64,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO research_gap_review_exceptions
+            (gap_id, rationale, reviewer_id, review_decision, reviewed_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(gap_id) DO UPDATE SET
+            rationale = excluded.rationale, reviewer_id = excluded.reviewer_id,
+            review_decision = excluded.review_decision, reviewed_at_us = excluded.reviewed_at_us",
+        params![
+            req.gap_id,
+            req.rationale.trim(),
+            req.reviewer_id,
+            req.review_decision,
+            now
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn transition_gap(
+    conn: &Connection,
+    gap_id: &str,
+    next_status: ResearchGapStatus,
+    actor_id: Option<&str>,
+    now: i64,
+) -> Result<ResearchGapDto> {
+    let tx = conn.unchecked_transaction()?;
+    let current: String = tx.query_row(
+        "SELECT lifecycle_status FROM research_gaps WHERE id = ?1",
+        [gap_id],
+        |row| row.get(0),
+    )?;
+    let next = next_status.as_str();
+    let allowed = matches!(
+        (current.as_str(), next),
+        ("candidate", "assessed" | "rejected")
+            | ("assessed", "accepted" | "rejected")
+            | ("accepted", "addressed" | "superseded")
+    );
+    if !allowed {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    tx.execute(
+        "UPDATE research_gaps SET lifecycle_status = ?1, updated_at_us = ?2 WHERE id = ?3",
+        params![next, now, gap_id],
+    )?;
+    insert_event(&tx, "gap", gap_id, next, actor_id, "", now)?;
+    tx.commit()?;
+    query_gap(conn, gap_id)
+}
+
+fn query_gap(conn: &Connection, id: &str) -> Result<ResearchGapDto> {
+    let mut gap = conn.query_row(
+        "SELECT id, project_id, domain_id, title, statement, lifecycle_status,
+                created_by, created_at_us, updated_at_us
+         FROM research_gaps WHERE id = ?1",
+        [id],
+        |row| {
+            let status = row.get::<_, String>(5)?;
+            Ok(ResearchGapDto {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                domain_id: row.get(2)?,
+                title: row.get(3)?,
+                statement: row.get(4)?,
+                lifecycle_status: match status.as_str() {
+                    "candidate" => ResearchGapStatus::Candidate,
+                    "assessed" => ResearchGapStatus::Assessed,
+                    "accepted" => ResearchGapStatus::Accepted,
+                    "rejected" => ResearchGapStatus::Rejected,
+                    "addressed" => ResearchGapStatus::Addressed,
+                    _ => ResearchGapStatus::Superseded,
+                },
+                literature_review_ids: Vec::new(),
+                prior_assessment_ids: Vec::new(),
+                has_reviewed_exception: false,
+                created_by: row.get(6)?,
+                created_at_us: row.get(7)?,
+                updated_at_us: row.get(8)?,
+            })
+        },
+    )?;
+    gap.literature_review_ids = {
+        let mut statement = conn.prepare(
+            "SELECT literature_review_id FROM research_gap_literature_reviews
+             WHERE gap_id = ?1 ORDER BY literature_review_id",
+        )?;
+        statement
+            .query_map([id], |row| row.get(0))?
+            .collect::<Result<Vec<_>>>()?
+    };
+    gap.prior_assessment_ids = {
+        let mut statement = conn.prepare(
+            "SELECT assessment_id FROM research_gap_prior_assessments
+             WHERE gap_id = ?1 ORDER BY assessment_id",
+        )?;
+        statement
+            .query_map([id], |row| row.get(0))?
+            .collect::<Result<Vec<_>>>()?
+    };
+    gap.has_reviewed_exception = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM research_gap_review_exceptions
+         WHERE gap_id = ?1 AND review_decision = 'accepted')",
+        [id],
+        |row| row.get(0),
+    )?;
+    Ok(gap)
+}
+
