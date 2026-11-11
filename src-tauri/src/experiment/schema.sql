@@ -17,6 +17,12 @@ CREATE TABLE experiment_design_version_specs (
     created_at_us INTEGER NOT NULL
 );
 
+CREATE TABLE experiment_design_version_titles (
+    design_version_id TEXT PRIMARY KEY
+        REFERENCES research_experiment_design_versions(id) ON DELETE RESTRICT,
+    title TEXT NOT NULL CHECK (length(trim(title)) BETWEEN 1 AND 200)
+);
+
 CREATE TABLE experiment_design_version_lineage (
     design_version_id TEXT PRIMARY KEY,
     design_id TEXT NOT NULL,
@@ -259,6 +265,37 @@ BEFORE DELETE ON experiment_design_version_specs
 BEGIN
     SELECT RAISE(ABORT, 'experiment design specifications are immutable');
 END;
+CREATE TRIGGER experiment_design_title_no_update
+BEFORE UPDATE ON experiment_design_version_titles
+BEGIN
+    SELECT RAISE(ABORT, 'experiment design version titles are immutable');
+END;
+CREATE TRIGGER experiment_design_title_no_delete
+BEFORE DELETE ON experiment_design_version_titles
+BEGIN
+    SELECT RAISE(ABORT, 'experiment design version titles are immutable');
+END;
+CREATE TRIGGER experiment_design_version_typed_immutable
+BEFORE UPDATE ON research_experiment_design_versions
+WHEN EXISTS (
+    SELECT 1 FROM experiment_design_version_specs s
+    WHERE s.design_version_id = OLD.id
+)
+ AND NOT (
+    OLD.lifecycle_status IN ('draft', 'review')
+    AND NEW.lifecycle_status = 'preregistered'
+    AND OLD.id = NEW.id
+    AND OLD.design_id = NEW.design_id
+    AND OLD.version_no = NEW.version_no
+    AND OLD.description = NEW.description
+    AND OLD.protocol = NEW.protocol
+    AND OLD.created_by IS NEW.created_by
+    AND OLD.created_at_us = NEW.created_at_us
+    AND NEW.preregistered_at_us IS NOT NULL
+)
+BEGIN
+    SELECT RAISE(ABORT, 'typed experiment design versions are immutable except for preregistration');
+END;
 CREATE TRIGGER experiment_design_lineage_no_update
 BEFORE UPDATE ON experiment_design_version_lineage
 BEGIN
@@ -290,6 +327,13 @@ BEFORE DELETE ON experiment_dataset_versions
 WHEN OLD.lifecycle_status = 'sealed'
 BEGIN
     SELECT RAISE(ABORT, 'sealed dataset versions are immutable');
+END;
+CREATE TRIGGER experiment_dataset_version_identity_immutable
+BEFORE UPDATE OF id, dataset_id, version_no, schema_id, schema_version,
+                 sample_schema_json, expected_sample_count, created_by, created_at_us
+ON experiment_dataset_versions
+BEGIN
+    SELECT RAISE(ABORT, 'dataset version identity and schema are immutable');
 END;
 CREATE TRIGGER experiment_dataset_asset_staged_insert
 BEFORE INSERT ON experiment_dataset_assets
@@ -367,6 +411,11 @@ BEFORE DELETE ON experiment_dataset_split_groups
 BEGIN
     SELECT RAISE(ABORT, 'dataset split groups are immutable');
 END;
+CREATE TRIGGER experiment_split_group_staged_guard
+BEFORE UPDATE ON experiment_dataset_split_groups
+BEGIN
+    SELECT RAISE(ABORT, 'dataset split groups are immutable');
+END;
 CREATE TRIGGER experiment_split_group_revision
 AFTER INSERT ON experiment_dataset_split_groups
 BEGIN
@@ -427,6 +476,26 @@ WHEN NOT (
 )
 BEGIN
     SELECT RAISE(ABORT, 'invalid experiment run lifecycle transition');
+END;
+CREATE TRIGGER experiment_transformation_no_update
+BEFORE UPDATE ON experiment_dataset_transformations
+BEGIN
+    SELECT RAISE(ABORT, 'dataset transformations are immutable');
+END;
+CREATE TRIGGER experiment_transformation_no_delete
+BEFORE DELETE ON experiment_dataset_transformations
+BEGIN
+    SELECT RAISE(ABORT, 'dataset transformations are immutable');
+END;
+CREATE TRIGGER experiment_transformation_input_no_update
+BEFORE UPDATE ON experiment_dataset_transformation_inputs
+BEGIN
+    SELECT RAISE(ABORT, 'dataset transformation inputs are immutable');
+END;
+CREATE TRIGGER experiment_transformation_input_no_delete
+BEFORE DELETE ON experiment_dataset_transformation_inputs
+BEGIN
+    SELECT RAISE(ABORT, 'dataset transformation inputs are immutable');
 END;
 CREATE TRIGGER experiment_run_no_delete
 BEFORE DELETE ON experiment_runs
