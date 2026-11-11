@@ -338,7 +338,7 @@ pub fn research_transition_design(
     actor_id: Option<String>,
 ) -> Result<ResearchExperimentDesignVersionDto, String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;
-    transition_research_design(&conn, &design_version_id, &next_status, actor_id.as_deref())
+    transition_research_design(&conn, &design_version_id, next_status, actor_id.as_deref())
 }
 
 #[tauri::command]
