@@ -3,6 +3,30 @@
 // Mirrors the style of src/mind/services/dbService.ts.
 
 import { invoke } from "@tauri-apps/api/core";
+import type {
+  AddFrameworkItemReq,
+  ClaimRelationDto,
+  CorrectExtractionReq,
+  CreateClaimRelationReq,
+  CreateFrameworkReq,
+  CreateFrameworkVersionReq,
+  CreateKnowledgeExtractionReq,
+  CreateKnowledgeItemReq,
+  CreateSourceClaimReq,
+  CreateSourceLocationReq,
+  CreateSourceVersionReq,
+  FrameworkDto,
+  FrameworkVersionDto,
+  KnowledgeExtractionDto,
+  KnowledgeItemDto,
+  ProvenanceEventDto,
+  ReviewExtractionReq,
+  ReviewFrameworkReq,
+  SourceClaimDto,
+  SourceLocationDto,
+  SourceVersionDto,
+  UpdateFrameworkVersionReq,
+} from "@/types";
 
 // ── Response types ────────────────────────────────────────────────
 
@@ -216,4 +240,119 @@ export async function srcCreateLink(req: CreateLinkReq): Promise<string> {
 /** Mark a pending-review extract as reviewed by the user. */
 export async function srcMarkExtractReviewed(id: string): Promise<void> {
   return invoke<void>("src_mark_extract_reviewed", { id });
+}
+
+export async function srcListSourceVersions(sourceId: string): Promise<SourceVersionDto[]> {
+  return invoke<SourceVersionDto[]>("src_list_source_versions", { sourceId });
+}
+
+export async function srcCreateSourceVersion(
+  req: CreateSourceVersionReq,
+): Promise<SourceVersionDto> {
+  return invoke<SourceVersionDto>("src_create_source_version", { req });
+}
+
+export async function srcListSourceLocations(
+  sourceVersionId: string,
+): Promise<SourceLocationDto[]> {
+  return invoke<SourceLocationDto[]>("src_list_source_locations", { sourceVersionId });
+}
+
+export async function srcCreateSourceLocation(
+  req: CreateSourceLocationReq,
+): Promise<SourceLocationDto> {
+  return invoke<SourceLocationDto>("src_create_source_location", { req });
+}
+
+export async function srcListKnowledgeExtractions(
+  sourceVersionId: string,
+): Promise<KnowledgeExtractionDto[]> {
+  return invoke<KnowledgeExtractionDto[]>("src_list_knowledge_extractions", { sourceVersionId });
+}
+
+export async function srcCreateKnowledgeExtraction(
+  req: CreateKnowledgeExtractionReq,
+): Promise<KnowledgeExtractionDto> {
+  return invoke<KnowledgeExtractionDto>("src_create_knowledge_extraction", { req });
+}
+
+export async function srcReviewKnowledgeExtraction(req: ReviewExtractionReq): Promise<void> {
+  return invoke<void>("src_review_knowledge_extraction", { req });
+}
+
+export async function srcCorrectKnowledgeExtraction(
+  req: CorrectExtractionReq,
+): Promise<KnowledgeExtractionDto> {
+  return invoke<KnowledgeExtractionDto>("src_correct_knowledge_extraction", { req });
+}
+
+export async function srcListSourceClaims(sourceId: string): Promise<SourceClaimDto[]> {
+  return invoke<SourceClaimDto[]>("src_list_source_claims", { sourceId });
+}
+
+export async function srcCreateSourceClaim(req: CreateSourceClaimReq): Promise<SourceClaimDto> {
+  return invoke<SourceClaimDto>("src_create_source_claim", { req });
+}
+
+export async function srcListKnowledgeItems(): Promise<KnowledgeItemDto[]> {
+  return invoke<KnowledgeItemDto[]>("src_list_knowledge_items");
+}
+
+export async function srcCreateKnowledgeItem(req: CreateKnowledgeItemReq): Promise<KnowledgeItemDto> {
+  return invoke<KnowledgeItemDto>("src_create_knowledge_item", { req });
+}
+
+export async function srcListClaimRelations(sourceClaimId: string): Promise<ClaimRelationDto[]> {
+  return invoke<ClaimRelationDto[]>("src_list_claim_relations", { sourceClaimId });
+}
+
+export async function srcCreateClaimRelation(req: CreateClaimRelationReq): Promise<string> {
+  return invoke<string>("src_create_claim_relation", { req });
+}
+
+export async function srcListFrameworks(): Promise<FrameworkDto[]> {
+  return invoke<FrameworkDto[]>("src_list_frameworks");
+}
+
+export async function srcCreateFramework(req: CreateFrameworkReq): Promise<FrameworkDto> {
+  return invoke<FrameworkDto>("src_create_framework", { req });
+}
+
+export async function srcListFrameworkVersions(frameworkId: string): Promise<FrameworkVersionDto[]> {
+  return invoke<FrameworkVersionDto[]>("src_list_framework_versions", { frameworkId });
+}
+
+export async function srcCreateFrameworkVersion(
+  req: CreateFrameworkVersionReq,
+): Promise<FrameworkVersionDto> {
+  return invoke<FrameworkVersionDto>("src_create_framework_version", { req });
+}
+
+export async function srcAddFrameworkItem(req: AddFrameworkItemReq): Promise<string> {
+  return invoke<string>("src_add_framework_item", { req });
+}
+
+export async function srcRemoveFrameworkItem(itemId: string): Promise<void> {
+  return invoke<void>("src_remove_framework_item", { itemId });
+}
+
+export async function srcUpdateFrameworkVersion(req: UpdateFrameworkVersionReq): Promise<void> {
+  return invoke<void>("src_update_framework_version", { req });
+}
+
+export async function srcReviewFrameworkVersion(req: ReviewFrameworkReq): Promise<void> {
+  return invoke<void>("src_review_framework_version", { req });
+}
+
+export async function srcPublishFrameworkVersion(frameworkVersionId: string): Promise<void> {
+  return invoke<void>("src_publish_framework_version", {
+    req: { frameworkVersionId },
+  });
+}
+
+export async function srcListProvenance(
+  targetKind: string,
+  targetId: string,
+): Promise<ProvenanceEventDto[]> {
+  return invoke<ProvenanceEventDto[]>("src_list_provenance", { targetKind, targetId });
 }

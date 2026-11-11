@@ -552,8 +552,8 @@ pub fn create_knowledge_item(
         title: req.title.clone(),
         content: req.content.clone(),
         lifecycle: "proposed".to_string(),
-        source_claim_id: req.source_claim_id.clone(),
-        relation_kind,
+        source_claim_id: Some(req.source_claim_id.clone()),
+        relation_kind: Some(relation_kind),
         created_at_us: now,
     };
     let after = serde_json::to_string(&dto).map_err(|_| rusqlite::Error::InvalidQuery)?;
@@ -621,7 +621,7 @@ pub fn create_claim_relation(
 pub fn list_claim_relations(
     conn: &Connection,
     source_claim_id: &str,
-) -> RepoResult<Vec<serde_json::Value>> {
+) -> RepoResult<Vec<ClaimRelationDto>> {
     let mut statement = conn.prepare(
         "SELECT 'source_claim' AS target_kind, object_claim_id AS target_id, relation_kind, rationale
            FROM source_claim_relations WHERE subject_claim_id = ?1
@@ -636,17 +636,85 @@ pub fn list_claim_relations(
            FROM source_claim_procedure_relations WHERE source_claim_id = ?1
          ORDER BY target_kind, target_id, relation_kind",
     )?;
-    let rows = statement
-        .query_map([source_claim_id], |row| {
-            Ok(serde_json::json!({
-                "targetKind": row.get::<_, String>(0)?,
-                "targetId": row.get::<_, String>(1)?,
-                "relationKind": row.get::<_, String>(2)?,
-                "rationale": row.get::<_, String>(3)?
-            }))
-        })?
-        .collect();
-    rows
+    let rows = statement.query_map([source_claim_id], |row| {
+        let target_kind: String = row.get(0)?;
+        let relation_kind: String = row.get(2)?;
+        Ok(ClaimRelationDto {
+            target_kind: KnowledgeItemKind::parse(&target_kind)
+                .map_err(|_| rusqlite::Error::InvalidQuery)?,
+            target_id: row.get(1)?,
+            relation_kind: ClaimRelationKind::parse(&relation_kind)
+                .map_err(|_| rusqlite::Error::InvalidQuery)?,
+            rationale: row.get(3)?,
+        })
+    })?;
+    rows.collect()
+}
+
+pub fn list_source_claims(
+    conn: &Connection,
+    source_id: &str,
+) -> RepoResult<Vec<SourceClaimDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, source_id, source_version_id, extraction_id, statement,
+                asserted_by, scope, created_at_us
+         FROM source_claims WHERE source_id = ?1 ORDER BY created_at_us, id",
+    )?;
+    let rows = statement.query_map([source_id], |row| {
+        Ok(SourceClaimDto {
+            id: row.get(0)?,
+            source_id: row.get(1)?,
+            source_version_id: row.get(2)?,
+            extraction_id: row.get(3)?,
+            statement: row.get(4)?,
+            asserted_by: row.get(5)?,
+            scope: row.get(6)?,
+            created_at_us: row.get(7)?,
+        })
+    })?;
+    rows.collect()
+}
+
+pub fn list_knowledge_items(conn: &Connection) -> RepoResult<Vec<KnowledgeItemDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, kind, title, content, lifecycle, source_claim_id, relation_kind, created_at_us
+         FROM (
+            SELECT c.id, 'concept' AS kind, c.title, c.definition AS content, c.lifecycle,
+                   r.source_claim_id, r.relation_kind, c.created_at_us
+            FROM knowledge_concepts c
+            LEFT JOIN source_claim_concept_relations r ON r.concept_id = c.id
+            UNION ALL
+            SELECT p.id, 'principle', p.title, p.statement, p.lifecycle,
+                   r.source_claim_id, r.relation_kind, p.created_at_us
+            FROM knowledge_principles p
+            LEFT JOIN source_claim_principle_relations r ON r.principle_id = p.id
+            UNION ALL
+            SELECT p.id, 'procedure', p.title, p.description, p.lifecycle,
+                   r.source_claim_id, r.relation_kind, p.created_at_us
+            FROM knowledge_procedures p
+            LEFT JOIN source_claim_procedure_relations r ON r.procedure_id = p.id
+         )
+         ORDER BY created_at_us, id, source_claim_id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        let kind: String = row.get(1)?;
+        let relation_kind: Option<String> = row.get(6)?;
+        Ok(KnowledgeItemDto {
+            id: row.get(0)?,
+            kind: KnowledgeItemKind::parse(&kind).map_err(|_| rusqlite::Error::InvalidQuery)?,
+            title: row.get(2)?,
+            content: row.get(3)?,
+            lifecycle: row.get(4)?,
+            source_claim_id: row.get(5)?,
+            relation_kind: relation_kind
+                .as_deref()
+                .map(ClaimRelationKind::parse)
+                .transpose()
+                .map_err(|_| rusqlite::Error::InvalidQuery)?,
+            created_at_us: row.get(7)?,
+        })
+    })?;
+    rows.collect()
 }
 
 pub fn create_framework(

@@ -182,6 +182,17 @@ impl ClaimRelationKind {
             Self::Describes => "describes",
         }
     }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "supports" => Ok(Self::Supports),
+            "contradicts" => Ok(Self::Contradicts),
+            "qualifies" => Ok(Self::Qualifies),
+            "defines" => Ok(Self::Defines),
+            "describes" => Ok(Self::Describes),
+            _ => Err(format!("invalid claim relation kind: {value}")),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -349,9 +360,18 @@ pub struct KnowledgeItemDto {
     pub title: String,
     pub content: String,
     pub lifecycle: String,
-    pub source_claim_id: String,
-    pub relation_kind: ClaimRelationKind,
+    pub source_claim_id: Option<String>,
+    pub relation_kind: Option<ClaimRelationKind>,
     pub created_at_us: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaimRelationDto {
+    pub target_kind: KnowledgeItemKind,
+    pub target_id: String,
+    pub relation_kind: ClaimRelationKind,
+    pub rationale: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -765,8 +785,19 @@ pub fn create_claim_relation(
 pub fn list_claim_relations(
     conn: &Connection,
     source_claim_id: &str,
-) -> Result<Vec<serde_json::Value>, String> {
+) -> Result<Vec<ClaimRelationDto>, String> {
     repository::list_claim_relations(conn, source_claim_id).map_err(|error| error.to_string())
+}
+
+pub fn list_source_claims(
+    conn: &Connection,
+    source_id: &str,
+) -> Result<Vec<SourceClaimDto>, String> {
+    repository::list_source_claims(conn, source_id).map_err(|error| error.to_string())
+}
+
+pub fn list_knowledge_items(conn: &Connection) -> Result<Vec<KnowledgeItemDto>, String> {
+    repository::list_knowledge_items(conn).map_err(|error| error.to_string())
 }
 
 pub fn create_framework(
