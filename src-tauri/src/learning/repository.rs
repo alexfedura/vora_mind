@@ -1791,8 +1791,7 @@ fn query_score_rows(
                 score: row.get(1)?,
             })
         })?
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)?;
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 
@@ -2040,8 +2039,7 @@ fn query_ids(conn: &Connection, sql: &str, parent_id: &str) -> Result<Vec<String
     let mut statement = conn.prepare(sql)?;
     let rows = statement
         .query_map([parent_id], |row| row.get(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)?;
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 
@@ -2121,7 +2119,7 @@ fn query_progress(conn: &Connection) -> Result<Vec<LearnerProgressDto>> {
                 "The latest competency record reports unmet mastery requirements.".to_string(),
                 Some(record_id.clone()),
             ),
-            (Some((evaluation_id, _)), None) => (
+            (Some((_evaluation_id, _)), None) => (
                 "evaluated".to_string(),
                 "An assessment evaluation exists, but no competency mastery record has been created."
                     .to_string(),
