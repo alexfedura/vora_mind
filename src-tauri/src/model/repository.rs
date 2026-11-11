@@ -634,6 +634,25 @@ fn validate_version_request(conn: &Connection, request: &CreateModelVersionReq) 
     }
     for impact in &request.impacts {
         required(&impact.rationale, "Impact rationale")?;
+        match impact.impact_kind {
+            ModelImpactKind::Added if impact.current_statement.as_deref().is_none_or(str::is_empty) => {
+                return Err(anyhow!("An added impact requires its new statement."));
+            }
+            ModelImpactKind::Changed
+                if impact.previous_statement.as_deref().is_none_or(str::is_empty)
+                    || impact.current_statement.as_deref().is_none_or(str::is_empty) =>
+            {
+                return Err(anyhow!(
+                    "A changed impact requires both previous and current statements."
+                ));
+            }
+            ModelImpactKind::Removed
+                if impact.previous_statement.as_deref().is_none_or(str::is_empty) =>
+            {
+                return Err(anyhow!("A removed impact requires its prior statement."));
+            }
+            _ => {}
+        }
         match &impact.target {
             ModelImpactTarget::Assumption { assumption_key } => {
                 if !request
@@ -1462,6 +1481,11 @@ pub fn finalize_validation(
     request: &FinalizeModelValidationReq,
 ) -> Result<ModelValidationDto> {
     required(&request.rationale, "Validation result rationale")?;
+    if request.analysis_evidence_ids.is_empty() && request.model_evidence_ids.is_empty() {
+        return Err(anyhow!(
+            "A validation result requires at least one underlying evidence record."
+        ));
+    }
     let target: Option<(Option<String>, Option<String>, Option<String>, String)> = conn
         .query_row(
             "SELECT target_model_version_id, target_finding_version_id,
@@ -1791,6 +1815,17 @@ fn validate_replication_request(
     ) {
         return Err(anyhow!(
             "Replication requires a completed or inconclusive original experiment run."
+        ));
+    }
+    let model_was_tested: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM model_version_experiments
+         WHERE model_version_id = ?1 AND experiment_run_id = ?2 AND relation_kind = 'tested_in')",
+        params![request.model_version_id, request.original_experiment_run_id],
+        |row| row.get(0),
+    )?;
+    if !model_was_tested {
+        return Err(anyhow!(
+            "The original experiment run must be explicitly linked as testing this exact ModelVersion."
         ));
     }
     for dataset in &request.datasets {
