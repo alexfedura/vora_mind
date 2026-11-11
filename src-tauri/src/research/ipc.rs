@@ -334,7 +334,7 @@ pub fn research_create_design(
 pub fn research_transition_design(
     state: State<AppState>,
     design_version_id: String,
-    next_status: String,
+    next_status: ResearchDesignStatus,
     actor_id: Option<String>,
 ) -> Result<ResearchExperimentDesignVersionDto, String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;

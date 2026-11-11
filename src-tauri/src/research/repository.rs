@@ -2116,7 +2116,7 @@ pub fn link_hypothesis_design(
         params![
             req.hypothesis_version_id,
             req.design_version_id,
-            req.relationship_kind,
+            req.relationship_kind.as_str(),
             req.rationale,
             req.created_by,
             now
