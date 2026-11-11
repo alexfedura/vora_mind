@@ -12,6 +12,23 @@ import type {
   TransferWorkspaceDto,
 } from "@/types";
 
+const TRANSFER_PURPOSES: TransferPurpose[] = [
+  "research",
+  "learning",
+  "commercial",
+  "public_distribution",
+];
+const DOWNSTREAM_KINDS: DownstreamUseRef["kind"][] = [
+  "analysis_run",
+  "experiment_run",
+  "model_evaluation",
+  "finding_version",
+  "concept_version",
+  "principle_version",
+  "framework_version",
+  "model_version",
+];
+
 const fieldClass =
   "w-full rounded-lg border border-[#343741] bg-[#101114] px-3 py-2 text-sm text-white outline-none focus:border-[#e8ad55]";
 const buttonClass =
@@ -24,7 +41,53 @@ function artifactKey(artifact: TransferArtifactRef): string {
 }
 
 function artifactLabel(artifact: TransferArtifactRef, title: string, versionNo: number): string {
-  return `${title} · v${versionNo} · ${artifact.kind.replaceAll("_", " ")}`;
+  return `${title} · v${versionNo} · ${artifact.kind.replace(/_/g, " ")}`;
+}
+
+function isTransferPurpose(value: string): value is TransferPurpose {
+  return TRANSFER_PURPOSES.includes(value as TransferPurpose);
+}
+
+function parseTransferPurpose(value: string): TransferPurpose {
+  if (!isTransferPurpose(value)) throw new Error(`Unsupported transfer purpose: ${value}`);
+  return value;
+}
+
+function parseAccessScope(value: string): TransferAccessScope {
+  if (value === "workspace" || value === "selected_projects") return value;
+  throw new Error(`Unsupported transfer access scope: ${value}`);
+}
+
+function parseLineageRelation(value: string): TransferLineageRelation {
+  if (value === "adopted" || value === "based_on" || value === "derived_from") return value;
+  throw new Error(`Unsupported lineage relation: ${value}`);
+}
+
+function parseDownstreamKind(value: string): DownstreamUseRef["kind"] {
+  if (DOWNSTREAM_KINDS.includes(value as DownstreamUseRef["kind"])) {
+    return value as DownstreamUseRef["kind"];
+  }
+  throw new Error(`Unsupported downstream-use kind: ${value}`);
+}
+
+function isArtifactUseKind(
+  kind: DownstreamUseRef["kind"],
+): kind is TransferArtifactRef["kind"] {
+  return kind.endsWith("_version");
+}
+
+function downstreamReference(
+  kind: DownstreamUseRef["kind"],
+  recordId: string,
+): DownstreamUseRef {
+  switch (kind) {
+    case "model_evaluation": return { kind, id: recordId };
+    case "analysis_run": return { kind, id: recordId };
+    case "experiment_run": return { kind, id: recordId };
+    default: {
+      throw new Error("Select an exact downstream artifact version.");
+    }
+  }
 }
 
 function Field({
@@ -121,14 +184,19 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
     && entityId(item.artifact) !== entityId(selectedTransfer.origin.artifact),
   );
 
-  const perform = async (action: () => Promise<unknown>, successMessage: string): Promise<void> => {
+  const perform = async <T,>(
+    action: () => Promise<T>,
+    successMessage: string,
+    afterSuccess?: (result: T) => void,
+  ): Promise<void> => {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      await action();
+      const result = await action();
       setNotice(successMessage);
       await loadWorkspace();
+      afterSuccess?.(result);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : String(actionError));
     } finally {
@@ -148,6 +216,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
         recordedBy: optionalString(form.get("recordedBy")),
       }),
       "Origin assertion recorded for this exact version.",
+      (origin) => setSelectedOriginId(origin.id),
     );
   };
 
@@ -171,6 +240,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
         reviewedBy: String(form.get("reviewedBy") ?? ""),
       }),
       "A new immutable eligibility snapshot was recorded.",
+      (eligibility) => setSelectedEligibilityId(eligibility.id),
     );
   };
 
@@ -182,7 +252,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
       () => knowledgeTransferService.adopt({
         eligibilityId: selectedEligibility.id,
         receivingProjectId: String(form.get("receivingProjectId") ?? ""),
-        intendedPurpose: String(form.get("intendedPurpose") ?? "research") as TransferPurpose,
+        intendedPurpose: parseTransferPurpose(String(form.get("intendedPurpose") ?? "research")),
         attributionText: String(form.get("attributionText") ?? ""),
         context: String(form.get("context") ?? ""),
         requestedBy: optionalString(form.get("requestedBy")),
@@ -205,7 +275,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
       () => knowledgeTransferService.createAdaptation({
         transferId: selectedTransfer.id,
         artifact: target.artifact,
-        relationKind: String(form.get("relationKind") ?? "derived_from") as TransferLineageRelation,
+        relationKind: parseLineageRelation(String(form.get("relationKind") ?? "derived_from")),
         rationale: String(form.get("rationale") ?? ""),
         adaptedBy: optionalString(form.get("adaptedBy")),
       }),
@@ -218,9 +288,11 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
     if (!selectedTransfer) return;
     const form = new FormData(event.currentTarget);
     let reference: DownstreamUseRef;
-    if (usageKind.endsWith("_version")) {
+    if (isArtifactUseKind(usageKind)) {
       const selected = workspace?.artifacts.find(
-        (item) => artifactKey(item.artifact) === String(form.get("artifact") ?? ""),
+        (item) =>
+          artifactKey(item.artifact) === String(form.get("artifact") ?? "")
+          && item.artifact.kind === usageKind,
       );
       if (!selected) {
         setError("Select an exact downstream artifact version.");
@@ -228,10 +300,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
       }
       reference = selected.artifact;
     } else {
-      reference = {
-        kind: usageKind,
-        id: String(form.get("recordId") ?? ""),
-      } as DownstreamUseRef;
+      reference = downstreamReference(usageKind, String(form.get("recordId") ?? ""));
     }
     await perform(
       () => knowledgeTransferService.recordUsage({
@@ -326,10 +395,6 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
     );
   };
 
-  const createOriginArtifact = (item: TransferArtifactRef): void => {
-    setSelectedArtifactKey(artifactKey(item));
-  };
-
   return (
     <section className="space-y-4 rounded-xl border border-[#343741] bg-[#17191e] p-4">
       <header className="flex items-start justify-between gap-3">
@@ -380,7 +445,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
                   <p>{selectedArtifact.title} v{selectedArtifact.versionNo}</p>
                   <p className="mt-1 text-gray-500">State: {selectedArtifact.lifecycleStatus} · origin: {selectedArtifact.originId ? "asserted" : "not yet asserted"} · exact version {selectedArtifact.artifact.versionId}</p>
                   {selectedArtifact.originId && (
-                    <button type="button" className={`${buttonClass} mt-2`} onClick={() => void previewOrigin(selectedArtifact.originId!)}>
+                    <button type="button" className={`${buttonClass} mt-2`} onClick={() => void previewOrigin(selectedArtifact.originId ?? "")}>
                       Preview complete provenance
                     </button>
                   )}
@@ -412,7 +477,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
                   <Field label="License URI"><input className={fieldClass} name="licenseUri" type="url" /></Field>
                 </div>
                 <Field label="Access scope">
-                  <select className={fieldClass} value={scope} onChange={(event) => setScope(event.target.value as TransferAccessScope)}>
+                  <select className={fieldClass} value={scope} onChange={(event) => setScope(parseAccessScope(event.target.value))}>
                     <option value="workspace">Workspace-wide</option>
                     <option value="selected_projects">Selected projects</option>
                   </select>
@@ -426,7 +491,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
                   </Field>
                 )}
                 <div className="flex flex-wrap gap-3 text-xs text-gray-300">
-                  {(["research", "learning", "commercial", "public_distribution"] as TransferPurpose[]).map((purpose) => (
+                  {TRANSFER_PURPOSES.map((purpose) => (
                     <label key={purpose} className="flex items-center gap-1.5">
                       <input
                         type="checkbox"
@@ -437,7 +502,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
                             : current.filter((value) => value !== purpose),
                         )}
                       />
-                      {purpose.replaceAll("_", " ")}
+                      {purpose.replace(/_/g, " ")}
                     </label>
                   ))}
                 </div>
@@ -481,8 +546,8 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
                   </select>
                 </Field>
                 <Field label="Purpose">
-                  <select className={fieldClass} name="intendedPurpose" value={selectedPurpose} onChange={(event) => setSelectedPurpose(event.target.value as TransferPurpose)} required>
-                    {(selectedEligibility?.permittedPurposes ?? []).map((purpose) => <option key={purpose} value={purpose}>{purpose.replaceAll("_", " ")}</option>)}
+                  <select className={fieldClass} name="intendedPurpose" value={selectedPurpose} onChange={(event) => setSelectedPurpose(parseTransferPurpose(event.target.value))} required>
+                    {(selectedEligibility?.permittedPurposes ?? []).map((purpose) => <option key={purpose} value={purpose}>{purpose.replace(/_/g, " ")}</option>)}
                   </select>
                 </Field>
                 <Field label="Attribution"><textarea className={fieldClass} name="attributionText" value={attributionText} onChange={(event) => setAttributionText(event.target.value)} rows={2} required /></Field>
@@ -519,7 +584,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
 
               <form onSubmit={(event) => void handleRecordUsage(event)} className="space-y-2 border-t border-[#292c34] pt-3">
                 <Field label="Downstream use type">
-                  <select className={fieldClass} value={usageKind} onChange={(event) => setUsageKind(event.target.value as DownstreamUseRef["kind"])}>
+                  <select className={fieldClass} value={usageKind} onChange={(event) => setUsageKind(parseDownstreamKind(event.target.value))}>
                     <option value="analysis_run">Analysis run</option>
                     <option value="experiment_run">Experiment run</option>
                     <option value="model_evaluation">Model evaluation</option>
@@ -530,11 +595,11 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
                     <option value="model_version">Model version</option>
                   </select>
                 </Field>
-                {usageKind.endsWith("_version") ? (
+                {isArtifactUseKind(usageKind) ? (
                   <Field label="Exact downstream artifact version">
                     <select className={fieldClass} name="artifact" required>
                       <option value="">Select artifact version</option>
-                      {(workspace?.artifacts ?? []).filter((item) => item.ownerProjectId === selectedTransfer?.receivingProjectId).map((item) => <option key={artifactKey(item.artifact)} value={artifactKey(item.artifact)}>{artifactLabel(item.artifact, item.title, item.versionNo)}</option>)}
+                      {(workspace?.artifacts ?? []).filter((item) => item.ownerProjectId === selectedTransfer?.receivingProjectId && item.artifact.kind === usageKind).map((item) => <option key={artifactKey(item.artifact)} value={artifactKey(item.artifact)}>{artifactLabel(item.artifact, item.title, item.versionNo)}</option>)}
                     </select>
                   </Field>
                 ) : (
@@ -595,7 +660,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
                 {(workspace?.eligibilities ?? []).map((eligibility) => (
                   <div key={eligibility.id} className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300">
                     <p className="font-medium text-white">{eligibility.origin.originProjectTitle} → {eligibility.licenseIdentifier} · {eligibility.state}</p>
-                    <p className="mt-1 text-gray-400">{eligibility.origin.artifact.kind} {eligibility.origin.artifact.versionId} · {eligibility.accessScope.replaceAll("_", " ")} · reviewer {eligibility.reviewedBy}</p>
+                    <p className="mt-1 text-gray-400">{eligibility.origin.artifact.kind} {eligibility.origin.artifact.versionId} · {eligibility.accessScope.replace(/_/g, " ")} · reviewer {eligibility.reviewedBy}</p>
                     <p className="mt-1 text-gray-500">{eligibility.stateRationale}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button type="button" className={buttonClass} onClick={() => void previewOrigin(eligibility.origin.id)}>Provenance preview</button>
