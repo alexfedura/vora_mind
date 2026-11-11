@@ -57,6 +57,7 @@ export function LearningWorkspacePanel(): React.JSX.Element {
   const [projectId, setProjectId] = useState("");
   const [attemptId, setAttemptId] = useState("");
   const [submissionId, setSubmissionId] = useState("");
+  const [ruleCompetencyId, setRuleCompetencyId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -181,7 +182,7 @@ export function LearningWorkspacePanel(): React.JSX.Element {
     const questionMaxPoints = Number(form.get("questionMaxPoints"));
     const rubricMaxPoints = Number(form.get("rubricMaxPoints"));
     return learningService.createAssessmentVersion({
-      assessmentId: null,
+      assessmentId: String(form.get("assessmentId") ?? "") || null,
       learningProjectId: projectId,
       title: String(form.get("title") ?? ""),
       changeRationale: String(form.get("changeRationale") ?? ""),
@@ -247,7 +248,7 @@ export function LearningWorkspacePanel(): React.JSX.Element {
 
   const createMasteryRule = (form: FormData): Promise<unknown> =>
     learningService.createMasteryRule({
-      masteryRuleId: null,
+      masteryRuleId: String(form.get("masteryRuleId") ?? "") || null,
       competencyId: String(form.get("competencyId") ?? ""),
       title: String(form.get("title") ?? ""),
       minimumAverageScore: Number(form.get("minimumAverageScore")) / 100,
@@ -419,6 +420,16 @@ export function LearningWorkspacePanel(): React.JSX.Element {
 
                 <form onSubmit={(event) => submitForm(event, createAssessment)} className="space-y-3 rounded-lg border border-[#292c34] bg-[#101114] p-3">
                   <h3 className="text-sm font-semibold text-white">Assessment authoring</h3>
+                  <Field label="Assessment identity">
+                    <select className={fieldClass} name="assessmentId">
+                      <option value="">Create new assessment</option>
+                      {assessments.filter((item, index, versions) =>
+                        versions.findIndex((candidate) => candidate.assessmentId === item.assessmentId) === index
+                      ).map((item) => (
+                        <option key={item.assessmentId} value={item.assessmentId}>New version of {item.title}</option>
+                      ))}
+                    </select>
+                  </Field>
                   <Field label="Objective version">
                     <select className={fieldClass} name="objectiveVersionId" required>
                       <option value="">Select objective</option>
@@ -556,7 +567,20 @@ export function LearningWorkspacePanel(): React.JSX.Element {
                     <button className={buttonClass} disabled={!objectives.length}>Create competency</button>
                   </form>
                   <form onSubmit={(event) => submitForm(event, createMasteryRule)} className="space-y-2 border-b border-[#292c34] pb-3">
-                    <Field label="Competency"><select className={fieldClass} name="competencyId" required><option value="">Select competency</option>{competencies.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>
+                    <Field label="Competency">
+                      <select className={fieldClass} name="competencyId" value={ruleCompetencyId} onChange={(event) => setRuleCompetencyId(event.target.value)} required>
+                        <option value="">Select competency</option>
+                        {competencies.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Rule identity">
+                      <select className={fieldClass} name="masteryRuleId">
+                        <option value="">Create new mastery rule</option>
+                        {workspace.masteryRules.filter((rule) => rule.competencyId === ruleCompetencyId).map((rule) => (
+                          <option key={rule.id} value={rule.id}>New version of {rule.title}</option>
+                        ))}
+                      </select>
+                    </Field>
                     <Field label="Mastery rule title"><input className={fieldClass} name="title" required /></Field>
                     <div className="grid grid-cols-2 gap-2">
                       <Field label="Minimum average (%)"><input className={fieldClass} type="number" min="0" max="100" name="minimumAverageScore" defaultValue="70" required /></Field>
