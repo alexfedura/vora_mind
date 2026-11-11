@@ -532,6 +532,18 @@ pub struct HypothesisDefinitionVersionDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct HypothesisModelReferenceDto {
+    pub id: String,
+    pub hypothesis_id: String,
+    pub model_id: String,
+    pub model_version_id: String,
+    pub label: String,
+    pub rationale: String,
+    pub resolution_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ResearchHypothesisDto {
     pub id: String,
     pub project_id: Option<String>,
@@ -542,6 +554,7 @@ pub struct ResearchHypothesisDto {
     pub lifecycle_status: ResearchHypothesisStatus,
     pub definitions: Vec<HypothesisDefinitionVersionDto>,
     pub competing_hypothesis_ids: Vec<String>,
+    pub model_references: Vec<HypothesisModelReferenceDto>,
     pub created_by: Option<String>,
     pub created_at_us: i64,
 }
@@ -791,6 +804,17 @@ pub struct CreateTypedHypothesisReq {
 pub struct LinkCompetingHypothesesReq {
     pub hypothesis_id: String,
     pub competing_hypothesis_id: String,
+    pub rationale: String,
+    pub created_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AddHypothesisModelReferenceReq {
+    pub hypothesis_id: String,
+    pub model_id: String,
+    pub model_version_id: String,
+    pub label: String,
     pub rationale: String,
     pub created_by: Option<String>,
 }
@@ -1247,6 +1271,18 @@ pub fn link_competing_hypotheses(
 ) -> Result<(), String> {
     validate_required(&req.rationale, "competition rationale")?;
     repository::link_competing_hypotheses(conn, &req, now_ts_us()?)
+        .map_err(|error| error.to_string())
+}
+
+pub fn add_hypothesis_model_reference(
+    conn: &Connection,
+    req: AddHypothesisModelReferenceReq,
+) -> Result<HypothesisModelReferenceDto, String> {
+    validate_required(&req.model_id, "model id")?;
+    validate_required(&req.model_version_id, "model version id")?;
+    validate_required(&req.label, "model reference label")?;
+    validate_required(&req.rationale, "model reference rationale")?;
+    repository::add_hypothesis_model_reference(conn, &req, &new_id("hypothesis_model_reference"), now_ts_us()?)
         .map_err(|error| error.to_string())
 }
 
