@@ -553,3 +553,534 @@ export interface SourceRevisionDto {
   createdBy: string;
   createdAt: number;
 }
+
+export type ResearchPathwayKey =
+  | "existing_knowledge_acquisition"
+  | "existing_knowledge_investigation"
+  | "first_principles_discovery";
+export type ResearchProjectStatus = "proposed" | "active" | "paused" | "completed" | "archived";
+export type ResearchGapStatus = "candidate" | "assessed" | "accepted" | "rejected" | "addressed" | "superseded";
+export type ResearchQuestionStatus =
+  | "legacy_unassessed" | "draft" | "review" | "accepted" | "rejected"
+  | "deferred" | "refined" | "superseded";
+export type ResearchQuestionRelation = "derived_from" | "refined_from" | "supersedes";
+export type ResearchHypothesisStatus =
+  | "legacy_untyped" | "draft" | "review" | "preregistered" | "closed";
+export type HypothesisDefinitionStatus = "draft" | "review" | "preregistered";
+export type HypothesisVariableRole = "independent" | "dependent" | "covariate";
+export type HypothesisValueKind = "continuous" | "discrete" | "categorical" | "qualitative" | "other";
+export type ResearchPolarity = "supports" | "contradicts" | "qualifies";
+
+export interface ResearchPathwayDto {
+  id: string;
+  pathwayKey: ResearchPathwayKey;
+  title: string;
+  description: string;
+}
+
+export interface ResearchProjectDto {
+  id: string;
+  title: string;
+  aim: string;
+  lifecycleStatus: ResearchProjectStatus;
+  pathwayKeys: ResearchPathwayKey[];
+  domainIds: string[];
+  createdBy: string | null;
+  createdAtUs: number;
+  updatedAtUs: number;
+}
+
+export interface ResearchDomainDto {
+  id: string;
+  name: string;
+  description: string;
+  parentDomainId: string | null;
+  lifecycleStatus: string;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface FrameworkVersionReferenceDto {
+  frameworkId: string;
+  frameworkVersionId: string;
+  title: string;
+  versionNo: number;
+}
+
+export interface SourceVersionReferenceDto {
+  sourceId: string;
+  sourceVersionId: string;
+  sourceTitle: string;
+  editionLabel: string | null;
+  sourceLocationId: string | null;
+  sourceLocationLabel: string | null;
+  sourceClaimId: string | null;
+  capturedAtUs: number;
+}
+
+export interface ProjectKnowledgeAdoptionDto {
+  id: string;
+  projectId: string;
+  frameworkId: string;
+  frameworkVersionId: string;
+  title: string;
+  versionNo: number;
+  useContext: string;
+  adoptedBy: string | null;
+  adoptedAtUs: number;
+}
+
+export interface LiteratureReviewSourceDto {
+  id: string;
+  sourceId: string;
+  sourceVersionId: string;
+  sourceLocationId: string | null;
+  sourceClaimId: string | null;
+  citationNote: string;
+}
+
+export interface LiteratureReviewDto {
+  id: string;
+  projectId: string;
+  title: string;
+  searchScope: string;
+  lifecycleStatus: "draft" | "reviewed";
+  reviewerId: string | null;
+  reviewedAtUs: number | null;
+  sources: LiteratureReviewSourceDto[];
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface PriorKnowledgeAssessmentDto {
+  id: string;
+  projectId: string;
+  title: string;
+  assessment: string;
+  frameworkVersionId: string | null;
+  lifecycleStatus: "draft" | "reviewed";
+  reviewerId: string | null;
+  reviewedAtUs: number | null;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface ResearchGapDto {
+  id: string;
+  projectId: string;
+  domainId: string | null;
+  title: string;
+  statement: string;
+  lifecycleStatus: ResearchGapStatus;
+  literatureReviewIds: string[];
+  priorAssessmentIds: string[];
+  hasReviewedException: boolean;
+  createdBy: string | null;
+  createdAtUs: number;
+  updatedAtUs: number;
+}
+
+export interface ResearchQuestionDto {
+  id: string;
+  title: string;
+  description: string;
+  projectId: string | null;
+  researchGapId: string | null;
+  domainId: string | null;
+  lifecycleStatus: ResearchQuestionStatus;
+  ownershipState: "project" | "unassigned" | "unknown";
+  migrationNote: string | null;
+  rationale: string;
+  legacyStatus: QuestionItem["status"];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ResearchQuestionLineageDto {
+  id: string;
+  parentQuestionId: string;
+  derivedQuestionId: string;
+  relationKind: ResearchQuestionRelation;
+  rationale: string;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface PhenomenonDto {
+  id: string;
+  projectId: string;
+  domainId: string | null;
+  title: string;
+  description: string;
+  populationScope: string;
+  context: string;
+  temporalBoundary: string;
+  lifecycleStatus: string;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface ObservationPlanVersionDto {
+  id: string;
+  planId: string;
+  versionNo: number;
+  measurementMethod: string;
+  sampleFrame: string;
+  conditionsTemplate: string;
+  inclusionRules: string;
+  lifecycleStatus: "draft" | "reviewed" | "preregistered" | "withdrawn";
+  createdBy: string | null;
+  createdAtUs: number;
+  preregisteredAtUs: number | null;
+}
+
+export interface ObservationPlanDto {
+  id: string;
+  projectId: string;
+  phenomenonId: string;
+  title: string;
+  createdBy: string | null;
+  createdAtUs: number;
+  versions: ObservationPlanVersionDto[];
+}
+
+export interface DatasetVersionReferenceDto {
+  id: string;
+  projectId: string;
+  title: string;
+  versionLabel: string;
+  externalUri: string | null;
+  contentSha256: string | null;
+  sourceVersionId: string | null;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface ObservationDto {
+  id: string;
+  projectId: string;
+  phenomenonId: string;
+  planId: string;
+  planVersionId: string;
+  datasetVersionReferenceId: string | null;
+  measuredAtUs: number;
+  valueDecimal: string | null;
+  valueState: string;
+  unit: string | null;
+  measurementMethod: string;
+  conditions: string;
+  sampleIdentifier: string | null;
+  qualityStatus: string;
+  supersedesObservationId: string | null;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface PatternDto {
+  id: string;
+  projectId: string;
+  title: string;
+  statement: string;
+  analysisMethod: string;
+  uncertainty: string;
+  lifecycleStatus: string;
+  observationIds: string[];
+  datasetVersionReferenceIds: string[];
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface IdeaDto {
+  id: string;
+  projectId: string;
+  title: string;
+  content: string;
+  lifecycleStatus: string;
+  phenomenonId: string | null;
+  observationId: string | null;
+  patternId: string | null;
+  questionId: string | null;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface HypothesisVariableDto {
+  id: string;
+  hypothesisVersionId: string;
+  role: HypothesisVariableRole;
+  name: string;
+  operationalDefinition: string;
+  valueKind: HypothesisValueKind;
+  unit: string | null;
+  measurementMethod: string;
+}
+
+export interface HypothesisDefinitionVersionDto {
+  id: string;
+  hypothesisId: string;
+  versionNo: number;
+  parentVersionId: string | null;
+  statementH0: string;
+  statementH1: string;
+  populationScope: string;
+  researchScope: string;
+  expectedDirection: string;
+  expectedEffectDecimal: string | null;
+  expectedEffectUnit: string | null;
+  falsificationCriteria: string;
+  assumptions: string;
+  lifecycleStatus: HypothesisDefinitionStatus;
+  createdBy: string | null;
+  createdAtUs: number;
+  preregisteredAtUs: number | null;
+  variables: HypothesisVariableDto[];
+}
+
+export interface ResearchHypothesisDto {
+  id: string;
+  projectId: string | null;
+  researchQuestionId: string | null;
+  legacyHypothesisId: string | null;
+  parentHypothesisId: string | null;
+  ownershipState: "project" | "unassigned" | "unknown";
+  lifecycleStatus: ResearchHypothesisStatus;
+  definitions: HypothesisDefinitionVersionDto[];
+  competingHypothesisIds: string[];
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface ResearchExperimentDesignVersionDto {
+  id: string;
+  designId: string;
+  projectId: string;
+  title: string;
+  versionNo: number;
+  description: string;
+  protocol: string;
+  lifecycleStatus: string;
+  createdBy: string | null;
+  createdAtUs: number;
+  preregisteredAtUs: number | null;
+}
+
+export interface ResearchWorkspaceDto {
+  pathways: ResearchPathwayDto[];
+  projects: ResearchProjectDto[];
+  domains: ResearchDomainDto[];
+  frameworkVersions: FrameworkVersionReferenceDto[];
+  sourceVersions: SourceVersionReferenceDto[];
+  adoptions: ProjectKnowledgeAdoptionDto[];
+  literatureReviews: LiteratureReviewDto[];
+  priorAssessments: PriorKnowledgeAssessmentDto[];
+  gaps: ResearchGapDto[];
+  questions: ResearchQuestionDto[];
+  questionLineage: ResearchQuestionLineageDto[];
+  phenomena: PhenomenonDto[];
+  observationPlans: ObservationPlanDto[];
+  datasetVersions: DatasetVersionReferenceDto[];
+  observations: ObservationDto[];
+  patterns: PatternDto[];
+  ideas: IdeaDto[];
+  hypotheses: ResearchHypothesisDto[];
+  designVersions: ResearchExperimentDesignVersionDto[];
+}
+
+export interface CreateResearchProjectReq {
+  title: string;
+  aim: string;
+  pathways: ResearchPathwayKey[];
+  createdBy: string | null;
+}
+
+export interface CreateResearchDomainReq {
+  name: string;
+  description: string;
+  parentDomainId: string | null;
+  createdBy: string | null;
+}
+
+export interface CreateResearchGapReq {
+  projectId: string;
+  domainId: string | null;
+  title: string;
+  statement: string;
+  createdBy: string | null;
+}
+
+export interface CreateResearchQuestionReq {
+  projectId: string | null;
+  researchGapId: string | null;
+  domainId: string | null;
+  title: string;
+  description: string;
+  rationale: string;
+  createdBy: string | null;
+}
+
+export interface CreateLiteratureReviewReq {
+  projectId: string;
+  title: string;
+  searchScope: string;
+  createdBy: string | null;
+}
+
+export interface AddLiteratureSourceReq {
+  literatureReviewId: string;
+  sourceId: string;
+  sourceVersionId: string;
+  sourceLocationId: string | null;
+  sourceClaimId: string | null;
+  citationNote: string;
+}
+
+export interface CreatePriorKnowledgeAssessmentReq {
+  projectId: string;
+  title: string;
+  assessment: string;
+  frameworkVersionId: string | null;
+  createdBy: string | null;
+}
+
+export interface AddGapEvidenceReq {
+  gapId: string;
+  literatureReviewId: string | null;
+  priorAssessmentId: string | null;
+}
+
+export interface ReviewGapExceptionReq {
+  gapId: string;
+  rationale: string;
+  reviewerId: string | null;
+  reviewDecision: "accepted" | "rejected";
+}
+
+export interface CreatePhenomenonReq {
+  projectId: string;
+  domainId: string | null;
+  title: string;
+  description: string;
+  populationScope: string;
+  context: string;
+  temporalBoundary: string;
+  createdBy: string | null;
+}
+
+export interface CreateObservationPlanReq {
+  projectId: string;
+  phenomenonId: string;
+  title: string;
+  measurementMethod: string;
+  sampleFrame: string;
+  conditionsTemplate: string;
+  inclusionRules: string;
+  createdBy: string | null;
+}
+
+export interface CreateDatasetVersionReferenceReq {
+  projectId: string;
+  title: string;
+  versionLabel: string;
+  externalUri: string | null;
+  contentSha256: string | null;
+  sourceVersionId: string | null;
+  createdBy: string | null;
+}
+
+export interface CreateObservationReq {
+  projectId: string;
+  phenomenonId: string;
+  planId: string;
+  planVersionId: string;
+  datasetVersionReferenceId: string | null;
+  measuredAtUs: number;
+  valueDecimal: string | null;
+  valueState: string;
+  unit: string | null;
+  measurementMethod: string;
+  conditions: string;
+  sampleIdentifier: string | null;
+  createdBy: string | null;
+}
+
+export interface CreatePatternReq {
+  projectId: string;
+  title: string;
+  statement: string;
+  analysisMethod: string;
+  uncertainty: string;
+  observationIds: string[];
+  datasetVersionReferenceIds: string[];
+  createdBy: string | null;
+}
+
+export interface CreateIdeaReq {
+  projectId: string;
+  title: string;
+  content: string;
+  phenomenonId: string | null;
+  observationId: string | null;
+  patternId: string | null;
+  questionId: string | null;
+  createdBy: string | null;
+}
+
+export interface HypothesisVariableInput {
+  role: HypothesisVariableRole;
+  name: string;
+  operationalDefinition: string;
+  valueKind: HypothesisValueKind;
+  unit: string | null;
+  measurementMethod: string;
+}
+
+export interface CreateTypedHypothesisReq {
+  projectId: string;
+  researchQuestionId: string;
+  parentHypothesisId: string | null;
+  lineageRationale: string | null;
+  statementH0: string;
+  statementH1: string;
+  populationScope: string;
+  researchScope: string;
+  expectedDirection: string;
+  expectedEffectDecimal: string | null;
+  expectedEffectUnit: string | null;
+  falsificationCriteria: string;
+  assumptions: string;
+  variables: HypothesisVariableInput[];
+  createdBy: string | null;
+}
+
+export interface LinkCompetingHypothesesReq {
+  hypothesisId: string;
+  competingHypothesisId: string;
+  rationale: string;
+  createdBy: string | null;
+}
+
+export interface AddHypothesisEvidenceReq {
+  hypothesisVersionId: string;
+  sourceClaimId: string | null;
+  observationId: string | null;
+  patternId: string | null;
+  polarity: ResearchPolarity;
+  rationale: string;
+  createdBy: string | null;
+}
+
+export interface CreateResearchDesignReq {
+  projectId: string;
+  title: string;
+  description: string;
+  protocol: string;
+  createdBy: string | null;
+}
+
+export interface LinkHypothesisDesignReq {
+  hypothesisVersionId: string;
+  designVersionId: string;
+  relationshipKind: "tests" | "competing_design";
+  rationale: string;
+  createdBy: string | null;
+}
