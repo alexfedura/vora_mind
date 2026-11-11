@@ -515,7 +515,7 @@ fn validate_confidence(value: Option<&str>) -> Result<(), String> {
                 .any(|byte| !byte.is_ascii_digit() && byte != b'.')
             || value.bytes().filter(|byte| *byte == b'.').count() > 1
         {
-            return Err("confidence must not be empty".to_string());
+            return Err("confidence must be a non-negative decimal between 0 and 1".to_string());
         }
     }
     Ok(())
@@ -590,7 +590,10 @@ pub fn create_source_location(
             return Err("time ranges require timeStartMs and timeEndMs".into())
         }
         SourceLocationKind::TextAnchor
-            if req.stable_selector.as_deref().is_none_or(str::is_empty) =>
+            if req
+                .stable_selector
+                .as_deref()
+                .map_or(true, str::is_empty) =>
         {
             return Err("text anchors require a stableSelector".into())
         }
@@ -708,9 +711,6 @@ pub fn create_source_claim(
 ) -> Result<SourceClaimDto, String> {
     validate_required(&req.statement, "statement")?;
     let id = new_id();
-    if req.kind == KnowledgeItemKind::SourceClaim {
-        return Err("source claims must be created from an accepted source-claim extraction".into());
-    }
     repository::create_source_claim(
         conn,
         &id,
@@ -730,6 +730,9 @@ pub fn create_knowledge_item(
 ) -> Result<KnowledgeItemDto, String> {
     validate_required(&req.title, "title")?;
     validate_required(&req.content, "content")?;
+    if req.kind == KnowledgeItemKind::SourceClaim {
+        return Err("source claims must be created from an accepted source-claim extraction".into());
+    }
     let id = new_id();
     repository::create_knowledge_item(
         conn,
