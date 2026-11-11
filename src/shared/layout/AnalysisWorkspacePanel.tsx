@@ -141,9 +141,9 @@ function RunCard({ run }: { run: AnalysisRunDto }): React.JSX.Element {
             {run.integrityDeclarations.map((declaration) => (
               <div key={declaration.category} className="rounded-md border border-[#292c34] p-2 text-xs">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="capitalize text-gray-200">{declaration.category.replaceAll("_", " ")}</span>
+                  <span className="capitalize text-gray-200">{declaration.category.replace(/_/g, " ")}</span>
                   <span className={declaration.applicability === "not_assessed" ? "text-amber-300" : "text-gray-400"}>
-                    {declaration.applicability.replaceAll("_", " ")}
+                    {declaration.applicability.replace(/_/g, " ")}
                   </span>
                 </div>
                 {declaration.rationale && <p className="mt-1 text-gray-400">{declaration.rationale}</p>}
