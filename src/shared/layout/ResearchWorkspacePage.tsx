@@ -298,7 +298,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     const form = new FormData(event.currentTarget);
     const observationId = String(form.get("observationId") ?? "");
     await act(async () => {
-      const pattern = await researchService.createPattern({
+      await researchService.createPattern({
         projectId,
         title: String(form.get("title") ?? ""),
         statement: String(form.get("statement") ?? ""),
