@@ -172,6 +172,54 @@ pub enum ClaimRelationKind {
     Describes,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AcquisitionProvenanceTargetKind {
+    Source,
+    SourceVersion,
+    SourceLocation,
+    Extraction,
+    SourceClaim,
+    Concept,
+    Principle,
+    Procedure,
+    Framework,
+    FrameworkVersion,
+}
+
+impl AcquisitionProvenanceTargetKind {
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "source" => Ok(Self::Source),
+            "source_version" => Ok(Self::SourceVersion),
+            "source_location" => Ok(Self::SourceLocation),
+            "extraction" => Ok(Self::Extraction),
+            "source_claim" => Ok(Self::SourceClaim),
+            "concept" => Ok(Self::Concept),
+            "principle" => Ok(Self::Principle),
+            "procedure" => Ok(Self::Procedure),
+            "framework" => Ok(Self::Framework),
+            "framework_version" => Ok(Self::FrameworkVersion),
+            _ => Err(format!("invalid acquisition provenance target: {value}")),
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Source => "source",
+            Self::SourceVersion => "source_version",
+            Self::SourceLocation => "source_location",
+            Self::Extraction => "extraction",
+            Self::SourceClaim => "source_claim",
+            Self::Concept => "concept",
+            Self::Principle => "principle",
+            Self::Procedure => "procedure",
+            Self::Framework => "framework",
+            Self::FrameworkVersion => "framework_version",
+        }
+    }
+}
+
 impl ClaimRelationKind {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -507,7 +555,7 @@ pub struct PublishFrameworkVersionReq {
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceEventDto {
     pub id: String,
-    pub target_kind: String,
+    pub target_kind: AcquisitionProvenanceTargetKind,
     pub target_id: String,
     pub event_kind: String,
     pub actor_id: Option<String>,
@@ -515,6 +563,17 @@ pub struct ProvenanceEventDto {
     pub reason: String,
     pub before_json: Option<String>,
     pub after_json: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameworkReviewDto {
+    pub id: String,
+    pub framework_version_id: String,
+    pub review_status: String,
+    pub reviewer_id: Option<String>,
+    pub rationale: String,
+    pub reviewed_at_us: i64,
 }
 
 fn new_id() -> String {
