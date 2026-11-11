@@ -2526,6 +2526,19 @@ mod tests {
             assert_eq!(initial.lifecycle_status, ModelVersionLifecycleStatus::Draft);
             assert_ne!(initial.model_id, "hypothesis-a");
             assert_eq!(initial.hypotheses.len(), 1);
+            let hypothesis_contribution = initial
+                .contributions
+                .iter()
+                .find(|contribution| {
+                    contribution.relation_kind == ModelContributionKind::ContributesTo
+                })
+                .expect("typed hypothesis contribution");
+            assert!(!hypothesis_contribution.id.is_empty());
+            assert_eq!(hypothesis_contribution.created_by.as_deref(), Some("author"));
+            assert!(matches!(
+                &hypothesis_contribution.target,
+                ModelContributionTarget::HypothesisVersion { id } if id == &initial.hypotheses[0].target_id
+            ));
 
             transition_version(
                 &mut conn,
@@ -2590,6 +2603,16 @@ mod tests {
                 successor.hypotheses[0].relation_kind,
                 ModelRelationKind::Contradicts
             );
+            assert!(successor.contributions.iter().any(|contribution| {
+                contribution.relation_kind == ModelContributionKind::TestedIn
+                    && matches!(
+                        &contribution.target,
+                        ModelContributionTarget::Experiment {
+                            experiment_run_id: Some(run_id),
+                            ..
+                        } if run_id == &experiment_run_id
+                    )
+            }));
 
             let evaluation = create_evaluation(
                 &mut conn,
