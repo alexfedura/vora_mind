@@ -3176,6 +3176,88 @@ mod tests {
     }
 
     #[test]
+    fn source_versions_coexist_and_literature_citations_pin_the_exact_location() {
+        let conn = initialized_connection();
+        let mut conn = conn;
+        let project = project(&mut conn, "Citation project");
+        conn.execute(
+            "INSERT INTO sources (id, kind, title, created_at, updated_at)
+             VALUES ('source-citation', 'book', 'Test source', 1, 1)",
+            [],
+        )
+        .expect("insert legacy source");
+        for (version_id, edition, captured_at, segment_id, page) in [
+            ("source-version-1", "First edition", 1_i64, "source-location-1", 10_i64),
+            ("source-version-2", "Second edition", 2_i64, "source-location-2", 28_i64),
+        ] {
+            conn.execute(
+                "INSERT INTO source_versions
+                    (id, source_id, capture_kind, edition_label, captured_at_us,
+                     metadata_json, created_by, created_at_us)
+                 VALUES (?1, 'source-citation', 'edition', ?2, ?3, '{}', 'test', ?3)",
+                params![version_id, edition, captured_at],
+            )
+            .expect("insert immutable source version");
+            conn.execute(
+                "INSERT INTO source_version_segments
+                    (id, source_id, source_version_id, label, location_kind, page_start, created_at_us)
+                 VALUES (?1, 'source-citation', ?2, ?3, 'page', ?4, ?5)",
+                params![
+                    segment_id,
+                    version_id,
+                    format!("Page {page}"),
+                    page,
+                    captured_at
+                ],
+            )
+            .expect("insert source location");
+        }
+        let source_version_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM source_versions WHERE source_id = 'source-citation'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count source versions");
+        assert_eq!(source_version_count, 2);
+
+        let review = create_reviewed_literature_review(
+            &conn,
+            &CreateReviewedLiteratureReviewReq {
+                project_id: project.id,
+                title: "Exact citation review".into(),
+                search_scope: "Two editions".into(),
+                source_id: "source-citation".into(),
+                source_version_id: "source-version-2".into(),
+                source_location_id: Some("source-location-2".into()),
+                source_claim_id: None,
+                citation_note: "Page 28 contains the relevant passage.".into(),
+                created_by: None,
+                reviewer_id: Some("reviewer".into()),
+            },
+            "review-citation",
+            "citation-link",
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create reviewed citation");
+        assert_eq!(review.lifecycle_status, ReviewLifecycleStatus::Reviewed);
+        assert_eq!(review.sources[0].source_version_id, "source-version-2");
+        assert_eq!(
+            review.sources[0].source_location_id.as_deref(),
+            Some("source-location-2")
+        );
+        let workspace = super::super::workspace(&conn).expect("reload citation workspace");
+        assert!(workspace.source_versions.iter().any(|source| {
+            source.source_version_id == "source-version-1"
+                && source.source_location_id.as_deref() == Some("source-location-1")
+        }));
+        assert!(workspace.source_versions.iter().any(|source| {
+            source.source_version_id == "source-version-2"
+                && source.source_location_id.as_deref() == Some("source-location-2")
+        }));
+    }
+
+    #[test]
     fn questions_keep_lineage_and_competing_hypotheses_keep_typed_definitions() {
         let mut conn = initialized_connection();
         let project = project(&mut conn, "Lineage project");
