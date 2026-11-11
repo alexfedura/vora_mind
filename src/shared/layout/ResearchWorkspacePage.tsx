@@ -25,6 +25,10 @@ function isoDate(timestampUs: number): string {
   return new Date(timestampUs / 1000).toLocaleString();
 }
 
+function latest<T>(items: T[]): T | undefined {
+  return items[items.length - 1];
+}
+
 function Field({
   label,
   children,
@@ -68,9 +72,6 @@ export const ResearchWorkspacePage: React.FC = () => {
   const [questionProjectId, setQuestionProjectId] = useState("");
   const [selectedSourceKey, setSelectedSourceKey] = useState("");
   const [selectedPlanVersionId, setSelectedPlanVersionId] = useState("");
-  const [selectedObservationId, setSelectedObservationId] = useState("");
-  const [selectedPatternId, setSelectedPatternId] = useState("");
-  const [selectedQuestionId, setSelectedQuestionId] = useState("");
   const [selectedHypothesisId, setSelectedHypothesisId] = useState("");
 
   const sourceVersions = workspace?.sourceVersions ?? [];
@@ -80,9 +81,6 @@ export const ResearchWorkspacePage: React.FC = () => {
   );
   const projectQuestions = (workspace?.questions ?? []).filter(
     (question) => question.projectId === projectId,
-  );
-  const acceptedGaps = (workspace?.gaps ?? []).filter(
-    (gap) => gap.projectId === projectId && gap.lifecycleStatus === "accepted",
   );
   const projectPhenomena = (workspace?.phenomena ?? []).filter(
     (phenomenon) => phenomenon.projectId === projectId,
@@ -310,7 +308,6 @@ export const ResearchWorkspacePage: React.FC = () => {
         datasetVersionReferenceIds: [],
         createdBy: null,
       });
-      setSelectedPatternId(pattern.id);
     });
     event.currentTarget.reset();
   };
@@ -377,7 +374,7 @@ export const ResearchWorkspacePage: React.FC = () => {
   const createDesign = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const hypothesis = projectHypotheses.find((item) => item.id === selectedHypothesisId);
-    const definition = hypothesis?.definitions.at(-1);
+    const definition = hypothesis ? latest(hypothesis.definitions) : undefined;
     if (!hypothesis || !definition) return;
     const form = new FormData(event.currentTarget);
     await act(async () => {
@@ -746,7 +743,7 @@ export const ResearchWorkspacePage: React.FC = () => {
               </form>
               <div className="space-y-2 border-t border-[#292c34] pt-3">
                 {projectHypotheses.map((hypothesis) => {
-                  const definition = hypothesis.definitions.at(-1);
+                  const definition = latest(hypothesis.definitions);
                   return (
                     <article key={hypothesis.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -774,7 +771,7 @@ export const ResearchWorkspacePage: React.FC = () => {
                 })}
               </div>
               <form onSubmit={(event) => void createDesign(event)} className="space-y-2 border-t border-[#292c34] pt-3">
-                <Field label="Hypothesis version to link"><select className={inputClass} value={selectedHypothesisId} onChange={(event) => setSelectedHypothesisId(event.target.value)} required><option value="">Select hypothesis</option>{projectHypotheses.filter((item) => item.definitions.length > 0).map((item) => <option key={item.id} value={item.id}>{item.definitions.at(-1)?.statementH1}</option>)}</select></Field>
+                <Field label="Hypothesis version to link"><select className={inputClass} value={selectedHypothesisId} onChange={(event) => setSelectedHypothesisId(event.target.value)} required><option value="">Select hypothesis</option>{projectHypotheses.filter((item) => item.definitions.length > 0).map((item) => <option key={item.id} value={item.id}>{latest(item.definitions)?.statementH1}</option>)}</select></Field>
                 <Field label="Design title"><input className={inputClass} name="title" required /></Field>
                 <Field label="Description"><textarea className={inputClass} name="description" required rows={2} /></Field>
                 <Field label="Design protocol (not execution)"><textarea className={inputClass} name="protocol" required rows={2} /></Field>
