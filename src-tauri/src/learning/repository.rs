@@ -1371,3 +1371,414 @@ fn insert_reproduction_scores(
     Ok(())
 }
 
+pub fn workspace(conn: &Connection) -> Result<LearningWorkspaceDto> {
+    let learners = query_many(conn, "SELECT id FROM learning_learners ORDER BY display_name, id", query_learner)?;
+    let projects = query_many(conn, "SELECT id FROM learning_projects ORDER BY created_at_us DESC, id", query_project)?;
+    let framework_versions = {
+        let mut statement = conn.prepare(
+            "SELECT f.id, v.id, v.title, v.version_no, v.published_at_us
+             FROM knowledge_framework_versions v
+             JOIN knowledge_frameworks f ON f.id = v.framework_id
+             WHERE v.status = 'published'
+             ORDER BY v.title, v.version_no DESC",
+        )?;
+        statement
+            .query_map([], |row| {
+                Ok(LearningFrameworkVersionDto {
+                    framework_id: row.get(0)?,
+                    framework_version_id: row.get(1)?,
+                    title: row.get(2)?,
+                    version_no: row.get(3)?,
+                    published_at_us: row.get(4)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    let objectives = query_many(
+        conn,
+        "SELECT id FROM learning_objective_versions ORDER BY created_at_us, id",
+        query_objective,
+    )?;
+    let assessments = query_many(
+        conn,
+        "SELECT id FROM assessment_versions ORDER BY created_at_us DESC, id",
+        query_assessment_version,
+    )?;
+    let attempts = query_many(
+        conn,
+        "SELECT id FROM assessment_attempts ORDER BY started_at_us DESC, id",
+        query_attempt,
+    )?;
+    let competencies = query_many(
+        conn,
+        "SELECT id FROM competencies ORDER BY created_at_us, id",
+        query_competency,
+    )?;
+    let mastery_rules = query_many(
+        conn,
+        "SELECT id FROM mastery_rules ORDER BY created_at_us, id",
+        query_mastery_rule,
+    )?;
+    let competency_records = query_many(
+        conn,
+        "SELECT id FROM competency_records ORDER BY created_at_us DESC, id",
+        query_competency_record,
+    )?;
+    let reproduction_tasks = query_many(
+        conn,
+        "SELECT id FROM reproduction_tasks ORDER BY created_at_us DESC, id",
+        query_reproduction_task,
+    )?;
+    let reproduction_submissions = query_many(
+        conn,
+        "SELECT id FROM reproduction_submissions ORDER BY submitted_at_us DESC, id",
+        query_reproduction_submission,
+    )?;
+    let progress = query_progress(conn)?;
+    Ok(LearningWorkspaceDto {
+        learners,
+        projects,
+        framework_versions,
+        objectives,
+        assessments,
+        attempts,
+        competencies,
+        mastery_rules,
+        competency_records,
+        reproduction_tasks,
+        reproduction_submissions,
+        progress,
+    })
+}
+
+fn query_many<T>(
+    conn: &Connection,
+    id_sql: &str,
+    mapper: fn(&Connection, &str) -> Result<T>,
+) -> Result<Vec<T>> {
+    let ids = {
+        let mut statement = conn.prepare(id_sql)?;
+        statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    ids.iter().map(|record_id| mapper(conn, record_id)).collect()
+}
+
+fn query_learner(conn: &Connection, learner_id: &str) -> Result<LearningLearnerDto> {
+    conn.query_row(
+        "SELECT id, display_name, created_by, created_at_us
+         FROM learning_learners WHERE id = ?1",
+        [learner_id],
+        |row| {
+            Ok(LearningLearnerDto {
+                id: row.get(0)?,
+                display_name: row.get(1)?,
+                created_by: row.get(2)?,
+                created_at_us: row.get(3)?,
+            })
+        },
+    )
+    .map_err(Into::into)
+}
+
+fn query_project(conn: &Connection, project_id: &str) -> Result<LearningProjectDto> {
+    conn.query_row(
+        "SELECT p.id, p.title, p.learner_id, l.display_name, p.framework_id,
+                p.framework_version_id, v.title, v.version_no, p.created_by, p.created_at_us
+         FROM learning_projects p
+         JOIN learning_learners l ON l.id = p.learner_id
+         JOIN knowledge_framework_versions v ON v.id = p.framework_version_id
+         WHERE p.id = ?1",
+        [project_id],
+        |row| {
+            Ok(LearningProjectDto {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                learner_id: row.get(2)?,
+                learner_name: row.get(3)?,
+                framework_id: row.get(4)?,
+                framework_version_id: row.get(5)?,
+                framework_title: row.get(6)?,
+                framework_version_no: row.get(7)?,
+                created_by: row.get(8)?,
+                created_at_us: row.get(9)?,
+            })
+        },
+    )
+    .map_err(Into::into)
+}
+
+fn query_objective(conn: &Connection, version_id: &str) -> Result<LearningObjectiveVersionDto> {
+    let mut dto = conn.query_row(
+        "SELECT ov.id, ov.objective_id, ov.version_no, ov.learning_project_id,
+                ov.framework_id, ov.framework_version_id, ov.parent_version_id,
+                o.title, ov.observable_outcome, ov.criteria_text, ov.level,
+                ov.created_by, ov.created_at_us
+         FROM learning_objective_versions ov
+         JOIN learning_objectives o ON o.id = ov.objective_id
+         WHERE ov.id = ?1",
+        [version_id],
+        |row| {
+            Ok(LearningObjectiveVersionDto {
+                id: row.get(0)?,
+                objective_id: row.get(1)?,
+                version_no: row.get(2)?,
+                learning_project_id: row.get(3)?,
+                framework_id: row.get(4)?,
+                framework_version_id: row.get(5)?,
+                parent_version_id: row.get(6)?,
+                title: row.get(7)?,
+                observable_outcome: row.get(8)?,
+                criteria_text: row.get(9)?,
+                level: row.get(10)?,
+                prerequisite_version_ids: Vec::new(),
+                created_by: row.get(11)?,
+                created_at_us: row.get(12)?,
+            })
+        },
+    )?;
+    dto.prerequisite_version_ids = {
+        let mut statement = conn.prepare(
+            "SELECT prerequisite_version_id FROM learning_objective_prerequisites
+             WHERE objective_version_id = ?1 ORDER BY prerequisite_version_id",
+        )?;
+        statement
+            .query_map([version_id], |row| row.get(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    Ok(dto)
+}
+
+fn query_assessment_version(conn: &Connection, version_id: &str) -> Result<AssessmentVersionDto> {
+    let (assessment, status): (String, String) = conn.query_row(
+        "SELECT a.title, av.status FROM assessment_versions av
+         JOIN assessments a ON a.id = av.assessment_id WHERE av.id = ?1",
+        [version_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let mut dto = conn.query_row(
+        "SELECT av.id, av.assessment_id, av.version_no, av.learning_project_id,
+                av.framework_id, av.framework_version_id, av.rubric_version_id,
+                rv.pass_threshold, av.status, av.change_rationale, av.created_by,
+                av.created_at_us, av.published_at_us
+         FROM assessment_versions av
+         JOIN assessment_rubric_versions rv ON rv.id = av.rubric_version_id
+         WHERE av.id = ?1",
+        [version_id],
+        |row| {
+            Ok(AssessmentVersionDto {
+                id: row.get(0)?,
+                assessment_id: row.get(1)?,
+                title: assessment,
+                version_no: row.get(2)?,
+                learning_project_id: row.get(3)?,
+                framework_id: row.get(4)?,
+                framework_version_id: row.get(5)?,
+                rubric_version_id: row.get(6)?,
+                rubric_pass_threshold: row.get(7)?,
+                status: LearningVersionStatus::parse(&status)
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                change_rationale: row.get(9)?,
+                created_by: row.get(10)?,
+                created_at_us: row.get(11)?,
+                published_at_us: row.get(12)?,
+                questions: Vec::new(),
+                rubric_criteria: Vec::new(),
+                objective_version_ids: Vec::new(),
+                reviews: Vec::new(),
+            })
+        },
+    )?;
+    dto.questions = {
+        let mut statement = conn.prepare(
+            "SELECT id, objective_version_id, question_order, prompt, response_kind,
+                    max_points, required
+             FROM assessment_questions WHERE assessment_version_id = ?1
+             ORDER BY question_order, id",
+        )?;
+        statement
+            .query_map([version_id], |row| {
+                Ok(AssessmentQuestionDto {
+                    id: row.get(0)?,
+                    objective_version_id: row.get(1)?,
+                    question_order: row.get(2)?,
+                    prompt: row.get(3)?,
+                    response_kind: row.get(4)?,
+                    max_points: row.get(5)?,
+                    required: row.get::<_, i64>(6)? != 0,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    dto.rubric_criteria = {
+        let mut statement = conn.prepare(
+            "SELECT id, objective_version_id, criterion_key, description, max_points
+             FROM assessment_rubric_criteria WHERE rubric_version_id = ?1
+             ORDER BY criterion_key, id",
+        )?;
+        statement
+            .query_map([&dto.rubric_version_id], |row| {
+                Ok(AssessmentRubricCriterionDto {
+                    id: row.get(0)?,
+                    objective_version_id: row.get(1)?,
+                    criterion_key: row.get(2)?,
+                    description: row.get(3)?,
+                    max_points: row.get(4)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    dto.objective_version_ids = {
+        let mut statement = conn.prepare(
+            "SELECT objective_version_id FROM assessment_version_objectives
+             WHERE assessment_version_id = ?1 ORDER BY objective_version_id",
+        )?;
+        statement
+            .query_map([version_id], |row| row.get(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    dto.reviews = {
+        let mut statement = conn.prepare(
+            "SELECT id, review_status, reviewer_id, rationale, reviewed_at_us
+             FROM assessment_reviews WHERE assessment_version_id = ?1
+             ORDER BY reviewed_at_us, id",
+        )?;
+        statement
+            .query_map([version_id], |row| {
+                let review_status: String = row.get(1)?;
+                let review_status = match review_status.as_str() {
+                    "approved" => AssessmentReviewStatus::Approved,
+                    "changes_requested" => AssessmentReviewStatus::ChangesRequested,
+                    "rejected" => AssessmentReviewStatus::Rejected,
+                    _ => return Err(rusqlite::Error::InvalidQuery),
+                };
+                Ok(AssessmentReviewDto {
+                    id: row.get(0)?,
+                    review_status,
+                    reviewer_id: row.get(2)?,
+                    rationale: row.get(3)?,
+                    reviewed_at_us: row.get(4)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    Ok(dto)
+}
+
+fn query_attempt(conn: &Connection, attempt_id: &str) -> Result<AssessmentAttemptDto> {
+    let mut dto = conn.query_row(
+        "SELECT id, learning_project_id, learner_id, assessment_version_id,
+                framework_version_id, status, started_at_us, submitted_at_us
+         FROM assessment_attempts WHERE id = ?1",
+        [attempt_id],
+        |row| {
+            Ok(AssessmentAttemptDto {
+                id: row.get(0)?,
+                learning_project_id: row.get(1)?,
+                learner_id: row.get(2)?,
+                assessment_version_id: row.get(3)?,
+                framework_version_id: row.get(4)?,
+                status: row.get(5)?,
+                started_at_us: row.get(6)?,
+                submitted_at_us: row.get(7)?,
+                responses: Vec::new(),
+                evaluations: Vec::new(),
+            })
+        },
+    )?;
+    dto.responses = {
+        let mut statement = conn.prepare(
+            "SELECT id, assessment_question_id, response_json, updated_at_us
+             FROM attempt_responses WHERE attempt_id = ?1 ORDER BY created_at_us, id",
+        )?;
+        statement
+            .query_map([attempt_id], |row| {
+                Ok(AttemptResponseDto {
+                    id: row.get(0)?,
+                    assessment_question_id: row.get(1)?,
+                    response: parse_json(&row.get::<_, String>(2)?)?,
+                    updated_at_us: row.get(3)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    dto.evaluations = query_many(
+        conn,
+        &format!(
+            "SELECT id FROM attempt_evaluations WHERE attempt_id = '{}' ORDER BY revision_no",
+            attempt_id.replace('\'', "''")
+        ),
+        query_attempt_evaluation,
+    )?;
+    Ok(dto)
+}
+
+fn query_attempt_evaluation(conn: &Connection, evaluation_id: &str) -> Result<AttemptEvaluationDto> {
+    let mut dto = conn.query_row(
+        "SELECT id, attempt_id, rubric_version_id, revision_no, correction_of_id,
+                evaluator_id, outcome, score, rationale, created_at_us
+         FROM attempt_evaluations WHERE id = ?1",
+        [evaluation_id],
+        |row| {
+            let outcome: String = row.get(6)?;
+            Ok(AttemptEvaluationDto {
+                id: row.get(0)?,
+                attempt_id: row.get(1)?,
+                rubric_version_id: row.get(2)?,
+                revision_no: row.get(3)?,
+                correction_of_id: row.get(4)?,
+                evaluator_id: row.get(5)?,
+                outcome: parse_outcome(&outcome)?,
+                score: row.get(7)?,
+                rationale: row.get(8)?,
+                criterion_scores: Vec::new(),
+                feedback: Vec::new(),
+                created_at_us: row.get(9)?,
+            })
+        },
+    )?;
+    dto.criterion_scores = query_score_rows(
+        conn,
+        "SELECT rubric_criterion_id, score FROM attempt_evaluation_scores
+         WHERE evaluation_id = ?1 ORDER BY rubric_criterion_id",
+        evaluation_id,
+    )?;
+    dto.feedback = {
+        let mut statement = conn.prepare(
+            "SELECT feedback FROM evaluator_feedback WHERE evaluation_id = ?1
+             ORDER BY created_at_us, id",
+        )?;
+        statement
+            .query_map([evaluation_id], |row| row.get(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    Ok(dto)
+}
+
+fn parse_outcome(value: &str) -> rusqlite::Result<AssessmentOutcome> {
+    match value {
+        "pass" => Ok(AssessmentOutcome::Pass),
+        "fail" => Ok(AssessmentOutcome::Fail),
+        "inconclusive" => Ok(AssessmentOutcome::Inconclusive),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn query_score_rows(
+    conn: &Connection,
+    sql: &str,
+    parent_id: &str,
+) -> Result<Vec<EvaluationCriterionScoreDto>> {
+    let mut statement = conn.prepare(sql)?;
+    statement
+        .query_map([parent_id], |row| {
+            Ok(EvaluationCriterionScoreDto {
+                rubric_criterion_id: row.get(0)?,
+                score: row.get(1)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
+}
+
