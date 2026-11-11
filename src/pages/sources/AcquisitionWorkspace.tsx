@@ -886,6 +886,7 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                   <ul className="mt-3 space-y-2">
                     {locations.map((location) => {
                       const url = citedUrl(source, location);
+                      const legacyId = location.legacySegmentId;
                       return (
                         <li key={location.id} className="rounded border border-[#283143] p-2">
                           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -896,7 +897,7 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                               {url && <a href={url} target="_blank" rel="noreferrer" className="text-[10px] text-sky-300">Open at citation</a>}
                               <button onClick={() => setSelectedLocationId(location.id)} className="text-[10px] text-amber-300">Use for extraction</button>
                               <button onClick={() => void showProvenance("source_location", location.id)} className="text-[10px] text-sky-300">Provenance</button>
-                              {location.legacySegmentId && <button onClick={() => void showLegacyHistory("segment", location.legacySegmentId!)} className="text-[10px] text-sky-300">Legacy revisions</button>}
+                              {legacyId && <button onClick={() => void showLegacyHistory("segment", legacyId)} className="text-[10px] text-sky-300">Legacy revisions</button>}
                             </div>
                           </div>
                           <p className="mt-1 break-all font-mono text-[10px] text-gray-500">
