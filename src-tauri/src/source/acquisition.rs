@@ -243,6 +243,16 @@ impl FrameworkChangeClass {
             Self::Replacement => "replacement",
         }
     }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "refinement" => Ok(Self::Refinement),
+            "extension" => Ok(Self::Extension),
+            "revision" => Ok(Self::Revision),
+            "replacement" => Ok(Self::Replacement),
+            _ => Err(format!("invalid framework change class: {value}")),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -259,6 +269,15 @@ impl FrameworkReviewStatus {
             Self::Approved => "approved",
             Self::ChangesRequested => "changes_requested",
             Self::Rejected => "rejected",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "approved" => Ok(Self::Approved),
+            "changes_requested" => Ok(Self::ChangesRequested),
+            "rejected" => Ok(Self::Rejected),
+            _ => Err(format!("invalid framework review status: {value}")),
         }
     }
 }
