@@ -198,10 +198,7 @@ pub fn query_model(conn: &Connection, model_id: &str) -> Result<ModelDto> {
     Ok(model)
 }
 
-pub fn transition_model(
-    conn: &mut Connection,
-    request: &TransitionModelReq,
-) -> Result<ModelDto> {
+pub fn transition_model(conn: &mut Connection, request: &TransitionModelReq) -> Result<ModelDto> {
     required(&request.rationale, "Model status rationale")?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let current: Option<String> = tx
@@ -484,7 +481,9 @@ pub fn create_model_version(
             ));
         }
         if relation.relation_kind == "tested_in" && relation.experiment_run_id.is_none() {
-            return Err(anyhow!("A tested_in relation requires an exact experiment run."));
+            return Err(anyhow!(
+                "A tested_in relation requires an exact experiment run."
+            ));
         }
         if let Some(run_id) = &relation.experiment_run_id {
             let run_design: Option<String> = tx
@@ -524,7 +523,9 @@ pub fn create_model_version(
             |row| row.get(0),
         )?;
         if !sealed {
-            return Err(anyhow!("Model dataset references must pin a sealed version."));
+            return Err(anyhow!(
+                "Model dataset references must pin a sealed version."
+            ));
         }
         tx.execute(
             "INSERT INTO model_version_dataset_uses
@@ -576,13 +577,18 @@ fn validate_version_request(conn: &Connection, request: &CreateModelVersionReq) 
     for (value, label) in [
         (&request.change_rationale, "Change rationale"),
         (&request.expected_implications, "Expected implications"),
-        (&request.specification.human_readable, "Human-readable model specification"),
+        (
+            &request.specification.human_readable,
+            "Human-readable model specification",
+        ),
         (&request.scope, "Model scope"),
     ] {
         required(value, label)?;
     }
     if !request.specification.machine_readable.is_object() {
-        return Err(anyhow!("Machine-readable model specification must be a JSON object."));
+        return Err(anyhow!(
+            "Machine-readable model specification must be a JSON object."
+        ));
     }
     if !request.environment.is_object() {
         return Err(anyhow!("Model environment identity must be a JSON object."));
@@ -635,19 +641,33 @@ fn validate_version_request(conn: &Connection, request: &CreateModelVersionReq) 
     for impact in &request.impacts {
         required(&impact.rationale, "Impact rationale")?;
         match impact.impact_kind {
-            ModelImpactKind::Added if impact.current_statement.as_deref().is_none_or(str::is_empty) => {
+            ModelImpactKind::Added
+                if impact
+                    .current_statement
+                    .as_deref()
+                    .is_none_or(str::is_empty) =>
+            {
                 return Err(anyhow!("An added impact requires its new statement."));
             }
             ModelImpactKind::Changed
-                if impact.previous_statement.as_deref().is_none_or(str::is_empty)
-                    || impact.current_statement.as_deref().is_none_or(str::is_empty) =>
+                if impact
+                    .previous_statement
+                    .as_deref()
+                    .is_none_or(str::is_empty)
+                    || impact
+                        .current_statement
+                        .as_deref()
+                        .is_none_or(str::is_empty) =>
             {
                 return Err(anyhow!(
                     "A changed impact requires both previous and current statements."
                 ));
             }
             ModelImpactKind::Removed
-                if impact.previous_statement.as_deref().is_none_or(str::is_empty) =>
+                if impact
+                    .previous_statement
+                    .as_deref()
+                    .is_none_or(str::is_empty) =>
             {
                 return Err(anyhow!("A removed impact requires its prior statement."));
             }
@@ -741,9 +761,13 @@ fn insert_impact(tx: &Transaction<'_>, version_id: &str, impact: &ModelImpactReq
             ModelImpactTarget::FindingVersion { finding_version_id } => {
                 ("claim", None, None, Some(finding_version_id.as_str()), None)
             }
-            ModelImpactTarget::Assumption { assumption_key } => {
-                ("assumption", None, None, None, Some(assumption_key.as_str()))
-            }
+            ModelImpactTarget::Assumption { assumption_key } => (
+                "assumption",
+                None,
+                None,
+                None,
+                Some(assumption_key.as_str()),
+            ),
         };
     tx.execute(
         "INSERT INTO model_version_impacts
@@ -961,7 +985,11 @@ fn parse_model_version_status(value: &str) -> Result<ModelVersionLifecycleStatus
     }
 }
 
-fn query_relations(conn: &Connection, sql: &str, version_id: &str) -> Result<Vec<ModelRelationReq>> {
+fn query_relations(
+    conn: &Connection,
+    sql: &str,
+    version_id: &str,
+) -> Result<Vec<ModelRelationReq>> {
     let mut statement = conn.prepare(sql)?;
     let rows = statement
         .query_map([version_id], |row| {
@@ -1048,9 +1076,9 @@ fn query_impacts(conn: &Connection, version_id: &str) -> Result<Vec<ModelImpactR
                     }
                 }
                 "assumption" => ModelImpactTarget::Assumption {
-                    assumption_key: row.get::<_, Option<String>>(5)?.ok_or(
-                        rusqlite::Error::InvalidQuery,
-                    )?,
+                    assumption_key: row
+                        .get::<_, Option<String>>(5)?
+                        .ok_or(rusqlite::Error::InvalidQuery)?,
                 },
                 _ => return Err(rusqlite::Error::InvalidQuery),
             };
@@ -1074,21 +1102,25 @@ fn query_impacts(conn: &Connection, version_id: &str) -> Result<Vec<ModelImpactR
 }
 
 fn query_all_models(conn: &Connection) -> Result<Vec<ModelDto>> {
-    let mut statement = conn.prepare("SELECT id FROM scientific_models ORDER BY display_name, id")?;
+    let mut statement =
+        conn.prepare("SELECT id FROM scientific_models ORDER BY display_name, id")?;
     let ids = statement
         .query_map([], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    ids.iter().map(|model_id| query_model(conn, model_id)).collect()
+    ids.iter()
+        .map(|model_id| query_model(conn, model_id))
+        .collect()
 }
 
 fn query_all_versions(conn: &Connection) -> Result<Vec<ModelVersionDto>> {
-    let mut statement = conn.prepare(
-        "SELECT id FROM model_versions ORDER BY model_id, version_no",
-    )?;
+    let mut statement =
+        conn.prepare("SELECT id FROM model_versions ORDER BY model_id, version_no")?;
     let ids = statement
         .query_map([], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    ids.iter().map(|version_id| query_version(conn, version_id)).collect()
+    ids.iter()
+        .map(|version_id| query_version(conn, version_id))
+        .collect()
 }
 
 pub fn create_evidence(
@@ -1107,13 +1139,27 @@ pub fn create_evidence(
     let evidence_id = id();
     let created_at = now_us()?;
     let artifact_columns = match &request.artifact {
-        ModelArtifactRef::AnalysisOutput(value) => (Some(value.as_str()), None, None, None, None, None, None),
-        ModelArtifactRef::ExperimentRun(value) => (None, Some(value.as_str()), None, None, None, None, None),
-        ModelArtifactRef::DatasetVersion(value) => (None, None, Some(value.as_str()), None, None, None, None),
-        ModelArtifactRef::ResearchObservation(value) => (None, None, None, Some(value.as_str()), None, None, None),
-        ModelArtifactRef::SourceVersionSegment(value) => (None, None, None, None, Some(value.as_str()), None, None),
-        ModelArtifactRef::SourceClaim(value) => (None, None, None, None, None, Some(value.as_str()), None),
-        ModelArtifactRef::FindingVersion(value) => (None, None, None, None, None, None, Some(value.as_str())),
+        ModelArtifactRef::AnalysisOutput(value) => {
+            (Some(value.as_str()), None, None, None, None, None, None)
+        }
+        ModelArtifactRef::ExperimentRun(value) => {
+            (None, Some(value.as_str()), None, None, None, None, None)
+        }
+        ModelArtifactRef::DatasetVersion(value) => {
+            (None, None, Some(value.as_str()), None, None, None, None)
+        }
+        ModelArtifactRef::ResearchObservation(value) => {
+            (None, None, None, Some(value.as_str()), None, None, None)
+        }
+        ModelArtifactRef::SourceVersionSegment(value) => {
+            (None, None, None, None, Some(value.as_str()), None, None)
+        }
+        ModelArtifactRef::SourceClaim(value) => {
+            (None, None, None, None, None, Some(value.as_str()), None)
+        }
+        ModelArtifactRef::FindingVersion(value) => {
+            (None, None, None, None, None, None, Some(value.as_str()))
+        }
     };
     conn.execute(
         "INSERT INTO model_evidence
@@ -1176,13 +1222,23 @@ fn query_evidence(conn: &Connection, evidence_id: &str) -> Result<ModelEvidenceD
     let artifact = match (
         values.2, values.3, values.4, values.5, values.6, values.7, values.8,
     ) {
-        (Some(value), None, None, None, None, None, None) => ModelArtifactRef::AnalysisOutput(value),
+        (Some(value), None, None, None, None, None, None) => {
+            ModelArtifactRef::AnalysisOutput(value)
+        }
         (None, Some(value), None, None, None, None, None) => ModelArtifactRef::ExperimentRun(value),
-        (None, None, Some(value), None, None, None, None) => ModelArtifactRef::DatasetVersion(value),
-        (None, None, None, Some(value), None, None, None) => ModelArtifactRef::ResearchObservation(value),
-        (None, None, None, None, Some(value), None, None) => ModelArtifactRef::SourceVersionSegment(value),
+        (None, None, Some(value), None, None, None, None) => {
+            ModelArtifactRef::DatasetVersion(value)
+        }
+        (None, None, None, Some(value), None, None, None) => {
+            ModelArtifactRef::ResearchObservation(value)
+        }
+        (None, None, None, None, Some(value), None, None) => {
+            ModelArtifactRef::SourceVersionSegment(value)
+        }
         (None, None, None, None, None, Some(value), None) => ModelArtifactRef::SourceClaim(value),
-        (None, None, None, None, None, None, Some(value)) => ModelArtifactRef::FindingVersion(value),
+        (None, None, None, None, None, None, Some(value)) => {
+            ModelArtifactRef::FindingVersion(value)
+        }
         _ => return Err(anyhow!("Model evidence has an invalid artifact endpoint.")),
     };
     let polarity = match values.9.as_str() {
@@ -1224,7 +1280,9 @@ pub fn create_evaluation(
         )
         .optional()?;
     let Some((run_project, run_status)) = run else {
-        return Err(anyhow!("Analysis run or its lifecycle status was not found."));
+        return Err(anyhow!(
+            "Analysis run or its lifecycle status was not found."
+        ));
     };
     if run_status != "completed" {
         return Err(anyhow!(
@@ -1264,7 +1322,9 @@ pub fn create_evaluation(
         |row| row.get(0),
     )?;
     if !sealed {
-        return Err(anyhow!("Model evaluation requires a sealed DatasetVersion."));
+        return Err(anyhow!(
+            "Model evaluation requires a sealed DatasetVersion."
+        ));
     }
     let metric_run: Option<String> = conn
         .query_row(
@@ -1351,7 +1411,9 @@ fn query_evaluations(conn: &Connection, project_id: &str) -> Result<Vec<ModelEva
     let ids = statement
         .query_map([project_id], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    ids.iter().map(|evaluation_id| query_evaluation(conn, evaluation_id)).collect()
+    ids.iter()
+        .map(|evaluation_id| query_evaluation(conn, evaluation_id))
+        .collect()
 }
 
 pub fn create_validation(
@@ -1400,7 +1462,10 @@ fn validate_validation_request(
         (&request.population_scope, "Validation population scope"),
         (&request.evaluation_method, "Validation method"),
         (&request.evaluator_identity, "Evaluator identity"),
-        (&request.conflict_of_interest, "Conflict-of-interest declaration"),
+        (
+            &request.conflict_of_interest,
+            "Conflict-of-interest declaration",
+        ),
     ] {
         required(value, label)?;
     }
@@ -1687,7 +1752,9 @@ fn query_validations(conn: &Connection, project_id: &str) -> Result<Vec<ModelVal
         "SELECT id FROM model_validations WHERE project_id = ?1 ORDER BY created_at_us, id",
         project_id,
     )?;
-    ids.iter().map(|validation_id| query_validation(conn, validation_id)).collect()
+    ids.iter()
+        .map(|validation_id| query_validation(conn, validation_id))
+        .collect()
 }
 
 pub fn create_replication(
@@ -1774,16 +1841,16 @@ fn validate_replication_request(
     request: &CreateModelReplicationReq,
 ) -> Result<()> {
     for (value, label) in [
-        (&request.independent_team_operator, "Independent team/operator"),
+        (
+            &request.independent_team_operator,
+            "Independent team/operator",
+        ),
         (&request.protocol_context, "Replication protocol context"),
         (&request.result_summary, "Replication result summary"),
     ] {
         required(value, label)?;
     }
-    if !matches!(
-        request.replication_kind.as_str(),
-        "direct" | "conceptual"
-    ) {
+    if !matches!(request.replication_kind.as_str(), "direct" | "conceptual") {
         return Err(anyhow!("Replication kind must be direct or conceptual."));
     }
     if !matches!(
@@ -1830,10 +1897,7 @@ fn validate_replication_request(
     let Some(status) = original_status else {
         return Err(anyhow!("Original experiment run was not found."));
     };
-    if !matches!(
-        status.as_str(),
-        "completed" | "inconclusive"
-    ) {
+    if !matches!(status.as_str(), "completed" | "inconclusive") {
         return Err(anyhow!(
             "Replication requires a completed or inconclusive original experiment run."
         ));
@@ -2016,7 +2080,9 @@ fn query_replications(conn: &Connection, project_id: &str) -> Result<Vec<ModelRe
         "SELECT id FROM model_replications WHERE project_id = ?1 ORDER BY created_at_us, id",
         project_id,
     )?;
-    ids.iter().map(|replication_id| query_replication(conn, replication_id)).collect()
+    ids.iter()
+        .map(|replication_id| query_replication(conn, replication_id))
+        .collect()
 }
 
 fn query_evidence_list(conn: &Connection) -> Result<Vec<ModelEvidenceDto>> {
@@ -2024,7 +2090,9 @@ fn query_evidence_list(conn: &Connection) -> Result<Vec<ModelEvidenceDto>> {
     let ids = statement
         .query_map([], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    ids.iter().map(|evidence_id| query_evidence(conn, evidence_id)).collect()
+    ids.iter()
+        .map(|evidence_id| query_evidence(conn, evidence_id))
+        .collect()
 }
 
 pub fn workspace(conn: &Connection, project_id: &str) -> Result<ModelWorkspaceDto> {
@@ -2141,9 +2209,7 @@ mod tests {
                 },
                 impact_kind: ModelImpactKind::Added,
                 previous_statement: None,
-                current_statement: Some(
-                    "Applies only to the declared population.".to_string(),
-                ),
+                current_statement: Some("Applies only to the declared population.".to_string()),
                 rationale: "Declare the baseline scope assumption.".to_string(),
             }],
             hypotheses: vec![],
@@ -2378,7 +2444,8 @@ mod tests {
                 insert_analysis_run(&conn, "project-b", &dataset_version_id);
             let mut successor_request = version_request("project-b", &model.id);
             successor_request.change_class = ModelChangeClass::Replacement;
-            successor_request.change_rationale = "Replace the baseline following new evidence.".to_string();
+            successor_request.change_rationale =
+                "Replace the baseline following new evidence.".to_string();
             successor_request.parents = vec![ModelParentReq {
                 version_id: initial.id.clone(),
                 rationale: "Predecessor retained for comparison.".to_string(),
@@ -2389,7 +2456,9 @@ mod tests {
                 },
                 impact_kind: ModelImpactKind::Changed,
                 previous_statement: Some("Applies only to the declared population.".to_string()),
-                current_statement: Some("Applies only to the preregistered population.".to_string()),
+                current_statement: Some(
+                    "Applies only to the preregistered population.".to_string(),
+                ),
                 rationale: "Narrowed the applicability scope.".to_string(),
             }];
             successor_request.hypotheses = vec![ModelRelationReq {
@@ -2407,7 +2476,10 @@ mod tests {
                 .expect("create replacement in another project");
             assert_eq!(successor.version_no, 2);
             assert_eq!(successor.created_in_project_id, "project-b");
-            assert_eq!(successor.hypotheses[0].relation_kind, ModelRelationKind::Contradicts);
+            assert_eq!(
+                successor.hypotheses[0].relation_kind,
+                ModelRelationKind::Contradicts
+            );
 
             let evaluation = create_evaluation(
                 &mut conn,
@@ -2425,7 +2497,10 @@ mod tests {
                 },
             )
             .expect("record exact evaluation");
-            assert_eq!(evaluation.metric_definition_version_id, "metric-version-project-b");
+            assert_eq!(
+                evaluation.metric_definition_version_id,
+                "metric-version-project-b"
+            );
             assert_eq!(evaluation.effect_estimate, "0.125");
             assert!(
                 create_evaluation(
@@ -2494,22 +2569,23 @@ mod tests {
                 },
             )
             .expect("record inconclusive validation with evidence");
-            assert_eq!(finalized.outcome, Some(ModelValidationOutcome::Inconclusive));
-            assert!(
-                finalize_validation(
-                    &mut conn,
-                    &FinalizeModelValidationReq {
-                        validation_id: validation.id,
-                        outcome: ModelValidationOutcome::Pass,
-                        rationale: "Cannot replace a prior result.".to_string(),
-                        deviations: vec![],
-                        analysis_evidence_ids: vec![],
-                        model_evidence_ids: vec![evidence.id.clone()],
-                        actor_id: None,
-                    }
-                )
-                .is_err()
+            assert_eq!(
+                finalized.outcome,
+                Some(ModelValidationOutcome::Inconclusive)
             );
+            assert!(finalize_validation(
+                &mut conn,
+                &FinalizeModelValidationReq {
+                    validation_id: validation.id,
+                    outcome: ModelValidationOutcome::Pass,
+                    rationale: "Cannot replace a prior result.".to_string(),
+                    deviations: vec![],
+                    analysis_evidence_ids: vec![],
+                    model_evidence_ids: vec![evidence.id.clone()],
+                    actor_id: None,
+                }
+            )
+            .is_err());
 
             for outcome in ["contradicts", "supports"] {
                 create_replication(
@@ -2542,7 +2618,12 @@ mod tests {
                 )
                 .expect("retain replication result");
             }
-            assert_eq!(query_replications(&conn, "project-b").expect("replications").len(), 2);
+            assert_eq!(
+                query_replications(&conn, "project-b")
+                    .expect("replications")
+                    .len(),
+                2
+            );
 
             let legacy_hypothesis_id = "legacy-hypothesis";
             conn.execute(
@@ -2567,11 +2648,8 @@ mod tests {
                 [&initial.id],
             )
             .expect_err("model parameter history must be immutable");
-            conn.execute(
-                "DELETE FROM model_versions WHERE id = ?1",
-                [&initial.id],
-            )
-            .expect_err("predecessor model version must not be deleted");
+            conn.execute("DELETE FROM model_versions WHERE id = ?1", [&initial.id])
+                .expect_err("predecessor model version must not be deleted");
             (
                 model.id,
                 initial.id,
@@ -2588,17 +2666,29 @@ mod tests {
             assert_eq!(state.models.len(), 1);
             assert!(state.models.iter().any(|model| model.id == model_id));
             assert_eq!(state.versions.len(), 2);
-            assert!(state.versions.iter().any(|version| version.id == initial_version_id));
+            assert!(state
+                .versions
+                .iter()
+                .any(|version| version.id == initial_version_id));
             assert!(state.versions.iter().any(|version| {
                 version.id == successor_version_id
                     && version.parents[0].version_id == initial_version_id
             }));
-            assert!(state.evidence.iter().any(|evidence| evidence.id == evidence_id));
+            assert!(state
+                .evidence
+                .iter()
+                .any(|evidence| evidence.id == evidence_id));
             assert_eq!(state.evaluations.len(), 1);
             assert_eq!(state.validations.len(), 1);
             assert_eq!(state.replications.len(), 2);
-            assert!(state.replications.iter().any(|replication| replication.outcome == "supports"));
-            assert!(state.replications.iter().any(|replication| replication.outcome == "contradicts"));
+            assert!(state
+                .replications
+                .iter()
+                .any(|replication| replication.outcome == "supports"));
+            assert!(state
+                .replications
+                .iter()
+                .any(|replication| replication.outcome == "contradicts"));
             let legacy: (String, String, String) = conn
                 .query_row(
                     "SELECT model_id, model_version_id, resolution_status
@@ -2607,10 +2697,19 @@ mod tests {
                     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                 )
                 .expect("legacy unresolved reference remains");
-            assert_eq!(legacy, ("unresolved-model".to_string(), "unresolved-version".to_string(), "unresolved".to_string()));
-            let foreign_key_violations: i64 =
-                conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| row.get(0))
-                    .expect("check foreign keys");
+            assert_eq!(
+                legacy,
+                (
+                    "unresolved-model".to_string(),
+                    "unresolved-version".to_string(),
+                    "unresolved".to_string()
+                )
+            );
+            let foreign_key_violations: i64 = conn
+                .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+                    row.get(0)
+                })
+                .expect("check foreign keys");
             assert_eq!(foreign_key_violations, 0);
         }
         fs::remove_file(path).expect("remove test database");

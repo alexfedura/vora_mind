@@ -12,10 +12,7 @@ pub fn model_get_workspace(
 }
 
 #[tauri::command]
-pub fn model_create(
-    state: State<AppState>,
-    request: CreateModelReq,
-) -> Result<ModelDto, String> {
+pub fn model_create(state: State<AppState>, request: CreateModelReq) -> Result<ModelDto, String> {
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
     repository::create_model(&mut conn, &request).map_err(|error| error.to_string())
 }
