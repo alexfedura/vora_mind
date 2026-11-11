@@ -725,7 +725,6 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
         [version_id],
         |row| parse_json(&row.get::<_, String>(0)?),
     )?;
-    let assumption_values = row.9;
     Ok(ModelVersionDto {
         id: row.0,
         model_id: row.1,
@@ -738,7 +737,7 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
             human_readable: row.7,
             machine_readable,
         },
-        assumptions: parse_json(&assumption_values)?,
+        assumptions,
         scope: row.10,
         dependencies,
         environment: parse_json(&row.12)?,
@@ -799,7 +798,7 @@ fn query_experiment_relations(
         "SELECT design_version_id, experiment_run_id, relation_kind, rationale
          FROM model_version_experiments WHERE model_version_id = ?1 ORDER BY id",
     )?;
-    Ok(statement
+    let rows = statement
         .query_map([version_id], |row| {
             Ok(ModelExperimentRelationReq {
                 design_version_id: row.get(0)?,
@@ -808,7 +807,8 @@ fn query_experiment_relations(
                 rationale: row.get(3)?,
             })
         })?
-        .collect::<rusqlite::Result<Vec<_>>>()?)
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
 }
 
 fn query_dataset_uses(conn: &Connection, version_id: &str) -> Result<Vec<ModelDatasetUseReq>> {
@@ -816,7 +816,7 @@ fn query_dataset_uses(conn: &Connection, version_id: &str) -> Result<Vec<ModelDa
         "SELECT dataset_version_id, role, split_group_id, rationale
          FROM model_version_dataset_uses WHERE model_version_id = ?1 ORDER BY role, dataset_version_id",
     )?;
-    Ok(statement
+    let rows = statement
         .query_map([version_id], |row| {
             Ok(ModelDatasetUseReq {
                 dataset_version_id: row.get(0)?,
@@ -825,7 +825,8 @@ fn query_dataset_uses(conn: &Connection, version_id: &str) -> Result<Vec<ModelDa
                 rationale: row.get(3)?,
             })
         })?
-        .collect::<rusqlite::Result<Vec<_>>>()?)
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
 }
 
 fn query_impacts(conn: &Connection, version_id: &str) -> Result<Vec<ModelImpactReq>> {
@@ -1478,9 +1479,10 @@ fn parse_validation_outcome(value: &str) -> Result<ModelValidationOutcome> {
 
 fn query_ids(conn: &Connection, sql: &str, id_value: &str) -> Result<Vec<String>> {
     let mut statement = conn.prepare(sql)?;
-    Ok(statement
+    let ids = statement
         .query_map([id_value], |row| row.get(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?)
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(ids)
 }
 
 fn query_validations(conn: &Connection, project_id: &str) -> Result<Vec<ModelValidationDto>> {
