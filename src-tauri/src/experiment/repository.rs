@@ -2286,7 +2286,7 @@ mod tests {
             Sha256::digest(fs::read(&source_file).expect("read source asset"))
         );
         let db = Mutex::new(Connection::open(&database_path).expect("open workspace"));
-        initialize(&db.lock().expect("lock").as_ref());
+        initialize(&db.lock().expect("lock"));
         project(&db.lock().expect("lock"), "dataset-project");
 
         let dataset = {
