@@ -2064,18 +2064,26 @@ fn query_progress(conn: &Connection) -> Result<Vec<LearnerProgressDto>> {
         )?;
         let latest_evaluation: Option<(String, i64)> = conn
             .query_row(
-                "SELECT e.id, e.created_at_us FROM attempt_evaluations e
-                 JOIN assessment_attempts a ON a.id = e.attempt_id
-                 JOIN assessment_version_objectives avo
-                   ON avo.assessment_version_id = a.assessment_version_id
-                 WHERE a.learner_id = ?1 AND a.learning_project_id = ?2
-                   AND avo.objective_version_id = ?3
-                   AND NOT EXISTS (
-                       SELECT 1 FROM attempt_evaluations later
-                       WHERE later.attempt_id = e.attempt_id
-                         AND later.revision_no > e.revision_no
-                   )
-                 ORDER BY e.created_at_us DESC, e.id DESC LIMIT 1",
+                "SELECT id, created_at_us FROM (
+                    SELECT e.id, e.created_at_us FROM attempt_evaluations e
+                    JOIN assessment_attempts a ON a.id = e.attempt_id
+                    JOIN assessment_version_objectives avo
+                      ON avo.assessment_version_id = a.assessment_version_id
+                    WHERE a.learner_id = ?1 AND a.learning_project_id = ?2
+                      AND avo.objective_version_id = ?3
+                      AND NOT EXISTS (
+                          SELECT 1 FROM attempt_evaluations later
+                          WHERE later.attempt_id = e.attempt_id
+                            AND later.revision_no > e.revision_no
+                      )
+                    UNION ALL
+                    SELECT re.id, re.created_at_us FROM reproduction_evaluations re
+                    JOIN reproduction_submissions rs ON rs.id = re.submission_id
+                    JOIN reproduction_tasks rt ON rt.id = rs.task_id
+                    WHERE rs.learner_id = ?1 AND rt.learning_project_id = ?2
+                      AND rt.objective_version_id = ?3
+                 )
+                 ORDER BY created_at_us DESC, id DESC LIMIT 1",
                 params![learner_id, project_id, objective_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
@@ -2098,12 +2106,13 @@ fn query_progress(conn: &Connection) -> Result<Vec<LearnerProgressDto>> {
             )
             .optional()?;
         let (status, explanation, competency_record_id) = match (&latest_evaluation, &latest_record) {
-            (Some((_, evaluation_at)), Some((record_id, outcome, record_at)))
-                if evaluation_at > record_at =>
+            (Some((evaluation_id, evaluation_at)), Some((record_id, _, record_at)))
+                if evaluation_at > record_at
+                    || (evaluation_at == record_at && evaluation_id > record_id) =>
             {
                 (
                     "reassessment_required".to_string(),
-                    "A newer evaluated attempt exists than the latest competency record; reevaluate the configured mastery rule."
+                    "Newer evaluated learning evidence exists than the latest competency record; reevaluate the configured mastery rule."
                         .to_string(),
                     Some(record_id.clone()),
                 )
@@ -2526,6 +2535,21 @@ mod tests {
         assert_eq!(
             mastery_record.reproduction_evaluation_ids,
             vec![reproduction_evaluation.id]
+        );
+        let later_reproduction_evaluation = evaluate_reproduction(
+            &mut conn,
+            &reproduction_request("second-independent-evaluator".to_string()),
+        )
+        .expect("record a later independent evaluation");
+        let current_progress = query_progress(&conn).expect("derive current Learning progress");
+        let objective_progress = current_progress
+            .iter()
+            .find(|item| item.objective_version_id == objective.id)
+            .expect("find objective progress");
+        assert_eq!(objective_progress.status, "reassessment_required");
+        assert_eq!(
+            objective_progress.latest_evaluation_id.as_deref(),
+            Some(later_reproduction_evaluation.id.as_str())
         );
 
         let stored = query_attempt(&conn, &attempt.id).expect("read attempt history");
