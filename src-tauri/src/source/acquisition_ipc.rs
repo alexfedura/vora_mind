@@ -241,6 +241,6 @@ pub fn src_list_provenance(
     state: State<AppState>,
 ) -> Result<Vec<ProvenanceEventDto>, String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;
-    acquisition::list_provenance(&conn, &target_kind, &target_id)
+    acquisition::list_provenance(&conn, target_kind, &target_id)
 }
 
