@@ -43,6 +43,185 @@ pub enum ResearchProjectStatus {
     Archived,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResearchDomainStatus {
+    Proposed,
+    Active,
+    Deprecated,
+}
+
+impl ResearchDomainStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Proposed => "proposed",
+            Self::Active => "active",
+            Self::Deprecated => "deprecated",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewLifecycleStatus {
+    Draft,
+    Reviewed,
+}
+
+impl ReviewLifecycleStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::Reviewed => "reviewed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PhenomenonStatus {
+    Identified,
+    Characterized,
+    Retired,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservationPlanStatus {
+    Draft,
+    Reviewed,
+    Preregistered,
+    Withdrawn,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservationValueState {
+    Observed,
+    NotMeasured,
+    NotRecorded,
+    Unknown,
+    NotApplicable,
+    Withheld,
+    Invalid,
+}
+
+impl ObservationValueState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Observed => "observed",
+            Self::NotMeasured => "not_measured",
+            Self::NotRecorded => "not_recorded",
+            Self::Unknown => "unknown",
+            Self::NotApplicable => "not_applicable",
+            Self::Withheld => "withheld",
+            Self::Invalid => "invalid",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservationQualityStatus {
+    Unreviewed,
+    Accepted,
+    Excluded,
+    Retracted,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PatternStatus {
+    Candidate,
+    Examined,
+    Supported,
+    Unsupported,
+    Retired,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum IdeaStatus {
+    Captured,
+    Explored,
+    Promoted,
+    Abandoned,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum HypothesisExpectedDirection {
+    Positive,
+    Negative,
+    NonDirectional,
+    Equivalence,
+    Other,
+}
+
+impl HypothesisExpectedDirection {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Positive => "positive",
+            Self::Negative => "negative",
+            Self::NonDirectional => "non_directional",
+            Self::Equivalence => "equivalence",
+            Self::Other => "other",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResearchDesignStatus {
+    Draft,
+    Review,
+    Preregistered,
+    Withdrawn,
+}
+
+impl ResearchDesignStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::Review => "review",
+            Self::Preregistered => "preregistered",
+            Self::Withdrawn => "withdrawn",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GapReviewDecision {
+    Accepted,
+    Rejected,
+}
+
+impl GapReviewDecision {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::Rejected => "rejected",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum HypothesisDesignRelation {
+    Tests,
+    CompetingDesign,
+}
+
+impl HypothesisDesignRelation {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Tests => "tests",
+            Self::CompetingDesign => "competing_design",
+        }
+    }
+}
+
 impl ResearchProjectStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
