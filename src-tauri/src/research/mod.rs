@@ -773,6 +773,8 @@ pub struct HypothesisVariableInput {
 pub struct CreateTypedHypothesisReq {
     pub project_id: String,
     pub research_question_id: String,
+    pub parent_hypothesis_id: Option<String>,
+    pub lineage_rationale: Option<String>,
     pub statement_h0: String,
     pub statement_h1: String,
     pub population_scope: String,
@@ -885,11 +887,7 @@ pub fn create_domain(
 ) -> Result<ResearchDomainDto, String> {
     validate_required(&req.name, "domain name")?;
     if let Some(parent_id) = req.parent_domain_id.as_deref() {
-        if repository::domain_is_descendant(conn, parent_id, parent_id)
-            .map_err(|error| error.to_string())?
-        {
-            return Err("research domain parent cycle is not allowed".into());
-        }
+        repository::validate_domain_parent(conn, parent_id).map_err(|error| error.to_string())?;
     }
     repository::create_domain(conn, &req, &new_id("research_domain"), now_ts_us()?)
         .map_err(|error| error.to_string())
@@ -1207,6 +1205,14 @@ pub fn create_typed_hypothesis(
     conn: &mut Connection,
     req: CreateTypedHypothesisReq,
 ) -> Result<ResearchHypothesisDto, String> {
+    if req.parent_hypothesis_id.is_some() {
+        validate_required(
+            req.lineage_rationale.as_deref().unwrap_or_default(),
+            "hypothesis lineage rationale",
+        )?;
+    } else if req.lineage_rationale.is_some() {
+        return Err("hypothesis lineage rationale requires a parent hypothesis".into());
+    }
     validate_hypothesis_definition(
         &req.statement_h0,
         &req.statement_h1,
@@ -1222,8 +1228,8 @@ pub fn create_typed_hypothesis(
         conn,
         &req,
         &new_id("hypothesis"),
+        &new_id("legacy_hypothesis"),
         &new_id("hypothesis_definition"),
-        &new_id("research_question"),
         now_ts_us()?,
     )
     .map_err(|error| error.to_string())
@@ -1320,14 +1326,14 @@ pub fn link_hypothesis_design(
 
 fn validate_decimal(value: &str, name: &str) -> Result<(), String> {
     let trimmed = value.trim();
-    if trimmed.is_empty()
-        || trimmed.starts_with('+')
-        || trimmed.bytes().any(|byte| {
-            !byte.is_ascii_digit() && byte != b'.' && byte != b'-'
+    let bytes = trimmed.as_bytes();
+    if bytes.is_empty()
+        || bytes.iter().any(|byte| {
+            !byte.is_ascii_digit() && *byte != b'.' && *byte != b'-'
         })
-        || trimmed.bytes().filter(|byte| *byte == b'.').count() > 1
-        || trimmed.bytes().filter(|byte| *byte == b'-').count() > 1
-        || trimmed[1..].contains('-')
+        || bytes.iter().filter(|byte| **byte == b'.').count() > 1
+        || bytes.iter().filter(|byte| **byte == b'-').count() > 1
+        || bytes.iter().skip(1).any(|byte| *byte == b'-')
     {
         return Err(format!("{name} must be a decimal string"));
     }
