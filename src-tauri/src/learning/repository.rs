@@ -2351,6 +2351,67 @@ mod tests {
         )
         .expect("publish assessment");
 
+        let task = create_reproduction_task(
+            &mut conn,
+            &CreateReproductionTaskReq {
+                learning_project_id: project.id.clone(),
+                objective_version_id: objective.id.clone(),
+                rubric_version_id: assessment.rubric_version_id.clone(),
+                title: "Reproduce the explanation".to_string(),
+                task_description: "Provide an independent explanation.".to_string(),
+                conditions: "Use the pinned framework version.".to_string(),
+                expected_result: serde_json::json!({"key": "explanation"}),
+                created_by: None,
+            },
+        )
+        .expect("create reproduction task");
+        assert!(
+            submit_reproduction(
+                &mut conn,
+                &SubmitReproductionReq {
+                    task_id: task.id.clone(),
+                    learner_id: learner.id.clone(),
+                    artifact_uri: None,
+                    artifact_sha256: None,
+                    result: None,
+                    deviations: String::new(),
+                },
+            )
+            .is_err(),
+            "reproduction requires a result or checksum-pinned artifact"
+        );
+        let submission = submit_reproduction(
+            &mut conn,
+            &SubmitReproductionReq {
+                task_id: task.id.clone(),
+                learner_id: learner.id.clone(),
+                artifact_uri: None,
+                artifact_sha256: None,
+                result: Some(serde_json::json!({"key": "learner response"})),
+                deviations: "No deviations".to_string(),
+            },
+        )
+        .expect("submit structured reproduction result");
+        let reproduction_request = |evaluator_id: String| EvaluateReproductionReq {
+            submission_id: submission.id.clone(),
+            evaluator_id,
+            outcome: AssessmentOutcome::Pass,
+            criterion_scores: vec![EvaluationCriterionScoreDto {
+                rubric_criterion_id: assessment.rubric_criteria[0].id.clone(),
+                score: 1.0,
+            }],
+            rationale: "Meets the independent rubric.".to_string(),
+            evidence_description: "Inspected the submitted structured result.".to_string(),
+        };
+        assert!(
+            evaluate_reproduction(&mut conn, &reproduction_request(learner.id.clone())).is_err(),
+            "the learner cannot evaluate their own reproduction"
+        );
+        let reproduction_evaluation =
+            evaluate_reproduction(&mut conn, &reproduction_request("independent-evaluator".to_string()))
+                .expect("evaluate independent reproduction");
+        assert_eq!(reproduction_evaluation.outcome, AssessmentOutcome::Pass);
+
         let attempt = create_attempt(
             &mut conn,
             &CreateAssessmentAttemptReq {
