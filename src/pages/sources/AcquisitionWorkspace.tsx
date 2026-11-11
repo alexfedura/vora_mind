@@ -21,6 +21,7 @@ import {
   srcListSourceVersions,
   srcPublishFrameworkVersion,
   srcRemoveFrameworkItem,
+  srcReorderFrameworkItems,
   srcReviewFrameworkVersion,
   srcReviewKnowledgeExtraction,
   srcUpdateFrameworkVersion,
@@ -593,6 +594,26 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
     }, "Framework membership added.");
   };
 
+  const reorderFrameworkItem = (itemId: string, direction: -1 | 1) => {
+    if (!selectedFrameworkVersion) return;
+    const orderedItemIds = selectedFrameworkVersion.items.map((item) => item.id);
+    const index = orderedItemIds.indexOf(itemId);
+    const targetIndex = index + direction;
+    if (index < 0 || targetIndex < 0 || targetIndex >= orderedItemIds.length) return;
+    [orderedItemIds[index], orderedItemIds[targetIndex]] = [
+      orderedItemIds[targetIndex],
+      orderedItemIds[index],
+    ];
+    void runAction(
+      () =>
+        srcReorderFrameworkItems({
+          frameworkVersionId: selectedFrameworkVersion.id,
+          orderedItemIds,
+        }),
+      "Framework member order updated.",
+    );
+  };
+
   const latestVersion = frameworkVersions[0] ?? null;
   const canCreateSuccessor = latestVersion?.status === "published";
   const membershipKey = (item: FrameworkVersionDto["items"][number]) =>
@@ -1086,7 +1107,11 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                           <p className="break-all font-mono text-[10px] text-gray-500">{item.itemId}</p>
                         </div>
                         {selectedFrameworkVersion.status === "draft" && (
-                          <button disabled={busy} onClick={() => void runAction(() => srcRemoveFrameworkItem(item.id), "Framework member removed from draft.")} className="text-[10px] text-rose-300">Remove</button>
+                          <div className="flex shrink-0 gap-2">
+                            <button disabled={busy || item.itemOrder === 0} onClick={() => reorderFrameworkItem(item.id, -1)} className="text-[10px] text-gray-300 disabled:opacity-40">Up</button>
+                            <button disabled={busy || item.itemOrder === selectedFrameworkVersion.items.length - 1} onClick={() => reorderFrameworkItem(item.id, 1)} className="text-[10px] text-gray-300 disabled:opacity-40">Down</button>
+                            <button disabled={busy} onClick={() => void runAction(() => srcRemoveFrameworkItem(item.id), "Framework member removed from draft.")} className="text-[10px] text-rose-300">Remove</button>
+                          </div>
                         )}
                       </li>
                     ))}
