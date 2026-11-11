@@ -114,15 +114,19 @@ export const ResearchWorkspacePage: React.FC = () => {
     event.preventDefault();
     const target = event.currentTarget;
     const form = new FormData(target);
-    const project = await run(() => researchService.createProject({
-      title: String(form.get("title") ?? ""),
-      aim: String(form.get("aim") ?? ""),
-      pathways,
-      createdBy: null,
-    }));
-    setProjectId(project.id);
-    setQuestionProjectId(project.id);
-    target.reset();
+    try {
+      const project = await run(() => researchService.createProject({
+        title: String(form.get("title") ?? ""),
+        aim: String(form.get("aim") ?? ""),
+        pathways,
+        createdBy: null,
+      }));
+      setProjectId(project.id);
+      setQuestionProjectId(project.id);
+      target.reset();
+    } catch {
+      // The hook exposes the failure in the page-level alert.
+    }
   };
 
   const createDomain = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
