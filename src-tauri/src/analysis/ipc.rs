@@ -147,6 +147,6 @@ pub fn analysis_create_finding_relation(
     state: State<AppState>,
     request: CreateFindingRelationReq,
 ) -> Result<FindingRelationDto, String> {
-    let conn = state.db.lock().map_err(|error| error.to_string())?;
-    repository::create_finding_relation(&conn, &request).map_err(|error| error.to_string())
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    repository::create_finding_relation(&mut conn, &request).map_err(|error| error.to_string())
 }
