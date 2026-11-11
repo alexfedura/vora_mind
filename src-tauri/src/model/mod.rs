@@ -237,6 +237,15 @@ pub struct ModelDatasetUseReq {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct ModelExperimentRelationReq {
+    pub design_version_id: String,
+    pub experiment_run_id: Option<String>,
+    pub relation_kind: String,
+    pub rationale: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateModelVersionReq {
     pub project_id: String,
     pub model_id: String,
@@ -254,7 +263,7 @@ pub struct CreateModelVersionReq {
     pub impacts: Vec<ModelImpactReq>,
     pub hypotheses: Vec<ModelRelationReq>,
     pub findings: Vec<ModelRelationReq>,
-    pub experiments: Vec<ModelRelationReq>,
+    pub experiments: Vec<ModelExperimentRelationReq>,
     pub dataset_uses: Vec<ModelDatasetUseReq>,
     pub evidence_ids: Vec<String>,
     pub created_by: Option<String>,
