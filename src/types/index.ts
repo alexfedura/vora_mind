@@ -961,6 +961,19 @@ export interface CreateLiteratureReviewReq {
   createdBy: string | null;
 }
 
+export interface CreateReviewedLiteratureReviewReq {
+  projectId: string;
+  title: string;
+  searchScope: string;
+  sourceId: string;
+  sourceVersionId: string;
+  sourceLocationId: string | null;
+  sourceClaimId: string | null;
+  citationNote: string;
+  createdBy: string | null;
+  reviewerId: string | null;
+}
+
 export interface AddLiteratureSourceReq {
   literatureReviewId: string;
   sourceId: string;

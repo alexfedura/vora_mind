@@ -17,6 +17,7 @@ import type {
   CreateResearchGapReq,
   CreateResearchProjectReq,
   CreateResearchQuestionReq,
+  CreateReviewedLiteratureReviewReq,
   CreateTypedHypothesisReq,
   DatasetVersionReferenceDto,
   HypothesisModelReferenceDto,
@@ -66,6 +67,8 @@ export const researchService = {
   }),
   createLiteratureReview: (request: CreateLiteratureReviewReq) =>
     invoke<LiteratureReviewDto>("research_create_literature_review", { request }),
+  createReviewedLiteratureReview: (request: CreateReviewedLiteratureReviewReq) =>
+    invoke<LiteratureReviewDto>("research_create_reviewed_literature_review", { request }),
   addLiteratureSource: (request: AddLiteratureSourceReq) =>
     invoke<LiteratureReviewSourceDto>("research_add_literature_source", { request }),
   reviewLiteratureReview: (reviewId: string, reviewerId: string | null) =>
