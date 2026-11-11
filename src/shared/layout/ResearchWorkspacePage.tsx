@@ -112,7 +112,8 @@ export const ResearchWorkspacePage: React.FC = () => {
 
   const createProject = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     const project = await run(() => researchService.createProject({
       title: String(form.get("title") ?? ""),
       aim: String(form.get("aim") ?? ""),
@@ -121,13 +122,14 @@ export const ResearchWorkspacePage: React.FC = () => {
     }));
     setProjectId(project.id);
     setQuestionProjectId(project.id);
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const createDomain = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     if (!projectId) return;
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     await act(async () => {
       const domain = await researchService.createDomain({
         name: String(form.get("name") ?? ""),
@@ -137,12 +139,13 @@ export const ResearchWorkspacePage: React.FC = () => {
       });
       await researchService.assignDomain(projectId, domain.id, "Assigned to this research project.");
     });
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const createPriorAssessment = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     await act(async () => {
       const assessment = await researchService.createPriorAssessment({
         projectId,
@@ -153,13 +156,14 @@ export const ResearchWorkspacePage: React.FC = () => {
       });
       await researchService.reviewPriorAssessment(assessment.id, null);
     });
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const createLiteratureReview = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     if (!selectedSource) return;
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     await act(async () => {
       const review = await researchService.createLiteratureReview({
         projectId,
@@ -177,29 +181,34 @@ export const ResearchWorkspacePage: React.FC = () => {
       });
       await researchService.reviewLiteratureReview(review.id, null);
     });
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const createGap = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const gap = await run(() => researchService.createGap({
-      projectId,
-      domainId: null,
-      title: String(form.get("title") ?? ""),
-      statement: String(form.get("statement") ?? ""),
-      createdBy: null,
-    }));
-    const evidenceId = String(form.get("evidenceId") ?? "");
-    const evidenceKind = String(form.get("evidenceKind") ?? "");
-    if (evidenceId) {
-      await act(() => researchService.addGapEvidence({
+    const target = event.currentTarget;
+    const form = new FormData(target);
+    try {
+      const gap = await run(() => researchService.createGap({
+        projectId,
+        domainId: null,
+        title: String(form.get("title") ?? ""),
+        statement: String(form.get("statement") ?? ""),
+        createdBy: null,
+      }));
+      const evidenceId = String(form.get("evidenceId") ?? "");
+      const evidenceKind = String(form.get("evidenceKind") ?? "");
+      if (evidenceId) {
+        await run(() => researchService.addGapEvidence({
         gapId: gap.id,
         literatureReviewId: evidenceKind === "literature" ? evidenceId : null,
         priorAssessmentId: evidenceKind === "prior" ? evidenceId : null,
-      }));
+        }));
+      }
+      target.reset();
+    } catch {
+      // The hook exposes the failure in the page-level alert.
     }
-    event.currentTarget.reset();
   };
 
   const addGapEvidence = async (gap: ResearchGapDto, form: HTMLFormElement): Promise<void> => {
@@ -216,7 +225,8 @@ export const ResearchWorkspacePage: React.FC = () => {
 
   const createQuestion = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     const gapId = String(form.get("gapId") ?? "");
     await act(() => researchService.createQuestion({
       projectId: questionProjectId || null,
@@ -227,12 +237,13 @@ export const ResearchWorkspacePage: React.FC = () => {
       rationale: String(form.get("rationale") ?? ""),
       createdBy: null,
     }));
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const createPhenomenon = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     await act(() => researchService.createPhenomenon({
       projectId,
       domainId: null,
@@ -243,12 +254,13 @@ export const ResearchWorkspacePage: React.FC = () => {
       temporalBoundary: String(form.get("temporalBoundary") ?? ""),
       createdBy: null,
     }));
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const createObservationPlan = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     await act(async () => {
       const plan = await researchService.createObservationPlan({
         projectId,
@@ -263,7 +275,7 @@ export const ResearchWorkspacePage: React.FC = () => {
       const version = plan.versions[0];
       if (version) setSelectedPlanVersionId(version.id);
     });
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const createObservation = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -273,7 +285,8 @@ export const ResearchWorkspacePage: React.FC = () => {
       .find((item) => item.id === selectedPlanVersionId);
     const plan = workspace?.observationPlans.find((item) => item.id === version?.planId);
     if (!version || !plan) return;
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     const state = String(form.get("valueState") ?? "observed");
     await act(() => researchService.createObservation({
       projectId,
@@ -290,12 +303,13 @@ export const ResearchWorkspacePage: React.FC = () => {
       sampleIdentifier: String(form.get("sampleId") ?? "") || null,
       createdBy: null,
     }));
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const createPattern = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     const observationId = String(form.get("observationId") ?? "");
     await act(async () => {
       await researchService.createPattern({
@@ -309,12 +323,13 @@ export const ResearchWorkspacePage: React.FC = () => {
         createdBy: null,
       });
     });
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const createIdea = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     const originKind = String(form.get("originKind") ?? "");
     const originId = String(form.get("originId") ?? "");
     await act(() => researchService.createIdea({
@@ -327,12 +342,13 @@ export const ResearchWorkspacePage: React.FC = () => {
       questionId: originKind === "question" ? originId : null,
       createdBy: null,
     }));
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const createHypothesis = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     const questionId = String(form.get("questionId") ?? "");
     await act(() => researchService.createTypedHypothesis({
       projectId,
@@ -368,7 +384,7 @@ export const ResearchWorkspacePage: React.FC = () => {
       ],
       createdBy: null,
     }));
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const createDesign = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -376,7 +392,8 @@ export const ResearchWorkspacePage: React.FC = () => {
     const hypothesis = projectHypotheses.find((item) => item.id === selectedHypothesisId);
     const definition = hypothesis ? latest(hypothesis.definitions) : undefined;
     if (!hypothesis || !definition) return;
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     await act(async () => {
       const design = await researchService.createDesign({
         projectId,
@@ -393,7 +410,7 @@ export const ResearchWorkspacePage: React.FC = () => {
         createdBy: null,
       });
     });
-    event.currentTarget.reset();
+    target.reset();
   };
 
   const updateQuestionStatus = (question: ResearchQuestionDto, status: "review" | "accepted" | "deferred" | "rejected") =>
