@@ -2033,3 +2033,290 @@ export interface CreateFindingRelationReq {
   createdBy: string | null;
 }
 
+export type ModelChangeClass = "refinement" | "extension" | "revision" | "replacement";
+export type ModelRelationKind = "contributes_to" | "contradicts" | "qualifies" | "tested_in";
+export type ModelEvidencePolarity = "supports" | "contradicts" | "qualifies" | "neutral";
+export type ModelArtifactRef =
+  | { kind: "analysis_output"; id: string }
+  | { kind: "experiment_run"; id: string }
+  | { kind: "dataset_version"; id: string }
+  | { kind: "research_observation"; id: string }
+  | { kind: "source_version_segment"; id: string }
+  | { kind: "source_claim"; id: string }
+  | { kind: "finding_version"; id: string };
+export type ModelValidationTarget =
+  | { kind: "model_version"; id: string }
+  | { kind: "finding_version"; id: string }
+  | { kind: "source_claim"; id: string };
+export type ModelValidationOutcome = "pass" | "fail" | "inconclusive";
+
+export interface CreateModelReq {
+  displayName: string;
+  description: string;
+  originProjectId: string | null;
+  domainId: string | null;
+  createdBy: string | null;
+}
+
+export interface ModelDto {
+  id: string;
+  displayName: string;
+  description: string;
+  originProjectId: string | null;
+  domainId: string | null;
+  status: "proposed" | "active" | "deprecated" | "replaced" | "retired";
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface ModelSpecificationDto {
+  humanReadable: string;
+  machineReadable: Record<string, unknown>;
+}
+
+export interface ModelParameterReq {
+  name: string;
+  value: string;
+  valueKind: "decimal" | "integer" | "boolean" | "string" | "json";
+  unit: string | null;
+  lowerBound: string | null;
+  upperBound: string | null;
+  defaultValue: string | null;
+  role: string;
+  tuneable: boolean;
+}
+
+export interface ModelDependencyReq {
+  name: string;
+  version: string;
+  sourceUri: string | null;
+  checksumSha256: string | null;
+}
+
+export interface ModelArtifactReq {
+  artifactKind: string;
+  title: string;
+  artifactUri: string;
+  checksumSha256: string;
+  mediaType: string | null;
+  byteLength: number | null;
+}
+
+export type ModelImpactKind = "added" | "changed" | "removed" | "affected";
+export type ModelImpactTarget =
+  | { kind: "source_claim"; claimId: string }
+  | { kind: "hypothesis_version"; hypothesisVersionId: string }
+  | { kind: "finding_version"; findingVersionId: string }
+  | { kind: "assumption"; assumptionKey: string };
+
+export interface ModelImpactReq {
+  target: ModelImpactTarget;
+  impactKind: ModelImpactKind;
+  previousStatement: string | null;
+  currentStatement: string | null;
+  rationale: string;
+}
+
+export interface ModelAssumptionReq {
+  key: string;
+  statement: string;
+}
+
+export interface ModelParentReq {
+  versionId: string;
+  rationale: string;
+}
+
+export interface ModelRelationReq {
+  targetId: string;
+  relationKind: ModelRelationKind;
+  rationale: string;
+}
+
+export interface ModelDatasetUseReq {
+  datasetVersionId: string;
+  role: DatasetRole;
+  splitGroupId: string | null;
+  rationale: string;
+}
+
+export interface ModelExperimentRelationReq {
+  designVersionId: string;
+  experimentRunId: string | null;
+  relationKind: "contributes_to" | "tested_in";
+  rationale: string;
+}
+
+export interface CreateModelVersionReq {
+  projectId: string;
+  modelId: string;
+  changeClass: ModelChangeClass;
+  changeRationale: string;
+  expectedImplications: string;
+  specification: ModelSpecificationDto;
+  assumptions: ModelAssumptionReq[];
+  scope: string;
+  dependencies: ModelDependencyReq[];
+  environment: Record<string, unknown>;
+  parents: ModelParentReq[];
+  parameters: ModelParameterReq[];
+  artifacts: ModelArtifactReq[];
+  impacts: ModelImpactReq[];
+  hypotheses: ModelRelationReq[];
+  findings: ModelRelationReq[];
+  experiments: ModelExperimentRelationReq[];
+  datasetUses: ModelDatasetUseReq[];
+  evidenceIds: string[];
+  createdBy: string | null;
+}
+
+export interface ModelParameterDto extends ModelParameterReq {}
+export interface ModelArtifactDto extends ModelArtifactReq {
+  id: string;
+}
+
+export interface ModelVersionDto {
+  id: string;
+  modelId: string;
+  versionNo: number;
+  createdInProjectId: string;
+  changeClass: ModelChangeClass;
+  changeRationale: string;
+  expectedImplications: string;
+  specification: ModelSpecificationDto;
+  assumptions: ModelAssumptionReq[];
+  scope: string;
+  dependencies: ModelDependencyReq[];
+  environment: Record<string, unknown>;
+  parents: ModelParentReq[];
+  parameters: ModelParameterDto[];
+  artifacts: ModelArtifactDto[];
+  impacts: ModelImpactReq[];
+  hypotheses: ModelRelationReq[];
+  findings: ModelRelationReq[];
+  experiments: ModelExperimentRelationReq[];
+  datasetUses: ModelDatasetUseReq[];
+  evidenceIds: string[];
+  contentSha256: string;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface CreateModelEvidenceReq {
+  modelVersionId: string;
+  artifact: ModelArtifactRef;
+  polarity: ModelEvidencePolarity;
+  scope: string;
+  qualityRationale: string;
+  limitations: string;
+  provenance: Record<string, unknown>;
+  createdBy: string | null;
+}
+
+export interface ModelEvidenceDto extends CreateModelEvidenceReq {
+  id: string;
+  createdAtUs: number;
+}
+
+export interface CreateModelEvaluationReq {
+  projectId: string;
+  modelVersionId: string;
+  analysisRunId: string;
+  analysisRunInputId: string;
+  datasetVersionId: string;
+  analysisMetricId: string;
+  role: DatasetRole;
+  splitGroupId: string | null;
+  limitations: string;
+  createdBy: string | null;
+}
+
+export interface ModelEvaluationDto extends CreateModelEvaluationReq {
+  id: string;
+  metricDefinitionVersionId: string;
+  estimand: string;
+  sampleSize: number;
+  effectEstimate: string;
+  unit: string;
+  uncertaintyKind: "interval" | "not_meaningful";
+  uncertaintyLower: string | null;
+  uncertaintyUpper: string | null;
+  uncertaintyLevel: string | null;
+  uncertaintyReason: string | null;
+  evaluatedAtUs: number;
+}
+
+export interface CreateModelValidationReq {
+  projectId: string;
+  target: ModelValidationTarget;
+  criteria: Array<string | { criterion: string }>;
+  scope: string;
+  populationScope: string;
+  evaluationMethod: string;
+  evaluatorIdentity: string;
+  independenceState: "independent" | "not_independent" | "unknown";
+  independenceRationale: string;
+  conflictOfInterest: string;
+  createdBy: string | null;
+}
+
+export interface FinalizeModelValidationReq {
+  validationId: string;
+  outcome: ModelValidationOutcome;
+  rationale: string;
+  deviations: string[];
+  analysisEvidenceIds: string[];
+  modelEvidenceIds: string[];
+  actorId: string | null;
+}
+
+export interface ModelValidationDto extends CreateModelValidationReq {
+  id: string;
+  outcome: ModelValidationOutcome | null;
+  resultRationale: string | null;
+  deviations: string[];
+  analysisEvidenceIds: string[];
+  modelEvidenceIds: string[];
+  createdAtUs: number;
+  finalizedAtUs: number | null;
+}
+
+export interface ModelReplicationDatasetReq {
+  datasetVersionId: string;
+  role: DatasetRole;
+  splitGroupId: string | null;
+}
+
+export interface CreateModelReplicationReq {
+  projectId: string;
+  modelVersionId: string;
+  originalExperimentRunId: string;
+  replicationKind: "direct" | "conceptual";
+  independentTeamOperator: string;
+  protocolContext: string;
+  datasetContext: Record<string, unknown>;
+  datasets: ModelReplicationDatasetReq[];
+  outcome: "supports" | "contradicts" | "mixed" | "inconclusive";
+  resultSummary: string;
+  deviations: string[];
+  provenance: Record<string, unknown>;
+  analysisEvidenceIds: string[];
+  modelEvidenceIds: string[];
+  createdBy: string | null;
+}
+
+export interface ModelReplicationDto extends CreateModelReplicationReq {
+  id: string;
+  originalDesignVersionId: string;
+  createdAtUs: number;
+}
+
+export interface ModelWorkspaceDto {
+  models: ModelDto[];
+  versions: ModelVersionDto[];
+  evidence: ModelEvidenceDto[];
+  evaluations: ModelEvaluationDto[];
+  validations: ModelValidationDto[];
+  replications: ModelReplicationDto[];
+}
+
