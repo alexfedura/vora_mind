@@ -150,12 +150,15 @@ CREATE TABLE research_gap_prior_assessments (
 );
 
 CREATE TABLE research_gap_review_exceptions (
-    gap_id TEXT PRIMARY KEY REFERENCES research_gaps(id) ON DELETE RESTRICT,
+    id TEXT PRIMARY KEY,
+    gap_id TEXT NOT NULL REFERENCES research_gaps(id) ON DELETE RESTRICT,
     rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
     reviewer_id TEXT,
     review_decision TEXT NOT NULL CHECK (review_decision IN ('accepted', 'rejected')),
     reviewed_at_us INTEGER NOT NULL
 );
+CREATE INDEX idx_research_gap_review_exceptions
+    ON research_gap_review_exceptions(gap_id, reviewed_at_us, id);
 
 CREATE TRIGGER research_gap_acceptance_requires_reviewed_basis
 BEFORE UPDATE OF lifecycle_status ON research_gaps
