@@ -213,6 +213,9 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
   const [workspace, setWorkspace] = useState<AnalysisWorkspaceDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [findingPropositionKind, setFindingPropositionKind] =
+    useState<PropositionRefDto["kind"]>("source_claim");
+  const [findingPropositionId, setFindingPropositionId] = useState("");
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!projectId) {
@@ -246,11 +249,6 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
       setBusy(false);
     }
   };
-
-  const matchingEvidence = (
-    kind: PropositionRefDto["kind"],
-    id: string,
-  ) => (workspace?.evidence ?? []).filter((item) => isFindingProposition(item.proposition, kind, id));
 
   const createEvidence = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -415,12 +413,29 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
           <h4 className="text-sm font-medium text-gray-200">Synthesize a finding version</h4>
           <div className="grid grid-cols-2 gap-2">
             <label className="text-xs text-gray-400">Proposition type
-              <select className={inputClass} name="propositionKind">
+              <select
+                className={inputClass}
+                name="propositionKind"
+                value={findingPropositionKind}
+                onChange={(event) => {
+                  if (isPropositionKind(event.target.value) && event.target.value !== "finding_version") {
+                    setFindingPropositionKind(event.target.value);
+                  }
+                }}
+              >
                 <option value="source_claim">Source claim</option>
                 <option value="hypothesis_version">Hypothesis version</option>
               </select>
             </label>
-            <label className="text-xs text-gray-400">Proposition ID<input className={inputClass} name="propositionId" required /></label>
+            <label className="text-xs text-gray-400">Proposition ID
+              <input
+                className={inputClass}
+                name="propositionId"
+                value={findingPropositionId}
+                onChange={(event) => setFindingPropositionId(event.target.value)}
+                required
+              />
+            </label>
           </div>
           <label className="block text-xs text-gray-400">Title<input className={inputClass} name="title" required /></label>
           <label className="block text-xs text-gray-400">Finding statement<textarea className={inputClass} name="statement" required rows={2} /></label>
@@ -443,9 +458,15 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
           </label>
           <label className="block text-xs text-gray-400">Proposition-matched evidence
             <select className={inputClass} name="evidenceIds" multiple required size={Math.min(Math.max(workspace?.evidence.length ?? 0, 2), 5)}>
-              {(workspace?.evidence ?? []).map((item) => (
+              {(workspace?.evidence ?? [])
+                .filter((item) => findingPropositionId && isFindingProposition(
+                  item.proposition,
+                  findingPropositionKind,
+                  findingPropositionId,
+                ))
+                .map((item) => (
                 <option key={item.id} value={item.id}>{item.polarity} · {item.id}</option>
-              ))}
+                ))}
             </select>
           </label>
           <div className="grid grid-cols-2 gap-2">
