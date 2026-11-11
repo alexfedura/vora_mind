@@ -139,7 +139,7 @@ erDiagram
     EVIDENCE ||--o{ RESEARCH_FINDING : informs
 
     MODEL ||--o{ MODEL_VERSION : versions
-    MODEL_VERSION ||--|| MODEL_SPECIFICATION_VERSION : specifies
+    MODEL_SPECIFICATION_VERSION ||--o{ MODEL_VERSION : implemented_by
     MODEL_VERSION ||--o{ MODEL_EVALUATION : evaluated_by
     DATASET_VERSION ||--o{ MODEL_EVALUATION : evaluated_against
     VALIDATION ||--o{ MODEL_VERSION : validates_exact_version

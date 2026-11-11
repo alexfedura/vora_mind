@@ -123,22 +123,24 @@ The JSON fixture must contain every nullable property with `null` when absent. `
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "entityType", rename_all = "snake_case")]
 pub enum ScientificEntityRefDto {
+    #[serde(rename_all = "camelCase")]
     Source {
         entity_id: SourceId,
         version_id: Option<SourceVersionId>,
     },
+    #[serde(rename_all = "camelCase")]
     SourceClaim {
         entity_id: SourceClaimId,
-        version_id: Option<SourceClaimVersionId>,
     },
+    #[serde(rename_all = "camelCase")]
     ResearchProject {
         entity_id: ResearchProjectId,
-        version_id: Option<ResearchProjectVersionId>,
     },
+    #[serde(rename_all = "camelCase")]
     ResearchFinding {
         entity_id: ResearchFindingId,
-        version_id: Option<ResearchFindingVersionId>,
     },
+    #[serde(rename_all = "camelCase")]
     Model {
         entity_id: ModelId,
         version_id: Option<ModelVersionId>,
@@ -161,9 +163,9 @@ pub struct ScientificRelationDto {
 ```ts
 type ScientificEntityRefDto =
   | { entityType: "source"; entityId: SourceId; versionId: SourceVersionId | null }
-  | { entityType: "source_claim"; entityId: SourceClaimId; versionId: SourceClaimVersionId | null }
-  | { entityType: "research_project"; entityId: ResearchProjectId; versionId: ResearchProjectVersionId | null }
-  | { entityType: "research_finding"; entityId: ResearchFindingId; versionId: ResearchFindingVersionId | null }
+  | { entityType: "source_claim"; entityId: SourceClaimId }
+  | { entityType: "research_project"; entityId: ResearchProjectId }
+  | { entityType: "research_finding"; entityId: ResearchFindingId }
   | { entityType: "model"; entityId: ModelId; versionId: ModelVersionId | null };
 
 interface ScientificRelationDto {
