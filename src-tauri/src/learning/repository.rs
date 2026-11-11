@@ -2226,6 +2226,21 @@ mod tests {
         let v2_project = create_learning_project(&mut conn, &learner.id, "framework-a-v2");
         assert_eq!(v1_project.framework_version_id, "framework-a-v1");
         assert_eq!(v2_project.framework_version_id, "framework-a-v2");
+        let objective = create_objective_version(
+            &mut conn,
+            &CreateLearningObjectiveReq {
+                objective_id: None,
+                learning_project_id: v1_project.id.clone(),
+                title: "Persisted objective".to_string(),
+                observable_outcome: "The learner can explain it".to_string(),
+                criteria_text: "Explanation is accurate".to_string(),
+                level: "introductory".to_string(),
+                parent_version_id: None,
+                prerequisite_version_ids: Vec::new(),
+                created_by: None,
+            },
+        )
+        .expect("create persisted objective");
 
         let update = conn.execute(
             "UPDATE learning_projects SET framework_version_id = 'framework-a-v2'
@@ -2249,6 +2264,14 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM learning_projects", [], |row| row.get(0))
             .expect("read projects after restart");
         assert_eq!(project_count, 2);
+        let persisted_workspace = workspace(&reopened_conn).expect("restore Learning workspace");
+        assert!(persisted_workspace.objectives.iter().any(|item| item.id == objective.id));
+        let progress = persisted_workspace
+            .progress
+            .iter()
+            .find(|item| item.objective_version_id == objective.id)
+            .expect("restore objective progress");
+        assert_eq!(progress.status, "not_started");
         drop(reopened_conn);
         std::fs::remove_file(path).expect("remove persistent test database");
     }
