@@ -2150,6 +2150,71 @@ pub fn create_research_design(
     query_design_version(conn, version_id)
 }
 
+pub fn create_linked_research_design(
+    conn: &mut Connection,
+    req: &CreateLinkedResearchDesignReq,
+    design_id: &str,
+    version_id: &str,
+    now: i64,
+) -> Result<ResearchExperimentDesignVersionDto> {
+    let tx = conn.transaction()?;
+    let hypothesis_project: String = tx.query_row(
+        "SELECT h.project_id
+         FROM hypothesis_definition_versions v
+         JOIN research_hypotheses h ON h.id = v.hypothesis_id
+         WHERE v.id = ?1",
+        [&req.hypothesis_version_id],
+        |row| row.get(0),
+    )?;
+    if hypothesis_project != req.project_id {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    tx.execute(
+        "INSERT INTO research_experiment_designs
+            (id, project_id, title, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![design_id, req.project_id, req.title.trim(), req.created_by, now],
+    )?;
+    tx.execute(
+        "INSERT INTO research_experiment_design_versions
+            (id, design_id, version_no, description, protocol, lifecycle_status, created_by, created_at_us)
+         VALUES (?1, ?2, 1, ?3, ?4, 'draft', ?5, ?6)",
+        params![
+            version_id,
+            design_id,
+            req.description,
+            req.protocol,
+            req.created_by,
+            now
+        ],
+    )?;
+    tx.execute(
+        "INSERT INTO hypothesis_design_links
+            (hypothesis_version_id, design_version_id, relationship_kind,
+             rationale, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            req.hypothesis_version_id,
+            version_id,
+            req.relationship_kind.as_str(),
+            req.rationale,
+            req.created_by,
+            now
+        ],
+    )?;
+    insert_event(
+        &tx,
+        "experiment_design",
+        design_id,
+        "draft_version_created_and_linked",
+        req.created_by.as_deref(),
+        &req.rationale,
+        now,
+    )?;
+    tx.commit()?;
+    query_design_version(conn, version_id)
+}
+
 pub fn transition_research_design(
     conn: &Connection,
     version_id: &str,

@@ -1050,6 +1050,19 @@ pub struct CreateResearchDesignReq {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct CreateLinkedResearchDesignReq {
+    pub project_id: String,
+    pub title: String,
+    pub description: String,
+    pub protocol: String,
+    pub hypothesis_version_id: String,
+    pub relationship_kind: HypothesisDesignRelation,
+    pub rationale: String,
+    pub created_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct LinkHypothesisDesignReq {
     pub hypothesis_version_id: String,
     pub design_version_id: String,
@@ -1542,6 +1555,24 @@ pub fn create_research_design(
     validate_required(&req.description, "experiment-design description")?;
     validate_required(&req.protocol, "experiment-design protocol")?;
     repository::create_research_design(
+        conn,
+        &req,
+        &new_id("experiment_design"),
+        &new_id("experiment_design_version"),
+        now_ts_us()?,
+    )
+    .map_err(|error| error.to_string())
+}
+
+pub fn create_linked_research_design(
+    conn: &mut Connection,
+    req: CreateLinkedResearchDesignReq,
+) -> Result<ResearchExperimentDesignVersionDto, String> {
+    validate_required(&req.title, "experiment-design title")?;
+    validate_required(&req.description, "experiment-design description")?;
+    validate_required(&req.protocol, "experiment-design protocol")?;
+    validate_required(&req.rationale, "hypothesis-design rationale")?;
+    repository::create_linked_research_design(
         conn,
         &req,
         &new_id("experiment_design"),
