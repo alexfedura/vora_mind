@@ -555,13 +555,47 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
           <details key={model.id} className="rounded-lg border border-[#343741] p-3" open={model.id === selectedModelId}>
             <summary className="cursor-pointer text-sm font-medium text-white">{model.displayName} · {model.status} · {model.id}</summary>
             <p className="mt-2 text-xs text-gray-400">{model.description} · origin {model.originProjectId ?? "workspace reusable"}</p>
+            {model.status === "proposed" && (
+              <button type="button" className={buttonClass} disabled={busy} onClick={() => void perform(() =>
+                modelService.transition({
+                  modelId: model.id,
+                  nextStatus: "active",
+                  rationale: "Model identity activated from the Research workspace.",
+                  actorId: null,
+                }))}>
+                Activate model
+              </button>
+            )}
             {(workspace?.versions ?? []).filter((version) => version.modelId === model.id).map((version) => (
               <details key={version.id} className="mt-2 rounded border border-[#343741] p-3">
                 <summary className="cursor-pointer text-xs text-gray-200">
-                  v{version.versionNo} · {version.changeClass} · {version.createdAtUs} · SHA-256 {version.contentSha256}
+                  v{version.versionNo} · {version.lifecycleStatus} · {version.changeClass} · {version.createdAtUs} · SHA-256 {version.contentSha256}
                 </summary>
+                {version.lifecycleStatus === "draft" && (
+                  <button type="button" className={buttonClass} disabled={busy} onClick={() => void perform(() =>
+                    modelService.transitionVersion({
+                      versionId: version.id,
+                      nextStatus: "review",
+                      rationale: "Submitted for model version review.",
+                      actorId: null,
+                    }))}>
+                    Submit for review
+                  </button>
+                )}
+                {version.lifecycleStatus === "review" && (
+                  <button type="button" className={buttonClass} disabled={busy} onClick={() => void perform(() =>
+                    modelService.transitionVersion({
+                      versionId: version.id,
+                      nextStatus: "released",
+                      rationale: "Released as an immutable model version.",
+                      actorId: null,
+                    }))}>
+                    Release version
+                  </button>
+                )}
                 <div className="mt-2 space-y-2 text-xs text-gray-400">
                   <p>{version.changeRationale} · implications: {version.expectedImplications}</p>
+                  <p>Lifecycle history: {version.lifecycleEvents.map((item) => `${item.status} (${item.rationale})`).join(" → ")}</p>
                   <p>Parents: {version.parents.map((parent) => parent.versionId).join(", ") || "initial baseline"}</p>
                   <p>Scope: {version.scope}</p>
                   <pre className="overflow-auto whitespace-pre-wrap rounded bg-[#101114] p-2">{version.specification.humanReadable}{"\n"}{JSON.stringify(version.specification.machineReadable, null, 2)}</pre>
