@@ -85,6 +85,23 @@ BEFORE DELETE ON source_version_segments
 BEGIN
     SELECT RAISE(ABORT, 'source version locations are immutable');
 END;
+CREATE TRIGGER source_version_segments_validate_context
+BEFORE INSERT ON source_version_segments
+WHEN
+    (NEW.legacy_segment_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM segments s
+        WHERE s.id = NEW.legacy_segment_id AND s.source_id = NEW.source_id
+    ))
+    OR
+    (NEW.parent_segment_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM source_version_segments p
+        WHERE p.id = NEW.parent_segment_id
+          AND p.source_id = NEW.source_id
+          AND p.source_version_id = NEW.source_version_id
+    ))
+BEGIN
+    SELECT RAISE(ABORT, 'source version location context mismatch');
+END;
 
 CREATE TABLE knowledge_extractions (
     id TEXT PRIMARY KEY,
@@ -144,6 +161,17 @@ BEFORE DELETE ON knowledge_extractions
 BEGIN
     SELECT RAISE(ABORT, 'extractions are immutable');
 END;
+CREATE TRIGGER knowledge_extractions_validate_parent
+BEFORE INSERT ON knowledge_extractions
+WHEN NEW.parent_extraction_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM knowledge_extractions p
+    WHERE p.id = NEW.parent_extraction_id
+      AND p.source_id = NEW.source_id
+      AND p.source_version_id = NEW.source_version_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'parent extraction must use the same source version');
+END;
 
 CREATE TABLE extraction_reviews (
     id TEXT PRIMARY KEY,
@@ -188,6 +216,22 @@ CREATE TABLE extraction_supersessions (
     created_at_us INTEGER NOT NULL,
     CHECK (prior_extraction_id <> replacement_extraction_id)
 );
+CREATE TRIGGER extraction_supersessions_validate_context
+BEFORE INSERT ON extraction_supersessions
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM knowledge_extractions prior
+    JOIN knowledge_extractions replacement
+      ON replacement.id = NEW.replacement_extraction_id
+    WHERE prior.id = NEW.prior_extraction_id
+      AND prior.source_id = replacement.source_id
+      AND prior.source_version_id = replacement.source_version_id
+      AND prior.source_segment_id = replacement.source_segment_id
+      AND replacement.parent_extraction_id = prior.id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'replacement must preserve exact extraction provenance');
+END;
 CREATE TRIGGER extraction_supersessions_no_update
 BEFORE UPDATE ON extraction_supersessions
 BEGIN
