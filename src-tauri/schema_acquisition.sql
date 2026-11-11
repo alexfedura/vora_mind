@@ -25,6 +25,16 @@ CREATE TABLE source_versions (
 );
 CREATE INDEX idx_source_versions_source
     ON source_versions(source_id, captured_at_us DESC, id);
+CREATE TRIGGER source_versions_no_update
+BEFORE UPDATE ON source_versions
+BEGIN
+    SELECT RAISE(ABORT, 'source_versions are immutable');
+END;
+CREATE TRIGGER source_versions_no_delete
+BEFORE DELETE ON source_versions
+BEGIN
+    SELECT RAISE(ABORT, 'source_versions are immutable');
+END;
 
 CREATE TABLE source_version_segments (
     id TEXT PRIMARY KEY,
@@ -65,6 +75,16 @@ CREATE INDEX idx_source_version_segments_version
     ON source_version_segments(source_version_id, order_index, id);
 CREATE INDEX idx_source_version_segments_legacy
     ON source_version_segments(legacy_segment_id);
+CREATE TRIGGER source_version_segments_no_update
+BEFORE UPDATE ON source_version_segments
+BEGIN
+    SELECT RAISE(ABORT, 'source version locations are immutable');
+END;
+CREATE TRIGGER source_version_segments_no_delete
+BEFORE DELETE ON source_version_segments
+BEGIN
+    SELECT RAISE(ABORT, 'source version locations are immutable');
+END;
 
 CREATE TABLE knowledge_extractions (
     id TEXT PRIMARY KEY,
@@ -100,6 +120,30 @@ CREATE INDEX idx_knowledge_extractions_parent
     ON knowledge_extractions(parent_extraction_id);
 CREATE INDEX idx_knowledge_extractions_review
     ON knowledge_extractions(review_status, created_at_us);
+CREATE TRIGGER knowledge_extractions_content_no_update
+BEFORE UPDATE ON knowledge_extractions
+WHEN OLD.source_id IS NOT NEW.source_id
+  OR OLD.source_version_id IS NOT NEW.source_version_id
+  OR OLD.source_segment_id IS NOT NEW.source_segment_id
+  OR OLD.kind IS NOT NEW.kind
+  OR OLD.content IS NOT NEW.content
+  OR OLD.language IS NOT NEW.language
+  OR OLD.parent_extraction_id IS NOT NEW.parent_extraction_id
+  OR OLD.tool_identity IS NOT NEW.tool_identity
+  OR OLD.tool_version IS NOT NEW.tool_version
+  OR OLD.prompt_config_identity IS NOT NEW.prompt_config_identity
+  OR OLD.confidence_decimal IS NOT NEW.confidence_decimal
+  OR OLD.uncertainty IS NOT NEW.uncertainty
+  OR OLD.created_by IS NOT NEW.created_by
+  OR OLD.created_at_us IS NOT NEW.created_at_us
+BEGIN
+    SELECT RAISE(ABORT, 'extraction content is immutable; create a correction');
+END;
+CREATE TRIGGER knowledge_extractions_no_delete
+BEFORE DELETE ON knowledge_extractions
+BEGIN
+    SELECT RAISE(ABORT, 'extractions are immutable');
+END;
 
 CREATE TABLE extraction_reviews (
     id TEXT PRIMARY KEY,
@@ -267,6 +311,16 @@ CREATE TABLE source_claim_relations (
     CHECK (subject_claim_id <> object_claim_id),
     UNIQUE (subject_claim_id, object_claim_id, relation_kind)
 );
+CREATE TRIGGER source_claim_relations_no_update
+BEFORE UPDATE ON source_claim_relations
+BEGIN
+    SELECT RAISE(ABORT, 'source claim relations are immutable');
+END;
+CREATE TRIGGER source_claim_relations_no_delete
+BEFORE DELETE ON source_claim_relations
+BEGIN
+    SELECT RAISE(ABORT, 'source claim relations are immutable');
+END;
 CREATE TABLE source_claim_concept_relations (
     id TEXT PRIMARY KEY,
     source_claim_id TEXT NOT NULL REFERENCES source_claims(id) ON DELETE RESTRICT,
@@ -277,6 +331,16 @@ CREATE TABLE source_claim_concept_relations (
     created_at_us INTEGER NOT NULL,
     UNIQUE (source_claim_id, concept_id, relation_kind)
 );
+CREATE TRIGGER source_claim_concept_relations_no_update
+BEFORE UPDATE ON source_claim_concept_relations
+BEGIN
+    SELECT RAISE(ABORT, 'source claim relations are immutable');
+END;
+CREATE TRIGGER source_claim_concept_relations_no_delete
+BEFORE DELETE ON source_claim_concept_relations
+BEGIN
+    SELECT RAISE(ABORT, 'source claim relations are immutable');
+END;
 CREATE TABLE source_claim_principle_relations (
     id TEXT PRIMARY KEY,
     source_claim_id TEXT NOT NULL REFERENCES source_claims(id) ON DELETE RESTRICT,
@@ -287,6 +351,16 @@ CREATE TABLE source_claim_principle_relations (
     created_at_us INTEGER NOT NULL,
     UNIQUE (source_claim_id, principle_id, relation_kind)
 );
+CREATE TRIGGER source_claim_principle_relations_no_update
+BEFORE UPDATE ON source_claim_principle_relations
+BEGIN
+    SELECT RAISE(ABORT, 'source claim relations are immutable');
+END;
+CREATE TRIGGER source_claim_principle_relations_no_delete
+BEFORE DELETE ON source_claim_principle_relations
+BEGIN
+    SELECT RAISE(ABORT, 'source claim relations are immutable');
+END;
 CREATE TABLE source_claim_procedure_relations (
     id TEXT PRIMARY KEY,
     source_claim_id TEXT NOT NULL REFERENCES source_claims(id) ON DELETE RESTRICT,
@@ -297,6 +371,16 @@ CREATE TABLE source_claim_procedure_relations (
     created_at_us INTEGER NOT NULL,
     UNIQUE (source_claim_id, procedure_id, relation_kind)
 );
+CREATE TRIGGER source_claim_procedure_relations_no_update
+BEFORE UPDATE ON source_claim_procedure_relations
+BEGIN
+    SELECT RAISE(ABORT, 'source claim relations are immutable');
+END;
+CREATE TRIGGER source_claim_procedure_relations_no_delete
+BEFORE DELETE ON source_claim_procedure_relations
+BEGIN
+    SELECT RAISE(ABORT, 'source claim relations are immutable');
+END;
 
 CREATE TABLE knowledge_frameworks (
     id TEXT PRIMARY KEY,
@@ -420,6 +504,32 @@ CREATE TABLE framework_version_reviews (
 );
 CREATE INDEX idx_framework_reviews_version
     ON framework_version_reviews(framework_version_id, reviewed_at_us, id);
+CREATE TRIGGER framework_publication_requires_approval
+BEFORE UPDATE OF status ON knowledge_framework_versions
+WHEN NEW.status = 'published' AND OLD.status <> 'published'
+ AND (
+    NOT EXISTS (
+        SELECT 1 FROM framework_version_reviews r
+        WHERE r.framework_version_id = NEW.id
+        ORDER BY r.reviewed_at_us DESC, r.id DESC
+        LIMIT 1
+    )
+    OR (
+        SELECT r.review_status FROM framework_version_reviews r
+        WHERE r.framework_version_id = NEW.id
+        ORDER BY r.reviewed_at_us DESC, r.id DESC
+        LIMIT 1
+    ) <> 'approved'
+    OR (
+        NEW.version_no > 1 AND NOT EXISTS (
+            SELECT 1 FROM framework_version_change_links l
+            WHERE l.framework_version_id = NEW.id
+        )
+    )
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'framework publication requires latest approval and change links');
+END;
 CREATE TRIGGER framework_reviews_no_update
 BEFORE UPDATE ON framework_version_reviews
 BEGIN
