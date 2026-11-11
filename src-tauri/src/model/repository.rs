@@ -750,12 +750,14 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
             conn,
             "SELECT hypothesis_version_id, relation_kind, rationale
              FROM model_version_hypotheses WHERE model_version_id = ?1",
-        , version_id)?,
+            version_id,
+        )?,
         findings: query_relations(
             conn,
             "SELECT finding_version_id, relation_kind, rationale
              FROM model_version_findings WHERE model_version_id = ?1",
-        , version_id)?,
+            version_id,
+        )?,
         experiments: query_experiment_relations(conn, version_id)?,
         dataset_uses: query_dataset_uses(conn, version_id)?,
         evidence_ids: query_ids(
