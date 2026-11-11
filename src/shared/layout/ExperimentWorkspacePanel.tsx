@@ -1,20 +1,21 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent, ReactElement, ReactNode } from "react";
 import { experimentService } from "@/mind/services/experimentService";
 import { researchService } from "@/mind/services/researchService";
 import type {
-  AddDatasetSamplesReq,
   AddDatasetSplitGroupReq,
   ComparisonGroupDto,
   CreateExperimentDesignVersionReq,
   DatasetFieldDefinitionDto,
   DatasetRole,
+  DatasetRolePinDto,
   DatasetSampleDto,
   DatasetSamplePageDto,
   DatasetSampleSchemaDto,
   DatasetSampleValue,
   DatasetSplitAssignmentReq,
+  DataSampleDto,
   ExperimentDatasetVersionDto,
   ExperimentDesignSpecificationDto,
   ExperimentDesignVersionDto,
@@ -24,6 +25,8 @@ import type {
   OperationalDefinitionDto,
   ResearchWorkspaceDto,
   TradeSampleDto,
+  MarketOrderType,
+  ExperimentWorkspaceDto,
 } from "@/types";
 
 const inputClass = "w-full rounded border border-[#343741] bg-[#15171b] px-2 py-1.5 text-xs text-gray-200";
@@ -41,7 +44,7 @@ interface FieldProps {
   children: ReactNode;
 }
 
-function Field({ label, children }: FieldProps): JSX.Element {
+function Field({ label, children }: FieldProps): ReactElement {
   return (
     <label className="block space-y-1">
       <span className="text-[11px] text-gray-400">{label}</span>
@@ -63,7 +66,7 @@ function isNullableNumber(value: unknown): value is number | null {
 }
 
 function isDatasetRole(value: unknown): value is DatasetRole {
-  return typeof value === "string" && roles.includes(value as DatasetRole);
+  return typeof value === "string" && roles.some((role) => role === value);
 }
 
 function isSampleValue(value: unknown): value is DatasetSampleValue {
@@ -88,7 +91,7 @@ function isSampleValue(value: unknown): value is DatasetSampleValue {
   }
 }
 
-function isDataSample(value: unknown): value is DatasetSampleDto["sample"] {
+function isDataSample(value: unknown): value is DataSampleDto {
   if (!isRecord(value)
     || typeof value.sampleId !== "string"
     || typeof value.datasetVersionId !== "string"
@@ -107,6 +110,15 @@ function isMeasurement(value: unknown): value is TradeSampleDto["orderQuantity"]
   return value === null || (isRecord(value)
     && typeof value.value === "string"
     && typeof value.unit === "string");
+}
+
+function isMarketOrderType(value: unknown): value is MarketOrderType | null {
+  return value === null
+    || value === "market"
+    || value === "limit"
+    || value === "stop"
+    || value === "stop_limit"
+    || value === "other";
 }
 
 function parseDatasetSamples(raw: string, versionId: string): DatasetSampleDto[] {
@@ -128,7 +140,7 @@ function parseDatasetSamples(raw: string, versionId: string): DatasetSampleDto[]
     const market = entry.sample;
     if (typeof market.instrument !== "string"
       || !(market.orderSide === null || market.orderSide === "buy" || market.orderSide === "sell")
-      || !(market.orderType === null || ["market", "limit", "stop", "stop_limit", "other"].includes(String(market.orderType)))
+      || !isMarketOrderType(market.orderType)
       || !isMeasurement(market.orderQuantity)
       || !isMeasurement(market.executionPrice)
       || !isMeasurement(market.fees)
@@ -174,16 +186,19 @@ function parseSplitAssignments(raw: string): DatasetSplitAssignmentReq[] {
   });
 }
 
+function isDatasetFieldKind(value: string): value is DatasetFieldDefinitionDto["valueKind"] {
+  return ["decimal", "integer", "text", "category", "boolean"].some((kind) => kind === value);
+}
+
 function parseFieldDefinitions(raw: string): DatasetFieldDefinitionDto[] {
-  const supported = ["decimal", "integer", "text", "category", "boolean"] as const;
   return raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
     const [key = "", valueKind = "", required = "", unit = ""] = line.split("|").map((part) => part.trim());
-    if (!key || !supported.includes(valueKind as typeof supported[number])) {
+    if (!key || !isDatasetFieldKind(valueKind)) {
       throw new Error("Schema fields use: key|decimal/integer/text/category/boolean|required/optional|unit.");
     }
     return {
       key,
-      valueKind: valueKind as DatasetFieldDefinitionDto["valueKind"],
+      valueKind,
       required: required === "required",
       unit: unit || null,
     };
@@ -215,17 +230,20 @@ function parseComparisonGroups(raw: FormDataEntryValue | null): ComparisonGroupD
   });
 }
 
-function parseStudyType(value: FormDataEntryValue | null): ExperimentStudyType {
-  const types: ExperimentStudyType[] = [
+function isStudyType(value: string): value is ExperimentStudyType {
+  return [
     "randomized_controlled", "quasi_experimental", "observational",
     "market_backtest", "market_forward", "case_study", "other",
-  ];
-  const selected = String(value ?? "other");
-  if (!types.includes(selected as ExperimentStudyType)) throw new Error("Unsupported study type.");
-  return selected as ExperimentStudyType;
+  ].some((studyType) => studyType === value);
 }
 
-function parseSpecification(form: FormData, projectId: string): ExperimentDesignSpecificationDto {
+function parseStudyType(value: FormDataEntryValue | null): ExperimentStudyType {
+  const selected = String(value ?? "other");
+  if (!isStudyType(selected)) throw new Error("Unsupported study type.");
+  return selected;
+}
+
+function parseSpecification(form: FormData): ExperimentDesignSpecificationDto {
   const targetQuestion = String(form.get("targetResearchQuestionId") ?? "");
   const targetHypothesis = String(form.get("targetHypothesisVersionId") ?? "");
   const targetModel = String(form.get("targetModelVersionId") ?? "");
@@ -246,7 +264,7 @@ function parseSpecification(form: FormData, projectId: string): ExperimentDesign
   const pin: DatasetRolePinDto[] = datasetVersionId
     ? [{
       datasetVersionId,
-      role: datasetRole as DatasetRole,
+      role: datasetRole,
       rationale: String(form.get("datasetPinRationale") ?? ""),
     }]
     : [];
@@ -327,11 +345,10 @@ function parseSamplesJsonTemplate(versionId: string): string {
 export function ExperimentWorkspacePanel({
   projectId,
   research,
-}: ExperimentWorkspacePanelProps): JSX.Element {
-  const [workspace, setWorkspace] = useState<import("@/types").ExperimentWorkspaceDto | null>(null);
+}: ExperimentWorkspacePanelProps): ReactElement {
+  const [workspace, setWorkspace] = useState<ExperimentWorkspaceDto | null>(null);
   const [samplePage, setSamplePage] = useState<DatasetSamplePageDto | null>(null);
   const [sampleVersionId, setSampleVersionId] = useState("");
-  const [sampleQuery, setSampleQuery] = useState("");
   const [sampleJson, setSampleJson] = useState("");
   const [selectedFilePath, setSelectedFilePath] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -404,7 +421,7 @@ export function ExperimentWorkspacePanel({
         description: String(form.get("description") ?? ""),
         protocol: String(form.get("protocol") ?? ""),
         changeRationale: String(form.get("changeRationale") ?? ""),
-        specification: parseSpecification(form, projectId),
+        specification: parseSpecification(form),
         createdBy: null,
       };
       const created = await act(() => experimentService.createDesignVersion(request));
@@ -524,7 +541,8 @@ export function ExperimentWorkspacePanel({
       setError("Select a dataset asset file first.");
       return;
     }
-    const name = selectedFilePath.split(/[\\/]/).at(-1) ?? "dataset-asset";
+    const pathParts = selectedFilePath.split(/[\\/]/);
+    const name = pathParts[pathParts.length - 1] ?? "dataset-asset";
     const asset = await act(() => experimentService.registerDatasetAsset({
       datasetVersionId: String(form.get("datasetVersionId") ?? ""),
       sourcePath: selectedFilePath,
@@ -748,7 +766,7 @@ export function ExperimentWorkspacePanel({
                 <p className="font-medium text-gray-200">{design.title} · v{design.versionNo} · {design.lifecycleStatus}</p>
                 <p className={mutedClass}>ID {design.id} · {design.specification ? `SHA-256 ${design.specificationSha256}` : "legacy/unconfigured; not eligible for runs"}</p>
                 {design.parentVersionId && <p className={mutedClass}>Revises {design.parentVersionId}: {design.changeRationale}</p>}
-                {design.preregistration && <p className="text-emerald-300">Preregistered by {design.preregistration.reviewerId ?? "unspecified reviewer"} at {new Date(design.preregistration.preregisteredAtUs / 1000).toISOString()}</p>}
+                        {design.preregistration && <p className="text-emerald-300">Preregistered by {design.preregistration.reviewerId ?? "unspecified reviewer"} at {new Date(design.preregistration.preregisteredAtUs / 1000).toISOString()}</p>}
                 <div className="flex flex-wrap gap-2">
                   {design.lifecycleStatus === "draft" && design.specification && (
                     <button className={buttonClass} type="button" onClick={() => void reviewDesign(design)}>Submit version for review</button>
@@ -831,7 +849,7 @@ export function ExperimentWorkspacePanel({
               <select className={inputClass} name="datasetVersionId" required defaultValue=""><option value="">Select staged dataset version</option>{allDatasetVersions.filter((version) => version.lifecycleStatus === "staged").map((version) => <option key={version.id} value={version.id}>{version.datasetTitle} · v{version.versionNo}</option>)}</select>
             </Field>
             <div className="grid gap-2 sm:grid-cols-2">
-              <button className={buttonClass} type="button" onClick={() => void pickDatasetAsset()}>Choose file: {selectedFilePath.split(/[\\/]/).at(-1) || "none"}</button>
+              <button className={buttonClass} type="button" onClick={() => void pickDatasetAsset()}>Choose file: {selectedFilePath.split(/[\\/]/).slice(-1)[0] || "none"}</button>
               <Field label="Media type"><input className={inputClass} name="mediaType" defaultValue="application/octet-stream" required /></Field>
               <Field label="Expected SHA-256 (optional)"><input className={inputClass} name="expectedSha256" /></Field>
             </div>
@@ -871,7 +889,7 @@ export function ExperimentWorkspacePanel({
           {samplePage && <div className="space-y-1">
             <p className={mutedClass}>{samplePage.totalCount} sample(s) in version {samplePage.datasetVersionId}</p>
             {samplePage.samples.map((item, index) => (
-              <pre key={`${item.sampleKind}-${item.sample.dataSampleId ?? item.sample.sampleId}-${index}`} className="overflow-auto rounded bg-[#0b0c0e] p-2 text-[10px] text-gray-300">{JSON.stringify(item, null, 2)}</pre>
+              <pre key={`${item.sampleKind}-${item.sample.sampleId}-${index}`} className="overflow-auto rounded bg-[#0b0c0e] p-2 text-[10px] text-gray-300">{JSON.stringify(item, null, 2)}</pre>
             ))}
           </div>}
           {workspace?.splitGroups.map((group) => (
@@ -920,7 +938,7 @@ interface RunMonitorProps {
   }) => Promise<unknown>;
 }
 
-function RunMonitor({ run, datasets, onTransition, onDeviation, onLog }: RunMonitorProps): JSX.Element {
+function RunMonitor({ run, datasets, onTransition, onDeviation, onLog }: RunMonitorProps): ReactElement {
   const complete = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
