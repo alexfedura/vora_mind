@@ -2191,7 +2191,12 @@ mod tests {
                 "INSERT INTO analysis_finding_events
                     (id, finding_version_id, status, rationale, actor_id, occurred_at_us)
                  VALUES (?1, ?2, ?3, 'Lifecycle event recorded', NULL, ?4)",
-                params![format!("finding-event-{key}-{index}"), finding_version_id, status, index as i64 + 1],
+                params![
+                    format!("finding-event-{key}-{index}"),
+                    finding_version_id,
+                    status,
+                    index as i64 + 1
+                ],
             )?;
         }
         Ok(finding_version_id)
@@ -2255,12 +2260,16 @@ mod tests {
     #[test]
     fn project_a_to_project_b_adoption_adaptation_and_usage_survive_backup_restore() -> Result<()> {
         let (mut conn, source_version_id, receiving_project_id) = transfer_fixture()?;
-        let transfer = create_accepted_transfer(&mut conn, &source_version_id, &receiving_project_id)?;
+        let transfer =
+            create_accepted_transfer(&mut conn, &source_version_id, &receiving_project_id)?;
         assert_eq!(transfer.origin.origin_project_id, "project-a");
         assert_eq!(transfer.receiving_project_id, "project-b");
         assert_eq!(transfer.origin.artifact.version_id(), source_version_id);
         assert_eq!(transfer.state, KnowledgeTransferState::Accepted);
-        assert_eq!(transfer.attribution_text, "Project A, exact finding version (attributed)");
+        assert_eq!(
+            transfer.attribution_text,
+            "Project A, exact finding version (attributed)"
+        );
 
         let destination_version_id = create_accepted_finding(&conn, "project-b", "adapted")?;
         let adaptation = create_adaptation(
@@ -2307,7 +2316,10 @@ mod tests {
                 actor_id: Some("rights-reviewer".to_string()),
             },
         )?;
-        assert_eq!(workspace(&conn)?.transfers[0].state, KnowledgeTransferState::Accepted);
+        assert_eq!(
+            workspace(&conn)?.transfers[0].state,
+            KnowledgeTransferState::Accepted
+        );
 
         let backup_path: PathBuf =
             std::env::temp_dir().join(format!("vora-transfer-{}.db", Uuid::now_v7()));
