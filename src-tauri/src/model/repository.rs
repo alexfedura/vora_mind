@@ -2043,3 +2043,600 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<ModelWorkspaceDt
         replications: query_replications(conn, project_id)?,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{fs, path::PathBuf};
+
+    fn new_database_path() -> PathBuf {
+        std::env::temp_dir().join(format!("vora-model-{}.db", Uuid::now_v7()))
+    }
+
+    fn initialize(conn: &Connection) {
+        crate::mind::portable_db::initialize_workspace_schema(conn)
+            .expect("initialize full workspace schema");
+    }
+
+    fn insert_project(conn: &Connection, project_id: &str) {
+        conn.execute(
+            "INSERT INTO research_projects
+                (id, title, aim, lifecycle_status, created_by, created_at_us, updated_at_us)
+             VALUES (?1, ?2, '', 'active', NULL, 1, 1)",
+            params![project_id, format!("Project {project_id}")],
+        )
+        .expect("insert project");
+    }
+
+    fn insert_hypothesis(conn: &Connection, project_id: &str, suffix: &str) -> String {
+        let hypothesis_id = format!("hypothesis-{suffix}");
+        let version_id = format!("hypothesis-version-{suffix}");
+        conn.execute(
+            "INSERT INTO research_hypotheses
+                (id, project_id, research_question_id, legacy_hypothesis_id,
+                 parent_hypothesis_id, ownership_state, lifecycle_status, created_at_us)
+             VALUES (?1, ?2, NULL, NULL, NULL, 'project', 'legacy_untyped', 1)",
+            params![hypothesis_id, project_id],
+        )
+        .expect("insert hypothesis identity");
+        conn.execute(
+            "INSERT INTO hypothesis_definition_versions
+                (id, hypothesis_id, version_no, parent_version_id, statement_h0,
+                 statement_h1, population_scope, research_scope, expected_direction,
+                 expected_effect_decimal, expected_effect_unit, falsification_criteria,
+                 assumptions, lifecycle_status, created_at_us, preregistered_at_us)
+             VALUES (?1, ?2, 1, NULL, 'H0', 'H1', 'population', 'scope',
+                     'non_directional', NULL, NULL, 'falsification rule', '',
+                     'draft', 1, NULL)",
+            params![version_id, hypothesis_id],
+        )
+        .expect("insert hypothesis version");
+        version_id
+    }
+
+    fn model_request(origin_project_id: &str) -> CreateModelReq {
+        CreateModelReq {
+            display_name: "Baseline model".to_string(),
+            description: "Reusable test model".to_string(),
+            origin_project_id: Some(origin_project_id.to_string()),
+            domain_id: None,
+            created_by: Some("author".to_string()),
+        }
+    }
+
+    fn version_request(project_id: &str, model_id: &str) -> CreateModelVersionReq {
+        CreateModelVersionReq {
+            project_id: project_id.to_string(),
+            model_id: model_id.to_string(),
+            change_class: ModelChangeClass::Revision,
+            change_rationale: "Register the initial baseline.".to_string(),
+            expected_implications: "Provides the first immutable specification.".to_string(),
+            specification: ModelSpecificationDto {
+                human_readable: "A model used to test versioned provenance.".to_string(),
+                machine_readable: serde_json::json!({"kind": "baseline"}),
+            },
+            assumptions: vec![ModelAssumptionReq {
+                key: "scope".to_string(),
+                statement: "Applies only to the declared population.".to_string(),
+            }],
+            scope: "Declared study population".to_string(),
+            dependencies: vec![],
+            environment: serde_json::json!({"runtime": "captured"}),
+            parents: vec![],
+            parameters: vec![ModelParameterReq {
+                name: "threshold".to_string(),
+                value: "0.1250000000000000001".to_string(),
+                value_kind: "decimal".to_string(),
+                unit: None,
+                lower_bound: Some("0".to_string()),
+                upper_bound: Some("1".to_string()),
+                default_value: None,
+                role: "decision_threshold".to_string(),
+                tuneable: true,
+            }],
+            artifacts: vec![],
+            impacts: vec![ModelImpactReq {
+                target: ModelImpactTarget::Assumption {
+                    assumption_key: "scope".to_string(),
+                },
+                impact_kind: ModelImpactKind::Added,
+                previous_statement: None,
+                current_statement: Some(
+                    "Applies only to the declared population.".to_string(),
+                ),
+                rationale: "Declare the baseline scope assumption.".to_string(),
+            }],
+            hypotheses: vec![],
+            findings: vec![],
+            experiments: vec![],
+            dataset_uses: vec![],
+            evidence_ids: vec![],
+            created_by: Some("author".to_string()),
+        }
+    }
+
+    fn insert_sealed_dataset(conn: &Connection, project_id: &str) -> String {
+        let dataset_id = format!("dataset-{project_id}");
+        let dataset_version_id = format!("dataset-version-{project_id}");
+        conn.execute(
+            "INSERT INTO experiment_datasets
+                (id, project_id, title, description, created_by, created_at_us)
+             VALUES (?1, ?2, 'Pinned evaluation data', '', NULL, 1)",
+            params![dataset_id, project_id],
+        )
+        .expect("insert dataset");
+        conn.execute(
+            "INSERT INTO experiment_dataset_versions
+                (id, dataset_id, version_no, schema_id, schema_version, sample_schema_json,
+                 expected_sample_count, lifecycle_status, content_sha256, created_at_us, sealed_at_us)
+             VALUES (?1, ?2, 1, 'test-schema', 1, '{}', 1, 'sealed', ?3, 1, 1)",
+            params![dataset_version_id, dataset_id, "0".repeat(64)],
+        )
+        .expect("insert sealed dataset version");
+        conn.execute(
+            "INSERT INTO experiment_dataset_samples
+                (id, dataset_version_id, sample_id, sample_kind, record_json, created_at_us)
+             VALUES (?1, ?2, 'sample-1', 'data', '{}', 1)",
+            params![format!("sample-{project_id}"), dataset_version_id],
+        )
+        .expect("insert dataset sample");
+        dataset_version_id
+    }
+
+    fn insert_experiment(conn: &Connection, project_id: &str) -> (String, String) {
+        let design_id = format!("design-{project_id}");
+        let design_version_id = format!("design-version-{project_id}");
+        let run_id = format!("experiment-run-{project_id}");
+        conn.execute(
+            "INSERT INTO research_experiment_designs
+                (id, project_id, title, created_by, created_at_us)
+             VALUES (?1, ?2, 'Original design', NULL, 1)",
+            params![design_id, project_id],
+        )
+        .expect("insert experiment design");
+        conn.execute(
+            "INSERT INTO research_experiment_design_versions
+                (id, design_id, version_no, description, protocol, lifecycle_status,
+                 created_by, created_at_us, preregistered_at_us)
+             VALUES (?1, ?2, 1, 'Design description', 'Protocol', 'draft', NULL, 1, NULL)",
+            params![design_version_id, design_id],
+        )
+        .expect("insert design version");
+        conn.execute(
+            "INSERT INTO experiment_runs
+                (id, project_id, design_version_id, lifecycle_status, created_at_us, ended_at_us)
+             VALUES (?1, ?2, ?3, 'completed', 1, 2)",
+            params![run_id, project_id, design_version_id],
+        )
+        .expect("insert completed experiment run");
+        (design_version_id, run_id)
+    }
+
+    fn insert_analysis_run(
+        conn: &Connection,
+        project_id: &str,
+        dataset_version_id: &str,
+    ) -> (String, String, String) {
+        let method_id = format!("method-{project_id}");
+        let method_version_id = format!("method-version-{project_id}");
+        let metric_id = format!("metric-{project_id}");
+        let metric_version_id = format!("metric-version-{project_id}");
+        let definition_id = format!("analysis-definition-{project_id}");
+        let definition_version_id = format!("analysis-definition-version-{project_id}");
+        let run_id = format!("analysis-run-{project_id}");
+        let input_id = format!("analysis-input-{project_id}");
+        let output_id = format!("analysis-output-{project_id}");
+        let analysis_metric_id = format!("analysis-metric-{project_id}");
+        conn.execute(
+            "INSERT INTO analysis_methods (id, project_id, name, created_at_us)
+             VALUES (?1, ?2, 'test method', 1)",
+            params![method_id, project_id],
+        )
+        .expect("insert analysis method");
+        conn.execute(
+            "INSERT INTO analysis_method_versions
+                (id, method_id, version_no, version_label, code_uri, code_revision,
+                 environment_json, assumptions_json, test_suite_uri, test_suite_sha256,
+                 tests_total, tests_passed, verification_status, content_sha256, created_at_us)
+             VALUES (?1, ?2, 1, '1', 'file:///method', 'rev-1', '{}', '[]',
+                     'file:///tests', ?3, 1, 1, 'passed', ?3, 1)",
+            params![method_version_id, method_id, "1".repeat(64)],
+        )
+        .expect("insert method version");
+        conn.execute(
+            "INSERT INTO analysis_metric_definitions
+                (id, project_id, metric_key, name, created_at_us)
+             VALUES (?1, ?2, 'effect', 'Effect estimate', 1)",
+            params![metric_id, project_id],
+        )
+        .expect("insert metric definition");
+        conn.execute(
+            "INSERT INTO analysis_metric_definition_versions
+                (id, metric_definition_id, version_no, version_label, formula, unit,
+                 test_suite_uri, test_suite_sha256, tests_total, tests_passed,
+                 verification_status, content_sha256, created_at_us)
+             VALUES (?1, ?2, 1, '1', 'difference', 'units', 'file:///tests',
+                     ?3, 1, 1, 'passed', ?3, 1)",
+            params![metric_version_id, metric_id, "2".repeat(64)],
+        )
+        .expect("insert metric version");
+        conn.execute(
+            "INSERT INTO analysis_definitions (id, project_id, title, created_at_us)
+             VALUES (?1, ?2, 'Test analysis', 1)",
+            params![definition_id, project_id],
+        )
+        .expect("insert analysis definition");
+        conn.execute(
+            "INSERT INTO analysis_definition_versions
+                (id, definition_id, version_no, version_label, method_version_id,
+                 specification_json, specification_sha256, created_at_us)
+             VALUES (?1, ?2, 1, '1', ?3, '{}', ?4, 1)",
+            params![
+                definition_version_id,
+                definition_id,
+                method_version_id,
+                "3".repeat(64)
+            ],
+        )
+        .expect("insert analysis definition version");
+        conn.execute(
+            "INSERT INTO analysis_runs
+                (id, project_id, definition_version_id, parameters_json, environment_json,
+                 random_seeds_json, protocol_version, created_at_us)
+             VALUES (?1, ?2, ?3, '{}', '{}', '[]', '1', 1)",
+            params![run_id, project_id, definition_version_id],
+        )
+        .expect("insert analysis run");
+        conn.execute(
+            "INSERT INTO analysis_run_events (id, run_id, lifecycle_status, occurred_at_us)
+             VALUES (?1, ?2, 'completed', 2)",
+            params![format!("analysis-event-{project_id}"), run_id],
+        )
+        .expect("complete analysis run");
+        conn.execute(
+            "INSERT INTO analysis_run_inputs
+                (id, run_id, dataset_version_id, role, dataset_checksum, sample_count,
+                 transformation_lineage_json, input_manifest_sha256)
+             VALUES (?1, ?2, ?3, 'test', ?4, 1, '{}', ?4)",
+            params![input_id, run_id, dataset_version_id, "4".repeat(64)],
+        )
+        .expect("insert analysis input");
+        conn.execute(
+            "INSERT INTO analysis_outputs
+                (id, run_id, output_key, output_kind, title, payload_json, payload_sha256, created_at_us)
+             VALUES (?1, ?2, 'result', 'report', 'Report', '{}', ?3, 2)",
+            params![output_id, run_id, "5".repeat(64)],
+        )
+        .expect("insert analysis output");
+        conn.execute(
+            "INSERT INTO analysis_metrics
+                (id, run_id, output_id, metric_definition_version_id, method_version_id,
+                 estimand, sample_size, effect_estimate, unit, uncertainty_kind,
+                 uncertainty_lower, uncertainty_upper, uncertainty_level,
+                 assumptions_json, exclusions_json, missing_data_json, multiplicity_treatment)
+             VALUES (?1, ?2, ?3, ?4, ?5, 'mean difference', 1, '0.125', 'units',
+                     'interval', '0.1', '0.15', '0.95', '[]', '[]', '{}', 'none planned')",
+            params![
+                analysis_metric_id,
+                run_id,
+                output_id,
+                metric_version_id,
+                method_version_id
+            ],
+        )
+        .expect("insert analysis metric");
+        (run_id, input_id, analysis_metric_id)
+    }
+
+    #[test]
+    fn model_versions_evaluations_validation_and_replications_survive_reopen() {
+        let path = new_database_path();
+        let (model_id, initial_version_id, successor_version_id, dataset_version_id, evidence_id) = {
+            let conn = Connection::open(&path).expect("open workspace");
+            initialize(&conn);
+            insert_project(&conn, "project-a");
+            insert_project(&conn, "project-b");
+            let hypothesis_b = insert_hypothesis(&conn, "project-b", "b");
+            let model = create_model(&mut conn, &model_request("project-a")).expect("create model");
+            let mut initial_request = version_request("project-a", &model.id);
+            initial_request.hypotheses.push(ModelRelationReq {
+                target_id: insert_hypothesis(&conn, "project-a", "a"),
+                relation_kind: ModelRelationKind::ContributesTo,
+                rationale: "Model is considered by this independent hypothesis.".to_string(),
+            });
+            let initial = create_model_version(&mut conn, &initial_request)
+                .expect("create initial revision baseline");
+            assert_eq!(initial.version_no, 1);
+            assert_eq!(initial.lifecycle_status, ModelVersionLifecycleStatus::Draft);
+            assert_ne!(initial.model_id, "hypothesis-a");
+            assert_eq!(initial.hypotheses.len(), 1);
+
+            transition_version(
+                &mut conn,
+                &TransitionModelVersionReq {
+                    version_id: initial.id.clone(),
+                    next_status: ModelVersionLifecycleStatus::Review,
+                    rationale: "Reviewed.".to_string(),
+                    actor_id: Some("reviewer".to_string()),
+                },
+            )
+            .expect("transition to review");
+            transition_version(
+                &mut conn,
+                &TransitionModelVersionReq {
+                    version_id: initial.id.clone(),
+                    next_status: ModelVersionLifecycleStatus::Released,
+                    rationale: "Release immutable baseline.".to_string(),
+                    actor_id: Some("reviewer".to_string()),
+                },
+            )
+            .expect("release baseline");
+
+            let dataset_version_id = insert_sealed_dataset(&conn, "project-b");
+            let (design_version_id, experiment_run_id) = insert_experiment(&conn, "project-b");
+            let (analysis_run_id, analysis_input_id, analysis_metric_id) =
+                insert_analysis_run(&conn, "project-b", &dataset_version_id);
+            let mut successor_request = version_request("project-b", &model.id);
+            successor_request.change_class = ModelChangeClass::Replacement;
+            successor_request.change_rationale = "Replace the baseline following new evidence.".to_string();
+            successor_request.parents = vec![ModelParentReq {
+                version_id: initial.id.clone(),
+                rationale: "Predecessor retained for comparison.".to_string(),
+            }];
+            successor_request.impacts = vec![ModelImpactReq {
+                target: ModelImpactTarget::Assumption {
+                    assumption_key: "scope".to_string(),
+                },
+                impact_kind: ModelImpactKind::Changed,
+                previous_statement: Some("Applies only to the declared population.".to_string()),
+                current_statement: Some("Applies only to the preregistered population.".to_string()),
+                rationale: "Narrowed the applicability scope.".to_string(),
+            }];
+            successor_request.hypotheses = vec![ModelRelationReq {
+                target_id: hypothesis_b,
+                relation_kind: ModelRelationKind::Contradicts,
+                rationale: "Conflicting hypothesis retained.".to_string(),
+            }];
+            successor_request.experiments = vec![ModelExperimentRelationReq {
+                design_version_id,
+                experiment_run_id: Some(experiment_run_id.clone()),
+                relation_kind: "tested_in".to_string(),
+                rationale: "Exact run assessed this model version.".to_string(),
+            }];
+            let successor = create_model_version(&mut conn, &successor_request)
+                .expect("create replacement in another project");
+            assert_eq!(successor.version_no, 2);
+            assert_eq!(successor.created_in_project_id, "project-b");
+            assert_eq!(successor.hypotheses[0].relation_kind, ModelRelationKind::Contradicts);
+
+            let evaluation = create_evaluation(
+                &mut conn,
+                &CreateModelEvaluationReq {
+                    project_id: "project-b".to_string(),
+                    model_version_id: successor.id.clone(),
+                    analysis_run_id: analysis_run_id.clone(),
+                    analysis_run_input_id: analysis_input_id.clone(),
+                    dataset_version_id: dataset_version_id.clone(),
+                    analysis_metric_id: analysis_metric_id.clone(),
+                    role: "test".to_string(),
+                    split_group_id: None,
+                    limitations: "Single-sample fixture.".to_string(),
+                    created_by: Some("evaluator".to_string()),
+                },
+            )
+            .expect("record exact evaluation");
+            assert_eq!(evaluation.metric_definition_version_id, "metric-version-project-b");
+            assert_eq!(evaluation.effect_estimate, "0.125");
+            assert!(
+                create_evaluation(
+                    &mut conn,
+                    &CreateModelEvaluationReq {
+                        role: "training".to_string(),
+                        ..CreateModelEvaluationReq {
+                            project_id: "project-b".to_string(),
+                            model_version_id: successor.id.clone(),
+                            analysis_run_id,
+                            analysis_run_input_id: analysis_input_id,
+                            dataset_version_id: dataset_version_id.clone(),
+                            analysis_metric_id,
+                            role: "test".to_string(),
+                            split_group_id: None,
+                            limitations: "fixture".to_string(),
+                            created_by: None,
+                        }
+                    }
+                )
+                .is_err(),
+                "a role that differs from the exact run input is rejected"
+            );
+
+            let evidence = create_evidence(
+                &mut conn,
+                &CreateModelEvidenceReq {
+                    model_version_id: successor.id.clone(),
+                    artifact: ModelArtifactRef::DatasetVersion(dataset_version_id.clone()),
+                    polarity: ModelEvidencePolarity::Supports,
+                    scope: "Project B evaluation dataset".to_string(),
+                    quality_rationale: "The dataset version is immutable and pinned.".to_string(),
+                    limitations: "Small fixture.".to_string(),
+                    provenance: serde_json::json!({"run": "external capture"}),
+                    created_by: Some("reviewer".to_string()),
+                },
+            )
+            .expect("create typed model evidence");
+            let validation = create_validation(
+                &mut conn,
+                &CreateModelValidationReq {
+                    project_id: "project-b".to_string(),
+                    target: ModelValidationTarget::ModelVersion(successor.id.clone()),
+                    criteria: vec![serde_json::json!({"criterion": "Effect remains within declared interval."})],
+                    scope: "This metric and exact model version".to_string(),
+                    population_scope: "Project B fixture population".to_string(),
+                    evaluation_method: "Compare against predeclared interval".to_string(),
+                    evaluator_identity: "Independent reviewer".to_string(),
+                    independence_state: "independent".to_string(),
+                    independence_rationale: String::new(),
+                    conflict_of_interest: "None declared.".to_string(),
+                    created_by: Some("reviewer".to_string()),
+                },
+            )
+            .expect("create predeclared validation");
+            let finalized = finalize_validation(
+                &mut conn,
+                &FinalizeModelValidationReq {
+                    validation_id: validation.id.clone(),
+                    outcome: ModelValidationOutcome::Inconclusive,
+                    rationale: "The sample is insufficient for a pass/fail conclusion.".to_string(),
+                    deviations: vec!["One sample in fixture.".to_string()],
+                    analysis_evidence_ids: vec![],
+                    model_evidence_ids: vec![evidence.id.clone()],
+                    actor_id: Some("reviewer".to_string()),
+                },
+            )
+            .expect("record inconclusive validation with evidence");
+            assert_eq!(finalized.outcome, Some(ModelValidationOutcome::Inconclusive));
+            assert!(
+                finalize_validation(
+                    &mut conn,
+                    &FinalizeModelValidationReq {
+                        validation_id: validation.id,
+                        outcome: ModelValidationOutcome::Pass,
+                        rationale: "Cannot replace a prior result.".to_string(),
+                        deviations: vec![],
+                        analysis_evidence_ids: vec![],
+                        model_evidence_ids: vec![evidence.id.clone()],
+                        actor_id: None,
+                    }
+                )
+                .is_err()
+            );
+
+            for outcome in ["contradicts", "supports"] {
+                create_replication(
+                    &mut conn,
+                    &CreateModelReplicationReq {
+                        project_id: "project-b".to_string(),
+                        model_version_id: successor.id.clone(),
+                        original_experiment_run_id: experiment_run_id.clone(),
+                        replication_kind: if outcome == "supports" {
+                            "conceptual".to_string()
+                        } else {
+                            "direct".to_string()
+                        },
+                        independent_team_operator: "Independent team".to_string(),
+                        protocol_context: "Protocol compared to original design.".to_string(),
+                        dataset_context: serde_json::json!({"population": "Project B"}),
+                        datasets: vec![ModelReplicationDatasetReq {
+                            dataset_version_id: dataset_version_id.clone(),
+                            role: "test".to_string(),
+                            split_group_id: None,
+                        }],
+                        outcome: outcome.to_string(),
+                        result_summary: format!("Reported {outcome} result."),
+                        deviations: vec![],
+                        provenance: serde_json::json!({"replication": true}),
+                        analysis_evidence_ids: vec![],
+                        model_evidence_ids: vec![evidence.id.clone()],
+                        created_by: Some("operator".to_string()),
+                    },
+                )
+                .expect("retain replication result");
+            }
+            assert_eq!(query_replications(&conn, "project-b").expect("replications").len(), 2);
+
+            let legacy_hypothesis_id = "legacy-hypothesis";
+            conn.execute(
+                "INSERT INTO research_hypotheses
+                    (id, project_id, research_question_id, legacy_hypothesis_id,
+                     parent_hypothesis_id, ownership_state, lifecycle_status, created_at_us)
+                 VALUES (?1, 'project-a', NULL, NULL, NULL, 'project', 'legacy_untyped', 1)",
+                [legacy_hypothesis_id],
+            )
+            .expect("insert legacy hypothesis");
+            conn.execute(
+                "INSERT INTO hypothesis_model_references
+                    (id, hypothesis_id, model_id, model_version_id, label, rationale,
+                     resolution_status, created_at_us)
+                 VALUES ('legacy-ref', ?1, 'unresolved-model', 'unresolved-version',
+                         'legacy note', 'not migrated speculatively', 'unresolved', 1)",
+                [legacy_hypothesis_id],
+            )
+            .expect("insert unresolved legacy model link");
+            conn.execute(
+                "UPDATE model_version_parameters SET value = 'changed' WHERE model_version_id = ?1",
+                [&initial.id],
+            )
+            .expect_err("model parameter history must be immutable");
+            conn.execute(
+                "DELETE FROM model_versions WHERE id = ?1",
+                [&initial.id],
+            )
+            .expect_err("predecessor model version must not be deleted");
+            (
+                model.id,
+                initial.id,
+                successor.id,
+                dataset_version_id,
+                evidence.id,
+            )
+        };
+
+        {
+            let conn = Connection::open(&path).expect("reopen workspace");
+            initialize(&conn);
+            let state = workspace(&conn, "project-b").expect("load model workspace after restart");
+            assert_eq!(state.models.len(), 1);
+            assert!(state.models.iter().any(|model| model.id == model_id));
+            assert_eq!(state.versions.len(), 2);
+            assert!(state.versions.iter().any(|version| version.id == initial_version_id));
+            assert!(state.versions.iter().any(|version| {
+                version.id == successor_version_id
+                    && version.parents[0].version_id == initial_version_id
+            }));
+            assert!(state.evidence.iter().any(|evidence| evidence.id == evidence_id));
+            assert_eq!(state.evaluations.len(), 1);
+            assert_eq!(state.validations.len(), 1);
+            assert_eq!(state.replications.len(), 2);
+            assert!(state.replications.iter().any(|replication| replication.outcome == "supports"));
+            assert!(state.replications.iter().any(|replication| replication.outcome == "contradicts"));
+            let legacy: (String, String, String) = conn
+                .query_row(
+                    "SELECT model_id, model_version_id, resolution_status
+                     FROM hypothesis_model_references WHERE id = 'legacy-ref'",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .expect("legacy unresolved reference remains");
+            assert_eq!(legacy, ("unresolved-model".to_string(), "unresolved-version".to_string(), "unresolved".to_string()));
+            let foreign_key_violations: i64 =
+                conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| row.get(0))
+                    .expect("check foreign keys");
+            assert_eq!(foreign_key_violations, 0);
+        }
+        fs::remove_file(path).expect("remove test database");
+    }
+
+    #[test]
+    fn initial_version_requires_revision_and_explicit_impact() {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        initialize(&conn);
+        insert_project(&conn, "project");
+        let model = create_model(&mut conn, &model_request("project")).expect("create model");
+        let mut request = version_request("project", &model.id);
+        request.change_class = ModelChangeClass::Extension;
+        assert!(create_model_version(&mut conn, &request).is_err());
+        request.change_class = ModelChangeClass::Revision;
+        request.impacts.clear();
+        assert!(create_model_version(&mut conn, &request).is_err());
+        request.impacts = vec![ModelImpactReq {
+            target: ModelImpactTarget::Assumption {
+                assumption_key: "scope".to_string(),
+            },
+            impact_kind: ModelImpactKind::Changed,
+            previous_statement: None,
+            current_statement: Some("New assumption".to_string()),
+            rationale: "Invalid without previous value.".to_string(),
+        }];
+        assert!(create_model_version(&mut conn, &request).is_err());
+    }
+}
