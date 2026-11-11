@@ -10,6 +10,7 @@ import type {
   ModelArtifactRef,
   ModelDatasetUseReq,
   ModelDependencyReq,
+  ModelEvidencePolarity,
   ModelExperimentRelationReq,
   ModelImpactReq,
   ModelParameterReq,
@@ -125,8 +126,77 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return isRecord(value);
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function changeClass(value: string): CreateModelVersionReq["changeClass"] {
+  switch (value) {
+    case "refinement": return "refinement";
+    case "extension": return "extension";
+    case "revision": return "revision";
+    case "replacement": return "replacement";
+    default: throw new Error("Choose a supported model change class.");
+  }
+}
+
+function evidencePolarity(value: string): ModelEvidencePolarity {
+  switch (value) {
+    case "supports": return "supports";
+    case "contradicts": return "contradicts";
+    case "qualifies": return "qualifies";
+    case "neutral": return "neutral";
+    default: throw new Error("Choose a supported evidence polarity.");
+  }
+}
+
+function artifactReference(kind: string, id: string): ModelArtifactRef {
+  switch (kind) {
+    case "analysis_output": return { kind, id };
+    case "experiment_run": return { kind, id };
+    case "dataset_version": return { kind, id };
+    case "research_observation": return { kind, id };
+    case "source_version_segment": return { kind, id };
+    case "source_claim": return { kind, id };
+    case "finding_version": return { kind, id };
+    default: throw new Error("Choose a supported evidence artifact type.");
+  }
+}
+
+function validationIndependence(value: string): "independent" | "not_independent" | "unknown" {
+  switch (value) {
+    case "independent": return "independent";
+    case "not_independent": return "not_independent";
+    case "unknown": return "unknown";
+    default: throw new Error("Choose a supported independence state.");
+  }
+}
+
+function validationOutcome(value: string): "pass" | "fail" | "inconclusive" {
+  switch (value) {
+    case "pass": return "pass";
+    case "fail": return "fail";
+    case "inconclusive": return "inconclusive";
+    default: throw new Error("Choose a supported validation outcome.");
+  }
+}
+
+function replicationKind(value: string): "direct" | "conceptual" {
+  switch (value) {
+    case "direct": return "direct";
+    case "conceptual": return "conceptual";
+    default: throw new Error("Choose a supported replication kind.");
+  }
+}
+
+function replicationOutcome(value: string): "supports" | "contradicts" | "mixed" | "inconclusive" {
+  switch (value) {
+    case "supports": return "supports";
+    case "contradicts": return "contradicts";
+    case "mixed": return "mixed";
+    case "inconclusive": return "inconclusive";
+    default: throw new Error("Choose a supported replication outcome.");
+  }
 }
 
 function ModelFormLabel({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
@@ -142,6 +212,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
   const [selectedModelId, setSelectedModelId] = useState("");
   const [compareLeftId, setCompareLeftId] = useState("");
   const [compareRightId, setCompareRightId] = useState("");
+  const [evaluationRunId, setEvaluationRunId] = useState("");
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!projectId) {
@@ -188,6 +259,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
   );
   const comparisonLeft = workspace?.versions.find((version) => version.id === compareLeftId);
   const comparisonRight = workspace?.versions.find((version) => version.id === compareRightId);
+  const selectedAnalysisRun = analysis?.runs.find((run) => run.id === evaluationRunId);
 
   const createModel = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -213,27 +285,27 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
     const modelId = String(values.get("modelId") ?? "");
     const assumptionKey = String(values.get("assumptionKey") ?? "").trim();
     const assumptionStatement = String(values.get("assumptionStatement") ?? "").trim();
-    const impacts = parseArray(
-      String(values.get("impacts") ?? "[]"),
-      "Affected claims/assumptions",
-      isImpact,
-    );
-    if (assumptionKey && assumptionStatement && !impacts.some(
-      (impact) => impact.target.kind === "assumption" && impact.target.assumptionKey === assumptionKey,
-    )) {
-      impacts.push({
-        target: { kind: "assumption", assumptionKey },
-        impactKind: "added",
-        previousStatement: null,
-        currentStatement: assumptionStatement,
-        rationale: String(values.get("changeRationale") ?? ""),
-      });
-    }
     await perform(async () => {
+      const impacts = parseArray(
+        String(values.get("impacts") ?? "[]"),
+        "Affected claims/assumptions",
+        isImpact,
+      );
+      if (assumptionKey && assumptionStatement && !impacts.some(
+        (impact) => impact.target.kind === "assumption" && impact.target.assumptionKey === assumptionKey,
+      )) {
+        impacts.push({
+          target: { kind: "assumption", assumptionKey },
+          impactKind: "added",
+          previousStatement: null,
+          currentStatement: assumptionStatement,
+          rationale: String(values.get("changeRationale") ?? ""),
+        });
+      }
       const created = await modelService.createVersion({
         projectId,
         modelId,
-        changeClass: String(values.get("changeClass") ?? "revision") as CreateModelVersionReq["changeClass"],
+        changeClass: changeClass(String(values.get("changeClass") ?? "revision")),
         changeRationale: String(values.get("changeRationale") ?? ""),
         expectedImplications: String(values.get("expectedImplications") ?? ""),
         specification: {
@@ -261,8 +333,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
         findings: parseArray(String(values.get("findings") ?? "[]"), "Finding links", isRelation),
         experiments: parseArray(String(values.get("experiments") ?? "[]"), "Experiment links", isExperimentRelation),
         datasetUses: parseArray(String(values.get("datasetUses") ?? "[]"), "Dataset uses", isDatasetUse),
-        evidenceIds: parseArray(String(values.get("evidenceIds") ?? "[]"), "Evidence IDs", isStringArray)
-          .flat(),
+        evidenceIds: parseArray(String(values.get("evidenceIds") ?? "[]"), "Evidence IDs", isString),
         createdBy: null,
       });
       setSelectedModelId(modelId);
@@ -280,14 +351,17 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
       setError("Provide the exact evidence artifact ID.");
       return;
     }
-    const artifact: ModelArtifactRef = {
-      kind: kind as ModelArtifactRef["kind"],
-      id: artifactId,
-    };
+    let artifact: ModelArtifactRef;
+    try {
+      artifact = artifactReference(kind, artifactId);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+      return;
+    }
     await perform(() => modelService.createEvidence({
       modelVersionId: String(values.get("modelVersionId") ?? ""),
       artifact,
-      polarity: String(values.get("polarity") ?? "supports") as ModelEvidencePolarity,
+      polarity: evidencePolarity(String(values.get("polarity") ?? "supports")),
       scope: String(values.get("scope") ?? ""),
       qualityRationale: String(values.get("qualityRationale") ?? ""),
       limitations: String(values.get("limitations") ?? ""),
@@ -331,8 +405,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
       populationScope: String(values.get("populationScope") ?? ""),
       evaluationMethod: String(values.get("evaluationMethod") ?? ""),
       evaluatorIdentity: String(values.get("evaluatorIdentity") ?? ""),
-      independenceState: String(values.get("independenceState") ?? "unknown") as
-        "independent" | "not_independent" | "unknown",
+      independenceState: validationIndependence(String(values.get("independenceState") ?? "unknown")),
       independenceRationale: String(values.get("independenceRationale") ?? ""),
       conflictOfInterest: String(values.get("conflictOfInterest") ?? ""),
       createdBy: null,
@@ -349,7 +422,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
     }
     await perform(() => modelService.finalizeValidation({
       validationId: String(values.get("validationId") ?? ""),
-      outcome: String(values.get("outcome") ?? "inconclusive") as "pass" | "fail" | "inconclusive",
+      outcome: validationOutcome(String(values.get("outcome") ?? "inconclusive")),
       rationale: String(values.get("rationale") ?? ""),
       deviations: [String(values.get("deviations") ?? "")].filter((value) => value.trim().length > 0),
       analysisEvidenceIds: [],
@@ -372,13 +445,12 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
       projectId,
       modelVersionId: String(values.get("modelVersionId") ?? ""),
       originalExperimentRunId: run.id,
-      replicationKind: String(values.get("replicationKind") ?? "direct") as "direct" | "conceptual",
+      replicationKind: replicationKind(String(values.get("replicationKind") ?? "direct")),
       independentTeamOperator: String(values.get("operator") ?? ""),
       protocolContext: String(values.get("protocolContext") ?? ""),
       datasetContext: { originalDesignVersionId: run.designVersionId },
       datasets: [],
-      outcome: String(values.get("outcome") ?? "inconclusive") as
-        "supports" | "contradicts" | "mixed" | "inconclusive",
+      outcome: replicationOutcome(String(values.get("outcome") ?? "inconclusive")),
       resultSummary: String(values.get("resultSummary") ?? ""),
       deviations: [String(values.get("deviations") ?? "")].filter((value) => value.trim().length > 0),
       provenance: { recordedIn: "model-workspace" },
@@ -562,13 +634,23 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
             <option value="">Model version</option>
             {modelVersions.map((version) => <option key={version.id} value={version.id}>{version.modelId} · v{version.versionNo}</option>)}
           </select>
-          <select className={fieldClass} name="analysisRunId" required defaultValue="">
+          <select className={fieldClass} name="analysisRunId" required value={evaluationRunId} onChange={(event) => setEvaluationRunId(event.target.value)}>
             <option value="">Completed AnalysisRun</option>
             {projectRuns.map((run) => <option key={run.id} value={run.id}>{run.id}</option>)}
           </select>
           <p className="text-[11px] text-gray-500">The backend checks that the selected input and metric belong to the same completed run.</p>
-          <input className={fieldClass} name="inputId" placeholder="Exact AnalysisRun input ID" required />
-          <input className={fieldClass} name="metricId" placeholder="Exact AnalysisMetric ID" required />
+          <select className={fieldClass} name="inputId" required defaultValue="">
+            <option value="">Exact run input</option>
+            {(selectedAnalysisRun?.inputs ?? []).map((input) => (
+              <option key={input.id} value={input.id}>{input.role} · {input.datasetVersionId} · {input.id}</option>
+            ))}
+          </select>
+          <select className={fieldClass} name="metricId" required defaultValue="">
+            <option value="">Analysis metric</option>
+            (selectedAnalysisRun?.metrics ?? []).map((metric) => (
+              <option key={metric.id} value={metric.id}>{metric.estimand} · {metric.effectEstimate} {metric.unit} · {metric.id}</option>
+            ))
+          </select>
           <textarea className={fieldClass} name="limitations" placeholder="Evaluation scope and limitations" required />
           <button className={buttonClass} disabled={busy || projectRuns.length === 0}>Save evaluation</button>
           {(workspace?.evaluations ?? []).map((evaluation) => (
