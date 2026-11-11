@@ -900,11 +900,22 @@ pub fn transition_question(
         (current.as_str(), next),
         ("draft", "review" | "rejected" | "deferred")
             | ("review", "accepted" | "rejected" | "deferred" | "draft")
-            | ("accepted", "deferred" | "refined" | "superseded")
+            | ("accepted", "deferred" | "superseded")
             | ("deferred", "draft" | "review" | "accepted" | "rejected")
     );
     if !allowed {
         return Err(rusqlite::Error::InvalidQuery);
+    }
+    if next == "superseded" {
+        let has_successor: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM research_question_lineage
+             WHERE parent_question_id = ?1 AND relation_kind = 'supersedes')",
+            [question_id],
+            |row| row.get(0),
+        )?;
+        if !has_successor {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
     }
     tx.execute(
         "UPDATE research_questions SET lifecycle_status = ?1, rationale = ?2 WHERE id = ?3",
