@@ -255,7 +255,7 @@ pub fn create_method_version(
 }
 
 fn metric_version_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MetricDefinitionVersionDto> {
-    let verification_status: String = row.get(12)?;
+    let verification_status: String = row.get(11)?;
     Ok(MetricDefinitionVersionDto {
         id: row.get(0)?,
         metric_definition_id: row.get(1)?,
@@ -268,13 +268,13 @@ fn metric_version_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MetricDe
         unit: row.get(8)?,
         test_suite_uri: row.get(9)?,
         test_suite_sha256: row.get(10)?,
-        tests_total: row.get(13)?,
-        tests_passed: row.get(14)?,
+        tests_total: row.get(12)?,
+        tests_passed: row.get(13)?,
         verification_status: AnalysisVerificationStatus::parse(&verification_status)
             .map_err(|_| rusqlite::Error::InvalidQuery)?,
-        content_sha256: row.get(15)?,
-        created_by: row.get(16)?,
-        created_at_us: row.get(17)?,
+        content_sha256: row.get(14)?,
+        created_by: row.get(15)?,
+        created_at_us: row.get(16)?,
     })
 }
 
@@ -283,17 +283,12 @@ fn query_metric_version(conn: &Connection, version_id: &str) -> Result<MetricDef
         "SELECT v.id, m.id, m.project_id, m.metric_key, m.name, v.version_no,
                 v.version_label, v.formula, v.unit, v.test_suite_uri,
                 v.test_suite_sha256, v.verification_status, v.tests_total,
-                v.tests_passed, v.content_sha256, v.created_by, v.created_at_us,
-                v.id
+                v.tests_passed, v.content_sha256, v.created_by, v.created_at_us
          FROM analysis_metric_definition_versions v
          JOIN analysis_metric_definitions m ON m.id = v.metric_definition_id
          WHERE v.id = ?1",
         [version_id],
-        |row| {
-            let mut dto = metric_version_from_row(row)?;
-            dto.version_no = row.get(5)?;
-            Ok(dto)
-        },
+        metric_version_from_row,
     )?)
 }
 
