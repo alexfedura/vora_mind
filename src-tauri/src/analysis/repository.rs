@@ -2203,6 +2203,37 @@ fn query_run_integrity_findings(
         .collect()
 }
 
+fn query_run_integrity_declarations(
+    conn: &Connection,
+    run_id: &str,
+) -> Result<Vec<AnalysisIntegrityDeclarationDto>> {
+    let mut statement = conn.prepare(
+        "SELECT category, applicability, rationale, details_json
+         FROM analysis_run_integrity_declarations WHERE run_id = ?1
+         ORDER BY category",
+    )?;
+    let rows = statement
+        .query_map([run_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(|(category, applicability, rationale, details)| {
+            Ok(AnalysisIntegrityDeclarationDto {
+                category,
+                applicability,
+                rationale,
+                details: parse_json(&details)?,
+            })
+        })
+        .collect()
+}
+
 pub fn query_run(conn: &Connection, run_id: &str) -> Result<AnalysisRunDto> {
     let row: (
         String,
@@ -2273,6 +2304,7 @@ pub fn query_run(conn: &Connection, run_id: &str) -> Result<AnalysisRunDto> {
         completion_summary: row.12.filter(|summary| !summary.trim().is_empty()),
         failure_summary: row.13,
         inputs: query_run_inputs(conn, run_id)?,
+        integrity_declarations: query_run_integrity_declarations(conn, run_id)?,
         integrity_findings: query_run_integrity_findings(conn, run_id)?,
         outputs: query_run_outputs(conn, run_id)?,
         metrics: query_run_metrics(conn, run_id)?,

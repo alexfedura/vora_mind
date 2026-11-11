@@ -569,6 +569,15 @@ pub struct AnalysisIntegrityFindingDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct AnalysisIntegrityDeclarationDto {
+    pub category: String,
+    pub applicability: String,
+    pub rationale: String,
+    pub details: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct FinalizeAnalysisRunReq {
     pub run_id: String,
     pub next_status: AnalysisRunStatus,
@@ -656,6 +665,7 @@ pub struct AnalysisRunDto {
     pub completion_summary: Option<String>,
     pub failure_summary: Option<String>,
     pub inputs: Vec<AnalysisInputDto>,
+    pub integrity_declarations: Vec<AnalysisIntegrityDeclarationDto>,
     pub integrity_findings: Vec<AnalysisIntegrityFindingDto>,
     pub outputs: Vec<AnalysisOutputDto>,
     pub metrics: Vec<AnalysisMetricDto>,
