@@ -1208,9 +1208,6 @@ pub fn add_gap_evidence(conn: &Connection, req: AddGapEvidenceReq) -> Result<(),
 
 pub fn review_gap_exception(conn: &Connection, req: ReviewGapExceptionReq) -> Result<(), String> {
     validate_required(&req.rationale, "review exception rationale")?;
-    if !matches!(req.review_decision.as_str(), "accepted" | "rejected") {
-        return Err("review decision must be accepted or rejected".into());
-    }
     repository::review_gap_exception(conn, &req, now_ts_us()?).map_err(|error| error.to_string())
 }
 
@@ -1430,7 +1427,7 @@ pub fn create_typed_hypothesis(
         &req.statement_h1,
         &req.population_scope,
         &req.research_scope,
-        &req.expected_direction,
+        req.expected_direction.as_str(),
         &req.falsification_criteria,
         req.expected_effect_decimal.as_deref(),
         req.expected_effect_unit.as_deref(),
@@ -1525,18 +1522,16 @@ pub fn create_research_design(
 pub fn transition_research_design(
     conn: &Connection,
     design_version_id: &str,
-    next_status: &str,
+    next_status: ResearchDesignStatus,
     actor_id: Option<&str>,
 ) -> Result<ResearchExperimentDesignVersionDto, String> {
-    if !matches!(next_status, "review" | "preregistered" | "withdrawn") {
-        return Err(format!(
-            "unsupported design transition target: {next_status}"
-        ));
+    if next_status == ResearchDesignStatus::Draft {
+        return Err("design cannot transition back to draft".into());
     }
     repository::transition_research_design(
         conn,
         design_version_id,
-        next_status,
+        next_status.as_str(),
         actor_id,
         now_ts_us()?,
     )
@@ -1548,12 +1543,6 @@ pub fn link_hypothesis_design(
     req: LinkHypothesisDesignReq,
 ) -> Result<(), String> {
     validate_required(&req.rationale, "hypothesis-design rationale")?;
-    if !matches!(req.relationship_kind.as_str(), "tests" | "competing_design") {
-        return Err(format!(
-            "unsupported hypothesis-design relation: {}",
-            req.relationship_kind
-        ));
-    }
     repository::link_hypothesis_design(conn, &req, now_ts_us()?).map_err(|error| error.to_string())
 }
 
