@@ -944,6 +944,69 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
         [version_id],
         |row| parse_json(&row.get::<_, String>(0)?),
     )?;
+    let contributions = query_contributions(conn, version_id)?;
+    let hypotheses = contributions
+        .iter()
+        .filter_map(|contribution| match &contribution.target {
+            ModelContributionTarget::HypothesisVersion { id } => Some(ModelRelationReq {
+                target_id: id.clone(),
+                relation_kind: ModelRelationKind::parse(contribution.relation_kind.as_str())
+                    .ok()?,
+                rationale: contribution.rationale.clone(),
+            }),
+            _ => None,
+        })
+        .collect();
+    let findings = contributions
+        .iter()
+        .filter_map(|contribution| match &contribution.target {
+            ModelContributionTarget::FindingVersion { id } => Some(ModelRelationReq {
+                target_id: id.clone(),
+                relation_kind: ModelRelationKind::parse(contribution.relation_kind.as_str())
+                    .ok()?,
+                rationale: contribution.rationale.clone(),
+            }),
+            _ => None,
+        })
+        .collect();
+    let experiments = contributions
+        .iter()
+        .filter_map(|contribution| match &contribution.target {
+            ModelContributionTarget::Experiment {
+                design_version_id,
+                experiment_run_id,
+            } => Some(ModelExperimentRelationReq {
+                design_version_id: design_version_id.clone(),
+                experiment_run_id: experiment_run_id.clone(),
+                relation_kind: contribution.relation_kind.as_str().to_string(),
+                rationale: contribution.rationale.clone(),
+            }),
+            _ => None,
+        })
+        .collect();
+    let dataset_uses = contributions
+        .iter()
+        .filter_map(|contribution| match &contribution.target {
+            ModelContributionTarget::Dataset {
+                dataset_version_id,
+                role,
+                split_group_id,
+            } => Some(ModelDatasetUseReq {
+                dataset_version_id: dataset_version_id.clone(),
+                role: role.clone(),
+                split_group_id: split_group_id.clone(),
+                rationale: contribution.rationale.clone(),
+            }),
+            _ => None,
+        })
+        .collect();
+    let evidence_ids = contributions
+        .iter()
+        .filter_map(|contribution| match &contribution.target {
+            ModelContributionTarget::Evidence { id } => Some(id.clone()),
+            _ => None,
+        })
+        .collect();
     Ok(ModelVersionDto {
         id: row.0,
         model_id: row.1,
@@ -964,26 +1027,12 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
         parameters,
         artifacts,
         impacts: query_impacts(conn, version_id)?,
-        contributions: query_contributions(conn, version_id)?,
-        hypotheses: query_relations(
-            conn,
-            "SELECT hypothesis_version_id, relation_kind, rationale
-             FROM model_version_hypotheses WHERE model_version_id = ?1",
-            version_id,
-        )?,
-        findings: query_relations(
-            conn,
-            "SELECT finding_version_id, relation_kind, rationale
-             FROM model_version_findings WHERE model_version_id = ?1",
-            version_id,
-        )?,
-        experiments: query_experiment_relations(conn, version_id)?,
-        dataset_uses: query_dataset_uses(conn, version_id)?,
-        evidence_ids: query_ids(
-            conn,
-            "SELECT evidence_id FROM model_version_evidence WHERE model_version_id = ?1 ORDER BY evidence_id",
-            version_id,
-        )?,
+        contributions,
+        hypotheses,
+        findings,
+        experiments,
+        dataset_uses,
+        evidence_ids,
         content_sha256: row.12,
         created_by: row.13,
         created_at_us: row.14,
@@ -997,65 +1046,48 @@ fn query_contributions(
     version_id: &str,
 ) -> Result<Vec<ModelContributionDto>> {
     let mut statement = conn.prepare(
-        "SELECT id, relation_kind, target_kind, target_id, secondary_id, role,
-                split_group_id, rationale, created_by, created_at_us
-         FROM (
-            SELECT id, model_version_id, relation_kind, 'hypothesis_version' AS target_kind,
-                   hypothesis_version_id AS target_id, NULL AS secondary_id, NULL AS role,
-                   NULL AS split_group_id, rationale, created_by, created_at_us
-            FROM model_version_hypotheses
-            UNION ALL
-            SELECT id, model_version_id, relation_kind, 'finding_version',
-                   finding_version_id, NULL, NULL, NULL, rationale, created_by, created_at_us
-            FROM model_version_findings
-            UNION ALL
-            SELECT id, model_version_id, relation_kind, 'experiment', design_version_id,
-                   experiment_run_id, NULL, NULL, rationale, created_by, created_at_us
-            FROM model_version_experiments
-            UNION ALL
-            SELECT id, model_version_id, 'dataset_use', 'dataset', dataset_version_id,
-                   NULL, role, split_group_id, rationale, created_by, created_at_us
-            FROM model_version_dataset_uses
-            UNION ALL
-            SELECT id, model_version_id, 'evidenced_by', 'evidence', evidence_id,
-                   NULL, NULL, NULL, rationale, created_by, created_at_us
-            FROM model_version_evidence
-         )
-         WHERE model_version_id = ?1
+        "SELECT id, relation_kind, hypothesis_version_id, finding_version_id,
+                design_version_id, experiment_run_id, dataset_version_id, dataset_role,
+                split_group_id, evidence_id, rationale, created_by, created_at_us
+         FROM model_contributions WHERE model_version_id = ?1
          ORDER BY created_at_us, id",
     )?;
     let rows = statement
         .query_map([version_id], |row| {
             let relation_kind = ModelContributionKind::parse(&row.get::<_, String>(1)?)
                 .map_err(|_| rusqlite::Error::InvalidQuery)?;
-            let target_kind: String = row.get(2)?;
-            let target_id: String = row.get(3)?;
-            let target = match target_kind.as_str() {
-                "hypothesis_version" => ModelContributionTarget::HypothesisVersion {
-                    id: target_id,
-                },
-                "finding_version" => ModelContributionTarget::FindingVersion {
-                    id: target_id,
-                },
-                "experiment" => ModelContributionTarget::Experiment {
-                    design_version_id: target_id,
-                    experiment_run_id: row.get(4)?,
-                },
-                "dataset" => ModelContributionTarget::Dataset {
-                    dataset_version_id: target_id,
-                    role: row.get(5)?,
-                    split_group_id: row.get(6)?,
-                },
-                "evidence" => ModelContributionTarget::Evidence { id: target_id },
-                _ => return Err(rusqlite::Error::InvalidQuery),
+            let hypothesis_id: Option<String> = row.get(2)?;
+            let finding_id: Option<String> = row.get(3)?;
+            let design_id: Option<String> = row.get(4)?;
+            let dataset_id: Option<String> = row.get(6)?;
+            let evidence_id: Option<String> = row.get(9)?;
+            let target = if let Some(id) = hypothesis_id {
+                ModelContributionTarget::HypothesisVersion { id }
+            } else if let Some(id) = finding_id {
+                ModelContributionTarget::FindingVersion { id }
+            } else if let Some(design_version_id) = design_id {
+                ModelContributionTarget::Experiment {
+                    design_version_id,
+                    experiment_run_id: row.get(5)?,
+                }
+            } else if let Some(dataset_version_id) = dataset_id {
+                ModelContributionTarget::Dataset {
+                    dataset_version_id,
+                    role: row.get(7)?.ok_or(rusqlite::Error::InvalidQuery)?,
+                    split_group_id: row.get(8)?,
+                }
+            } else if let Some(id) = evidence_id {
+                ModelContributionTarget::Evidence { id }
+            } else {
+                return Err(rusqlite::Error::InvalidQuery);
             };
             Ok(ModelContributionDto {
                 id: row.get(0)?,
                 relation_kind,
                 target,
-                rationale: row.get(7)?,
-                created_by: row.get(8)?,
-                created_at_us: row.get(9)?,
+                rationale: row.get(10)?,
+                created_by: row.get(11)?,
+                created_at_us: row.get(12)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
