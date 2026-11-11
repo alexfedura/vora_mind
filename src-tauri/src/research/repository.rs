@@ -2108,3 +2108,233 @@ fn query_hypothesis_definition(
     Ok(version)
 }
 
+pub fn workspace(conn: &Connection) -> Result<ResearchWorkspaceDto> {
+    let mut pathways_statement =
+        conn.prepare("SELECT id, pathway_key, title, description FROM research_pathways ORDER BY id")?;
+    let pathways = pathways_statement
+        .query_map([], |row| {
+            let key = row.get::<_, String>(1)?;
+            Ok(ResearchPathwayDto {
+                id: row.get(0)?,
+                pathway_key: ResearchPathwayKey::parse(&key)
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                title: row.get(2)?,
+                description: row.get(3)?,
+            })
+        })?
+        .collect::<Result<Vec<_>>>()?;
+
+    let project_ids = query_ids(conn, "SELECT id FROM research_projects ORDER BY updated_at_us DESC, id")?;
+    let projects = project_ids
+        .iter()
+        .map(|id| query_project(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+    let mut domains_statement = conn.prepare(
+        "SELECT id, name, description, parent_domain_id, lifecycle_status, created_by, created_at_us
+         FROM research_domains ORDER BY name, id",
+    )?;
+    let domains = domains_statement
+        .query_map([], |row| {
+            Ok(ResearchDomainDto {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                parent_domain_id: row.get(3)?,
+                lifecycle_status: row.get(4)?,
+                created_by: row.get(5)?,
+                created_at_us: row.get(6)?,
+            })
+        })?
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut framework_statement = conn.prepare(
+        "SELECT f.id, v.id, v.title, v.version_no
+         FROM knowledge_framework_versions v
+         JOIN knowledge_frameworks f ON f.id = v.framework_id
+         WHERE v.status = 'published'
+         ORDER BY v.title, v.version_no DESC",
+    )?;
+    let framework_versions = framework_statement
+        .query_map([], |row| {
+            Ok(FrameworkVersionReferenceDto {
+                framework_id: row.get(0)?,
+                framework_version_id: row.get(1)?,
+                title: row.get(2)?,
+                version_no: row.get(3)?,
+            })
+        })?
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut source_statement = conn.prepare(
+        "SELECT s.id, v.id, s.title, v.edition_label, seg.id, seg.label,
+                (SELECT c.id FROM source_claims c
+                 WHERE c.source_id = s.id AND c.source_version_id = v.id
+                 ORDER BY c.created_at_us LIMIT 1),
+                v.captured_at_us
+         FROM source_versions v
+         JOIN sources s ON s.id = v.source_id
+         LEFT JOIN source_version_segments seg ON seg.source_id = v.source_id
+             AND seg.source_version_id = v.id
+         ORDER BY s.title, v.captured_at_us DESC, seg.order_index, seg.id",
+    )?;
+    let source_versions = source_statement
+        .query_map([], |row| {
+            Ok(SourceVersionReferenceDto {
+                source_id: row.get(0)?,
+                source_version_id: row.get(1)?,
+                source_title: row.get(2)?,
+                edition_label: row.get(3)?,
+                source_location_id: row.get(4)?,
+                source_location_label: row.get(5)?,
+                source_claim_id: row.get(6)?,
+                captured_at_us: row.get(7)?,
+            })
+        })?
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut adoption_statement = conn.prepare(
+        "SELECT a.id, a.project_id, a.framework_id, a.framework_version_id,
+                v.title, v.version_no, a.use_context, a.adopted_by, a.adopted_at_us
+         FROM research_project_knowledge_adoptions a
+         JOIN knowledge_framework_versions v ON v.id = a.framework_version_id
+         ORDER BY a.adopted_at_us DESC",
+    )?;
+    let adoptions = adoption_statement
+        .query_map([], |row| {
+            Ok(ProjectKnowledgeAdoptionDto {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                framework_id: row.get(2)?,
+                framework_version_id: row.get(3)?,
+                title: row.get(4)?,
+                version_no: row.get(5)?,
+                use_context: row.get(6)?,
+                adopted_by: row.get(7)?,
+                adopted_at_us: row.get(8)?,
+            })
+        })?
+        .collect::<Result<Vec<_>>>()?;
+
+    let review_ids = query_ids(conn, "SELECT id FROM literature_reviews ORDER BY created_at_us DESC")?;
+    let literature_reviews = review_ids
+        .iter()
+        .map(|id| query_literature_review(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+    let assessment_ids =
+        query_ids(conn, "SELECT id FROM prior_knowledge_assessments ORDER BY created_at_us DESC")?;
+    let prior_assessments = assessment_ids
+        .iter()
+        .map(|id| query_prior_assessment(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+    let gap_ids = query_ids(conn, "SELECT id FROM research_gaps ORDER BY updated_at_us DESC")?;
+    let gaps = gap_ids
+        .iter()
+        .map(|id| query_gap(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+    let question_ids =
+        query_ids(conn, "SELECT id FROM research_questions ORDER BY mapped_at_us DESC")?;
+    let questions = question_ids
+        .iter()
+        .map(|id| query_question(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+    let question_lineage = {
+        let mut statement = conn.prepare(
+            "SELECT id, parent_question_id, derived_question_id, relation_kind,
+                    rationale, created_by, created_at_us
+             FROM research_question_lineage ORDER BY created_at_us, id",
+        )?;
+        statement
+            .query_map([], |row| {
+                let relation = row.get::<_, String>(3)?;
+                Ok(ResearchQuestionLineageDto {
+                    id: row.get(0)?,
+                    parent_question_id: row.get(1)?,
+                    derived_question_id: row.get(2)?,
+                    relation_kind: match relation.as_str() {
+                        "refined_from" => ResearchQuestionRelation::RefinedFrom,
+                        "supersedes" => ResearchQuestionRelation::Supersedes,
+                        _ => ResearchQuestionRelation::DerivedFrom,
+                    },
+                    rationale: row.get(4)?,
+                    created_by: row.get(5)?,
+                    created_at_us: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?
+    };
+    let phenomenon_ids = query_ids(conn, "SELECT id FROM research_phenomena ORDER BY created_at_us DESC")?;
+    let phenomena = phenomenon_ids
+        .iter()
+        .map(|id| query_phenomenon(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+    let plan_ids = query_ids(conn, "SELECT id FROM observation_plans ORDER BY created_at_us DESC")?;
+    let observation_plans = plan_ids
+        .iter()
+        .map(|id| query_observation_plan(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+    let dataset_ids =
+        query_ids(conn, "SELECT id FROM research_dataset_version_references ORDER BY created_at_us DESC")?;
+    let dataset_versions = dataset_ids
+        .iter()
+        .map(|id| query_dataset_version(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+    let observation_ids =
+        query_ids(conn, "SELECT id FROM research_observations ORDER BY measured_at_us DESC")?;
+    let observations = observation_ids
+        .iter()
+        .map(|id| query_observation(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+    let pattern_ids = query_ids(conn, "SELECT id FROM research_patterns ORDER BY created_at_us DESC")?;
+    let patterns = pattern_ids
+        .iter()
+        .map(|id| query_pattern(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+    let idea_ids = query_ids(conn, "SELECT id FROM research_ideas ORDER BY created_at_us DESC")?;
+    let ideas = idea_ids
+        .iter()
+        .map(|id| query_idea(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+    let hypothesis_ids =
+        query_ids(conn, "SELECT id FROM research_hypotheses ORDER BY created_at_us DESC")?;
+    let hypotheses = hypothesis_ids
+        .iter()
+        .map(|id| query_hypothesis(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+    let design_ids = query_ids(
+        conn,
+        "SELECT id FROM research_experiment_design_versions ORDER BY created_at_us DESC",
+    )?;
+    let design_versions = design_ids
+        .iter()
+        .map(|id| query_design_version(conn, id))
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(ResearchWorkspaceDto {
+        pathways,
+        projects,
+        domains,
+        framework_versions,
+        source_versions,
+        adoptions,
+        literature_reviews,
+        prior_assessments,
+        gaps,
+        questions,
+        question_lineage,
+        phenomena,
+        observation_plans,
+        dataset_versions,
+        observations,
+        patterns,
+        ideas,
+        hypotheses,
+        design_versions,
+    })
+}
+
+fn query_ids(conn: &Connection, sql: &str) -> Result<Vec<String>> {
+    let mut statement = conn.prepare(sql)?;
+    let rows = statement.query_map([], |row| row.get(0))?;
+    rows.collect()
+}
+
