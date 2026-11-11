@@ -884,6 +884,7 @@ pub fn initialize_workspace_schema(conn: &Connection) -> Result<(), Box<dyn std:
     super::hypothesis::init_schema(conn)?;
     crate::market::db::init_schema(conn)?;
     crate::source::db::init_schema(conn)?;
+    crate::research::init_schema(conn)?;
     crate::forge::index::CodeIndex::initialize_schema(conn)?;
     init_vora_schema(conn)?;
     Ok(())

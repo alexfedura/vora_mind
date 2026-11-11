@@ -2,6 +2,7 @@ extern crate self as vora_lib;
 
 pub mod forge;
 pub mod mind;
+pub mod research;
 pub mod vora_trace;
 
 use crate::mind::canvas_db::{AppState, BoardSummary, EdgeInput, NodeInput, SnapshotSummary};
@@ -2456,6 +2457,38 @@ pub fn run() {
             create_question,
             save_question,
             delete_question,
+            research::ipc::research_get_workspace,
+            research::ipc::research_create_project,
+            research::ipc::research_create_domain,
+            research::ipc::research_assign_domain,
+            research::ipc::research_adopt_framework_version,
+            research::ipc::research_create_literature_review,
+            research::ipc::research_add_literature_source,
+            research::ipc::research_review_literature_review,
+            research::ipc::research_create_prior_assessment,
+            research::ipc::research_review_prior_assessment,
+            research::ipc::research_create_gap,
+            research::ipc::research_add_gap_evidence,
+            research::ipc::research_review_gap_exception,
+            research::ipc::research_transition_gap,
+            research::ipc::research_create_question,
+            research::ipc::research_transition_question,
+            research::ipc::research_refine_question,
+            research::ipc::research_link_question_lineage,
+            research::ipc::research_create_phenomenon,
+            research::ipc::research_create_observation_plan,
+            research::ipc::research_review_observation_plan,
+            research::ipc::research_create_dataset_version_reference,
+            research::ipc::research_create_observation,
+            research::ipc::research_create_pattern,
+            research::ipc::research_create_idea,
+            research::ipc::research_create_typed_hypothesis,
+            research::ipc::research_transition_hypothesis,
+            research::ipc::research_link_competing_hypotheses,
+            research::ipc::research_add_hypothesis_evidence,
+            research::ipc::research_create_design,
+            research::ipc::research_transition_design,
+            research::ipc::research_link_hypothesis_design,
             triage_question,
             untriage_question,
             archive_question,
