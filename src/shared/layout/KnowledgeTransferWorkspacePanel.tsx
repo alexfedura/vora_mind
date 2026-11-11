@@ -457,7 +457,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
                   )}
                 </div>
               )}
-              <form onSubmit={(event) => void handleCreateOrigin(event)} className="space-y-2 border-t border-[#292c34] pt-3">
+              <form key={selectedArtifactKey} onSubmit={(event) => void handleCreateOrigin(event)} className="space-y-2 border-t border-[#292c34] pt-3">
                 <Field label="Origin project">
                   <select className={fieldClass} name="originProjectId" defaultValue={selectedArtifact?.ownerProjectId ?? ""} required>
                     <option value="">Select project</option>
@@ -537,6 +537,25 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
                       setSelectedEligibilityId(event.target.value);
                       setAttributionText(eligibility?.attributionText ?? "");
                       setSelectedPurpose(eligibility?.permittedPurposes[0] ?? "research");
+                        const projects = workspace?.projects ?? [];
+                        const validProject = projects.some((project) =>
+                          project.id === selectedProjectId
+                          && project.id !== eligibility?.origin.originProjectId
+                          && (
+                            eligibility?.accessScope === "workspace"
+                            || eligibility?.allowedProjectIds.includes(project.id)
+                          ),
+                        );
+                        if (!validProject) {
+                          const nextProject = projects.find((project) =>
+                            project.id !== eligibility?.origin.originProjectId
+                            && (
+                              eligibility?.accessScope === "workspace"
+                              || eligibility?.allowedProjectIds.includes(project.id)
+                            ),
+                          );
+                          setSelectedProjectId(nextProject?.id ?? "");
+                        }
                     }}
                     required
                   >
