@@ -2397,8 +2397,8 @@ mod tests {
     #[test]
     fn model_versions_evaluations_validation_and_replications_survive_reopen() {
         let path = new_database_path();
-        let (model_id, initial_version_id, successor_version_id, dataset_version_id, evidence_id) = {
-            let conn = Connection::open(&path).expect("open workspace");
+        let (model_id, initial_version_id, successor_version_id, evidence_id) = {
+            let mut conn = Connection::open(&path).expect("open workspace");
             initialize(&conn);
             insert_project(&conn, "project-a");
             insert_project(&conn, "project-b");
@@ -2650,13 +2650,7 @@ mod tests {
             .expect_err("model parameter history must be immutable");
             conn.execute("DELETE FROM model_versions WHERE id = ?1", [&initial.id])
                 .expect_err("predecessor model version must not be deleted");
-            (
-                model.id,
-                initial.id,
-                successor.id,
-                dataset_version_id,
-                evidence.id,
-            )
+            (model.id, initial.id, successor.id, evidence.id)
         };
 
         {
@@ -2717,7 +2711,7 @@ mod tests {
 
     #[test]
     fn initial_version_requires_revision_and_explicit_impact() {
-        let conn = Connection::open_in_memory().expect("open in-memory database");
+        let mut conn = Connection::open_in_memory().expect("open in-memory database");
         initialize(&conn);
         insert_project(&conn, "project");
         let model = create_model(&mut conn, &model_request("project")).expect("create model");
