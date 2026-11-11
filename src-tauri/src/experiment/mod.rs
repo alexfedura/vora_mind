@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub mod ipc;
 pub mod repository;
+pub mod service;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
