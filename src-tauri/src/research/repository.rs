@@ -2206,7 +2206,13 @@ pub fn create_linked_research_design(
         "INSERT INTO research_experiment_designs
             (id, project_id, title, created_by, created_at_us)
          VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![design_id, req.project_id, req.title.trim(), req.created_by, now],
+        params![
+            design_id,
+            req.project_id,
+            req.title.trim(),
+            req.created_by,
+            now
+        ],
     )?;
     tx.execute(
         "INSERT INTO research_experiment_design_versions
@@ -3187,8 +3193,20 @@ mod tests {
         )
         .expect("insert legacy source");
         for (version_id, edition, captured_at, segment_id, page) in [
-            ("source-version-1", "First edition", 1_i64, "source-location-1", 10_i64),
-            ("source-version-2", "Second edition", 2_i64, "source-location-2", 28_i64),
+            (
+                "source-version-1",
+                "First edition",
+                1_i64,
+                "source-location-1",
+                10_i64,
+            ),
+            (
+                "source-version-2",
+                "Second edition",
+                2_i64,
+                "source-location-2",
+                28_i64,
+            ),
         ] {
             conn.execute(
                 "INSERT INTO source_versions

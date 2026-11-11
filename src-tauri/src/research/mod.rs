@@ -1133,14 +1133,8 @@ pub fn transition_project(
     next_status: ResearchProjectStatus,
     actor_id: Option<&str>,
 ) -> Result<ResearchProjectDto, String> {
-    repository::transition_project(
-        conn,
-        project_id,
-        next_status,
-        actor_id,
-        now_ts_us()?,
-    )
-    .map_err(|error| error.to_string())
+    repository::transition_project(conn, project_id, next_status, actor_id, now_ts_us()?)
+        .map_err(|error| error.to_string())
 }
 
 pub fn create_domain(
