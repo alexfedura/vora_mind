@@ -20,6 +20,7 @@ import type {
   KnowledgeExtractionDto,
   KnowledgeItemDto,
   ProvenanceEventDto,
+  ReorderFrameworkItemsReq,
   ReviewExtractionReq,
   ReviewFrameworkReq,
   SourceClaimDto,
@@ -334,6 +335,10 @@ export async function srcAddFrameworkItem(req: AddFrameworkItemReq): Promise<str
 
 export async function srcRemoveFrameworkItem(itemId: string): Promise<void> {
   return invoke<void>("src_remove_framework_item", { itemId });
+}
+
+export async function srcReorderFrameworkItems(req: ReorderFrameworkItemsReq): Promise<void> {
+  return invoke<void>("src_reorder_framework_items", { req });
 }
 
 export async function srcUpdateFrameworkVersion(req: UpdateFrameworkVersionReq): Promise<void> {

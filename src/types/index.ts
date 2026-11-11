@@ -488,6 +488,11 @@ export interface AddFrameworkItemReq {
   rationale: string | null;
 }
 
+export interface ReorderFrameworkItemsReq {
+  frameworkVersionId: string;
+  orderedItemIds: string[];
+}
+
 export interface UpdateFrameworkVersionReq {
   frameworkVersionId: string;
   title: string;
