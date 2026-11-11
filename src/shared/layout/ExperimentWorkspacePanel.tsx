@@ -7,6 +7,7 @@ import type {
   AddDatasetSplitGroupReq,
   ComparisonGroupDto,
   CreateExperimentDesignVersionReq,
+  CreateDatasetTransformationReq,
   DatasetFieldDefinitionDto,
   DatasetRole,
   DatasetRolePinDto,
@@ -15,6 +16,7 @@ import type {
   DatasetSampleSchemaDto,
   DatasetSampleValue,
   DatasetSplitAssignmentReq,
+  DatasetTransformationInputReq,
   DataSampleDto,
   ExperimentDatasetVersionDto,
   ExperimentDesignSpecificationDto,
@@ -128,16 +130,18 @@ function parseDatasetSamples(raw: string, versionId: string): DatasetSampleDto[]
     if (!isRecord(entry) || !isRecord(entry.sample)) {
       throw new Error("Every sample needs a sampleKind and sample object.");
     }
-    if (!isDataSample(entry.sample) || entry.sample.datasetVersionId !== versionId) {
+    const sampleValue: unknown = entry.sample;
+    if (!isDataSample(sampleValue) || sampleValue.datasetVersionId !== versionId) {
       throw new Error("Each sample must have a valid base shape and the selected exact dataset version ID.");
     }
     if (entry.sampleKind === "data_sample") {
-      return { sampleKind: "data_sample", sample: entry.sample };
+      return { sampleKind: "data_sample", sample: sampleValue };
     }
     if (entry.sampleKind !== "trade_sample") {
       throw new Error("sampleKind must be data_sample or trade_sample.");
     }
-    const market = entry.sample;
+    if (!isRecord(sampleValue)) throw new Error("Trade sample must be an object.");
+    const market = sampleValue;
     if (typeof market.instrument !== "string"
       || !(market.orderSide === null || market.orderSide === "buy" || market.orderSide === "sell")
       || !isMarketOrderType(market.orderType)
@@ -156,7 +160,7 @@ function parseDatasetSamples(raw: string, versionId: string): DatasetSampleDto[]
     return {
       sampleKind: "trade_sample",
       sample: {
-        ...entry.sample,
+        ...sampleValue,
         instrument: market.instrument,
         orderSide: market.orderSide,
         orderType: market.orderType,
@@ -184,6 +188,25 @@ function parseSplitAssignments(raw: string): DatasetSplitAssignmentReq[] {
     }
     return { sampleId: entry.sampleId, role: entry.role, splitKey: entry.splitKey };
   });
+}
+
+function parseTransformationInputs(raw: string): DatasetTransformationInputReq[] {
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) throw new Error("Transformation inputs must be a JSON array.");
+  return parsed.map((entry): DatasetTransformationInputReq => {
+    if (!isRecord(entry) || typeof entry.datasetVersionId !== "string" || !isDatasetRole(entry.role)) {
+      throw new Error("Each transformation input needs an exact datasetVersionId and role.");
+    }
+    return { datasetVersionId: entry.datasetVersionId, role: entry.role };
+  });
+}
+
+function parseJsonValue(raw: string, fieldName: string): unknown {
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch (reason) {
+    throw new Error(`${fieldName} must be valid JSON: ${reason instanceof Error ? reason.message : String(reason)}`);
+  }
 }
 
 function isDatasetFieldKind(value: string): value is DatasetFieldDefinitionDto["valueKind"] {
