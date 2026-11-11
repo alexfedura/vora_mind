@@ -5,6 +5,7 @@ import { useResearchWorkspace } from "@/hooks/useResearchWorkspace";
 import { researchService } from "@/mind/services/researchService";
 import { ExperimentWorkspacePanel } from "@/shared/layout/ExperimentWorkspacePanel";
 import { AnalysisWorkspacePanel } from "@/shared/layout/AnalysisWorkspacePanel";
+import { ModelWorkspacePanel } from "@/shared/layout/ModelWorkspacePanel";
 import type {
   ResearchGapDto,
   HypothesisExpectedDirection,
@@ -1034,6 +1035,7 @@ export const ResearchWorkspacePage: React.FC = () => {
       )}
       <ExperimentWorkspacePanel projectId={projectId} research={workspace} />
       <AnalysisWorkspacePanel projectId={projectId} />
+      <ModelWorkspacePanel projectId={projectId} />
     </div>
   );
 };

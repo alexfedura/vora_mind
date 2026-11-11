@@ -647,9 +647,9 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
           </select>
           <select className={fieldClass} name="metricId" required defaultValue="">
             <option value="">Analysis metric</option>
-            (selectedAnalysisRun?.metrics ?? []).map((metric) => (
+            {(selectedAnalysisRun?.metrics ?? []).map((metric) => (
               <option key={metric.id} value={metric.id}>{metric.estimand} · {metric.effectEstimate} {metric.unit} · {metric.id}</option>
-            ))
+            ))}
           </select>
           <textarea className={fieldClass} name="limitations" placeholder="Evaluation scope and limitations" required />
           <button className={buttonClass} disabled={busy || projectRuns.length === 0}>Save evaluation</button>
