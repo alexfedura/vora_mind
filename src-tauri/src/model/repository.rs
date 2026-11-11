@@ -962,6 +962,7 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
         parameters,
         artifacts,
         impacts: query_impacts(conn, version_id)?,
+        contributions: query_contributions(conn, version_id)?,
         hypotheses: query_relations(
             conn,
             "SELECT hypothesis_version_id, relation_kind, rationale
@@ -987,6 +988,76 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
         lifecycle_status,
         lifecycle_events,
     })
+}
+
+fn query_contributions(
+    conn: &Connection,
+    version_id: &str,
+) -> Result<Vec<ModelContributionDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, relation_kind, target_kind, target_id, secondary_id, role,
+                split_group_id, rationale, created_by, created_at_us
+         FROM (
+            SELECT id, model_version_id, relation_kind, 'hypothesis_version' AS target_kind,
+                   hypothesis_version_id AS target_id, NULL AS secondary_id, NULL AS role,
+                   NULL AS split_group_id, rationale, created_by, created_at_us
+            FROM model_version_hypotheses
+            UNION ALL
+            SELECT id, model_version_id, relation_kind, 'finding_version',
+                   finding_version_id, NULL, NULL, NULL, rationale, created_by, created_at_us
+            FROM model_version_findings
+            UNION ALL
+            SELECT id, model_version_id, relation_kind, 'experiment', design_version_id,
+                   experiment_run_id, NULL, NULL, rationale, created_by, created_at_us
+            FROM model_version_experiments
+            UNION ALL
+            SELECT id, model_version_id, 'dataset_use', 'dataset', dataset_version_id,
+                   NULL, role, split_group_id, rationale, created_by, created_at_us
+            FROM model_version_dataset_uses
+            UNION ALL
+            SELECT id, model_version_id, 'evidenced_by', 'evidence', evidence_id,
+                   NULL, NULL, NULL, rationale, created_by, created_at_us
+            FROM model_version_evidence
+         )
+         WHERE model_version_id = ?1
+         ORDER BY created_at_us, id",
+    )?;
+    let rows = statement
+        .query_map([version_id], |row| {
+            let relation_kind = ModelContributionKind::parse(&row.get::<_, String>(1)?)
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+            let target_kind: String = row.get(2)?;
+            let target_id: String = row.get(3)?;
+            let target = match target_kind.as_str() {
+                "hypothesis_version" => ModelContributionTarget::HypothesisVersion {
+                    id: target_id,
+                },
+                "finding_version" => ModelContributionTarget::FindingVersion {
+                    id: target_id,
+                },
+                "experiment" => ModelContributionTarget::Experiment {
+                    design_version_id: target_id,
+                    experiment_run_id: row.get(4)?,
+                },
+                "dataset" => ModelContributionTarget::Dataset {
+                    dataset_version_id: target_id,
+                    role: row.get(5)?,
+                    split_group_id: row.get(6)?,
+                },
+                "evidence" => ModelContributionTarget::Evidence { id: target_id },
+                _ => return Err(rusqlite::Error::InvalidQuery),
+            };
+            Ok(ModelContributionDto {
+                id: row.get(0)?,
+                relation_kind,
+                target,
+                rationale: row.get(7)?,
+                created_by: row.get(8)?,
+                created_at_us: row.get(9)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
 }
 
 fn parse_model_version_status(value: &str) -> Result<ModelVersionLifecycleStatus> {
@@ -1783,7 +1854,6 @@ pub fn create_replication(
         |row| row.get(0),
     )?;
     let replication_id = id();
-    let contribution_id = id();
     let created_at = now_us()?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     tx.execute(
