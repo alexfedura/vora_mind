@@ -2852,7 +2852,7 @@ mod tests {
                 statement_h1: "The treatment changes the outcome.".into(),
                 population_scope: "Adults".into(),
                 research_scope: "This study".into(),
-                expected_direction: "non_directional".into(),
+                expected_direction: HypothesisExpectedDirection::NonDirectional,
                 expected_effect_decimal: None,
                 expected_effect_unit: None,
                 falsification_criteria: "Reject if observed effect exceeds stated threshold."
@@ -3173,7 +3173,7 @@ mod tests {
                 dataset_version_reference_id: None,
                 measured_at_us: now_ts_us().expect("timestamp"),
                 value_decimal: Some("4.2".into()),
-                value_state: "observed".into(),
+                value_state: ObservationValueState::Observed,
                 unit: Some("units".into()),
                 measurement_method: "Sensor".into(),
                 conditions: "Room temperature".into(),
