@@ -7,7 +7,6 @@ pub mod model;
 pub mod forge;
 pub mod mind;
 pub mod research;
-pub mod transfer;
 pub mod vora_trace;
 
 use crate::mind::canvas_db::{AppState, BoardSummary, EdgeInput, NodeInput, SnapshotSummary};
@@ -2463,15 +2462,6 @@ pub fn run() {
             save_question,
             delete_question,
             research::ipc::research_get_workspace,
-            transfer::ipc::transfer_get_workspace,
-            transfer::ipc::transfer_create_artifact_version,
-            transfer::ipc::transfer_record_origin,
-            transfer::ipc::transfer_create_eligibility,
-            transfer::ipc::transfer_change_eligibility,
-            transfer::ipc::transfer_create_transfer,
-            transfer::ipc::transfer_transition_transfer,
-            transfer::ipc::transfer_create_adaptation,
-            transfer::ipc::transfer_create_downstream_usage,
             research::ipc::research_create_project,
             research::ipc::research_transition_project,
             research::ipc::research_create_domain,
