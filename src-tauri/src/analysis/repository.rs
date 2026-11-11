@@ -1452,3 +1452,293 @@ pub fn add_run_deviation(
         recorded_at_us,
     })
 }
+
+fn validate_numeric(value: &str, field: &str) -> Result<f64> {
+    let number: f64 = value
+        .trim()
+        .parse()
+        .map_err(|_| anyhow!("{field} must be a finite numeric value."))?;
+    if !number.is_finite() {
+        return Err(anyhow!("{field} must be finite."));
+    }
+    Ok(number)
+}
+
+fn validate_metric_report(
+    report: &AnalysisMetricReportDto,
+    max_sample_size: i64,
+) -> Result<()> {
+    nonempty(&report.output_key, "Metric output key")?;
+    nonempty(&report.estimand, "Metric estimand")?;
+    nonempty(&report.unit, "Metric unit")?;
+    nonempty(&report.multiplicity_treatment, "Multiplicity treatment")?;
+    if report.sample_size <= 0 || report.sample_size > max_sample_size {
+        return Err(anyhow!(
+            "Metric sample size must be positive and cannot exceed the pinned input sample count."
+        ));
+    }
+    if report.missing_data.missing_count < 0
+        || report.missing_data.missing_count > report.sample_size
+    {
+        return Err(anyhow!(
+            "Missing-data count must be between zero and the reported sample size."
+        ));
+    }
+    nonempty(&report.missing_data.policy, "Missing-data policy")?;
+    nonempty(&report.missing_data.rationale, "Missing-data rationale")?;
+    let _effect = validate_numeric(&report.effect_estimate, "Effect estimate")?;
+    if let Some(p_value) = report.p_value.as_deref() {
+        let value = validate_numeric(p_value, "P-value")?;
+        if !(0.0..=1.0).contains(&value) {
+            return Err(anyhow!("P-values must be between zero and one."));
+        }
+    }
+    if report.assumptions.iter().any(|value| value.trim().is_empty())
+        || report.exclusions.iter().any(|value| value.trim().is_empty())
+    {
+        return Err(anyhow!(
+            "Metric assumptions and exclusions must not contain empty entries."
+        ));
+    }
+    match &report.uncertainty {
+        UncertaintyReportDto::Interval { interval } => {
+            let lower = validate_numeric(&interval.lower, "Uncertainty lower bound")?;
+            let upper = validate_numeric(&interval.upper, "Uncertainty upper bound")?;
+            let level = validate_numeric(&interval.level, "Uncertainty level")?;
+            if lower > upper || !(0.0..=1.0).contains(&level) {
+                return Err(anyhow!(
+                    "Uncertainty intervals require lower <= upper and a level between zero and one."
+                ));
+            }
+        }
+        UncertaintyReportDto::NotMeaningful { reason } => {
+            nonempty(reason, "Uncertainty interval rationale")?;
+        }
+    }
+    Ok(())
+}
+
+fn parse_dataset_role(value: &str) -> Result<DatasetRole> {
+    match value {
+        "training" => Ok(DatasetRole::Training),
+        "validation" => Ok(DatasetRole::Validation),
+        "test" => Ok(DatasetRole::Test),
+        "exploratory" => Ok(DatasetRole::Exploratory),
+        "prospective" => Ok(DatasetRole::Prospective),
+        "forward" => Ok(DatasetRole::Forward),
+        _ => Err(anyhow!("Invalid analysis dataset role: {value}")),
+    }
+}
+
+pub fn finalize_run(
+    conn: &mut Connection,
+    req: &FinalizeAnalysisRunReq,
+) -> Result<AnalysisRunDto> {
+    if !matches!(
+        req.next_status,
+        AnalysisRunStatus::Completed
+            | AnalysisRunStatus::Failed
+            | AnalysisRunStatus::Cancelled
+            | AnalysisRunStatus::Inconclusive
+    ) {
+        return Err(anyhow!(
+            "Analysis finalization requires a terminal status."
+        ));
+    }
+    nonempty(&req.summary, "Analysis completion summary")?;
+    if req.next_status == AnalysisRunStatus::Failed && req.errors.is_empty() {
+        return Err(anyhow!(
+            "A failed analysis must retain at least one error record."
+        ));
+    }
+    if req.next_status == AnalysisRunStatus::Completed && req.outputs.is_empty() {
+        return Err(anyhow!(
+            "A completed analysis must retain at least one immutable output."
+        ));
+    }
+    let now = now_us()?;
+    let tx = conn.transaction()?;
+    let (project_id, definition_version_id, current_status): (String, String, String) =
+        tx.query_row(
+            "SELECT r.project_id, r.definition_version_id,
+                    (SELECT lifecycle_status FROM analysis_run_events
+                     WHERE run_id = r.id ORDER BY occurred_at_us DESC, id DESC LIMIT 1)
+             FROM analysis_runs r WHERE r.id = ?1",
+            [&req.run_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+    if AnalysisRunStatus::parse(&current_status).map_err(anyhow::Error::msg)?
+        != AnalysisRunStatus::Running
+    {
+        return Err(anyhow!("Only a running analysis can be finalized."));
+    }
+    let definition = query_definition_version(&tx, &definition_version_id)?;
+    let method_version_id = definition.method_version_id;
+    let max_sample_size: i64 = tx.query_row(
+        "SELECT COALESCE(SUM(sample_count), 0)
+         FROM analysis_run_inputs WHERE run_id = ?1",
+        [&req.run_id],
+        |row| row.get(0),
+    )?;
+    let mut output_ids = HashMap::new();
+    let mut output_keys = HashSet::new();
+    for output in &req.outputs {
+        nonempty(&output.output_key, "Analysis output key")?;
+        nonempty(&output.output_kind, "Analysis output kind")?;
+        nonempty(&output.title, "Analysis output title")?;
+        if !output_keys.insert(output.output_key.as_str()) {
+            return Err(anyhow!("Analysis output keys must be unique within a run."));
+        }
+        match (
+            output.artifact_uri.as_deref(),
+            output.artifact_sha256.as_deref(),
+        ) {
+            (Some(uri), Some(checksum)) => {
+                nonempty(uri, "External output artifact URI")?;
+                valid_sha256(checksum, "Output artifact checksum")?;
+            }
+            (None, None) => {}
+            _ => {
+                return Err(anyhow!(
+                    "External output artifacts require both a URI and checksum."
+                ))
+            }
+        }
+        if output.byte_length.is_some_and(|length| length < 0) {
+            return Err(anyhow!("Output artifact byte length cannot be negative."));
+        }
+        let output_id = id();
+        tx.execute(
+            "INSERT INTO analysis_outputs
+                (id, run_id, output_key, output_kind, title, payload_json,
+                 payload_sha256, artifact_uri, artifact_sha256, media_type,
+                 byte_length, created_at_us)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                output_id,
+                req.run_id,
+                output.output_key.trim(),
+                output.output_kind.trim(),
+                output.title.trim(),
+                json(&output.payload)?,
+                sha256(json(&output.payload)?.as_bytes()),
+                output.artifact_uri,
+                output.artifact_sha256
+                    .as_deref()
+                    .map(str::to_ascii_lowercase),
+                output.media_type,
+                output.byte_length,
+                now
+            ],
+        )?;
+        output_ids.insert(output.output_key.as_str(), output_id);
+    }
+    for error in &req.errors {
+        nonempty(&error.error_kind, "Analysis error kind")?;
+        nonempty(&error.message, "Analysis error message")?;
+        tx.execute(
+            "INSERT INTO analysis_run_errors
+                (id, run_id, error_kind, message, details_json, recorded_at_us)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                id(),
+                req.run_id,
+                error.error_kind.trim(),
+                error.message.trim(),
+                json(&error.details)?,
+                now
+            ],
+        )?;
+    }
+    if req.next_status == AnalysisRunStatus::Failed && req.errors.is_empty() {
+        return Err(anyhow!("Failed analysis must have a persisted error."));
+    }
+    for report in &req.metrics {
+        validate_metric_report(report, max_sample_size)?;
+        let output_id = output_ids
+            .get(report.output_key.as_str())
+            .ok_or_else(|| anyhow!("Metric references an unknown output key."))?;
+        let metric_version = query_metric_version(&tx, &report.metric_definition_version_id)?;
+        if metric_version.project_id != project_id
+            || !definition
+                .metric_definition_version_ids
+                .contains(&report.metric_definition_version_id)
+        {
+            return Err(anyhow!(
+                "Metric version must be pinned by this analysis definition and belong to this project."
+            ));
+        }
+        if report.unit != metric_version.unit {
+            return Err(anyhow!(
+                "Metric report unit must match the pinned metric definition version."
+            ));
+        }
+        let uncertainty = match &report.uncertainty {
+            UncertaintyReportDto::Interval { interval } => (
+                "interval",
+                Some(interval.lower.as_str()),
+                Some(interval.upper.as_str()),
+                Some(interval.level.as_str()),
+                None,
+            ),
+            UncertaintyReportDto::NotMeaningful { reason } => (
+                "not_meaningful",
+                None,
+                None,
+                None,
+                Some(reason.as_str()),
+            ),
+        };
+        tx.execute(
+            "INSERT INTO analysis_metrics
+                (id, run_id, output_id, metric_definition_version_id,
+                 method_version_id, estimand, sample_size, effect_estimate, unit,
+                 uncertainty_kind, uncertainty_lower, uncertainty_upper,
+                 uncertainty_level, uncertainty_reason, assumptions_json,
+                 exclusions_json, missing_data_json, multiplicity_treatment, p_value)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
+                     ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+            params![
+                id(),
+                req.run_id,
+                output_id,
+                report.metric_definition_version_id,
+                method_version_id,
+                report.estimand.trim(),
+                report.sample_size,
+                report.effect_estimate.trim(),
+                report.unit.trim(),
+                uncertainty.0,
+                uncertainty.1,
+                uncertainty.2,
+                uncertainty.3,
+                uncertainty.4,
+                json(&report.assumptions)?,
+                json(&report.exclusions)?,
+                json(&report.missing_data)?,
+                report.multiplicity_treatment.trim(),
+                report.p_value
+            ],
+        )?;
+    }
+    let failure_summary = if req.next_status == AnalysisRunStatus::Failed {
+        req.errors
+            .iter()
+            .map(|error| error.message.trim())
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        String::new()
+    };
+    insert_run_event(
+        &tx,
+        &req.run_id,
+        req.next_status,
+        &req.summary,
+        &failure_summary,
+        req.actor_id.as_deref(),
+        now,
+    )?;
+    tx.commit()?;
+    query_run(conn, &req.run_id)
+}
