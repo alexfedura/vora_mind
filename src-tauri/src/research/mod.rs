@@ -842,6 +842,21 @@ pub struct CreateLiteratureReviewReq {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct CreateReviewedLiteratureReviewReq {
+    pub project_id: String,
+    pub title: String,
+    pub search_scope: String,
+    pub source_id: String,
+    pub source_version_id: String,
+    pub source_location_id: Option<String>,
+    pub source_claim_id: Option<String>,
+    pub citation_note: String,
+    pub created_by: Option<String>,
+    pub reviewer_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct AddLiteratureSourceReq {
     pub literature_review_id: String,
     pub source_id: String,
@@ -1151,6 +1166,22 @@ pub fn create_literature_review(
     validate_required(&req.search_scope, "literature search scope")?;
     repository::create_literature_review(conn, &req, &new_id("literature_review"), now_ts_us()?)
         .map_err(|error| error.to_string())
+}
+
+pub fn create_reviewed_literature_review(
+    conn: &Connection,
+    req: CreateReviewedLiteratureReviewReq,
+) -> Result<LiteratureReviewDto, String> {
+    validate_required(&req.title, "literature review title")?;
+    validate_required(&req.search_scope, "literature search scope")?;
+    repository::create_reviewed_literature_review(
+        conn,
+        &req,
+        &new_id("literature_review"),
+        &new_id("literature_source"),
+        now_ts_us()?,
+    )
+    .map_err(|error| error.to_string())
 }
 
 pub fn add_literature_source(
