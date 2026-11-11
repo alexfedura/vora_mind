@@ -1797,6 +1797,11 @@ fn validate_replication_request(
             "Replication dataset context and provenance must be JSON objects."
         ));
     }
+    if request.datasets.is_empty() {
+        return Err(anyhow!(
+            "A replication must pin at least one exact dataset version and role."
+        ));
+    }
     exists(
         conn,
         "SELECT EXISTS(SELECT 1 FROM research_projects WHERE id = ?1)",

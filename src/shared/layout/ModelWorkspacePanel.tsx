@@ -14,6 +14,7 @@ import type {
   ModelExperimentRelationReq,
   ModelImpactReq,
   ModelParameterReq,
+  ModelReplicationDatasetReq,
   ModelRelationReq,
   ModelWorkspaceDto,
 } from "@/types";
@@ -83,6 +84,13 @@ function isDatasetUse(value: unknown): value is ModelDatasetUseReq {
     && ["training", "validation", "test", "exploratory", "prospective", "forward"].includes(String(value.role))
     && isNullableString(value.splitGroupId)
     && typeof value.rationale === "string";
+}
+
+function isReplicationDataset(value: unknown): value is ModelReplicationDatasetReq {
+  return isRecord(value)
+    && typeof value.datasetVersionId === "string"
+    && ["training", "validation", "test", "exploratory", "prospective", "forward"].includes(String(value.role))
+    && isNullableString(value.splitGroupId);
 }
 
 function isImpact(value: unknown): value is ModelImpactReq {
@@ -441,23 +449,30 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
       setError("Select an original experiment run and at least one exact model evidence record.");
       return;
     }
-    await perform(() => modelService.createReplication({
-      projectId,
-      modelVersionId: String(values.get("modelVersionId") ?? ""),
-      originalExperimentRunId: run.id,
-      replicationKind: replicationKind(String(values.get("replicationKind") ?? "direct")),
-      independentTeamOperator: String(values.get("operator") ?? ""),
-      protocolContext: String(values.get("protocolContext") ?? ""),
-      datasetContext: { originalDesignVersionId: run.designVersionId },
-      datasets: [],
-      outcome: replicationOutcome(String(values.get("outcome") ?? "inconclusive")),
-      resultSummary: String(values.get("resultSummary") ?? ""),
-      deviations: [String(values.get("deviations") ?? "")].filter((value) => value.trim().length > 0),
-      provenance: { recordedIn: "model-workspace" },
-      analysisEvidenceIds: [],
-      modelEvidenceIds: evidenceIds,
-      createdBy: null,
-    }));
+    await perform(() => {
+      const datasets = parseArray(
+        String(values.get("datasets") ?? "[]"),
+        "Replication dataset pins",
+        isReplicationDataset,
+      );
+      return modelService.createReplication({
+        projectId,
+        modelVersionId: String(values.get("modelVersionId") ?? ""),
+        originalExperimentRunId: run.id,
+        replicationKind: replicationKind(String(values.get("replicationKind") ?? "direct")),
+        independentTeamOperator: String(values.get("operator") ?? ""),
+        protocolContext: String(values.get("protocolContext") ?? ""),
+        datasetContext: { originalDesignVersionId: run.designVersionId },
+        datasets,
+        outcome: replicationOutcome(String(values.get("outcome") ?? "inconclusive")),
+        resultSummary: String(values.get("resultSummary") ?? ""),
+        deviations: [String(values.get("deviations") ?? "")].filter((value) => value.trim().length > 0),
+        provenance: { recordedIn: "model-workspace" },
+        analysisEvidenceIds: [],
+        modelEvidenceIds: evidenceIds,
+        createdBy: null,
+      });
+    });
   };
 
   const projectRuns = (analysis?.runs ?? []).filter((run) => run.lifecycleStatus === "completed");
@@ -745,6 +760,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
           <select className={fieldClass} name="replicationKind"><option value="direct">Direct</option><option value="conceptual">Conceptual</option></select>
           <input className={fieldClass} name="operator" placeholder="Independent team/operator" required />
           <input className={fieldClass} name="protocolContext" placeholder="Protocol context" required />
+          <textarea className={fieldClass} name="datasets" defaultValue="[]" placeholder='Dataset pins JSON: [{"datasetVersionId":"…","role":"test","splitGroupId":null}]' required />
           <select className={fieldClass} name="outcome"><option value="supports">Supports original</option><option value="contradicts">Contradicts original</option><option value="mixed">Mixed</option><option value="inconclusive">Inconclusive</option></select>
           <textarea className={fieldClass} name="resultSummary" placeholder="Reported result" required />
           <textarea className={fieldClass} name="deviations" placeholder="Deviations (if any)" />
