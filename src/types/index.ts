@@ -559,6 +559,8 @@ export type ResearchPathwayKey =
   | "existing_knowledge_investigation"
   | "first_principles_discovery";
 export type ResearchProjectStatus = "proposed" | "active" | "paused" | "completed" | "archived";
+export type ResearchDomainStatus = "proposed" | "active" | "deprecated";
+export type ReviewLifecycleStatus = "draft" | "reviewed";
 export type ResearchGapStatus = "candidate" | "assessed" | "accepted" | "rejected" | "addressed" | "superseded";
 export type ResearchQuestionStatus =
   | "legacy_unassessed" | "draft" | "review" | "accepted" | "rejected"
@@ -570,6 +572,18 @@ export type HypothesisDefinitionStatus = "draft" | "review" | "preregistered";
 export type HypothesisVariableRole = "independent" | "dependent" | "covariate";
 export type HypothesisValueKind = "continuous" | "discrete" | "categorical" | "qualitative" | "other";
 export type ResearchPolarity = "supports" | "contradicts" | "qualifies";
+export type PhenomenonStatus = "identified" | "characterized" | "retired";
+export type ObservationPlanStatus = "draft" | "reviewed" | "preregistered" | "withdrawn";
+export type ObservationValueState =
+  | "observed" | "not_measured" | "not_recorded" | "unknown"
+  | "not_applicable" | "withheld" | "invalid";
+export type ObservationQualityStatus = "unreviewed" | "accepted" | "excluded" | "retracted";
+export type PatternStatus = "candidate" | "examined" | "supported" | "unsupported" | "retired";
+export type IdeaStatus = "captured" | "explored" | "promoted" | "abandoned";
+export type HypothesisExpectedDirection = "positive" | "negative" | "non_directional" | "equivalence" | "other";
+export type ResearchDesignStatus = "draft" | "review" | "preregistered" | "withdrawn";
+export type GapReviewDecision = "accepted" | "rejected";
+export type HypothesisDesignRelation = "tests" | "competing_design";
 
 export interface ResearchPathwayDto {
   id: string;
@@ -595,7 +609,7 @@ export interface ResearchDomainDto {
   name: string;
   description: string;
   parentDomainId: string | null;
-  lifecycleStatus: string;
+  lifecycleStatus: ResearchDomainStatus;
   createdBy: string | null;
   createdAtUs: number;
 }
@@ -644,7 +658,7 @@ export interface LiteratureReviewDto {
   projectId: string;
   title: string;
   searchScope: string;
-  lifecycleStatus: "draft" | "reviewed";
+  lifecycleStatus: ReviewLifecycleStatus;
   reviewerId: string | null;
   reviewedAtUs: number | null;
   sources: LiteratureReviewSourceDto[];
@@ -658,7 +672,7 @@ export interface PriorKnowledgeAssessmentDto {
   title: string;
   assessment: string;
   frameworkVersionId: string | null;
-  lifecycleStatus: "draft" | "reviewed";
+  lifecycleStatus: ReviewLifecycleStatus;
   reviewerId: string | null;
   reviewedAtUs: number | null;
   createdBy: string | null;
@@ -715,7 +729,7 @@ export interface PhenomenonDto {
   populationScope: string;
   context: string;
   temporalBoundary: string;
-  lifecycleStatus: string;
+  lifecycleStatus: PhenomenonStatus;
   createdBy: string | null;
   createdAtUs: number;
 }
@@ -728,7 +742,7 @@ export interface ObservationPlanVersionDto {
   sampleFrame: string;
   conditionsTemplate: string;
   inclusionRules: string;
-  lifecycleStatus: "draft" | "reviewed" | "preregistered" | "withdrawn";
+  lifecycleStatus: ObservationPlanStatus;
   createdBy: string | null;
   createdAtUs: number;
   preregisteredAtUs: number | null;
@@ -765,12 +779,12 @@ export interface ObservationDto {
   datasetVersionReferenceId: string | null;
   measuredAtUs: number;
   valueDecimal: string | null;
-  valueState: string;
+  valueState: ObservationValueState;
   unit: string | null;
   measurementMethod: string;
   conditions: string;
   sampleIdentifier: string | null;
-  qualityStatus: string;
+  qualityStatus: ObservationQualityStatus;
   supersedesObservationId: string | null;
   createdBy: string | null;
   createdAtUs: number;
@@ -783,7 +797,7 @@ export interface PatternDto {
   statement: string;
   analysisMethod: string;
   uncertainty: string;
-  lifecycleStatus: string;
+  lifecycleStatus: PatternStatus;
   observationIds: string[];
   datasetVersionReferenceIds: string[];
   createdBy: string | null;
@@ -795,7 +809,7 @@ export interface IdeaDto {
   projectId: string;
   title: string;
   content: string;
-  lifecycleStatus: string;
+  lifecycleStatus: IdeaStatus;
   phenomenonId: string | null;
   observationId: string | null;
   patternId: string | null;
@@ -824,7 +838,7 @@ export interface HypothesisDefinitionVersionDto {
   statementH1: string;
   populationScope: string;
   researchScope: string;
-  expectedDirection: string;
+  expectedDirection: HypothesisExpectedDirection;
   expectedEffectDecimal: string | null;
   expectedEffectUnit: string | null;
   falsificationCriteria: string;
@@ -880,7 +894,7 @@ export interface ResearchExperimentDesignVersionDto {
   versionNo: number;
   description: string;
   protocol: string;
-  lifecycleStatus: string;
+  lifecycleStatus: ResearchDesignStatus;
   createdBy: string | null;
   createdAtUs: number;
   preregisteredAtUs: number | null;
@@ -974,7 +988,7 @@ export interface ReviewGapExceptionReq {
   gapId: string;
   rationale: string;
   reviewerId: string | null;
-  reviewDecision: "accepted" | "rejected";
+  reviewDecision: GapReviewDecision;
 }
 
 export interface CreatePhenomenonReq {
@@ -1017,7 +1031,7 @@ export interface CreateObservationReq {
   datasetVersionReferenceId: string | null;
   measuredAtUs: number;
   valueDecimal: string | null;
-  valueState: string;
+  valueState: ObservationValueState;
   unit: string | null;
   measurementMethod: string;
   conditions: string;
@@ -1065,7 +1079,7 @@ export interface CreateTypedHypothesisReq {
   statementH1: string;
   populationScope: string;
   researchScope: string;
-  expectedDirection: string;
+  expectedDirection: HypothesisExpectedDirection;
   expectedEffectDecimal: string | null;
   expectedEffectUnit: string | null;
   falsificationCriteria: string;
@@ -1111,7 +1125,7 @@ export interface CreateResearchDesignReq {
 export interface LinkHypothesisDesignReq {
   hypothesisVersionId: string;
   designVersionId: string;
-  relationshipKind: "tests" | "competing_design";
+  relationshipKind: HypothesisDesignRelation;
   rationale: string;
   createdBy: string | null;
 }
