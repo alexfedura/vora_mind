@@ -171,7 +171,8 @@ export function LearningWorkspacePanel(): React.JSX.Element {
       criteriaText: String(form.get("criteriaText") ?? ""),
       level: String(form.get("level") ?? ""),
       parentVersionId: null,
-      prerequisiteVersionIds: [],
+      prerequisiteVersionIds: form.getAll("prerequisiteVersionIds")
+        .filter((value): value is string => typeof value === "string"),
       createdBy: null,
     });
 
@@ -391,12 +392,24 @@ export function LearningWorkspacePanel(): React.JSX.Element {
                   <Field label="Observable outcome"><textarea className={fieldClass} name="observableOutcome" rows={2} required /></Field>
                   <Field label="Assessment criteria"><textarea className={fieldClass} name="criteriaText" rows={2} required /></Field>
                   <Field label="Level"><input className={fieldClass} name="level" required placeholder="e.g. introductory" /></Field>
+                  <Field label="Prerequisite objective versions (optional)">
+                    <select className={fieldClass} name="prerequisiteVersionIds" multiple size={3}>
+                      {objectives.map((objective) => (
+                        <option key={objective.id} value={objective.id}>{objective.title} · v{objective.versionNo}</option>
+                      ))}
+                    </select>
+                  </Field>
                   <button className={buttonClass}>Create objective version</button>
                   <div className="max-h-44 space-y-2 overflow-auto border-t border-[#292c34] pt-3">
                     {objectives.map((objective) => (
                       <article key={objective.id} className="rounded bg-[#17191f] p-2 text-xs">
                         <p className="font-medium text-gray-200">{objective.title} · v{objective.versionNo}</p>
                         <p className="mt-1 text-gray-400">{objective.observableOutcome}</p>
+                        <p className="mt-1 text-[11px] text-gray-500">
+                          Prerequisites: {objective.prerequisiteVersionIds.length
+                            ? objective.prerequisiteVersionIds.map((id) => objectives.find((item) => item.id === id)?.title ?? id).join(", ")
+                            : "none declared"}
+                        </p>
                         <p className="mt-1 text-[10px] text-gray-600">Framework version {objective.frameworkVersionId}</p>
                       </article>
                     ))}
@@ -448,7 +461,8 @@ export function LearningWorkspacePanel(): React.JSX.Element {
                           rationale: "Approved in the Learning workspace.",
                         }))}>Approve review</button>
                       )}
-                      {assessment.status === "review" && assessment.reviews.some((review) => review.reviewStatus === "approved") && (
+                      {assessment.status === "review"
+                        && assessment.reviews[assessment.reviews.length - 1]?.reviewStatus === "approved" && (
                         <button type="button" className={`${quietButtonClass} mt-2`} onClick={() => void perform(() => learningService.transitionAssessmentVersion({
                           assessmentVersionId: assessment.id,
                           nextStatus: "published",
