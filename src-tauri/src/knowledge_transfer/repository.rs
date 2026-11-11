@@ -2370,4 +2370,159 @@ mod tests {
         assert!(result.is_err());
         Ok(())
     }
+
+    #[test]
+    fn eligibility_enforces_rights_scope_purpose_and_restriction() -> Result<()> {
+        let (mut conn, source_version_id, _) = transfer_fixture()?;
+        create_project(&conn, "project-c", "Project C")?;
+        let origin = create_origin(
+            &mut conn,
+            &CreateTransferOriginReq {
+                artifact: TransferArtifactRef::FindingVersion {
+                    finding_id: "finding-source".to_string(),
+                    version_id: source_version_id,
+                },
+                origin_project_id: "project-a".to_string(),
+                rationale: "Verified exact source finding.".to_string(),
+                recorded_by: None,
+            },
+        )?;
+        let unknown_rights = create_eligibility(
+            &mut conn,
+            &CreateTransferEligibilityReq {
+                origin_id: origin.id.clone(),
+                license_identifier: "unknown".to_string(),
+                license_uri: None,
+                access_scope: TransferAccessScope::Workspace,
+                permitted_purposes: vec![TransferPurpose::Research],
+                allowed_project_ids: Vec::new(),
+                attribution_text: "Attribution".to_string(),
+                permission_basis: "Unverified".to_string(),
+                permission_granted: true,
+                reviewed_by: "reviewer".to_string(),
+            },
+        );
+        assert!(unknown_rights.is_err());
+
+        let eligibility = create_eligibility(
+            &mut conn,
+            &CreateTransferEligibilityReq {
+                origin_id: origin.id,
+                license_identifier: "CC BY 4.0".to_string(),
+                license_uri: None,
+                access_scope: TransferAccessScope::SelectedProjects,
+                permitted_purposes: vec![TransferPurpose::Research],
+                allowed_project_ids: vec!["project-b".to_string()],
+                attribution_text: "Project A attribution".to_string(),
+                permission_basis: "Permission reviewed for Project B research.".to_string(),
+                permission_granted: true,
+                reviewed_by: "rights-reviewer".to_string(),
+            },
+        )?;
+        let disallowed_purpose = adopt_knowledge(
+            &mut conn,
+            &AdoptKnowledgeReq {
+                eligibility_id: eligibility.id.clone(),
+                receiving_project_id: "project-b".to_string(),
+                intended_purpose: TransferPurpose::Commercial,
+                attribution_text: "Project A".to_string(),
+                context: "Commercial use".to_string(),
+                requested_by: None,
+            },
+        );
+        assert!(disallowed_purpose.is_err());
+        let disallowed_project = adopt_knowledge(
+            &mut conn,
+            &AdoptKnowledgeReq {
+                eligibility_id: eligibility.id.clone(),
+                receiving_project_id: "project-c".to_string(),
+                intended_purpose: TransferPurpose::Research,
+                attribution_text: "Project A".to_string(),
+                context: "Outside allowlist".to_string(),
+                requested_by: None,
+            },
+        );
+        assert!(disallowed_project.is_err());
+        assert!(workspace(&conn)?.transfers.is_empty());
+
+        let transfer = adopt_knowledge(
+            &mut conn,
+            &AdoptKnowledgeReq {
+                eligibility_id: eligibility.id.clone(),
+                receiving_project_id: "project-b".to_string(),
+                intended_purpose: TransferPurpose::Research,
+                attribution_text: "Project A".to_string(),
+                context: "Permitted research use.".to_string(),
+                requested_by: None,
+            },
+        )?;
+        change_eligibility(
+            &mut conn,
+            &ChangeTransferEligibilityReq {
+                eligibility_id: eligibility.id.clone(),
+                state: TransferEligibilityState::Restricted,
+                rationale: "Restrict future adoption.".to_string(),
+                actor_id: None,
+            },
+        )?;
+        let future_adoption = adopt_knowledge(
+            &mut conn,
+            &AdoptKnowledgeReq {
+                eligibility_id: eligibility.id,
+                receiving_project_id: "project-b".to_string(),
+                intended_purpose: TransferPurpose::Research,
+                attribution_text: "Project A".to_string(),
+                context: "Should be blocked.".to_string(),
+                requested_by: None,
+            },
+        );
+        assert!(future_adoption.is_err());
+        let records = workspace(&conn)?;
+        assert_eq!(records.transfers.len(), 1);
+        assert_eq!(records.transfers[0].id, transfer.id);
+        Ok(())
+    }
+
+    #[test]
+    fn unreviewed_concept_version_cannot_be_offered_as_transferable_knowledge() -> Result<()> {
+        let (mut conn, _, _) = transfer_fixture()?;
+        let version_id = create_concept_version(
+            &mut conn,
+            &CreateConceptVersionReq {
+                concept_id: None,
+                project_id: "project-a".to_string(),
+                parent_version_id: None,
+                title: "Test concept".to_string(),
+                definition: "A test definition.".to_string(),
+                rationale: "Initial definition.".to_string(),
+                created_by: Some("author".to_string()),
+            },
+        )?;
+        let origin_request = CreateTransferOriginReq {
+            artifact: TransferArtifactRef::ConceptVersion {
+                concept_id: conn.query_row(
+                    "SELECT concept_id FROM knowledge_concept_versions WHERE id = ?1",
+                    [&version_id],
+                    |row| row.get(0),
+                )?,
+                version_id: version_id.clone(),
+            },
+            origin_project_id: "project-a".to_string(),
+            rationale: "Origin is explicitly asserted.".to_string(),
+            recorded_by: None,
+        };
+        assert!(create_origin(&mut conn, &origin_request).is_err());
+        review_knowledge_version(
+            &mut conn,
+            &ReviewKnowledgeVersionReq {
+                version_id,
+                kind: KnowledgeVersionKind::Concept,
+                status: KnowledgeVersionStatus::Reviewed,
+                rationale: "Reviewed content quality only.".to_string(),
+                actor_id: Some("reviewer".to_string()),
+            },
+        )?;
+        assert!(create_origin(&mut conn, &origin_request).is_ok());
+        Ok(())
+    }
 }
