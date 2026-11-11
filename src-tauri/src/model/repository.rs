@@ -746,10 +746,84 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
         parameters,
         artifacts,
         impacts: query_impacts(conn, version_id)?,
+        hypotheses: query_relations(
+            conn,
+            "SELECT hypothesis_version_id, relation_kind, rationale
+             FROM model_version_hypotheses WHERE model_version_id = ?1",
+        , version_id)?,
+        findings: query_relations(
+            conn,
+            "SELECT finding_version_id, relation_kind, rationale
+             FROM model_version_findings WHERE model_version_id = ?1",
+        , version_id)?,
+        experiments: query_experiment_relations(conn, version_id)?,
+        dataset_uses: query_dataset_uses(conn, version_id)?,
+        evidence_ids: query_ids(
+            conn,
+            "SELECT evidence_id FROM model_version_evidence WHERE model_version_id = ?1 ORDER BY evidence_id",
+            version_id,
+        )?,
         content_sha256: row.13,
         created_by: row.14,
         created_at_us: row.15,
     })
+}
+
+fn query_relations(conn: &Connection, sql: &str, version_id: &str) -> Result<Vec<ModelRelationReq>> {
+    let mut statement = conn.prepare(sql)?;
+    let rows = statement
+        .query_map([version_id], |row| {
+            let relation_kind = match row.get::<_, String>(1)?.as_str() {
+                "contributes_to" => ModelRelationKind::ContributesTo,
+                "contradicts" => ModelRelationKind::Contradicts,
+                "qualifies" => ModelRelationKind::Qualifies,
+                _ => return Err(rusqlite::Error::InvalidQuery),
+            };
+            Ok(ModelRelationReq {
+                target_id: row.get(0)?,
+                relation_kind,
+                rationale: row.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+fn query_experiment_relations(
+    conn: &Connection,
+    version_id: &str,
+) -> Result<Vec<ModelExperimentRelationReq>> {
+    let mut statement = conn.prepare(
+        "SELECT design_version_id, experiment_run_id, relation_kind, rationale
+         FROM model_version_experiments WHERE model_version_id = ?1 ORDER BY id",
+    )?;
+    Ok(statement
+        .query_map([version_id], |row| {
+            Ok(ModelExperimentRelationReq {
+                design_version_id: row.get(0)?,
+                experiment_run_id: row.get(1)?,
+                relation_kind: row.get(2)?,
+                rationale: row.get(3)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+fn query_dataset_uses(conn: &Connection, version_id: &str) -> Result<Vec<ModelDatasetUseReq>> {
+    let mut statement = conn.prepare(
+        "SELECT dataset_version_id, role, split_group_id, rationale
+         FROM model_version_dataset_uses WHERE model_version_id = ?1 ORDER BY role, dataset_version_id",
+    )?;
+    Ok(statement
+        .query_map([version_id], |row| {
+            Ok(ModelDatasetUseReq {
+                dataset_version_id: row.get(0)?,
+                role: row.get(1)?,
+                split_group_id: row.get(2)?,
+                rationale: row.get(3)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 fn query_impacts(conn: &Connection, version_id: &str) -> Result<Vec<ModelImpactReq>> {
