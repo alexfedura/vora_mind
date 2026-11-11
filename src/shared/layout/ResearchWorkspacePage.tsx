@@ -120,6 +120,9 @@ export const ResearchWorkspacePage: React.FC = () => {
   const projectDomains = (workspace?.domains ?? []).filter((domain) =>
     workspace?.projects.find((project) => project.id === projectId)?.domainIds.includes(domain.id),
   );
+  const questionProjectDomains = (workspace?.domains ?? []).filter((domain) =>
+    workspace?.projects.find((project) => project.id === questionProjectId)?.domainIds.includes(domain.id),
+  );
   const projectObservations = (workspace?.observations ?? []).filter(
     (observation) => observation.projectId === projectId,
   );
@@ -289,7 +292,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     await act(() => researchService.createQuestion({
       projectId: questionProjectId || null,
       researchGapId: gapId || null,
-      domainId: null,
+      domainId: String(form.get("domainId") ?? "") || null,
       title: String(form.get("title") ?? ""),
       description: String(form.get("description") ?? ""),
       rationale: String(form.get("rationale") ?? ""),
@@ -720,7 +723,7 @@ export const ResearchWorkspacePage: React.FC = () => {
             <form onSubmit={(event) => void createGap(event)} className="grid gap-3 md:grid-cols-2">
               <Field label="Gap title"><input className={inputClass} name="title" required /></Field>
               <Field label="Gap statement"><input className={inputClass} name="statement" required /></Field>
-              <Field label="Domain (optional)"><select className={inputClass} name="domainId"><option value="">No domain</option>{projectDomains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></Field>
+              <Field label="Domain (optional)"><select className={inputClass} name="domainId"><option value="">No domain</option>{questionProjectDomains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></Field>
               <Field label="Evidence type">
                 <select className={inputClass} name="evidenceKind">
                   <option value="prior">Prior-knowledge assessment</option>
@@ -796,6 +799,7 @@ export const ResearchWorkspacePage: React.FC = () => {
                     {(workspace.gaps.filter((gap) => gap.projectId === questionProjectId && gap.lifecycleStatus === "accepted")).map((gap) => <option key={gap.id} value={gap.id}>{gap.title}</option>)}
                   </select>
                 </Field>
+                <Field label="Domain (optional)"><select className={inputClass} name="domainId"><option value="">No domain</option>{projectDomains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></Field>
                 <Field label="Question"><input className={inputClass} name="title" required /></Field>
                 <Field label="Description"><textarea className={inputClass} name="description" rows={2} /></Field>
                 <Field label="Rationale"><input className={inputClass} name="rationale" /></Field>
