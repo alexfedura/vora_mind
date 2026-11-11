@@ -823,9 +823,8 @@ pub fn validate_decimal(value: &str) -> Result<(), String> {
     let valid_integer = !integer_part.is_empty()
         && integer_part.bytes().all(|byte| byte.is_ascii_digit())
         && (integer_part == "0" || !integer_part.starts_with('0'));
-    let valid_fraction = fraction_part.is_none_or(|part| {
-        !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit())
-    });
+    let valid_fraction = fraction_part
+        .is_none_or(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()));
     if !valid_integer || !valid_fraction || parts.next().is_some() {
         return Err(format!("invalid canonical decimal: {value}"));
     }

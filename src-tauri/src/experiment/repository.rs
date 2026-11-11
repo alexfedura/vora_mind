@@ -1994,9 +1994,7 @@ mod tests {
         })
     }
 
-    fn valid_specification(
-        datasets: Vec<DatasetRolePinDto>,
-    ) -> ExperimentDesignSpecificationDto {
+    fn valid_specification(datasets: Vec<DatasetRolePinDto>) -> ExperimentDesignSpecificationDto {
         ExperimentDesignSpecificationDto {
             target_research_question_id: None,
             target_hypothesis_version_id: None,
@@ -2252,8 +2250,14 @@ mod tests {
         )
         .expect("create immutable design revision");
         assert_eq!(revision.version_no, 2);
-        assert_eq!(revision.parent_version_id.as_deref(), Some(first.id.as_str()));
-        assert_eq!(query_design_version(&conn, &first.id).unwrap().title, "First design");
+        assert_eq!(
+            revision.parent_version_id.as_deref(),
+            Some(first.id.as_str())
+        );
+        assert_eq!(
+            query_design_version(&conn, &first.id).unwrap().title,
+            "First design"
+        );
         assert_eq!(failed.design_version_id, first.id);
 
         drop(conn);
@@ -2261,7 +2265,10 @@ mod tests {
         initialize(&reopened);
         let restored = workspace(&reopened, "run-project").expect("restore workspace");
         assert_eq!(restored.runs.len(), 1);
-        assert_eq!(restored.runs[0].lifecycle_status, ExperimentRunStatus::Failed);
+        assert_eq!(
+            restored.runs[0].lifecycle_status,
+            ExperimentRunStatus::Failed
+        );
         assert_eq!(restored.design_versions.len(), 2);
         drop(reopened);
         fs::remove_file(database_path).expect("remove temporary workspace database");
@@ -2273,8 +2280,7 @@ mod tests {
         let assets_root = std::env::temp_dir().join(format!("vora-assets-{}", Uuid::now_v7()));
         fs::create_dir_all(&assets_root).expect("create test asset directory");
         let source_file = assets_root.join("market.csv");
-        fs::write(&source_file, b"sample,price\ns1,10.5\ns2,11.0\n")
-            .expect("write fixture asset");
+        fs::write(&source_file, b"sample,price\ns1,10.5\ns2,11.0\n").expect("write fixture asset");
         let file_hash = format!(
             "{:x}",
             Sha256::digest(fs::read(&source_file).expect("read source asset"))
@@ -2495,8 +2501,11 @@ mod tests {
             .is_err(),
             "a run cannot become ready with a changed pinned asset"
         );
-        fs::write(&managed_asset, fs::read(&source_file).expect("read source asset"))
-            .expect("restore managed file");
+        fs::write(
+            &managed_asset,
+            fs::read(&source_file).expect("read source asset"),
+        )
+        .expect("restore managed file");
         let samples = {
             let conn = db.lock().expect("lock");
             get_dataset_samples(&conn, &version.id, Some("s"), 0, 20)
@@ -2508,18 +2517,21 @@ mod tests {
             let conn = db.lock().expect("lock");
             workspace(&conn, "dataset-project").expect("query experimental workspace")
         };
-        assert_eq!(
-            workspace_state.split_groups[0].assignments.len(),
-            2
-        );
+        assert_eq!(workspace_state.split_groups[0].assignments.len(), 2);
         assert!(workspace_state.transformations.is_empty());
 
         drop(db);
         let reopened = Connection::open(&database_path).expect("reopen workspace");
         initialize(&reopened);
         let restored = workspace(&reopened, "dataset-project").expect("restore dataset state");
-        assert_eq!(restored.datasets[0].versions[0].content_sha256, sealed.content_sha256);
-        assert_eq!(restored.runs[0].dataset_pins[0].dataset_version_id, version.id);
+        assert_eq!(
+            restored.datasets[0].versions[0].content_sha256,
+            sealed.content_sha256
+        );
+        assert_eq!(
+            restored.runs[0].dataset_pins[0].dataset_version_id,
+            version.id
+        );
         assert_eq!(
             get_dataset_samples(&reopened, &version.id, None, 0, 20)
                 .expect("query restored samples")
@@ -2615,10 +2627,6 @@ mod tests {
             unreachable!();
         };
         invalid_trade.execution_at_us = Some(8);
-        assert!(validate_sample(
-            &schema(),
-            &DatasetSampleDto::TradeSample(invalid_trade)
-        )
-        .is_err());
+        assert!(validate_sample(&schema(), &DatasetSampleDto::TradeSample(invalid_trade)).is_err());
     }
 }
