@@ -23,6 +23,7 @@ impl SourceCaptureKind {
 
     pub fn parse(value: &str) -> Result<Self, String> {
         match value {
+            "source_claim" => Ok(Self::SourceClaim),
             "edition" => Ok(Self::Edition),
             "retrieval" => Ok(Self::Retrieval),
             _ => Err(format!("invalid source capture kind: {value}")),
@@ -135,6 +136,7 @@ impl ExtractionReviewStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum KnowledgeItemKind {
+    SourceClaim,
     Concept,
     Principle,
     Procedure,
@@ -143,6 +145,7 @@ pub enum KnowledgeItemKind {
 impl KnowledgeItemKind {
     pub fn as_str(&self) -> &'static str {
         match self {
+            Self::SourceClaim => "source_claim",
             Self::Concept => "concept",
             Self::Principle => "principle",
             Self::Procedure => "procedure",
@@ -506,7 +509,12 @@ fn validate_confidence(value: Option<&str>) -> Result<(), String> {
         if !parsed.is_finite() || !(0.0..=1.0).contains(&parsed) {
             return Err("confidence must be a decimal between 0 and 1".to_string());
         }
-        if value.trim().is_empty() {
+        if value.trim().is_empty()
+            || value
+                .bytes()
+                .any(|byte| !byte.is_ascii_digit() && byte != b'.')
+            || value.bytes().filter(|byte| *byte == b'.').count() > 1
+        {
             return Err("confidence must not be empty".to_string());
         }
     }
@@ -563,6 +571,31 @@ pub fn create_source_location(
     req: CreateSourceLocationReq,
 ) -> Result<SourceLocationDto, String> {
     validate_required(&req.label, "label")?;
+    match req.location_kind {
+        SourceLocationKind::Page if req.page_start.is_none() => {
+            return Err("page locations require pageStart".into())
+        }
+        SourceLocationKind::Paragraph if req.paragraph_start.is_none() => {
+            return Err("paragraph locations require paragraphStart".into())
+        }
+        SourceLocationKind::Line if req.line_start.is_none() => {
+            return Err("line locations require lineStart".into())
+        }
+        SourceLocationKind::Timestamp if req.time_start_ms.is_none() => {
+            return Err("timestamp locations require timeStartMs".into())
+        }
+        SourceLocationKind::TimeRange
+            if req.time_start_ms.is_none() || req.time_end_ms.is_none() =>
+        {
+            return Err("time ranges require timeStartMs and timeEndMs".into())
+        }
+        SourceLocationKind::TextAnchor
+            if req.stable_selector.as_deref().is_none_or(str::is_empty) =>
+        {
+            return Err("text anchors require a stableSelector".into())
+        }
+        _ => {}
+    }
     let dto = SourceLocationDto {
         id: new_id(),
         source_id: req.source_id,
@@ -675,6 +708,9 @@ pub fn create_source_claim(
 ) -> Result<SourceClaimDto, String> {
     validate_required(&req.statement, "statement")?;
     let id = new_id();
+    if req.kind == KnowledgeItemKind::SourceClaim {
+        return Err("source claims must be created from an accepted source-claim extraction".into());
+    }
     repository::create_source_claim(
         conn,
         &id,
