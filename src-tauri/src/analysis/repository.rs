@@ -3643,13 +3643,30 @@ mod tests {
 
             let run_req =
                 create_run_request(&definition.id, dataset_version_id, split_group_id);
+            let mut duplicate_sample_req = run_req.clone();
+            duplicate_sample_req.inputs[0]
+                .samples
+                .push(duplicate_sample_req.inputs[0].samples[0].clone());
+            assert!(create_run(&mut conn, &duplicate_sample_req).is_err());
+
             let queued = create_run(&mut conn, &run_req)?;
             assert_eq!(queued.lifecycle_status, AnalysisRunStatus::Queued);
             assert_eq!(queued.inputs[0].dataset_version_id, dataset_version_id);
             assert_eq!(queued.inputs[0].samples[0].sample_id, "sample-1");
+            assert_eq!(queued.definition_version_id, definition.id);
             assert!(queued.integrity_findings.iter().any(|finding| {
                 finding.code == "control_not_assessed:overfitting"
             }));
+            assert!(transition_definition(
+                &mut conn,
+                &TransitionAnalysisDefinitionReq {
+                    version_id: definition.id.clone(),
+                    next_status: AnalysisDefinitionStatus::Draft,
+                    rationale: "Attempt to mutate a locked definition.".to_string(),
+                    actor_id: Some("reviewer".to_string()),
+                }
+            )
+            .is_err());
 
             let running = start_run(&mut conn, &queued.id, Some("analyst"))?;
             assert_eq!(running.lifecycle_status, AnalysisRunStatus::Running);
@@ -3700,6 +3717,19 @@ mod tests {
             assert_eq!(completed.lifecycle_status, AnalysisRunStatus::Completed);
             assert_eq!(completed.metrics[0].sample_size, 1);
             assert_eq!(completed.inputs[0].dataset_checksum, "d".repeat(64));
+            assert!(finalize_run(
+                &mut conn,
+                &FinalizeAnalysisRunReq {
+                    run_id: completed.id.clone(),
+                    next_status: AnalysisRunStatus::Completed,
+                    summary: "Attempt to overwrite a finalized run.".to_string(),
+                    outputs: Vec::new(),
+                    metrics: Vec::new(),
+                    errors: Vec::new(),
+                    actor_id: Some("analyst".to_string()),
+                }
+            )
+            .is_err());
 
             let failed_run = create_run(&mut conn, &run_req)?;
             start_run(&mut conn, &failed_run.id, Some("analyst"))?;
@@ -3852,6 +3882,16 @@ mod tests {
 
     #[test]
     fn temporal_leakage_and_incomplete_statistical_reports_are_rejected() {
+        let incomplete_plan: std::result::Result<StatisticalIntegrityPlanDto, _> =
+            serde_json::from_value(serde_json::json!({}));
+        assert!(incomplete_plan.is_err());
+
+        let mut plan = integrity_plan();
+        plan.overfitting = Applicability::NotApplicable {
+            reason: "   ".to_string(),
+        };
+        assert!(validate_integrity_plan(&plan).is_err());
+
         let mut sample = AnalysisInputSampleReq {
             sample_id: "sample".to_string(),
             feature_available_at_us: Some(20),

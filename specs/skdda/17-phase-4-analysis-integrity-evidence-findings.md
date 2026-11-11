@@ -43,9 +43,12 @@ scientific correctness of externally computed values.
 - A run is persisted before external work begins. Logs, errors, deviations,
   output manifests, metrics, and terminal state are append-only or immutable.
   Finalization is transactional; failed runs and retries remain distinct.
-  Output artifacts are staged outside SQLite transactions, content-hashed,
-  copied to workspace-managed storage, then referenced from committed output
-  rows. Analysis never mutates a dataset or prior output.
+  Outputs may be inline payloads or external artifact references. For external
+  references, Vora captures the URI and caller-declared checksum metadata; it
+  does not copy artifact bytes into workspace storage or verify those bytes.
+  These references therefore preserve the external provenance claim without
+  asserting that the artifact is locally available or independently verified.
+  Analysis never mutates a dataset or prior output.
 
 ## Statistical integrity and reporting
 
@@ -111,9 +114,9 @@ controls are visible without inferring a pass from absence of a warning.
   is idempotent.
 - New findings/evidence reference exact typed endpoints and use restrictive
   foreign keys. Model targets are not accepted until the Model domain exists.
-- Managed artifact bytes and their checksums survive application restart;
-  database and asset writes are staged so no committed row points at an
-  unverified file.
+- Inline outputs and external artifact reference/checksum metadata survive
+  application restart. External files remain under the external system's
+  storage and availability guarantees.
 
 ## Acceptance tests
 
@@ -121,7 +124,7 @@ Rust repository/service tests prove exact analysis definition, dataset-version,
 role, split, and sample pins; temporal leakage rejection; required and
 not-applicable integrity semantics; failed and repeated run retention; tested
 method/metric version requirements; required statistical report validation;
-artifact checksum and restart persistence; typed evidence target rejection;
+external artifact metadata and restart persistence; typed evidence target rejection;
 contradictory evidence coexistence; valid null/inconclusive findings; append-only
 contestation and revision; and unchanged historical outputs after later runs.
 Representative end-to-end fixtures initialize a workspace, register method
