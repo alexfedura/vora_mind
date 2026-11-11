@@ -155,6 +155,60 @@ pub enum KnowledgeTransferState {
     Withdrawn,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KnowledgeVersionKind {
+    Concept,
+    Principle,
+}
+
+impl KnowledgeVersionKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Concept => "concept",
+            Self::Principle => "principle",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KnowledgeVersionStatus {
+    Draft,
+    Reviewed,
+    Rejected,
+    Superseded,
+}
+
+impl KnowledgeVersionStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::Reviewed => "reviewed",
+            Self::Rejected => "rejected",
+            Self::Superseded => "superseded",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TransferLineageRelation {
+    Adopted,
+    DerivedFrom,
+    BasedOn,
+}
+
+impl TransferLineageRelation {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Adopted => "adopted",
+            Self::DerivedFrom => "derived_from",
+            Self::BasedOn => "based_on",
+        }
+    }
+}
+
 impl KnowledgeTransferState {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -361,7 +415,8 @@ pub struct CreatePrincipleVersionReq {
 #[serde(rename_all = "camelCase")]
 pub struct ReviewKnowledgeVersionReq {
     pub version_id: String,
-    pub status: String,
+    pub kind: KnowledgeVersionKind,
+    pub status: KnowledgeVersionStatus,
     pub rationale: String,
     pub actor_id: Option<String>,
 }
@@ -415,7 +470,7 @@ pub struct AdoptKnowledgeReq {
 pub struct CreateTransferAdaptationReq {
     pub transfer_id: String,
     pub artifact: TransferArtifactRef,
-    pub relation_kind: String,
+    pub relation_kind: TransferLineageRelation,
     pub rationale: String,
     pub adapted_by: Option<String>,
 }
