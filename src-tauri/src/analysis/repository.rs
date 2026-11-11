@@ -3644,9 +3644,8 @@ mod tests {
             let run_req =
                 create_run_request(&definition.id, dataset_version_id, split_group_id);
             let mut duplicate_sample_req = run_req.clone();
-            duplicate_sample_req.inputs[0]
-                .samples
-                .push(duplicate_sample_req.inputs[0].samples[0].clone());
+            let duplicate_sample = duplicate_sample_req.inputs[0].samples[0].clone();
+            duplicate_sample_req.inputs[0].samples.push(duplicate_sample);
             assert!(create_run(&mut conn, &duplicate_sample_req).is_err());
 
             let queued = create_run(&mut conn, &run_req)?;
