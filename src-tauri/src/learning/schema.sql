@@ -481,9 +481,32 @@ WHEN OLD.status = 'published' AND (
     OR NEW.rubric_version_id <> OLD.rubric_version_id
     OR NEW.change_rationale <> OLD.change_rationale OR NEW.created_by IS NOT OLD.created_by
     OR NEW.created_at_us <> OLD.created_at_us
+    OR NEW.published_at_us IS NOT OLD.published_at_us
 )
 BEGIN
     SELECT RAISE(ABORT, 'published assessment versions are immutable');
+END;
+CREATE TRIGGER assessment_publication_guard
+BEFORE UPDATE OF status ON assessment_versions
+WHEN NEW.status = 'published' AND OLD.status <> 'published'
+ AND (
+    (SELECT status FROM assessment_rubric_versions WHERE id = NEW.rubric_version_id) <> 'published'
+    OR NOT EXISTS (
+        SELECT 1 FROM assessment_reviews r
+        WHERE r.assessment_version_id = NEW.id
+        ORDER BY r.reviewed_at_us DESC, r.id DESC LIMIT 1
+    )
+    OR (
+        SELECT r.review_status FROM assessment_reviews r
+        WHERE r.assessment_version_id = NEW.id
+        ORDER BY r.reviewed_at_us DESC, r.id DESC LIMIT 1
+    ) <> 'approved'
+    OR NOT EXISTS (
+        SELECT 1 FROM assessment_questions q WHERE q.assessment_version_id = NEW.id
+    )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'assessment publication requires an approved review, published rubric, and questions');
 END;
 CREATE TRIGGER assessment_version_no_delete
 BEFORE DELETE ON assessment_versions
@@ -526,9 +549,19 @@ WHEN OLD.status = 'published' AND (
     OR NEW.learning_project_id <> OLD.learning_project_id
     OR NEW.framework_version_id <> OLD.framework_version_id
     OR NEW.created_by IS NOT OLD.created_by OR NEW.created_at_us <> OLD.created_at_us
+    OR NEW.published_at_us IS NOT OLD.published_at_us
 )
 BEGIN
     SELECT RAISE(ABORT, 'published rubric versions are immutable');
+END;
+CREATE TRIGGER rubric_publication_guard
+BEFORE UPDATE OF status ON assessment_rubric_versions
+WHEN NEW.status = 'published' AND OLD.status <> 'published'
+ AND NOT EXISTS (
+    SELECT 1 FROM assessment_rubric_criteria c WHERE c.rubric_version_id = NEW.id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'rubric publication requires at least one criterion');
 END;
 CREATE TRIGGER rubric_criterion_published_no_insert
 BEFORE INSERT ON assessment_rubric_criteria
@@ -554,6 +587,15 @@ WHEN OLD.status = 'submitted'
 BEGIN
     SELECT RAISE(ABORT, 'submitted assessment attempts are immutable');
 END;
+CREATE TRIGGER assessment_attempt_learner_match
+BEFORE INSERT ON assessment_attempts
+WHEN NOT EXISTS (
+    SELECT 1 FROM learning_projects p
+    WHERE p.id = NEW.learning_project_id AND p.learner_id = NEW.learner_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'assessment attempt learner must own its learning project');
+END;
 CREATE TRIGGER assessment_attempt_response_insert_guard
 BEFORE INSERT ON attempt_responses
 WHEN (SELECT status FROM assessment_attempts WHERE id = NEW.attempt_id) <> 'in_progress'
@@ -563,6 +605,13 @@ END;
 CREATE TRIGGER assessment_attempt_response_update_guard
 BEFORE UPDATE ON attempt_responses
 WHEN (SELECT status FROM assessment_attempts WHERE id = OLD.attempt_id) <> 'in_progress'
+ OR NEW.attempt_id <> OLD.attempt_id
+ OR NEW.assessment_question_id <> OLD.assessment_question_id
+ OR NOT EXISTS (
+    SELECT 1 FROM assessment_attempts a
+    JOIN assessment_questions q ON q.assessment_version_id = a.assessment_version_id
+    WHERE a.id = NEW.attempt_id AND q.id = NEW.assessment_question_id
+ )
 BEGIN
     SELECT RAISE(ABORT, 'submitted attempt responses are immutable');
 END;
@@ -729,6 +778,7 @@ WHEN NOT EXISTS (
     WHERE cr.id = NEW.competency_record_id
       AND cr.learner_id = a.learner_id
       AND cr.learning_project_id = a.learning_project_id
+      AND cr.framework_version_id = a.framework_version_id
 )
 BEGIN
     SELECT RAISE(ABORT, 'competency evidence must use the same learner and learning project');
@@ -743,6 +793,7 @@ WHEN NOT EXISTS (
     WHERE cr.id = NEW.competency_record_id
       AND cr.learner_id = s.learner_id
       AND cr.learning_project_id = t.learning_project_id
+      AND cr.framework_version_id = t.framework_version_id
 )
 BEGIN
     SELECT RAISE(ABORT, 'reproduction evidence must use the same learner and learning project');
