@@ -1105,69 +1105,6 @@ fn parse_model_version_status(value: &str) -> Result<ModelVersionLifecycleStatus
     }
 }
 
-fn query_relations(
-    conn: &Connection,
-    sql: &str,
-    version_id: &str,
-) -> Result<Vec<ModelRelationReq>> {
-    let mut statement = conn.prepare(sql)?;
-    let rows = statement
-        .query_map([version_id], |row| {
-            let relation_kind = match row.get::<_, String>(1)?.as_str() {
-                "contributes_to" => ModelRelationKind::ContributesTo,
-                "contradicts" => ModelRelationKind::Contradicts,
-                "qualifies" => ModelRelationKind::Qualifies,
-                _ => return Err(rusqlite::Error::InvalidQuery),
-            };
-            Ok(ModelRelationReq {
-                target_id: row.get(0)?,
-                relation_kind,
-                rationale: row.get(2)?,
-            })
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(rows)
-}
-
-fn query_experiment_relations(
-    conn: &Connection,
-    version_id: &str,
-) -> Result<Vec<ModelExperimentRelationReq>> {
-    let mut statement = conn.prepare(
-        "SELECT design_version_id, experiment_run_id, relation_kind, rationale
-         FROM model_version_experiments WHERE model_version_id = ?1 ORDER BY id",
-    )?;
-    let rows = statement
-        .query_map([version_id], |row| {
-            Ok(ModelExperimentRelationReq {
-                design_version_id: row.get(0)?,
-                experiment_run_id: row.get(1)?,
-                relation_kind: row.get(2)?,
-                rationale: row.get(3)?,
-            })
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(rows)
-}
-
-fn query_dataset_uses(conn: &Connection, version_id: &str) -> Result<Vec<ModelDatasetUseReq>> {
-    let mut statement = conn.prepare(
-        "SELECT dataset_version_id, role, split_group_id, rationale
-         FROM model_version_dataset_uses WHERE model_version_id = ?1 ORDER BY role, dataset_version_id",
-    )?;
-    let rows = statement
-        .query_map([version_id], |row| {
-            Ok(ModelDatasetUseReq {
-                dataset_version_id: row.get(0)?,
-                role: row.get(1)?,
-                split_group_id: row.get(2)?,
-                rationale: row.get(3)?,
-            })
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(rows)
-}
-
 fn query_impacts(conn: &Connection, version_id: &str) -> Result<Vec<ModelImpactReq>> {
     let mut statement = conn.prepare(
         "SELECT item_kind, impact_kind, source_claim_id, hypothesis_version_id,
@@ -1891,7 +1828,7 @@ pub fn create_replication(
     let created_at = now_us()?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     tx.execute(
-        "INSERT OR IGNORE INTO model_version_experiments
+        "INSERT OR IGNORE INTO model_contributions
             (id, model_version_id, design_version_id, experiment_run_id, relation_kind,
              rationale, created_by, created_at_us)
          VALUES (?1, ?2, ?3, ?4, 'tested_in',
