@@ -1,4 +1,4 @@
-CREATE TABLE model_schema_migrations (
+CREATE TABLE IF NOT EXISTS model_schema_migrations (
     version INTEGER PRIMARY KEY,
     migration_id TEXT NOT NULL UNIQUE,
     checksum TEXT NOT NULL,
@@ -365,20 +365,120 @@ BEFORE UPDATE ON model_version_parameters
 BEGIN
     SELECT RAISE(ABORT, 'model version parameters are immutable');
 END;
+CREATE TRIGGER model_version_parameters_no_delete
+BEFORE DELETE ON model_version_parameters
+BEGIN
+    SELECT RAISE(ABORT, 'model version parameters cannot be deleted');
+END;
 CREATE TRIGGER model_version_dependencies_no_update
 BEFORE UPDATE ON model_version_dependencies
 BEGIN
     SELECT RAISE(ABORT, 'model version dependencies are immutable');
+END;
+CREATE TRIGGER model_version_dependencies_no_delete
+BEFORE DELETE ON model_version_dependencies
+BEGIN
+    SELECT RAISE(ABORT, 'model version dependencies cannot be deleted');
 END;
 CREATE TRIGGER model_version_artifacts_no_update
 BEFORE UPDATE ON model_version_artifacts
 BEGIN
     SELECT RAISE(ABORT, 'model version artifacts are immutable');
 END;
+CREATE TRIGGER model_version_artifacts_no_delete
+BEFORE DELETE ON model_version_artifacts
+BEGIN
+    SELECT RAISE(ABORT, 'model version artifacts cannot be deleted');
+END;
 CREATE TRIGGER model_version_assumptions_no_update
 BEFORE UPDATE ON model_version_assumptions
 BEGIN
     SELECT RAISE(ABORT, 'model version assumptions are immutable');
+END;
+CREATE TRIGGER model_version_assumptions_no_delete
+BEFORE DELETE ON model_version_assumptions
+BEGIN
+    SELECT RAISE(ABORT, 'model version assumptions cannot be deleted');
+END;
+CREATE TRIGGER model_version_parents_no_update
+BEFORE UPDATE ON model_version_parents
+BEGIN
+    SELECT RAISE(ABORT, 'model version parent links are immutable');
+END;
+CREATE TRIGGER model_version_parents_no_delete
+BEFORE DELETE ON model_version_parents
+BEGIN
+    SELECT RAISE(ABORT, 'model version parent links cannot be deleted');
+END;
+CREATE TRIGGER model_version_impacts_no_update
+BEFORE UPDATE ON model_version_impacts
+BEGIN
+    SELECT RAISE(ABORT, 'model version impact records are immutable');
+END;
+CREATE TRIGGER model_version_impacts_no_delete
+BEFORE DELETE ON model_version_impacts
+BEGIN
+    SELECT RAISE(ABORT, 'model version impact records cannot be deleted');
+END;
+CREATE TRIGGER model_version_hypotheses_no_update
+BEFORE UPDATE ON model_version_hypotheses
+BEGIN
+    SELECT RAISE(ABORT, 'model hypothesis relations are immutable');
+END;
+CREATE TRIGGER model_version_hypotheses_no_delete
+BEFORE DELETE ON model_version_hypotheses
+BEGIN
+    SELECT RAISE(ABORT, 'model hypothesis relations cannot be deleted');
+END;
+CREATE TRIGGER model_version_findings_no_update
+BEFORE UPDATE ON model_version_findings
+BEGIN
+    SELECT RAISE(ABORT, 'model finding relations are immutable');
+END;
+CREATE TRIGGER model_version_findings_no_delete
+BEFORE DELETE ON model_version_findings
+BEGIN
+    SELECT RAISE(ABORT, 'model finding relations cannot be deleted');
+END;
+CREATE TRIGGER model_version_experiments_no_update
+BEFORE UPDATE ON model_version_experiments
+BEGIN
+    SELECT RAISE(ABORT, 'model experiment relations are immutable');
+END;
+CREATE TRIGGER model_version_experiments_no_delete
+BEFORE DELETE ON model_version_experiments
+BEGIN
+    SELECT RAISE(ABORT, 'model experiment relations cannot be deleted');
+END;
+CREATE TRIGGER model_version_dataset_uses_no_update
+BEFORE UPDATE ON model_version_dataset_uses
+BEGIN
+    SELECT RAISE(ABORT, 'model dataset uses are immutable');
+END;
+CREATE TRIGGER model_version_dataset_uses_no_delete
+BEFORE DELETE ON model_version_dataset_uses
+BEGIN
+    SELECT RAISE(ABORT, 'model dataset uses cannot be deleted');
+END;
+CREATE TRIGGER model_evidence_no_update
+BEFORE UPDATE ON model_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'model evidence is immutable');
+END;
+CREATE TRIGGER model_evidence_no_delete
+BEFORE DELETE ON model_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'model evidence cannot be deleted');
+END;
+CREATE TRIGGER model_version_evidence_no_update
+BEFORE UPDATE ON model_version_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'model evidence links are immutable');
+END;
+CREATE TRIGGER model_version_evidence_no_delete
+BEFORE DELETE ON model_version_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'model evidence links cannot be deleted');
 END;
 CREATE TRIGGER model_evaluations_no_update
 BEFORE UPDATE ON model_evaluations
