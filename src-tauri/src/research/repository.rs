@@ -1829,3 +1829,282 @@ pub fn add_hypothesis_evidence(
     Ok(())
 }
 
+pub fn create_research_design(
+    conn: &mut Connection,
+    req: &CreateResearchDesignReq,
+    design_id: &str,
+    version_id: &str,
+    now: i64,
+) -> Result<ResearchExperimentDesignVersionDto> {
+    let tx = conn.transaction()?;
+    tx.execute(
+        "INSERT INTO research_experiment_designs
+            (id, project_id, title, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![design_id, req.project_id, req.title.trim(), req.created_by, now],
+    )?;
+    tx.execute(
+        "INSERT INTO research_experiment_design_versions
+            (id, design_id, version_no, description, protocol, lifecycle_status, created_by, created_at_us)
+         VALUES (?1, ?2, 1, ?3, ?4, 'draft', ?5, ?6)",
+        params![
+            version_id,
+            design_id,
+            req.description,
+            req.protocol,
+            req.created_by,
+            now
+        ],
+    )?;
+    insert_event(
+        &tx,
+        "experiment_design",
+        design_id,
+        "draft_version_created",
+        req.created_by.as_deref(),
+        "",
+        now,
+    )?;
+    tx.commit()?;
+    query_design_version(conn, version_id)
+}
+
+pub fn transition_research_design(
+    conn: &Connection,
+    version_id: &str,
+    next_status: &str,
+    actor_id: Option<&str>,
+    now: i64,
+) -> Result<ResearchExperimentDesignVersionDto> {
+    let tx = conn.unchecked_transaction()?;
+    let current: String = tx.query_row(
+        "SELECT lifecycle_status FROM research_experiment_design_versions WHERE id = ?1",
+        [version_id],
+        |row| row.get(0),
+    )?;
+    let allowed = matches!(
+        (current.as_str(), next_status),
+        ("draft", "review" | "withdrawn")
+            | ("review", "preregistered" | "withdrawn")
+            | ("preregistered", "withdrawn")
+    );
+    if !allowed {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let preregistered_at = if next_status == "preregistered" {
+        Some(now)
+    } else {
+        None
+    };
+    tx.execute(
+        "UPDATE research_experiment_design_versions
+         SET lifecycle_status = ?1, preregistered_at_us = ?2 WHERE id = ?3",
+        params![next_status, preregistered_at, version_id],
+    )?;
+    let design_id: String = tx.query_row(
+        "SELECT design_id FROM research_experiment_design_versions WHERE id = ?1",
+        [version_id],
+        |row| row.get(0),
+    )?;
+    insert_event(
+        &tx,
+        "experiment_design",
+        &design_id,
+        next_status,
+        actor_id,
+        "",
+        now,
+    )?;
+    tx.commit()?;
+    query_design_version(conn, version_id)
+}
+
+pub fn link_hypothesis_design(
+    conn: &Connection,
+    req: &LinkHypothesisDesignReq,
+    now: i64,
+) -> Result<()> {
+    let same_project = conn.query_row(
+        "SELECT (h.project_id IS d.project_id)
+         FROM hypothesis_definition_versions v
+         JOIN research_hypotheses h ON h.id = v.hypothesis_id,
+         research_experiment_design_versions dv
+         JOIN research_experiment_designs d ON d.id = dv.design_id
+         WHERE v.id = ?1 AND dv.id = ?2",
+        params![req.hypothesis_version_id, req.design_version_id],
+        |row| row.get::<_, bool>(0),
+    )?;
+    if !same_project {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    conn.execute(
+        "INSERT INTO hypothesis_design_links
+            (hypothesis_version_id, design_version_id, relationship_kind,
+             rationale, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            req.hypothesis_version_id,
+            req.design_version_id,
+            req.relationship_kind,
+            req.rationale,
+            req.created_by,
+            now
+        ],
+    )?;
+    Ok(())
+}
+
+fn query_design_version(
+    conn: &Connection,
+    version_id: &str,
+) -> Result<ResearchExperimentDesignVersionDto> {
+    conn.query_row(
+        "SELECT v.id, v.design_id, d.project_id, d.title, v.version_no, v.description,
+                v.protocol, v.lifecycle_status, v.created_by, v.created_at_us, v.preregistered_at_us
+         FROM research_experiment_design_versions v
+         JOIN research_experiment_designs d ON d.id = v.design_id
+         WHERE v.id = ?1",
+        [version_id],
+        |row| {
+            Ok(ResearchExperimentDesignVersionDto {
+                id: row.get(0)?,
+                design_id: row.get(1)?,
+                project_id: row.get(2)?,
+                title: row.get(3)?,
+                version_no: row.get(4)?,
+                description: row.get(5)?,
+                protocol: row.get(6)?,
+                lifecycle_status: row.get(7)?,
+                created_by: row.get(8)?,
+                created_at_us: row.get(9)?,
+                preregistered_at_us: row.get(10)?,
+            })
+        },
+    )
+}
+
+fn query_hypothesis(conn: &Connection, hypothesis_id: &str) -> Result<ResearchHypothesisDto> {
+    let mut hypothesis = conn.query_row(
+        "SELECT id, project_id, research_question_id, legacy_hypothesis_id,
+                parent_hypothesis_id, ownership_state, lifecycle_status, created_by, created_at_us
+         FROM research_hypotheses WHERE id = ?1",
+        [hypothesis_id],
+        |row| {
+            let status = row.get::<_, String>(6)?;
+            Ok(ResearchHypothesisDto {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                research_question_id: row.get(2)?,
+                legacy_hypothesis_id: row.get(3)?,
+                parent_hypothesis_id: row.get(4)?,
+                ownership_state: row.get(5)?,
+                lifecycle_status: match status.as_str() {
+                    "draft" => ResearchHypothesisStatus::Draft,
+                    "review" => ResearchHypothesisStatus::Review,
+                    "preregistered" => ResearchHypothesisStatus::Preregistered,
+                    "testing" => ResearchHypothesisStatus::Testing,
+                    "closed" => ResearchHypothesisStatus::Closed,
+                    _ => ResearchHypothesisStatus::LegacyUntyped,
+                },
+                definitions: Vec::new(),
+                competing_hypothesis_ids: Vec::new(),
+                created_by: row.get(7)?,
+                created_at_us: row.get(8)?,
+            })
+        },
+    )?;
+    let mut versions = conn.prepare(
+        "SELECT id FROM hypothesis_definition_versions
+         WHERE hypothesis_id = ?1 ORDER BY version_no",
+    )?;
+    let version_ids = versions
+        .query_map([hypothesis_id], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>>>()?;
+    for version_id in version_ids {
+        hypothesis
+            .definitions
+            .push(query_hypothesis_definition(conn, &version_id)?);
+    }
+    let mut competitors = conn.prepare(
+        "SELECT competing_hypothesis_id FROM hypothesis_competitions
+         WHERE hypothesis_id = ?1 ORDER BY competing_hypothesis_id",
+    )?;
+    hypothesis.competing_hypothesis_ids = competitors
+        .query_map([hypothesis_id], |row| row.get(0))?
+        .collect::<Result<Vec<_>>>()?;
+    Ok(hypothesis)
+}
+
+fn query_hypothesis_definition(
+    conn: &Connection,
+    version_id: &str,
+) -> Result<HypothesisDefinitionVersionDto> {
+    let mut version = conn.query_row(
+        "SELECT id, hypothesis_id, version_no, parent_version_id, statement_h0, statement_h1,
+                population_scope, research_scope, expected_direction, expected_effect_decimal,
+                expected_effect_unit, falsification_criteria, assumptions, lifecycle_status,
+                created_by, created_at_us, preregistered_at_us
+         FROM hypothesis_definition_versions WHERE id = ?1",
+        [version_id],
+        |row| {
+            let status = row.get::<_, String>(13)?;
+            Ok(HypothesisDefinitionVersionDto {
+                id: row.get(0)?,
+                hypothesis_id: row.get(1)?,
+                version_no: row.get(2)?,
+                parent_version_id: row.get(3)?,
+                statement_h0: row.get(4)?,
+                statement_h1: row.get(5)?,
+                population_scope: row.get(6)?,
+                research_scope: row.get(7)?,
+                expected_direction: row.get(8)?,
+                expected_effect_decimal: row.get(9)?,
+                expected_effect_unit: row.get(10)?,
+                falsification_criteria: row.get(11)?,
+                assumptions: row.get(12)?,
+                lifecycle_status: match status.as_str() {
+                    "review" => HypothesisDefinitionStatus::Review,
+                    "preregistered" => HypothesisDefinitionStatus::Preregistered,
+                    _ => HypothesisDefinitionStatus::Draft,
+                },
+                created_by: row.get(14)?,
+                created_at_us: row.get(15)?,
+                preregistered_at_us: row.get(16)?,
+                variables: Vec::new(),
+            })
+        },
+    )?;
+    let mut statement = conn.prepare(
+        "SELECT id, hypothesis_version_id, role, name, operational_definition,
+                value_kind, unit, measurement_method
+         FROM hypothesis_variables WHERE hypothesis_version_id = ?1 ORDER BY role, name",
+    )?;
+    version.variables = statement
+        .query_map([version_id], |row| {
+            let role = row.get::<_, String>(2)?;
+            let value_kind = row.get::<_, String>(5)?;
+            Ok(HypothesisVariableDto {
+                id: row.get(0)?,
+                hypothesis_version_id: row.get(1)?,
+                role: match role.as_str() {
+                    "dependent" => HypothesisVariableRole::Dependent,
+                    "covariate" => HypothesisVariableRole::Covariate,
+                    _ => HypothesisVariableRole::Independent,
+                },
+                name: row.get(3)?,
+                operational_definition: row.get(4)?,
+                value_kind: match value_kind.as_str() {
+                    "discrete" => HypothesisValueKind::Discrete,
+                    "categorical" => HypothesisValueKind::Categorical,
+                    "qualitative" => HypothesisValueKind::Qualitative,
+                    "other" => HypothesisValueKind::Other,
+                    _ => HypothesisValueKind::Continuous,
+                },
+                unit: row.get(6)?,
+                measurement_method: row.get(7)?,
+            })
+        })?
+        .collect::<Result<Vec<_>>>()?;
+    Ok(version)
+}
+
