@@ -5,6 +5,8 @@ import { useResearchWorkspace } from "@/hooks/useResearchWorkspace";
 import { researchService } from "@/mind/services/researchService";
 import type {
   ResearchGapDto,
+  HypothesisExpectedDirection,
+  ObservationValueState,
   ResearchPathwayKey,
   ResearchProjectDto,
   ResearchQuestionDto,
@@ -28,6 +30,34 @@ function isoDate(timestampUs: number): string {
 
 function latest<T>(items: T[]): T | undefined {
   return items[items.length - 1];
+}
+
+function observationValueState(value: string): ObservationValueState {
+  switch (value) {
+    case "observed":
+    case "not_measured":
+    case "not_recorded":
+    case "unknown":
+    case "not_applicable":
+    case "withheld":
+    case "invalid":
+      return value;
+    default:
+      throw new Error(`Unsupported observation value state: ${value}`);
+  }
+}
+
+function hypothesisDirection(value: string): HypothesisExpectedDirection {
+  switch (value) {
+    case "positive":
+    case "negative":
+    case "non_directional":
+    case "equivalence":
+    case "other":
+      return value;
+    default:
+      throw new Error(`Unsupported expected direction: ${value}`);
+  }
 }
 
 function Field({
@@ -311,7 +341,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     if (!version || !plan) return;
     const target = event.currentTarget;
     const form = new FormData(target);
-    const state = String(form.get("valueState") ?? "observed");
+    const state = observationValueState(String(form.get("valueState") ?? "observed"));
     await act(() => researchService.createObservation({
       projectId,
       phenomenonId: plan.phenomenonId,
@@ -406,7 +436,7 @@ export const ResearchWorkspacePage: React.FC = () => {
       statementH1: String(form.get("h1") ?? ""),
       populationScope: String(form.get("population") ?? ""),
       researchScope: String(form.get("scope") ?? ""),
-      expectedDirection: String(form.get("direction") ?? "non_directional"),
+      expectedDirection: hypothesisDirection(String(form.get("direction") ?? "non_directional")),
       expectedEffectDecimal: null,
       expectedEffectUnit: null,
       falsificationCriteria: String(form.get("falsification") ?? ""),

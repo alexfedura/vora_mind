@@ -33,6 +33,7 @@ import type {
   PriorKnowledgeAssessmentDto,
   ProjectKnowledgeAdoptionDto,
   ResearchDomainDto,
+  ResearchDesignStatus,
   ResearchExperimentDesignVersionDto,
   ResearchGapDto,
   ResearchGapStatus,
@@ -144,7 +145,7 @@ export const researchService = {
     invoke<ResearchExperimentDesignVersionDto>("research_create_design", { request }),
   transitionDesign: (
     designVersionId: string,
-    nextStatus: "review" | "preregistered" | "withdrawn",
+    nextStatus: ResearchDesignStatus,
     actorId: string | null,
   ) => invoke<ResearchExperimentDesignVersionDto>("research_transition_design", {
     designVersionId, nextStatus, actorId,
