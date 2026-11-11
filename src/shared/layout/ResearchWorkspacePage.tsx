@@ -785,6 +785,14 @@ export const ResearchWorkspacePage: React.FC = () => {
                   </article>
                 ))}
               </div>
+              <form onSubmit={(event) => void refineQuestion(event)} className="space-y-2 border-t border-[#292c34] pt-3">
+                <h4 className="text-xs font-semibold text-gray-300">Refine an accepted question</h4>
+                <Field label="Parent question"><select className={inputClass} name="parentQuestionId" required><option value="">Select accepted parent</option>{projectQuestions.filter((question) => question.lifecycleStatus === "accepted").map((question) => <option key={question.id} value={question.id}>{question.title}</option>)}</select></Field>
+                <Field label="Derived question"><input className={inputClass} name="title" required /></Field>
+                <Field label="Description"><input className={inputClass} name="description" /></Field>
+                <Field label="Refinement rationale"><input className={inputClass} name="rationale" required /></Field>
+                <button className={buttonClass} disabled={!projectQuestions.some((question) => question.lifecycleStatus === "accepted")}>Create refined child question</button>
+              </form>
             </div>
 
             <div className="space-y-3 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
@@ -932,6 +940,37 @@ export const ResearchWorkspacePage: React.FC = () => {
                   );
                 })}
               </div>
+              <form onSubmit={(event) => void addHypothesisEvidence(event)} className="space-y-2 border-t border-[#292c34] pt-3">
+                <h4 className="text-xs font-semibold text-gray-300">Attach typed evidence to the current definition</h4>
+                <Field label="Hypothesis"><select className={inputClass} value={selectedHypothesisId} onChange={(event) => setSelectedHypothesisId(event.target.value)} required><option value="">Select a typed hypothesis</option>{projectHypotheses.filter((item) => item.definitions.length > 0).map((item) => <option key={item.id} value={item.id}>{latest(item.definitions)?.statementH1}</option>)}</select></Field>
+                <Field label="Evidence record"><select className={inputClass} name="evidenceId" required>
+                  <option value="">Select source claim, observation, or pattern</option>
+                  {sourceVersions.filter((source) => source.sourceClaimId).map((source, index) => <option key={`${source.sourceClaimId}-${index}`} value={`source_claim|${source.sourceClaimId}`}>Source claim {source.sourceClaimId} · source version {source.sourceVersionId}</option>)}
+                  {projectObservations.map((observation) => <option key={observation.id} value={`observation|${observation.id}`}>Observation {observation.id}</option>)}
+                  {workspace.patterns.filter((item) => item.projectId === projectId).map((pattern) => <option key={pattern.id} value={`pattern|${pattern.id}`}>Pattern {pattern.title}</option>)}
+                </select></Field>
+                <Field label="Evidence relationship"><select className={inputClass} name="polarity"><option value="supports">Supports</option><option value="contradicts">Contradicts</option><option value="qualifies">Qualifies</option></select></Field>
+                <Field label="Rationale"><input className={inputClass} name="rationale" required /></Field>
+                <button className={buttonClass} disabled={!projectHypotheses.some((item) => item.definitions.length > 0)}>Attach evidence</button>
+              </form>
+              <form onSubmit={(event) => void addCompetingHypotheses(event)} className="space-y-2 border-t border-[#292c34] pt-3">
+                <h4 className="text-xs font-semibold text-gray-300">Preserve competing hypotheses</h4>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Field label="Hypothesis"><select className={inputClass} name="hypothesisId" required><option value="">Select hypothesis</option>{projectHypotheses.filter((item) => item.definitions.length > 0).map((item) => <option key={item.id} value={item.id}>{latest(item.definitions)?.statementH1}</option>)}</select></Field>
+                  <Field label="Competing hypothesis"><select className={inputClass} name="competingId" required><option value="">Select alternative</option>{projectHypotheses.filter((item) => item.definitions.length > 0).map((item) => <option key={item.id} value={item.id}>{latest(item.definitions)?.statementH1}</option>)}</select></Field>
+                </div>
+                <Field label="Competition rationale"><input className={inputClass} name="rationale" required /></Field>
+                <button className={buttonClass} disabled={projectHypotheses.filter((item) => item.definitions.length > 0).length < 2}>Link as competitors</button>
+              </form>
+              <form onSubmit={(event) => void addModelReference(event)} className="space-y-2 border-t border-[#292c34] pt-3">
+                <h4 className="text-xs font-semibold text-gray-300">Model and version reference</h4>
+                <Field label="Hypothesis"><select className={inputClass} name="hypothesisId" required><option value="">Select hypothesis</option>{projectHypotheses.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}</select></Field>
+                <div className="grid grid-cols-2 gap-2"><Field label="Model ID"><input className={inputClass} name="modelId" required /></Field><Field label="Model version ID"><input className={inputClass} name="modelVersionId" required /></Field></div>
+                <Field label="Label"><input className={inputClass} name="label" required /></Field>
+                <Field label="Rationale"><input className={inputClass} name="rationale" required /></Field>
+                <p className="text-[11px] text-amber-300">Model identity remains unresolved until linked to a verified model record.</p>
+                <button className={buttonClass}>Add unresolved model reference</button>
+              </form>
               <form onSubmit={(event) => void createDesign(event)} className="space-y-2 border-t border-[#292c34] pt-3">
                 <Field label="Hypothesis version to link"><select className={inputClass} value={selectedHypothesisId} onChange={(event) => setSelectedHypothesisId(event.target.value)} required><option value="">Select hypothesis</option>{projectHypotheses.filter((item) => item.definitions.length > 0).map((item) => <option key={item.id} value={item.id}>{latest(item.definitions)?.statementH1}</option>)}</select></Field>
                 <Field label="Design title"><input className={inputClass} name="title" required /></Field>
@@ -942,9 +981,13 @@ export const ResearchWorkspacePage: React.FC = () => {
               </form>
               <div className="space-y-2 border-t border-[#292c34] pt-3">
                 {workspace.designVersions.filter((design) => design.projectId === projectId).map((design) => (
-                  <p key={design.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3 text-xs text-gray-300">
-                    Design v{design.versionNo} · {design.title} · {design.lifecycleStatus} · no execution data in this phase
-                  </p>
+                  <div key={design.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3 text-xs text-gray-300">
+                    <p>Design v{design.versionNo} · {design.title} · {design.lifecycleStatus} · no execution data in this phase</p>
+                    <div className="mt-2 flex gap-2">
+                      {design.lifecycleStatus === "draft" && <button type="button" onClick={() => void act(() => researchService.transitionDesign(design.id, "review", null))} className="rounded border border-[#343741] px-2 py-1 text-xs">Review design</button>}
+                      {design.lifecycleStatus === "review" && <button type="button" onClick={() => void act(() => researchService.transitionDesign(design.id, "preregistered", null))} className="rounded border border-emerald-800 px-2 py-1 text-xs text-emerald-300">Preregister design</button>}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
