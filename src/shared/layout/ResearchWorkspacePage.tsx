@@ -539,22 +539,16 @@ export const ResearchWorkspacePage: React.FC = () => {
     if (!hypothesis || !definition) return;
     const target = event.currentTarget;
     const form = new FormData(target);
-    await act(async () => {
-      const design = await researchService.createDesign({
+    await act(() => researchService.createLinkedDesign({
         projectId,
         title: String(form.get("title") ?? ""),
         description: String(form.get("description") ?? ""),
         protocol: String(form.get("protocol") ?? ""),
-        createdBy: null,
-      });
-      await researchService.linkHypothesisDesign({
         hypothesisVersionId: definition.id,
-        designVersionId: design.id,
         relationshipKind: "tests",
         rationale: String(form.get("rationale") ?? ""),
         createdBy: null,
-      });
-    });
+      }));
     target.reset();
   };
 
