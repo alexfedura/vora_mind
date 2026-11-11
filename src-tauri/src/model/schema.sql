@@ -187,26 +187,28 @@ CREATE TABLE model_contributions (
         (relation_kind = 'contributes_to' AND
             (hypothesis_version_id IS NOT NULL OR finding_version_id IS NOT NULL
              OR design_version_id IS NOT NULL) AND experiment_run_id IS NULL
-             AND dataset_role IS NULL AND evidence_id IS NULL)
+             AND dataset_role IS NULL AND split_group_id IS NULL AND evidence_id IS NULL)
         OR (relation_kind = 'contradicts' AND
             (hypothesis_version_id IS NOT NULL OR finding_version_id IS NOT NULL)
             AND design_version_id IS NULL AND experiment_run_id IS NULL
-            AND dataset_role IS NULL AND evidence_id IS NULL)
+            AND dataset_role IS NULL AND split_group_id IS NULL AND evidence_id IS NULL)
         OR (relation_kind = 'qualifies' AND finding_version_id IS NOT NULL
             AND hypothesis_version_id IS NULL AND design_version_id IS NULL
-            AND experiment_run_id IS NULL AND dataset_role IS NULL AND evidence_id IS NULL)
+            AND experiment_run_id IS NULL AND dataset_role IS NULL
+            AND split_group_id IS NULL AND evidence_id IS NULL)
         OR (relation_kind = 'tested_in' AND design_version_id IS NOT NULL
             AND experiment_run_id IS NOT NULL AND hypothesis_version_id IS NULL
             AND finding_version_id IS NULL AND dataset_version_id IS NULL
-            AND dataset_role IS NULL AND evidence_id IS NULL)
+            AND dataset_role IS NULL AND split_group_id IS NULL AND evidence_id IS NULL)
         OR (relation_kind = 'dataset_use' AND dataset_version_id IS NOT NULL
             AND dataset_role IS NOT NULL AND hypothesis_version_id IS NULL
             AND finding_version_id IS NULL AND design_version_id IS NULL
-            AND experiment_run_id IS NULL AND evidence_id IS NULL)
+            AND experiment_run_id IS NULL AND split_group_id IS NULL AND evidence_id IS NULL)
         OR (relation_kind = 'evidenced_by' AND evidence_id IS NOT NULL
             AND hypothesis_version_id IS NULL AND finding_version_id IS NULL
             AND design_version_id IS NULL AND experiment_run_id IS NULL
-            AND dataset_version_id IS NULL AND dataset_role IS NULL)
+            AND dataset_version_id IS NULL AND dataset_role IS NULL
+            AND split_group_id IS NULL)
     )
 );
 CREATE UNIQUE INDEX idx_model_contribution_hypothesis
@@ -216,10 +218,14 @@ CREATE UNIQUE INDEX idx_model_contribution_finding
     ON model_contributions(model_version_id, finding_version_id, relation_kind)
     WHERE finding_version_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_model_contribution_experiment
-    ON model_contributions(model_version_id, design_version_id, experiment_run_id, relation_kind)
+    ON model_contributions(
+        model_version_id, design_version_id, COALESCE(experiment_run_id, ''), relation_kind
+    )
     WHERE design_version_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_model_contribution_dataset
-    ON model_contributions(model_version_id, dataset_version_id, dataset_role, split_group_id)
+    ON model_contributions(
+        model_version_id, dataset_version_id, dataset_role, COALESCE(split_group_id, '')
+    )
     WHERE dataset_version_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_model_contribution_evidence
     ON model_contributions(model_version_id, evidence_id)
