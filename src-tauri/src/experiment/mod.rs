@@ -792,27 +792,28 @@ pub fn now_ts_us() -> Result<i64, String> {
 }
 
 pub fn validate_decimal(value: &str) -> Result<(), String> {
-    let bytes = value.as_bytes();
-    if bytes.is_empty() {
+    let unsigned = value.strip_prefix('-').unwrap_or(value);
+    if unsigned.is_empty() {
         return Err("decimal value cannot be empty".into());
     }
-    let digits = bytes.iter().filter(|byte| byte.is_ascii_digit()).count();
-    let valid = digits > 0
-        && bytes.iter().enumerate().all(|(index, byte)| match byte {
-            b'0'..=b'9' => true,
-            b'-' | b'+' => index == 0,
-            b'.' => bytes.iter().filter(|candidate| **candidate == b'.').count() == 1,
-            _ => false,
-        });
-    if !valid {
+    let mut parts = unsigned.split('.');
+    let integer_part = parts.next().unwrap_or_default();
+    let fraction_part = parts.next();
+    let valid_integer = !integer_part.is_empty()
+        && integer_part.bytes().all(|byte| byte.is_ascii_digit())
+        && (integer_part == "0" || !integer_part.starts_with('0'));
+    let valid_fraction = fraction_part.is_none_or(|part| {
+        !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit())
+    });
+    if !valid_integer || !valid_fraction || parts.next().is_some() {
         return Err(format!("invalid canonical decimal: {value}"));
     }
     Ok(())
 }
 
 pub fn validate_sample_schema(schema: &DatasetSampleSchemaDto) -> Result<(), String> {
-    if schema.schema_id.trim().is_empty() || schema.schema_version <= 0 {
-        return Err("dataset sample schema requires an ID and positive version".into());
+    if schema.schema_id.trim().is_empty() || schema.schema_version != 1 {
+        return Err("dataset sample schema requires an ID and supported version 1".into());
     }
     let mut keys = std::collections::HashSet::new();
     for field in &schema.fields {
