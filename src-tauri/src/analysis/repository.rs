@@ -2161,3 +2161,438 @@ pub fn query_run(conn: &Connection, run_id: &str) -> Result<AnalysisRunDto> {
         deviations: query_run_deviations(conn, run_id)?,
     })
 }
+
+fn project_exists(conn: &Connection, project_id: &str) -> Result<()> {
+    let exists: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM research_projects WHERE id = ?1)",
+        [project_id],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        return Err(anyhow!("Research project was not found."));
+    }
+    Ok(())
+}
+
+fn validate_proposition_project(
+    conn: &Connection,
+    project_id: &str,
+    proposition: &PropositionRefDto,
+) -> Result<()> {
+    match proposition {
+        PropositionRefDto::SourceClaim(id) => {
+            let exists: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM source_claims WHERE id = ?1)",
+                [id],
+                |row| row.get(0),
+            )?;
+            if !exists {
+                return Err(anyhow!("Evidence proposition source claim was not found."));
+            }
+        }
+        PropositionRefDto::HypothesisVersion(id) => {
+            let owning_project: Option<String> = conn
+                .query_row(
+                    "SELECT h.project_id FROM hypothesis_definition_versions v
+                     JOIN research_hypotheses h ON h.id = v.hypothesis_id
+                     WHERE v.id = ?1",
+                    [id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if owning_project.as_deref() != Some(project_id) {
+                return Err(anyhow!(
+                    "Evidence hypothesis version must belong to this research project."
+                ));
+            }
+        }
+        PropositionRefDto::FindingVersion(id) => {
+            let owning_project: Option<String> = conn
+                .query_row(
+                    "SELECT project_id FROM analysis_finding_versions WHERE id = ?1",
+                    [id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if owning_project.as_deref() != Some(project_id) {
+                return Err(anyhow!(
+                    "Evidence finding version must belong to this research project."
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_artifact_project(
+    conn: &Connection,
+    project_id: &str,
+    artifact: &EvidenceArtifactRefDto,
+) -> Result<()> {
+    let owning_project: Option<String> = match artifact {
+        EvidenceArtifactRefDto::AnalysisOutput(id) => conn
+            .query_row(
+                "SELECT r.project_id FROM analysis_outputs o
+                 JOIN analysis_runs r ON r.id = o.run_id WHERE o.id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?,
+        EvidenceArtifactRefDto::ExperimentRun(id) => conn
+            .query_row(
+                "SELECT project_id FROM experiment_runs WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?,
+        EvidenceArtifactRefDto::DatasetVersion(id) => conn
+            .query_row(
+                "SELECT d.project_id FROM experiment_dataset_versions v
+                 JOIN experiment_datasets d ON d.id = v.dataset_id WHERE v.id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?,
+        EvidenceArtifactRefDto::ResearchObservation(id) => conn
+            .query_row(
+                "SELECT project_id FROM research_observations WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?,
+        EvidenceArtifactRefDto::SourceVersionSegment(id) => {
+            let exists: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM source_version_segments WHERE id = ?1)",
+                [id],
+                |row| row.get(0),
+            )?;
+            if !exists {
+                return Err(anyhow!("Evidence source segment was not found."));
+            }
+            return Ok(());
+        }
+        EvidenceArtifactRefDto::SourceClaim(id) => {
+            let exists: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM source_claims WHERE id = ?1)",
+                [id],
+                |row| row.get(0),
+            )?;
+            if !exists {
+                return Err(anyhow!("Evidence source claim was not found."));
+            }
+            return Ok(());
+        }
+    };
+    if owning_project.as_deref() != Some(project_id) {
+        return Err(anyhow!(
+            "Evidence artifact must belong to this research project."
+        ));
+    }
+    Ok(())
+}
+
+fn insert_evidence_event(
+    tx: &Transaction<'_>,
+    evidence_id: &str,
+    status: &EvidenceStatus,
+    rationale: &str,
+    actor_id: Option<&str>,
+    now: i64,
+) -> Result<()> {
+    tx.execute(
+        "INSERT INTO analysis_evidence_events
+            (id, evidence_id, status, rationale, actor_id, occurred_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![id(), evidence_id, status.as_str(), rationale.trim(), actor_id, now],
+    )?;
+    Ok(())
+}
+
+fn proposition_target_values(
+    proposition: &PropositionRefDto,
+) -> (Option<&str>, Option<&str>, Option<&str>) {
+    match proposition {
+        PropositionRefDto::SourceClaim(id) => (Some(id), None, None),
+        PropositionRefDto::HypothesisVersion(id) => (None, Some(id), None),
+        PropositionRefDto::FindingVersion(id) => (None, None, Some(id)),
+    }
+}
+
+fn artifact_target_values(
+    artifact: &EvidenceArtifactRefDto,
+) -> (
+    Option<&str>,
+    Option<&str>,
+    Option<&str>,
+    Option<&str>,
+    Option<&str>,
+    Option<&str>,
+) {
+    match artifact {
+        EvidenceArtifactRefDto::AnalysisOutput(id) => {
+            (Some(id), None, None, None, None, None)
+        }
+        EvidenceArtifactRefDto::ExperimentRun(id) => {
+            (None, Some(id), None, None, None, None)
+        }
+        EvidenceArtifactRefDto::DatasetVersion(id) => {
+            (None, None, Some(id), None, None, None)
+        }
+        EvidenceArtifactRefDto::ResearchObservation(id) => {
+            (None, None, None, Some(id), None, None)
+        }
+        EvidenceArtifactRefDto::SourceVersionSegment(id) => {
+            (None, None, None, None, Some(id), None)
+        }
+        EvidenceArtifactRefDto::SourceClaim(id) => {
+            (None, None, None, None, None, Some(id))
+        }
+    }
+}
+
+fn parse_proposition_refs(
+    source_claim_id: Option<String>,
+    hypothesis_version_id: Option<String>,
+    finding_version_id: Option<String>,
+) -> Result<PropositionRefDto> {
+    match (
+        source_claim_id,
+        hypothesis_version_id,
+        finding_version_id,
+    ) {
+        (Some(id), None, None) => Ok(PropositionRefDto::SourceClaim(id)),
+        (None, Some(id), None) => Ok(PropositionRefDto::HypothesisVersion(id)),
+        (None, None, Some(id)) => Ok(PropositionRefDto::FindingVersion(id)),
+        _ => Err(anyhow!("Stored evidence proposition endpoint is invalid.")),
+    }
+}
+
+fn parse_artifact_refs(
+    output_id: Option<String>,
+    experiment_run_id: Option<String>,
+    dataset_version_id: Option<String>,
+    observation_id: Option<String>,
+    source_segment_id: Option<String>,
+    source_claim_id: Option<String>,
+) -> Result<EvidenceArtifactRefDto> {
+    match (
+        output_id,
+        experiment_run_id,
+        dataset_version_id,
+        observation_id,
+        source_segment_id,
+        source_claim_id,
+    ) {
+        (Some(id), None, None, None, None, None) => Ok(EvidenceArtifactRefDto::AnalysisOutput(id)),
+        (None, Some(id), None, None, None, None) => Ok(EvidenceArtifactRefDto::ExperimentRun(id)),
+        (None, None, Some(id), None, None, None) => Ok(EvidenceArtifactRefDto::DatasetVersion(id)),
+        (None, None, None, Some(id), None, None) => {
+            Ok(EvidenceArtifactRefDto::ResearchObservation(id))
+        }
+        (None, None, None, None, Some(id), None) => {
+            Ok(EvidenceArtifactRefDto::SourceVersionSegment(id))
+        }
+        (None, None, None, None, None, Some(id)) => Ok(EvidenceArtifactRefDto::SourceClaim(id)),
+        _ => Err(anyhow!("Stored evidence artifact endpoint is invalid.")),
+    }
+}
+
+fn query_evidence_events(conn: &Connection, evidence_id: &str) -> Result<Vec<EvidenceEventDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, status, rationale, actor_id, occurred_at_us
+         FROM analysis_evidence_events WHERE evidence_id = ?1 ORDER BY occurred_at_us, id",
+    )?;
+    let rows = statement
+        .query_map([evidence_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, i64>(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(|(id, status, rationale, actor_id, occurred_at_us)| {
+            Ok(EvidenceEventDto {
+                id,
+                status: EvidenceStatus::parse(&status).map_err(anyhow::Error::msg)?,
+                rationale,
+                actor_id,
+                occurred_at_us,
+            })
+        })
+        .collect()
+}
+
+pub fn query_evidence(conn: &Connection, evidence_id: &str) -> Result<EvidenceDto> {
+    let row = conn.query_row(
+        "SELECT id, project_id, target_source_claim_id, target_hypothesis_version_id,
+                target_finding_version_id, artifact_analysis_output_id,
+                artifact_experiment_run_id, artifact_dataset_version_id,
+                artifact_observation_id, artifact_source_segment_id,
+                artifact_source_claim_id, polarity, scope, quality_rationale,
+                limitations, provenance_json, created_by, created_at_us,
+                (SELECT status FROM analysis_evidence_events e
+                 WHERE e.evidence_id = analysis_evidence.id
+                 ORDER BY e.occurred_at_us DESC, e.id DESC LIMIT 1)
+         FROM analysis_evidence WHERE id = ?1",
+        [evidence_id],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<String>>(6)?,
+                row.get::<_, Option<String>>(7)?,
+                row.get::<_, Option<String>>(8)?,
+                row.get::<_, Option<String>>(9)?,
+                row.get::<_, Option<String>>(10)?,
+                row.get::<_, String>(11)?,
+                row.get::<_, String>(12)?,
+                row.get::<_, String>(13)?,
+                row.get::<_, String>(14)?,
+                row.get::<_, String>(15)?,
+                row.get::<_, Option<String>>(16)?,
+                row.get::<_, i64>(17)?,
+                row.get::<_, String>(18)?,
+            ))
+        },
+    )?;
+    Ok(EvidenceDto {
+        id: row.0,
+        project_id: row.1,
+        proposition: parse_proposition_refs(row.2, row.3, row.4)?,
+        artifact: parse_artifact_refs(row.5, row.6, row.7, row.8, row.9, row.10)?,
+        polarity: EvidencePolarity::parse(&row.11).map_err(anyhow::Error::msg)?,
+        scope: row.12,
+        quality_rationale: row.13,
+        limitations: row.14,
+        provenance: parse_json(&row.15)?,
+        created_by: row.16,
+        created_at_us: row.17,
+        status: EvidenceStatus::parse(&row.18).map_err(anyhow::Error::msg)?,
+        events: query_evidence_events(conn, evidence_id)?,
+    })
+}
+
+pub fn create_evidence(conn: &mut Connection, req: &CreateEvidenceReq) -> Result<EvidenceDto> {
+    nonempty(&req.scope, "Evidence scope")?;
+    nonempty(&req.quality_rationale, "Evidence quality rationale")?;
+    nonempty(&req.limitations, "Evidence limitations")?;
+    project_exists(conn, &req.project_id)?;
+    validate_proposition_project(conn, &req.project_id, &req.proposition)?;
+    validate_artifact_project(conn, &req.project_id, &req.artifact)?;
+    if !req.provenance.is_object() {
+        return Err(anyhow!("Evidence provenance must be a JSON object."));
+    }
+    let (target_source_claim_id, target_hypothesis_version_id, target_finding_version_id) =
+        proposition_target_values(&req.proposition);
+    let (
+        artifact_analysis_output_id,
+        artifact_experiment_run_id,
+        artifact_dataset_version_id,
+        artifact_observation_id,
+        artifact_source_segment_id,
+        artifact_source_claim_id,
+    ) = artifact_target_values(&req.artifact);
+    let evidence_id = id();
+    let now = now_us()?;
+    let tx = conn.transaction()?;
+    tx.execute(
+        "INSERT INTO analysis_evidence
+            (id, project_id, target_source_claim_id, target_hypothesis_version_id,
+             target_finding_version_id, artifact_analysis_output_id,
+             artifact_experiment_run_id, artifact_dataset_version_id,
+             artifact_observation_id, artifact_source_segment_id,
+             artifact_source_claim_id, polarity, scope, quality_rationale,
+             limitations, provenance_json, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+                 ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+        params![
+            evidence_id,
+            req.project_id,
+            target_source_claim_id,
+            target_hypothesis_version_id,
+            target_finding_version_id,
+            artifact_analysis_output_id,
+            artifact_experiment_run_id,
+            artifact_dataset_version_id,
+            artifact_observation_id,
+            artifact_source_segment_id,
+            artifact_source_claim_id,
+            req.polarity.as_str(),
+            req.scope.trim(),
+            req.quality_rationale.trim(),
+            req.limitations.trim(),
+            json(&req.provenance)?,
+            req.created_by,
+            now
+        ],
+    )?;
+    insert_evidence_event(
+        &tx,
+        &evidence_id,
+        &EvidenceStatus::Recorded,
+        "Evidence recorded.",
+        req.created_by.as_deref(),
+        now,
+    )?;
+    tx.commit()?;
+    query_evidence(conn, &evidence_id)
+}
+
+pub fn transition_evidence(
+    conn: &mut Connection,
+    req: &TransitionEvidenceReq,
+) -> Result<EvidenceDto> {
+    nonempty(&req.rationale, "Evidence lifecycle rationale")?;
+    let current = query_evidence(conn, &req.evidence_id)?.status;
+    let allowed = matches!(
+        (&current, &req.next_status),
+        (EvidenceStatus::Recorded, EvidenceStatus::Assessed)
+            | (EvidenceStatus::Recorded, EvidenceStatus::Contested)
+            | (EvidenceStatus::Recorded, EvidenceStatus::Rejected)
+            | (EvidenceStatus::Recorded, EvidenceStatus::Retracted)
+            | (EvidenceStatus::Assessed, EvidenceStatus::Accepted)
+            | (EvidenceStatus::Assessed, EvidenceStatus::Contested)
+            | (EvidenceStatus::Assessed, EvidenceStatus::Rejected)
+            | (EvidenceStatus::Assessed, EvidenceStatus::Retracted)
+            | (EvidenceStatus::Accepted, EvidenceStatus::Contested)
+            | (EvidenceStatus::Accepted, EvidenceStatus::Superseded)
+            | (EvidenceStatus::Accepted, EvidenceStatus::Retracted)
+            | (EvidenceStatus::Contested, EvidenceStatus::Accepted)
+            | (EvidenceStatus::Contested, EvidenceStatus::Rejected)
+            | (EvidenceStatus::Contested, EvidenceStatus::Superseded)
+            | (EvidenceStatus::Contested, EvidenceStatus::Retracted)
+    );
+    if !allowed {
+        return Err(anyhow!("Invalid evidence lifecycle transition."));
+    }
+    let tx = conn.transaction()?;
+    insert_evidence_event(
+        &tx,
+        &req.evidence_id,
+        &req.next_status,
+        &req.rationale,
+        req.actor_id.as_deref(),
+        now_us()?,
+    )?;
+    tx.commit()?;
+    query_evidence(conn, &req.evidence_id)
+}
+
+pub fn evidence_for_project(conn: &Connection, project_id: &str) -> Result<Vec<EvidenceDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id FROM analysis_evidence WHERE project_id = ?1
+         ORDER BY created_at_us, id",
+    )?;
+    let ids = statement
+        .query_map([project_id], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    ids.iter().map(|id| query_evidence(conn, id)).collect()
+}
