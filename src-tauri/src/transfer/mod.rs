@@ -433,8 +433,13 @@ pub fn change_eligibility(
     request: ChangeTransferEligibilityReq,
 ) -> Result<TransferEligibilityDto, String> {
     required(&request.rationale, "eligibility change rationale")?;
-    repository::change_eligibility(&request, &new_id("transfer_eligibility_event"), now_us()?)
-        .map_err(|error| error.to_string())
+    repository::change_eligibility(
+        conn,
+        &request,
+        &new_id("transfer_eligibility_event"),
+        now_us()?,
+    )
+    .map_err(|error| error.to_string())
 }
 
 pub fn create_transfer(
@@ -461,6 +466,7 @@ pub fn transition_transfer(
 ) -> Result<KnowledgeTransferDto, String> {
     required(&request.rationale, "transfer transition rationale")?;
     repository::transition_transfer(
+        conn,
         &request,
         &new_id("knowledge_transfer_event"),
         now_us()?,
@@ -475,8 +481,13 @@ pub fn create_adaptation(
     required(&request.transfer_id, "transfer ID")?;
     required(&request.artifact_version_id, "adapted artifact version ID")?;
     required(&request.rationale, "adaptation rationale")?;
-    repository::create_adaptation(&request, &new_id("transfer_adaptation"), now_us()?)
-        .map_err(|error| error.to_string())
+    repository::create_adaptation(
+        conn,
+        &request,
+        &new_id("transfer_adaptation"),
+        now_us()?,
+    )
+    .map_err(|error| error.to_string())
 }
 
 pub fn create_downstream_usage(
@@ -487,6 +498,11 @@ pub fn create_downstream_usage(
     required(&request.project_id, "project ID")?;
     required(&request.artifact_id, "downstream artifact ID")?;
     required(&request.use_context, "downstream use context")?;
-    repository::create_downstream_usage(&request, &new_id("transfer_usage"), now_us()?)
-        .map_err(|error| error.to_string())
+    repository::create_downstream_usage(
+        conn,
+        &request,
+        &new_id("transfer_usage"),
+        now_us()?,
+    )
+    .map_err(|error| error.to_string())
 }
