@@ -2367,3 +2367,416 @@ export interface ModelWorkspaceDto {
   replications: ModelReplicationDto[];
 }
 
+export type LearningVersionStatus = "draft" | "review" | "published" | "deprecated";
+export type LearningReviewStatus = "approved" | "changes_requested" | "rejected";
+export type LearningAssessmentOutcome = "pass" | "fail" | "inconclusive";
+export type LearningMasteryOutcome = "mastered" | "not_mastered";
+
+export interface LearningLearnerDto {
+  id: string;
+  displayName: string;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface LearningProjectDto {
+  id: string;
+  title: string;
+  learnerId: string;
+  learnerName: string;
+  frameworkId: string;
+  frameworkVersionId: string;
+  frameworkTitle: string;
+  frameworkVersionNo: number;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface LearningFrameworkVersionDto {
+  frameworkId: string;
+  frameworkVersionId: string;
+  title: string;
+  versionNo: number;
+  publishedAtUs: number;
+}
+
+export interface LearningObjectiveVersionDto {
+  id: string;
+  objectiveId: string;
+  versionNo: number;
+  learningProjectId: string;
+  frameworkId: string;
+  frameworkVersionId: string;
+  parentVersionId: string | null;
+  title: string;
+  observableOutcome: string;
+  criteriaText: string;
+  level: string;
+  prerequisiteVersionIds: string[];
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface AssessmentQuestionDto {
+  id: string;
+  objectiveVersionId: string;
+  questionOrder: number;
+  prompt: string;
+  responseKind: string;
+  maxPoints: number;
+  required: boolean;
+}
+
+export interface AssessmentRubricCriterionDto {
+  id: string;
+  objectiveVersionId: string;
+  criterionKey: string;
+  description: string;
+  maxPoints: number;
+}
+
+export interface AssessmentReviewDto {
+  id: string;
+  reviewStatus: LearningReviewStatus;
+  reviewerId: string | null;
+  rationale: string;
+  reviewedAtUs: number;
+}
+
+export interface AssessmentVersionDto {
+  id: string;
+  assessmentId: string;
+  title: string;
+  versionNo: number;
+  learningProjectId: string;
+  frameworkId: string;
+  frameworkVersionId: string;
+  rubricVersionId: string;
+  rubricPassThreshold: number;
+  status: LearningVersionStatus;
+  changeRationale: string;
+  createdBy: string | null;
+  createdAtUs: number;
+  publishedAtUs: number | null;
+  questions: AssessmentQuestionDto[];
+  rubricCriteria: AssessmentRubricCriterionDto[];
+  objectiveVersionIds: string[];
+  reviews: AssessmentReviewDto[];
+}
+
+export interface AttemptResponseDto {
+  id: string;
+  assessmentQuestionId: string;
+  response: unknown;
+  updatedAtUs: number;
+}
+
+export interface EvaluationCriterionScoreDto {
+  rubricCriterionId: string;
+  score: number;
+}
+
+export interface AttemptEvaluationDto {
+  id: string;
+  attemptId: string;
+  rubricVersionId: string;
+  revisionNo: number;
+  correctionOfId: string | null;
+  evaluatorId: string;
+  outcome: LearningAssessmentOutcome;
+  score: number;
+  rationale: string;
+  criterionScores: EvaluationCriterionScoreDto[];
+  feedback: string[];
+  createdAtUs: number;
+}
+
+export interface AssessmentAttemptDto {
+  id: string;
+  learningProjectId: string;
+  learnerId: string;
+  assessmentVersionId: string;
+  frameworkVersionId: string;
+  status: string;
+  startedAtUs: number;
+  submittedAtUs: number | null;
+  responses: AttemptResponseDto[];
+  evaluations: AttemptEvaluationDto[];
+}
+
+export interface CompetencyCriterionDto {
+  id: string;
+  objectiveVersionId: string;
+  criterion: string;
+  minimumScore: number;
+  required: boolean;
+}
+
+export interface CompetencyDto {
+  id: string;
+  learningProjectId: string;
+  frameworkId: string;
+  frameworkVersionId: string;
+  title: string;
+  description: string;
+  criteria: CompetencyCriterionDto[];
+}
+
+export interface MasteryRuleVersionDto {
+  id: string;
+  masteryRuleId: string;
+  competencyId: string;
+  versionNo: number;
+  minimumAverageScore: number;
+  minimumEvaluatedAttempts: number;
+  allRequiredCriteria: boolean;
+  reproductionRequired: boolean;
+  requiredReproductionOutcome: LearningAssessmentOutcome;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface MasteryRuleDto {
+  id: string;
+  competencyId: string;
+  title: string;
+  versions: MasteryRuleVersionDto[];
+}
+
+export interface CompetencyRecordCriterionDto {
+  competencyCriterionId: string;
+  satisfied: boolean;
+  rationale: string;
+}
+
+export interface CompetencyRecordDto {
+  id: string;
+  competencyId: string;
+  learningProjectId: string;
+  learnerId: string;
+  frameworkVersionId: string;
+  masteryRuleVersionId: string;
+  outcome: LearningMasteryOutcome;
+  explanation: string;
+  attemptEvaluationIds: string[];
+  reproductionEvaluationIds: string[];
+  objectiveVersionIds: string[];
+  criteria: CompetencyRecordCriterionDto[];
+  createdAtUs: number;
+}
+
+export interface ReproductionTaskDto {
+  id: string;
+  learningProjectId: string;
+  frameworkId: string;
+  frameworkVersionId: string;
+  objectiveVersionId: string;
+  rubricVersionId: string;
+  title: string;
+  taskDescription: string;
+  conditions: string;
+  expectedResult: unknown;
+  createdBy: string | null;
+  createdAtUs: number;
+}
+
+export interface ReproductionSubmissionDto {
+  id: string;
+  taskId: string;
+  learnerId: string;
+  artifactUri: string | null;
+  artifactSha256: string | null;
+  result: unknown;
+  deviations: string;
+  submittedAtUs: number;
+  evaluations: ReproductionEvaluationDto[];
+}
+
+export interface ReproductionEvaluationDto {
+  id: string;
+  submissionId: string;
+  rubricVersionId: string;
+  evaluatorId: string;
+  outcome: LearningAssessmentOutcome;
+  score: number;
+  rationale: string;
+  evidenceDescription: string;
+  criterionScores: EvaluationCriterionScoreDto[];
+  createdAtUs: number;
+}
+
+export interface LearnerProgressDto {
+  learnerId: string;
+  learningProjectId: string;
+  objectiveVersionId: string;
+  status: string;
+  explanation: string;
+  latestEvaluationId: string | null;
+  competencyRecordId: string | null;
+}
+
+export interface LearningWorkspaceDto {
+  learners: LearningLearnerDto[];
+  projects: LearningProjectDto[];
+  frameworkVersions: LearningFrameworkVersionDto[];
+  objectives: LearningObjectiveVersionDto[];
+  assessments: AssessmentVersionDto[];
+  attempts: AssessmentAttemptDto[];
+  competencies: CompetencyDto[];
+  masteryRules: MasteryRuleDto[];
+  competencyRecords: CompetencyRecordDto[];
+  reproductionTasks: ReproductionTaskDto[];
+  reproductionSubmissions: ReproductionSubmissionDto[];
+  progress: LearnerProgressDto[];
+}
+
+export interface CreateLearnerReq {
+  displayName: string;
+  createdBy: string | null;
+}
+
+export interface CreateLearningProjectReq {
+  title: string;
+  learnerId: string;
+  frameworkId: string;
+  frameworkVersionId: string;
+  createdBy: string | null;
+}
+
+export interface CreateLearningObjectiveReq {
+  objectiveId: string | null;
+  learningProjectId: string;
+  title: string;
+  observableOutcome: string;
+  criteriaText: string;
+  level: string;
+  parentVersionId: string | null;
+  prerequisiteVersionIds: string[];
+  createdBy: string | null;
+}
+
+export interface CreateAssessmentQuestionReq {
+  objectiveVersionId: string;
+  questionOrder: number;
+  prompt: string;
+  responseKind: string;
+  maxPoints: number;
+  required: boolean;
+}
+
+export interface CreateRubricCriterionReq {
+  objectiveVersionId: string;
+  criterionKey: string;
+  description: string;
+  maxPoints: number;
+}
+
+export interface CreateAssessmentVersionReq {
+  assessmentId: string | null;
+  learningProjectId: string;
+  title: string;
+  changeRationale: string;
+  rubricTitle: string;
+  rubricPassThreshold: number;
+  questions: CreateAssessmentQuestionReq[];
+  rubricCriteria: CreateRubricCriterionReq[];
+  createdBy: string | null;
+}
+
+export interface ReviewAssessmentReq {
+  assessmentVersionId: string;
+  reviewStatus: LearningReviewStatus;
+  reviewerId: string | null;
+  rationale: string;
+}
+
+export interface TransitionAssessmentVersionReq {
+  assessmentVersionId: string;
+  nextStatus: LearningVersionStatus;
+  actorId: string | null;
+}
+
+export interface CreateAssessmentAttemptReq {
+  learningProjectId: string;
+  learnerId: string;
+  assessmentVersionId: string;
+}
+
+export interface SaveAttemptResponseReq {
+  attemptId: string;
+  assessmentQuestionId: string;
+  response: unknown;
+}
+
+export interface EvaluateAssessmentAttemptReq {
+  attemptId: string;
+  correctionOfId: string | null;
+  evaluatorId: string;
+  outcome: LearningAssessmentOutcome;
+  criterionScores: EvaluationCriterionScoreDto[];
+  rationale: string;
+  feedback: string;
+}
+
+export interface CreateCompetencyCriterionReq {
+  objectiveVersionId: string;
+  criterion: string;
+  minimumScore: number;
+  required: boolean;
+}
+
+export interface CreateCompetencyReq {
+  learningProjectId: string;
+  title: string;
+  description: string;
+  criteria: CreateCompetencyCriterionReq[];
+  createdBy: string | null;
+}
+
+export interface CreateMasteryRuleVersionReq {
+  masteryRuleId: string | null;
+  competencyId: string;
+  title: string;
+  minimumAverageScore: number;
+  minimumEvaluatedAttempts: number;
+  allRequiredCriteria: boolean;
+  reproductionRequired: boolean;
+  requiredReproductionOutcome: LearningAssessmentOutcome;
+  createdBy: string | null;
+}
+
+export interface EvaluateCompetencyReq {
+  competencyId: string;
+  learnerId: string;
+  masteryRuleVersionId: string;
+}
+
+export interface CreateReproductionTaskReq {
+  learningProjectId: string;
+  objectiveVersionId: string;
+  rubricVersionId: string;
+  title: string;
+  taskDescription: string;
+  conditions: string;
+  expectedResult: unknown;
+  createdBy: string | null;
+}
+
+export interface SubmitReproductionReq {
+  taskId: string;
+  learnerId: string;
+  artifactUri: string | null;
+  artifactSha256: string | null;
+  result: unknown;
+  deviations: string;
+}
+
+export interface EvaluateReproductionReq {
+  submissionId: string;
+  evaluatorId: string;
+  outcome: LearningAssessmentOutcome;
+  criterionScores: EvaluationCriterionScoreDto[];
+  rationale: string;
+  evidenceDescription: string;
+}
+
