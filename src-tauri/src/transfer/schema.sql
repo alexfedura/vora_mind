@@ -286,6 +286,16 @@ BEFORE DELETE ON knowledge_transfer_origins
 BEGIN
     SELECT RAISE(ABORT, 'knowledge transfer origins are immutable');
 END;
+CREATE TRIGGER knowledge_transfer_eligibility_validate_purposes
+BEFORE INSERT ON knowledge_transfer_eligibility
+WHEN EXISTS (
+    SELECT 1 FROM json_each(NEW.allowed_purposes_json)
+    WHERE type <> 'text'
+       OR value NOT IN ('research', 'learning', 'commercial', 'public_distribution')
+)
+BEGIN
+    SELECT RAISE(ABORT, 'eligibility contains an unsupported use purpose');
+END;
 CREATE TRIGGER knowledge_transfer_eligibility_no_update
 BEFORE UPDATE ON knowledge_transfer_eligibility
 BEGIN
@@ -315,6 +325,22 @@ CREATE TRIGGER knowledge_transfer_eligibility_events_no_delete
 BEFORE DELETE ON knowledge_transfer_eligibility_events
 BEGIN
     SELECT RAISE(ABORT, 'knowledge transfer eligibility events are append-only');
+END;
+CREATE TRIGGER knowledge_transfer_eligibility_events_validate_transition
+BEFORE INSERT ON knowledge_transfer_eligibility_events
+WHEN NOT (
+    (NEW.status = 'eligible' AND NOT EXISTS (
+        SELECT 1 FROM knowledge_transfer_eligibility_events
+        WHERE eligibility_id = NEW.eligibility_id
+    ))
+    OR (NEW.status IN ('restricted', 'withdrawn') AND (
+        SELECT status FROM knowledge_transfer_eligibility_events
+        WHERE eligibility_id = NEW.eligibility_id
+        ORDER BY sequence DESC LIMIT 1
+    ) = 'eligible')
+)
+BEGIN
+    SELECT RAISE(ABORT, 'invalid transfer eligibility state transition');
 END;
 CREATE TRIGGER knowledge_transfer_adaptations_no_update
 BEFORE UPDATE ON knowledge_transfer_adaptations
@@ -347,6 +373,65 @@ WHEN NEW.origin_project_id <> (
 )
 BEGIN
     SELECT RAISE(ABORT, 'transfer origin does not match the pinned eligibility record');
+END;
+CREATE TRIGGER knowledge_transfers_validate_eligibility
+BEFORE INSERT ON knowledge_transfers
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM knowledge_transfer_eligibility eligibility
+    JOIN knowledge_transfer_origins origin ON origin.id = eligibility.origin_id
+    JOIN knowledge_transfer_eligibility_events state
+        ON state.eligibility_id = eligibility.id
+       AND state.sequence = (
+           SELECT MAX(latest.sequence) FROM knowledge_transfer_eligibility_events latest
+           WHERE latest.eligibility_id = eligibility.id
+       )
+    WHERE eligibility.id = NEW.eligibility_id
+      AND state.status = 'eligible'
+      AND EXISTS (
+          SELECT 1 FROM json_each(eligibility.allowed_purposes_json)
+          WHERE value = NEW.intended_purpose
+      )
+      AND (
+          eligibility.access_scope = 'workspace'
+          OR EXISTS (
+              SELECT 1 FROM knowledge_transfer_eligibility_projects allowed
+              WHERE allowed.eligibility_id = eligibility.id
+                AND allowed.project_id = NEW.receiving_project_id
+          )
+      )
+      AND (
+          NEW.reasserts_transfer_id IS NULL
+          OR EXISTS (
+              SELECT 1 FROM knowledge_transfers previous
+              WHERE previous.id = NEW.reasserts_transfer_id
+                AND previous.receiving_project_id = NEW.receiving_project_id
+                AND previous.origin_project_id = NEW.origin_project_id
+          )
+      )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'transfer is not permitted by current eligibility');
+END;
+CREATE TRIGGER knowledge_transfer_events_validate_transition
+BEFORE INSERT ON knowledge_transfer_events
+WHEN NOT (
+    (NEW.status = 'proposed' AND NOT EXISTS (
+        SELECT 1 FROM knowledge_transfer_events WHERE transfer_id = NEW.transfer_id
+    ))
+    OR (NEW.status IN ('accepted', 'rejected') AND (
+        SELECT status FROM knowledge_transfer_events
+        WHERE transfer_id = NEW.transfer_id
+        ORDER BY sequence DESC LIMIT 1
+    ) = 'proposed')
+    OR (NEW.status = 'withdrawn' AND (
+        SELECT status FROM knowledge_transfer_events
+        WHERE transfer_id = NEW.transfer_id
+        ORDER BY sequence DESC LIMIT 1
+    ) = 'accepted')
+)
+BEGIN
+    SELECT RAISE(ABORT, 'invalid knowledge transfer state transition');
 END;
 CREATE TRIGGER knowledge_transfer_adaptations_validate
 BEFORE INSERT ON knowledge_transfer_adaptations
@@ -395,4 +480,80 @@ WHEN NOT EXISTS (
 )
 BEGIN
     SELECT RAISE(ABORT, 'adaptation must be a distinct accepted artifact version in the receiving project');
+END;
+CREATE TRIGGER knowledge_transfer_downstream_usage_validate
+BEFORE INSERT ON knowledge_transfer_downstream_usage
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM knowledge_transfers t
+    JOIN knowledge_transfer_events transfer_state ON transfer_state.transfer_id = t.id
+       AND transfer_state.sequence = (
+           SELECT MAX(latest.sequence) FROM knowledge_transfer_events latest
+           WHERE latest.transfer_id = t.id
+       )
+    JOIN knowledge_transfer_eligibility eligibility ON eligibility.id = t.eligibility_id
+    JOIN knowledge_transfer_eligibility_events eligibility_state
+        ON eligibility_state.eligibility_id = eligibility.id
+       AND eligibility_state.sequence = (
+           SELECT MAX(latest.sequence) FROM knowledge_transfer_eligibility_events latest
+           WHERE latest.eligibility_id = eligibility.id
+       )
+    WHERE t.id = NEW.transfer_id
+      AND t.receiving_project_id = NEW.project_id
+      AND transfer_state.status = 'accepted'
+      AND eligibility_state.status = 'eligible'
+      AND (
+          (NEW.usage_kind = 'concept_version' AND EXISTS (
+              SELECT 1 FROM knowledge_concept_versions v
+              WHERE v.id = NEW.concept_version_id
+                AND v.created_in_project_id = NEW.project_id
+          ))
+          OR (NEW.usage_kind = 'principle_version' AND EXISTS (
+              SELECT 1 FROM knowledge_principle_versions v
+              WHERE v.id = NEW.principle_version_id
+                AND v.created_in_project_id = NEW.project_id
+          ))
+          OR (NEW.usage_kind = 'framework_version' AND EXISTS (
+              SELECT 1 FROM knowledge_transfer_origins o
+              WHERE o.framework_version_id = NEW.framework_version_id
+                AND o.origin_project_id = NEW.project_id
+          ))
+          OR (NEW.usage_kind = 'finding_version' AND EXISTS (
+              SELECT 1 FROM analysis_finding_versions v
+              JOIN analysis_findings f ON f.id = v.finding_id
+              WHERE v.id = NEW.finding_version_id AND f.project_id = NEW.project_id
+          ))
+          OR (NEW.usage_kind = 'model_version' AND EXISTS (
+              SELECT 1 FROM model_versions v
+              WHERE v.id = NEW.model_version_id
+                AND v.created_in_project_id = NEW.project_id
+          ))
+          OR (NEW.usage_kind = 'model_evaluation' AND EXISTS (
+              SELECT 1 FROM model_evaluations e
+              WHERE e.id = NEW.model_evaluation_id AND e.project_id = NEW.project_id
+                AND (
+                    e.model_version_id = (
+                        SELECT origin.model_version_id
+                        FROM knowledge_transfer_origins origin
+                        WHERE origin.id = eligibility.origin_id
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM knowledge_transfer_adaptations a
+                        WHERE a.transfer_id = t.id
+                          AND a.model_version_id = e.model_version_id
+                    )
+                )
+          ))
+          OR (NEW.usage_kind = 'analysis_run' AND EXISTS (
+              SELECT 1 FROM analysis_runs r
+              WHERE r.id = NEW.analysis_run_id AND r.project_id = NEW.project_id
+          ))
+          OR (NEW.usage_kind = 'experiment_run' AND EXISTS (
+              SELECT 1 FROM experiment_runs r
+              WHERE r.id = NEW.experiment_run_id AND r.project_id = NEW.project_id
+          ))
+      )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'downstream use must reference a receiving-project artifact on an active accepted transfer');
 END;
