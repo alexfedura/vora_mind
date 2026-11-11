@@ -2536,6 +2536,7 @@ mod tests {
             mastery_record.reproduction_evaluation_ids,
             vec![reproduction_evaluation.id]
         );
+        std::thread::sleep(std::time::Duration::from_millis(1));
         let later_reproduction_evaluation = evaluate_reproduction(
             &mut conn,
             &reproduction_request("second-independent-evaluator".to_string()),
