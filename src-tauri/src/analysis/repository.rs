@@ -2596,3 +2596,494 @@ pub fn evidence_for_project(conn: &Connection, project_id: &str) -> Result<Vec<E
         .collect::<rusqlite::Result<Vec<_>>>()?;
     ids.iter().map(|id| query_evidence(conn, id)).collect()
 }
+
+fn insert_finding_event(
+    tx: &Transaction<'_>,
+    version_id: &str,
+    status: &FindingStatus,
+    rationale: &str,
+    actor_id: Option<&str>,
+    now: i64,
+) -> Result<()> {
+    tx.execute(
+        "INSERT INTO analysis_finding_events
+            (id, finding_version_id, status, rationale, actor_id, occurred_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            id(),
+            version_id,
+            status.as_str(),
+            rationale.trim(),
+            actor_id,
+            now
+        ],
+    )?;
+    Ok(())
+}
+
+fn finding_status_transition_is_valid(current: &FindingStatus, next: &FindingStatus) -> bool {
+    matches!(
+        (current, next),
+        (FindingStatus::Draft, FindingStatus::Review)
+            | (FindingStatus::Draft, FindingStatus::Retracted)
+            | (FindingStatus::Review, FindingStatus::Accepted)
+            | (FindingStatus::Review, FindingStatus::Contested)
+            | (FindingStatus::Review, FindingStatus::Unsupported)
+            | (FindingStatus::Review, FindingStatus::Inconclusive)
+            | (FindingStatus::Review, FindingStatus::Retracted)
+            | (FindingStatus::Accepted, FindingStatus::Contested)
+            | (FindingStatus::Accepted, FindingStatus::Superseded)
+            | (FindingStatus::Accepted, FindingStatus::Retracted)
+            | (FindingStatus::Contested, FindingStatus::Accepted)
+            | (FindingStatus::Contested, FindingStatus::Unsupported)
+            | (FindingStatus::Contested, FindingStatus::Inconclusive)
+            | (FindingStatus::Contested, FindingStatus::Superseded)
+            | (FindingStatus::Contested, FindingStatus::Retracted)
+            | (FindingStatus::Unsupported, FindingStatus::Contested)
+            | (FindingStatus::Unsupported, FindingStatus::Superseded)
+            | (FindingStatus::Unsupported, FindingStatus::Retracted)
+            | (FindingStatus::Inconclusive, FindingStatus::Contested)
+            | (FindingStatus::Inconclusive, FindingStatus::Superseded)
+            | (FindingStatus::Inconclusive, FindingStatus::Retracted)
+    )
+}
+
+fn query_finding_events(conn: &Connection, version_id: &str) -> Result<Vec<FindingEventDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, status, rationale, actor_id, occurred_at_us
+         FROM analysis_finding_events WHERE finding_version_id = ?1
+         ORDER BY occurred_at_us, id",
+    )?;
+    let rows = statement
+        .query_map([version_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, i64>(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(|(id, status, rationale, actor_id, occurred_at_us)| {
+            Ok(FindingEventDto {
+                id,
+                status: FindingStatus::parse(&status).map_err(anyhow::Error::msg)?,
+                rationale,
+                actor_id,
+                occurred_at_us,
+            })
+        })
+        .collect()
+}
+
+fn query_finding_evidence(conn: &Connection, version_id: &str) -> Result<Vec<FindingEvidenceLinkDto>> {
+    let mut statement = conn.prepare(
+        "SELECT evidence_id, synthesis_polarity, rationale
+         FROM analysis_finding_version_evidence WHERE finding_version_id = ?1
+         ORDER BY evidence_id",
+    )?;
+    let rows = statement
+        .query_map([version_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(|(evidence_id, polarity, rationale)| {
+            Ok(FindingEvidenceLinkDto {
+                evidence_id,
+                synthesis_polarity: EvidencePolarity::parse(&polarity)
+                    .map_err(anyhow::Error::msg)?,
+                rationale,
+            })
+        })
+        .collect()
+}
+
+fn query_finding_relations(conn: &Connection, version_id: &str) -> Result<Vec<FindingRelationDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, target_version_id, relation_kind, rationale, created_by, created_at_us
+         FROM analysis_finding_relations WHERE source_version_id = ?1
+         ORDER BY created_at_us, id",
+    )?;
+    let rows = statement
+        .query_map([version_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(
+            |(id, target_version_id, relation_kind, rationale, created_by, created_at_us)| {
+                let relation_kind = match relation_kind.as_str() {
+                    "contests" => FindingRelationKind::Contests,
+                    "contradicts" => FindingRelationKind::Contradicts,
+                    "qualifies" => FindingRelationKind::Qualifies,
+                    "supersedes" => FindingRelationKind::Supersedes,
+                    _ => return Err(anyhow!("Invalid stored finding relation kind.")),
+                };
+                Ok(FindingRelationDto {
+                    id,
+                    target_version_id,
+                    relation_kind,
+                    rationale,
+                    created_by,
+                    created_at_us,
+                })
+            },
+        )
+        .collect()
+}
+
+pub fn query_finding_version(conn: &Connection, version_id: &str) -> Result<FindingVersionDto> {
+    let row = conn.query_row(
+        "SELECT v.id, f.id, f.project_id, v.version_no, v.parent_version_id,
+                v.change_rationale, v.title, v.statement, v.target_source_claim_id,
+                v.target_hypothesis_version_id, v.scope, v.applicability, v.uncertainty,
+                v.limitations, v.conclusion_kind, v.content_sha256, v.created_by,
+                v.created_at_us,
+                (SELECT status FROM analysis_finding_events e
+                 WHERE e.finding_version_id = v.id
+                 ORDER BY e.occurred_at_us DESC, e.id DESC LIMIT 1)
+         FROM analysis_finding_versions v
+         JOIN analysis_findings f ON f.id = v.finding_id
+         WHERE v.id = ?1",
+        [version_id],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, Option<String>>(8)?,
+                row.get::<_, Option<String>>(9)?,
+                row.get::<_, String>(10)?,
+                row.get::<_, String>(11)?,
+                row.get::<_, String>(12)?,
+                row.get::<_, String>(13)?,
+                row.get::<_, String>(14)?,
+                row.get::<_, String>(15)?,
+                row.get::<_, Option<String>>(16)?,
+                row.get::<_, i64>(17)?,
+                row.get::<_, String>(18)?,
+            ))
+        },
+    )?;
+    let analysis_run_ids = {
+        let mut statement = conn.prepare(
+            "SELECT run_id FROM analysis_finding_version_runs
+             WHERE finding_version_id = ?1 ORDER BY run_id",
+        )?;
+        statement
+            .query_map([version_id], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    let conclusion_kind = match row.14.as_str() {
+        "result" => FindingConclusionKind::Result,
+        "null_result" => FindingConclusionKind::NullResult,
+        "contradictory" => FindingConclusionKind::Contradictory,
+        "inconclusive" => FindingConclusionKind::Inconclusive,
+        _ => return Err(anyhow!("Invalid stored finding conclusion kind.")),
+    };
+    Ok(FindingVersionDto {
+        id: row.0,
+        finding_id: row.1,
+        project_id: row.2,
+        version_no: row.3,
+        parent_version_id: row.4,
+        change_rationale: row.5,
+        title: row.6,
+        statement: row.7,
+        proposition: parse_proposition_refs(row.8, row.9, None)?,
+        scope: row.10,
+        applicability: row.11,
+        uncertainty: row.12,
+        limitations: row.13,
+        conclusion_kind,
+        analysis_run_ids,
+        evidence: query_finding_evidence(conn, version_id)?,
+        status: FindingStatus::parse(&row.18).map_err(anyhow::Error::msg)?,
+        events: query_finding_events(conn, version_id)?,
+        relations: query_finding_relations(conn, version_id)?,
+        content_sha256: row.15,
+        created_by: row.16,
+        created_at_us: row.17,
+    })
+}
+
+fn insert_finding_evidence_links(
+    tx: &Transaction<'_>,
+    version_id: &str,
+    evidence: &[FindingEvidenceLinkReq],
+) -> Result<()> {
+    for link in evidence {
+        nonempty(&link.rationale, "Finding evidence synthesis rationale")?;
+        tx.execute(
+            "INSERT INTO analysis_finding_version_evidence
+                (finding_version_id, evidence_id, synthesis_polarity, rationale)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                version_id,
+                link.evidence_id,
+                link.synthesis_polarity.as_str(),
+                link.rationale.trim()
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+pub fn create_finding_version(
+    conn: &mut Connection,
+    req: &CreateFindingVersionReq,
+) -> Result<FindingVersionDto> {
+    nonempty(&req.title, "Finding title")?;
+    nonempty(&req.statement, "Finding statement")?;
+    nonempty(&req.scope, "Finding scope")?;
+    nonempty(&req.applicability, "Finding applicability")?;
+    nonempty(&req.uncertainty, "Finding uncertainty")?;
+    nonempty(&req.limitations, "Finding limitations")?;
+    nonempty(&req.change_rationale, "Finding version rationale, if supplied")?;
+    if req.analysis_run_ids.is_empty() || req.evidence.is_empty() {
+        return Err(anyhow!(
+            "Findings require at least one analysis lineage record and evidence link."
+        ));
+    }
+    if req.analysis_run_ids.iter().collect::<HashSet<_>>().len() != req.analysis_run_ids.len()
+        || req.evidence.iter().map(|link| &link.evidence_id).collect::<HashSet<_>>().len()
+            != req.evidence.len()
+    {
+        return Err(anyhow!(
+            "Finding run and evidence references must be unique."
+        ));
+    }
+    if req.finding_id.is_some() != req.parent_version_id.is_some() {
+        return Err(anyhow!(
+            "A revised finding must specify both its identity and parent version."
+        ));
+    }
+    if req.parent_version_id.is_some() {
+        nonempty(&req.change_rationale, "Finding change rationale")?;
+    } else if !req.change_rationale.trim().is_empty() {
+        return Err(anyhow!(
+            "Finding change rationale is only valid for a revised version."
+        ));
+    }
+    project_exists(conn, &req.project_id)?;
+    validate_proposition_project(conn, &req.project_id, &req.proposition)?;
+
+    let now = now_us()?;
+    let finding_id = req.finding_id.clone().unwrap_or_else(id);
+    let version_id = id();
+    let tx = conn.transaction()?;
+    let version_no = if let Some(parent_id) = req.parent_version_id.as_deref() {
+        let (parent_finding, parent_project): (String, String) = tx.query_row(
+            "SELECT v.finding_id, f.project_id
+             FROM analysis_finding_versions v
+             JOIN analysis_findings f ON f.id = v.finding_id
+             WHERE v.id = ?1",
+            [parent_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        if parent_finding != finding_id || parent_project != req.project_id {
+            return Err(anyhow!(
+                "Finding parent version must belong to this finding and project."
+            ));
+        }
+        tx.query_row(
+            "SELECT COALESCE(MAX(version_no), 0) + 1
+             FROM analysis_finding_versions WHERE finding_id = ?1",
+            [&finding_id],
+            |row| row.get(0),
+        )?
+    } else {
+        tx.execute(
+            "INSERT INTO analysis_findings (id, project_id, created_by, created_at_us)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![finding_id, req.project_id, req.created_by, now],
+        )?;
+        1
+    };
+
+    let (target_source_claim_id, target_hypothesis_version_id, target_finding_version_id) =
+        proposition_target_values(&req.proposition);
+    if target_finding_version_id.is_some() {
+        return Err(anyhow!(
+            "Findings can only assert source claims or hypothesis versions, not other findings."
+        ));
+    }
+    let content_sha256 = sha256(json(req)?.as_bytes());
+    tx.execute(
+        "INSERT INTO analysis_finding_versions
+            (id, finding_id, version_no, parent_version_id, change_rationale, title,
+             statement, target_source_claim_id, target_hypothesis_version_id,
+             scope, applicability, uncertainty, limitations, conclusion_kind,
+             content_sha256, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+        params![
+            version_id,
+            finding_id,
+            version_no,
+            req.parent_version_id,
+            req.parent_version_id
+                .as_ref()
+                .map(|_| req.change_rationale.trim()),
+            req.title.trim(),
+            req.statement.trim(),
+            target_source_claim_id,
+            target_hypothesis_version_id,
+            req.scope.trim(),
+            req.applicability.trim(),
+            req.uncertainty.trim(),
+            req.limitations.trim(),
+            match req.conclusion_kind {
+                FindingConclusionKind::Result => "result",
+                FindingConclusionKind::NullResult => "null_result",
+                FindingConclusionKind::Contradictory => "contradictory",
+                FindingConclusionKind::Inconclusive => "inconclusive",
+            },
+            content_sha256,
+            req.created_by,
+            now
+        ],
+    )?;
+    for run_id in &req.analysis_run_ids {
+        let (run_project, run_status): (String, String) = tx.query_row(
+            "SELECT r.project_id,
+                    (SELECT lifecycle_status FROM analysis_run_events e
+                     WHERE e.run_id = r.id ORDER BY e.occurred_at_us DESC, e.id DESC LIMIT 1)
+             FROM analysis_runs r WHERE r.id = ?1",
+            [run_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        if run_project != req.project_id
+            || !matches!(run_status.as_str(), "completed" | "inconclusive")
+        {
+            return Err(anyhow!(
+                "Finding analysis lineage must reference completed or inconclusive runs in this project."
+            ));
+        }
+        tx.execute(
+            "INSERT INTO analysis_finding_version_runs (finding_version_id, run_id)
+             VALUES (?1, ?2)",
+            params![version_id, run_id],
+        )?;
+    }
+    for link in &req.evidence {
+        let evidence = query_evidence(&tx, &link.evidence_id)?;
+        if evidence.project_id != req.project_id || evidence.proposition != req.proposition {
+            return Err(anyhow!(
+                "Finding evidence must reference the same proposition in this project."
+            ));
+        }
+    }
+    insert_finding_evidence_links(&tx, &version_id, &req.evidence)?;
+    insert_finding_event(
+        &tx,
+        &version_id,
+        &FindingStatus::Draft,
+        "Finding version created.",
+        req.created_by.as_deref(),
+        now,
+    )?;
+    tx.commit()?;
+    query_finding_version(conn, &version_id)
+}
+
+pub fn transition_finding(
+    conn: &mut Connection,
+    req: &TransitionFindingReq,
+) -> Result<FindingVersionDto> {
+    nonempty(&req.rationale, "Finding lifecycle rationale")?;
+    let current = query_finding_version(conn, &req.version_id)?.status;
+    if !finding_status_transition_is_valid(&current, &req.next_status) {
+        return Err(anyhow!("Invalid finding lifecycle transition."));
+    }
+    let tx = conn.transaction()?;
+    insert_finding_event(
+        &tx,
+        &req.version_id,
+        &req.next_status,
+        &req.rationale,
+        req.actor_id.as_deref(),
+        now_us()?,
+    )?;
+    tx.commit()?;
+    query_finding_version(conn, &req.version_id)
+}
+
+pub fn create_finding_relation(
+    conn: &mut Connection,
+    req: &CreateFindingRelationReq,
+) -> Result<FindingRelationDto> {
+    nonempty(&req.rationale, "Finding relation rationale")?;
+    if req.source_version_id == req.target_version_id {
+        return Err(anyhow!("A finding version cannot relate to itself."));
+    }
+    let source = query_finding_version(conn, &req.source_version_id)?;
+    let target = query_finding_version(conn, &req.target_version_id)?;
+    if source.project_id != target.project_id {
+        return Err(anyhow!("Finding relations cannot cross project boundaries."));
+    }
+    if req.relation_kind == FindingRelationKind::Supersedes
+        && source.finding_id != target.finding_id
+    {
+        return Err(anyhow!(
+            "Supersession is only valid between versions of the same finding identity."
+        ));
+    }
+    let relation_id = id();
+    let created_at_us = now_us()?;
+    conn.execute(
+        "INSERT INTO analysis_finding_relations
+            (id, source_version_id, target_version_id, relation_kind,
+             rationale, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            relation_id,
+            req.source_version_id,
+            req.target_version_id,
+            req.relation_kind.as_str(),
+            req.rationale.trim(),
+            req.created_by,
+            created_at_us
+        ],
+    )?;
+    Ok(FindingRelationDto {
+        id: relation_id,
+        target_version_id: req.target_version_id.clone(),
+        relation_kind: req.relation_kind.clone(),
+        rationale: req.rationale.trim().to_string(),
+        created_by: req.created_by.clone(),
+        created_at_us,
+    })
+}
+
+pub fn findings_for_project(conn: &Connection, project_id: &str) -> Result<Vec<FindingVersionDto>> {
+    let mut statement = conn.prepare(
+        "SELECT v.id FROM analysis_finding_versions v
+         JOIN analysis_findings f ON f.id = v.finding_id
+         WHERE f.project_id = ?1 ORDER BY v.created_at_us, v.id",
+    )?;
+    let ids = statement
+        .query_map([project_id], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    ids.iter()
+        .map(|version_id| query_finding_version(conn, version_id))
+        .collect()
+}
