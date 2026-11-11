@@ -629,11 +629,32 @@ pub struct ExperimentSampleSplitAssignmentDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct DatasetTransformationInputDto {
+    pub dataset_version_id: String,
+    pub role: DatasetRole,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExperimentDatasetTransformationDto {
+    pub id: String,
+    pub output_dataset_version_id: String,
+    pub method: String,
+    pub parameters: serde_json::Value,
+    pub provenance: serde_json::Value,
+    pub inputs: Vec<DatasetTransformationInputDto>,
+    pub created_by: Option<String>,
+    pub created_at_us: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ExperimentWorkspaceDto {
     pub design_versions: Vec<ExperimentDesignVersionDto>,
     pub runs: Vec<ExperimentRunDto>,
     pub datasets: Vec<ExperimentDatasetDto>,
     pub split_groups: Vec<ExperimentDatasetSplitGroupDto>,
+    pub transformations: Vec<ExperimentDatasetTransformationDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
