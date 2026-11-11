@@ -180,13 +180,13 @@ pub fn create_model_version(
     conn: &mut Connection,
     request: &CreateModelVersionReq,
 ) -> Result<ModelVersionDto> {
-    validate_version_request(conn, request)?;
     let model_version_id = id();
     let created_at = now_us()?;
     let serialized = serde_json::to_vec(request)?;
     let content_sha256 = sha256(&serialized);
 
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    validate_version_request(&tx, request)?;
     let version_no: i64 = tx.query_row(
         "SELECT COALESCE(MAX(version_no), 0) + 1 FROM model_versions WHERE model_id = ?1",
         [&request.model_id],
