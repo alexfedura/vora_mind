@@ -1703,14 +1703,15 @@ fn query_attempt(conn: &Connection, attempt_id: &str) -> Result<AssessmentAttemp
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?
     };
-    dto.evaluations = query_many(
+    let evaluation_ids = query_ids(
         conn,
-        &format!(
-            "SELECT id FROM attempt_evaluations WHERE attempt_id = '{}' ORDER BY revision_no",
-            attempt_id.replace('\'', "''")
-        ),
-        query_attempt_evaluation,
+        "SELECT id FROM attempt_evaluations WHERE attempt_id = ?1 ORDER BY revision_no",
+        attempt_id,
     )?;
+    dto.evaluations = evaluation_ids
+        .iter()
+        .map(|evaluation_id| query_attempt_evaluation(conn, evaluation_id))
+        .collect::<Result<Vec<_>>>()?;
     Ok(dto)
 }
 
@@ -1976,14 +1977,15 @@ fn query_reproduction_submission(
             })
         },
     )?;
-    dto.evaluations = query_many(
+    let evaluation_ids = query_ids(
         conn,
-        &format!(
-            "SELECT id FROM reproduction_evaluations WHERE submission_id = '{}' ORDER BY created_at_us, id",
-            submission_id.replace('\'', "''")
-        ),
-        query_reproduction_evaluation,
+        "SELECT id FROM reproduction_evaluations WHERE submission_id = ?1 ORDER BY created_at_us, id",
+        submission_id,
     )?;
+    dto.evaluations = evaluation_ids
+        .iter()
+        .map(|evaluation_id| query_reproduction_evaluation(conn, evaluation_id))
+        .collect::<Result<Vec<_>>>()?;
     Ok(dto)
 }
 
