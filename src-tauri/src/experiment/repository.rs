@@ -775,10 +775,11 @@ pub fn add_dataset_split_group(
         ));
     }
     let mut seen = std::collections::HashSet::new();
-    if req
-        .assignments
-        .iter()
-        .any(|assignment| !seen.insert(assignment.sample_id.as_str()))
+    if req.require_disjoint
+        && req
+            .assignments
+            .iter()
+            .any(|assignment| !seen.insert(assignment.sample_id.as_str()))
     {
         return Err(invalid(
             "A sample may only belong to one split in a given split group.",
@@ -1089,7 +1090,27 @@ pub fn verify_dataset_assets(
     assets: &[ExperimentDatasetAssetDto],
 ) -> Result<()> {
     for asset in assets {
-        let path = assets_root.join(&asset.storage_key);
+        let relative = Path::new(&asset.storage_key);
+        let mut components = relative.components();
+        let first = components.next();
+        let second = components.next();
+        if !matches!(
+            (first, second, components.next()),
+            (
+                Some(std::path::Component::Normal(directory)),
+                Some(std::path::Component::Normal(_)),
+                None
+            ) if directory == "dataset-assets"
+        ) {
+            return Err(invalid("Dataset asset storage key is invalid."));
+        }
+        let asset_root = fs::canonicalize(assets_root.join("dataset-assets"))?;
+        let path = fs::canonicalize(assets_root.join(relative))?;
+        if !path.starts_with(&asset_root) || !path.is_file() {
+            return Err(invalid(
+                "Dataset asset is not contained in its managed asset directory.",
+            ));
+        }
         let (byte_length, content_sha256) = hash_file(&path)?;
         if byte_length != asset.byte_length || content_sha256 != asset.content_sha256 {
             return Err(invalid(format!(
