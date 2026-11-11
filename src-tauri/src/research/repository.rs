@@ -2706,7 +2706,8 @@ mod tests {
                 expected_direction: "non_directional".into(),
                 expected_effect_decimal: None,
                 expected_effect_unit: None,
-                falsification_criteria: "Reject if observed effect exceeds stated threshold.".into(),
+                falsification_criteria: "Reject if observed effect exceeds stated threshold."
+                    .into(),
                 assumptions: "Measurements are comparable.".into(),
                 variables: vec![
                     HypothesisVariableInput {
@@ -2761,7 +2762,10 @@ mod tests {
             .iter()
             .find(|question| question.id == "legacy-question")
             .expect("mapped legacy question");
-        assert_eq!(question.lifecycle_status, ResearchQuestionStatus::LegacyUnassessed);
+        assert_eq!(
+            question.lifecycle_status,
+            ResearchQuestionStatus::LegacyUnassessed
+        );
         assert_eq!(question.ownership_state, "unassigned");
         assert_eq!(question.project_id, None);
         assert_eq!(question.title, "Legacy question");
@@ -2769,12 +2773,20 @@ mod tests {
         let hypothesis = workspace
             .hypotheses
             .iter()
-            .find(|hypothesis| hypothesis.legacy_hypothesis_id.as_deref() == Some("legacy-hypothesis"))
+            .find(|hypothesis| {
+                hypothesis.legacy_hypothesis_id.as_deref() == Some("legacy-hypothesis")
+            })
             .expect("mapped legacy hypothesis");
-        assert_eq!(hypothesis.lifecycle_status, ResearchHypothesisStatus::LegacyUntyped);
+        assert_eq!(
+            hypothesis.lifecycle_status,
+            ResearchHypothesisStatus::LegacyUntyped
+        );
         assert!(hypothesis.definitions.is_empty());
         assert_eq!(hypothesis.project_id, None);
-        assert_eq!(hypothesis.research_question_id.as_deref(), Some("legacy-question"));
+        assert_eq!(
+            hypothesis.research_question_id.as_deref(),
+            Some("legacy-question")
+        );
     }
 
     #[test]
@@ -2879,9 +2891,27 @@ mod tests {
             )
             .expect("read question lineage");
         assert_eq!(lineage_count, 1);
+        transition_question(
+            &conn,
+            &child.id,
+            ResearchQuestionStatus::Review,
+            None,
+            "Ready for review",
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("submit refined question");
+        transition_question(
+            &conn,
+            &child.id,
+            ResearchQuestionStatus::Accepted,
+            None,
+            "Accepted",
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("accept refined question");
 
-        let parent_hypothesis = typed_hypothesis(&mut conn, &project.id, &parent.id);
-        let competing = typed_hypothesis(&mut conn, &project.id, &parent.id);
+        let parent_hypothesis = typed_hypothesis(&mut conn, &project.id, &child.id);
+        let competing = typed_hypothesis(&mut conn, &project.id, &child.id);
         link_competing_hypotheses(
             &conn,
             &LinkCompetingHypothesesReq {
@@ -3038,10 +3068,12 @@ mod tests {
         }
         {
             let conn = Connection::open(&path).expect("reopen file-backed database");
-            crate::mind::portable_db::initialize_workspace_schema(&conn)
-                .expect("reopen schema");
+            crate::mind::portable_db::initialize_workspace_schema(&conn).expect("reopen schema");
             let workspace = super::super::workspace(&conn).expect("reload workspace");
-            assert!(workspace.projects.iter().any(|item| item.title == "Persistent project"));
+            assert!(workspace
+                .projects
+                .iter()
+                .any(|item| item.title == "Persistent project"));
         }
         std::fs::remove_file(path).expect("remove temporary database");
     }
