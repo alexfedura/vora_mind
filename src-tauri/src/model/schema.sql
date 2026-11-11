@@ -152,57 +152,78 @@ CREATE TABLE model_version_impacts (
     CHECK (impact_kind <> 'removed' OR previous_statement IS NOT NULL)
 );
 
-CREATE TABLE model_version_hypotheses (
-    id TEXT NOT NULL UNIQUE,
+CREATE TABLE model_contributions (
+    id TEXT PRIMARY KEY,
     model_version_id TEXT NOT NULL REFERENCES model_versions(id) ON DELETE RESTRICT,
-    hypothesis_version_id TEXT NOT NULL
+    relation_kind TEXT NOT NULL CHECK (relation_kind IN (
+        'contributes_to', 'contradicts', 'qualifies', 'tested_in',
+        'dataset_use', 'evidenced_by'
+    )),
+    hypothesis_version_id TEXT
         REFERENCES hypothesis_definition_versions(id) ON DELETE RESTRICT,
-    relation_kind TEXT NOT NULL CHECK (relation_kind IN ('contributes_to', 'contradicts')),
-    rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
-    created_by TEXT,
-    created_at_us INTEGER NOT NULL,
-    PRIMARY KEY (model_version_id, hypothesis_version_id, relation_kind)
-);
-
-CREATE TABLE model_version_findings (
-    id TEXT NOT NULL UNIQUE,
-    model_version_id TEXT NOT NULL REFERENCES model_versions(id) ON DELETE RESTRICT,
-    finding_version_id TEXT NOT NULL REFERENCES analysis_finding_versions(id) ON DELETE RESTRICT,
-    relation_kind TEXT NOT NULL CHECK (relation_kind IN ('contributes_to', 'contradicts', 'qualifies')),
-    rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
-    created_by TEXT,
-    created_at_us INTEGER NOT NULL,
-    PRIMARY KEY (model_version_id, finding_version_id, relation_kind)
-);
-
-CREATE TABLE model_version_experiments (
-    id TEXT PRIMARY KEY,
-    model_version_id TEXT NOT NULL REFERENCES model_versions(id) ON DELETE RESTRICT,
-    design_version_id TEXT NOT NULL REFERENCES research_experiment_design_versions(id) ON DELETE RESTRICT,
+    finding_version_id TEXT REFERENCES analysis_finding_versions(id) ON DELETE RESTRICT,
+    design_version_id TEXT
+        REFERENCES research_experiment_design_versions(id) ON DELETE RESTRICT,
     experiment_run_id TEXT REFERENCES experiment_runs(id) ON DELETE RESTRICT,
-    relation_kind TEXT NOT NULL CHECK (relation_kind IN ('contributes_to', 'tested_in')),
-    rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
-    created_by TEXT,
-    created_at_us INTEGER NOT NULL,
-    CHECK (relation_kind <> 'tested_in' OR experiment_run_id IS NOT NULL),
-    UNIQUE (model_version_id, design_version_id, experiment_run_id, relation_kind)
-);
-
-CREATE TABLE model_version_dataset_uses (
-    id TEXT PRIMARY KEY,
-    model_version_id TEXT NOT NULL REFERENCES model_versions(id) ON DELETE RESTRICT,
-    dataset_version_id TEXT NOT NULL REFERENCES experiment_dataset_versions(id) ON DELETE RESTRICT,
-    role TEXT NOT NULL CHECK (role IN (
+    dataset_version_id TEXT REFERENCES experiment_dataset_versions(id) ON DELETE RESTRICT,
+    dataset_role TEXT CHECK (dataset_role IN (
         'training', 'validation', 'test', 'exploratory', 'prospective', 'forward'
     )),
     split_group_id TEXT,
+    evidence_id TEXT REFERENCES model_evidence(id) ON DELETE RESTRICT,
     rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
     created_by TEXT,
     created_at_us INTEGER NOT NULL,
     FOREIGN KEY (split_group_id, dataset_version_id)
         REFERENCES experiment_dataset_split_groups(id, dataset_version_id) ON DELETE RESTRICT,
-    UNIQUE (model_version_id, dataset_version_id, role, split_group_id)
+    CHECK (
+        (hypothesis_version_id IS NOT NULL)
+        + (finding_version_id IS NOT NULL)
+        + (design_version_id IS NOT NULL)
+        + (dataset_version_id IS NOT NULL)
+        + (evidence_id IS NOT NULL) = 1
+    ),
+    CHECK (
+        (relation_kind = 'contributes_to' AND
+            (hypothesis_version_id IS NOT NULL OR finding_version_id IS NOT NULL
+             OR design_version_id IS NOT NULL) AND experiment_run_id IS NULL
+             AND dataset_role IS NULL AND evidence_id IS NULL)
+        OR (relation_kind = 'contradicts' AND
+            (hypothesis_version_id IS NOT NULL OR finding_version_id IS NOT NULL)
+            AND design_version_id IS NULL AND experiment_run_id IS NULL
+            AND dataset_role IS NULL AND evidence_id IS NULL)
+        OR (relation_kind = 'qualifies' AND finding_version_id IS NOT NULL
+            AND hypothesis_version_id IS NULL AND design_version_id IS NULL
+            AND experiment_run_id IS NULL AND dataset_role IS NULL AND evidence_id IS NULL)
+        OR (relation_kind = 'tested_in' AND design_version_id IS NOT NULL
+            AND experiment_run_id IS NOT NULL AND hypothesis_version_id IS NULL
+            AND finding_version_id IS NULL AND dataset_version_id IS NULL
+            AND dataset_role IS NULL AND evidence_id IS NULL)
+        OR (relation_kind = 'dataset_use' AND dataset_version_id IS NOT NULL
+            AND dataset_role IS NOT NULL AND hypothesis_version_id IS NULL
+            AND finding_version_id IS NULL AND design_version_id IS NULL
+            AND experiment_run_id IS NULL AND evidence_id IS NULL)
+        OR (relation_kind = 'evidenced_by' AND evidence_id IS NOT NULL
+            AND hypothesis_version_id IS NULL AND finding_version_id IS NULL
+            AND design_version_id IS NULL AND experiment_run_id IS NULL
+            AND dataset_version_id IS NULL AND dataset_role IS NULL)
+    )
 );
+CREATE UNIQUE INDEX idx_model_contribution_hypothesis
+    ON model_contributions(model_version_id, hypothesis_version_id, relation_kind)
+    WHERE hypothesis_version_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_model_contribution_finding
+    ON model_contributions(model_version_id, finding_version_id, relation_kind)
+    WHERE finding_version_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_model_contribution_experiment
+    ON model_contributions(model_version_id, design_version_id, experiment_run_id, relation_kind)
+    WHERE design_version_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_model_contribution_dataset
+    ON model_contributions(model_version_id, dataset_version_id, dataset_role, split_group_id)
+    WHERE dataset_version_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_model_contribution_evidence
+    ON model_contributions(model_version_id, evidence_id)
+    WHERE evidence_id IS NOT NULL;
 
 CREATE TABLE model_evidence (
     id TEXT PRIMARY KEY,
@@ -232,16 +253,6 @@ CREATE TABLE model_evidence (
     )
 );
 CREATE INDEX idx_model_evidence_version ON model_evidence(model_version_id, created_at_us);
-
-CREATE TABLE model_version_evidence (
-    id TEXT PRIMARY KEY,
-    model_version_id TEXT NOT NULL REFERENCES model_versions(id) ON DELETE RESTRICT,
-    evidence_id TEXT NOT NULL REFERENCES model_evidence(id) ON DELETE RESTRICT,
-    rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
-    created_by TEXT,
-    created_at_us INTEGER NOT NULL,
-    UNIQUE (model_version_id, evidence_id)
-);
 
 CREATE TABLE model_evaluations (
     id TEXT PRIMARY KEY,
