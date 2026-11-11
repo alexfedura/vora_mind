@@ -678,6 +678,7 @@ pub enum EvidenceArtifactRefDto {
     ExperimentRun(String),
     DatasetVersion(String),
     ResearchObservation(String),
+    SourceVersionSegment(String),
     SourceClaim(String),
 }
 

@@ -285,6 +285,7 @@ CREATE TABLE analysis_run_deviations (
 CREATE TABLE analysis_outputs (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL REFERENCES analysis_runs(id) ON DELETE RESTRICT,
+    output_key TEXT NOT NULL CHECK (length(trim(output_key)) > 0),
     output_kind TEXT NOT NULL CHECK (length(trim(output_kind)) > 0),
     title TEXT NOT NULL CHECK (length(trim(title)) > 0),
     payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
@@ -300,13 +301,14 @@ CREATE TABLE analysis_outputs (
     byte_length INTEGER CHECK (byte_length IS NULL OR byte_length >= 0),
     created_at_us INTEGER NOT NULL,
     UNIQUE (id, run_id),
+    UNIQUE (run_id, output_key),
     CHECK ((artifact_uri IS NULL) = (artifact_sha256 IS NULL))
 );
 
 CREATE TABLE analysis_metrics (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL REFERENCES analysis_runs(id) ON DELETE RESTRICT,
-    output_id TEXT NOT NULL UNIQUE,
+    output_id TEXT NOT NULL,
     metric_definition_version_id TEXT NOT NULL
         REFERENCES analysis_metric_definition_versions(id) ON DELETE RESTRICT,
     method_version_id TEXT NOT NULL REFERENCES analysis_method_versions(id) ON DELETE RESTRICT,
