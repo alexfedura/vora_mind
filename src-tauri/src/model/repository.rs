@@ -1073,7 +1073,9 @@ fn query_contributions(
             } else if let Some(dataset_version_id) = dataset_id {
                 ModelContributionTarget::Dataset {
                     dataset_version_id,
-                    role: row.get(7)?.ok_or(rusqlite::Error::InvalidQuery)?,
+                    role: row
+                        .get::<_, Option<String>>(7)?
+                        .ok_or(rusqlite::Error::InvalidQuery)?,
                     split_group_id: row.get(8)?,
                 }
             } else if let Some(id) = evidence_id {
