@@ -206,6 +206,22 @@ export function LearningWorkspacePanel(): React.JSX.Element {
     });
   };
 
+  const reviewAssessment = (
+    assessment: LearningWorkspaceDto["assessments"][number],
+    reviewStatus: "approved" | "changes_requested" | "rejected",
+  ): void => {
+    void perform(() => learningService.reviewAssessment({
+      assessmentVersionId: assessment.id,
+      reviewStatus,
+      reviewerId: null,
+      rationale: reviewStatus === "approved"
+        ? "Approved in the Learning workspace."
+        : reviewStatus === "changes_requested"
+          ? "Changes requested during Learning workspace review."
+          : "Rejected during Learning workspace review.",
+    }));
+  };
+
   const createAttempt = (form: FormData): Promise<unknown> =>
     learningService.createAttempt({
       learningProjectId: projectId,
@@ -467,13 +483,12 @@ export function LearningWorkspacePanel(): React.JSX.Element {
                       </div>
                       <p className="mt-1 text-[11px] text-gray-500">Framework {assessment.frameworkVersionId} · rubric {assessment.rubricVersionId}</p>
                       {assessment.reviews.map((review) => <p key={review.id} className="mt-1 text-[11px] text-gray-400">Review: {review.reviewStatus} · {review.rationale}</p>)}
-                      {assessment.status === "draft" && (
-                        <button type="button" className={`${quietButtonClass} mt-2`} onClick={() => void perform(() => learningService.reviewAssessment({
-                          assessmentVersionId: assessment.id,
-                          reviewStatus: "approved",
-                          reviewerId: null,
-                          rationale: "Approved in the Learning workspace.",
-                        }))}>Approve review</button>
+                      {["draft", "review"].includes(assessment.status) && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button type="button" className={quietButtonClass} onClick={() => reviewAssessment(assessment, "approved")}>Approve</button>
+                          <button type="button" className={quietButtonClass} onClick={() => reviewAssessment(assessment, "changes_requested")}>Request changes</button>
+                          <button type="button" className={quietButtonClass} onClick={() => reviewAssessment(assessment, "rejected")}>Reject</button>
+                        </div>
                       )}
                       {assessment.status === "review"
                         && assessment.reviews[assessment.reviews.length - 1]?.reviewStatus === "approved" && (
