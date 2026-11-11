@@ -516,7 +516,7 @@ pub struct ExperimentRunDeviationDto {
     pub recorded_at_us: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RunLogSeverity {
     Debug,
@@ -683,7 +683,7 @@ pub struct TransitionExperimentRunReq {
     pub details: String,
     pub completion_summary: Option<String>,
     pub failure_details: Option<String>,
-    pub output_dataset_versions: Vec<String>,
+    pub output_dataset_pins: Vec<DatasetRolePinDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
