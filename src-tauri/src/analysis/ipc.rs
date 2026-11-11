@@ -1,6 +1,7 @@
 use super::*;
 use crate::mind::canvas_db::AppState;
-use tauri::State;
+use std::collections::HashSet;
+use tauri::{AppHandle, Manager, State};
 
 #[tauri::command]
 pub fn analysis_get_workspace(
@@ -50,9 +51,27 @@ pub fn analysis_transition_definition(
 
 #[tauri::command]
 pub fn analysis_create_run(
+    app: AppHandle,
     state: State<AppState>,
     request: CreateAnalysisRunReq,
 ) -> Result<AnalysisRunDto, String> {
+    let assets_root = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    let dataset_versions = request
+        .inputs
+        .iter()
+        .map(|input| input.dataset_version_id.as_str())
+        .collect::<HashSet<_>>();
+    for dataset_version_id in dataset_versions {
+        crate::experiment::service::verify_dataset_version(
+            &state.db,
+            dataset_version_id,
+            &assets_root,
+        )
+        .map_err(|error| error.to_string())?;
+    }
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
     repository::create_run(&mut conn, &request).map_err(|error| error.to_string())
 }
