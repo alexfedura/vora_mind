@@ -196,9 +196,9 @@ pub fn create_model_version(
         "INSERT INTO model_versions
             (id, model_id, version_no, created_in_project_id, change_class,
              change_rationale, expected_implications, human_specification,
-             machine_specification_json, assumptions_json, scope, dependencies_json,
-             environment_json, content_sha256, created_by, created_at_us)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+             machine_specification_json, scope, dependencies_json, environment_json,
+             content_sha256, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         params![
             model_version_id,
             request.model_id,
@@ -209,7 +209,6 @@ pub fn create_model_version(
             request.expected_implications.trim(),
             request.specification.human_readable.trim(),
             json(&request.specification.machine_readable)?,
-            json(&request.assumptions)?,
             request.scope.trim(),
             json(&request.dependencies)?,
             json(&request.environment)?,
@@ -626,7 +625,7 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
     let row = conn.query_row(
         "SELECT id, model_id, version_no, created_in_project_id, change_class,
                 change_rationale, expected_implications, human_specification,
-                machine_specification_json, assumptions_json, scope, dependencies_json,
+                machine_specification_json, scope, dependencies_json,
                 environment_json, content_sha256, created_by, created_at_us
          FROM model_versions WHERE id = ?1",
         [version_id],
@@ -645,9 +644,8 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
                 row.get::<_, String>(10)?,
                 row.get::<_, String>(11)?,
                 row.get::<_, String>(12)?,
-                row.get::<_, String>(13)?,
-                row.get::<_, Option<String>>(14)?,
-                row.get::<_, i64>(15)?,
+                row.get::<_, Option<String>>(13)?,
+                row.get::<_, i64>(14)?,
             ))
         },
     )?;
@@ -715,11 +713,7 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
 
-    let dependencies = conn.query_row(
-        "SELECT dependencies_json FROM model_versions WHERE id = ?1",
-        [version_id],
-        |row| parse_json(&row.get::<_, String>(0)?),
-    )?;
+    let dependencies = parse_json(&row.10)?;
     let machine_readable = conn.query_row(
         "SELECT machine_specification_json FROM model_versions WHERE id = ?1",
         [version_id],
@@ -738,9 +732,9 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
             machine_readable,
         },
         assumptions,
-        scope: row.10,
+        scope: row.9,
         dependencies,
-        environment: parse_json(&row.12)?,
+        environment: parse_json(&row.11)?,
         parents,
         parameters,
         artifacts,
@@ -764,9 +758,9 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
             "SELECT evidence_id FROM model_version_evidence WHERE model_version_id = ?1 ORDER BY evidence_id",
             version_id,
         )?,
-        content_sha256: row.13,
-        created_by: row.14,
-        created_at_us: row.15,
+        content_sha256: row.12,
+        created_by: row.13,
+        created_at_us: row.14,
     })
 }
 
