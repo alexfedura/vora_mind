@@ -3,7 +3,8 @@ use tauri::State;
 use crate::mind::canvas_db::AppState;
 
 use super::acquisition::{
-    self, AddFrameworkItemReq, CreateFrameworkReq, CreateFrameworkVersionReq,
+    self, AcquisitionProvenanceTargetKind, AddFrameworkItemReq, CreateFrameworkReq,
+    CreateFrameworkVersionReq, FrameworkReviewDto,
     CreateKnowledgeExtractionReq, CreateKnowledgeItemReq, CreateSourceClaimReq,
     CreateSourceLocationReq, CreateSourceVersionReq, CorrectExtractionReq,
     KnowledgeExtractionDto, KnowledgeItemDto, ProvenanceEventDto, PublishFrameworkVersionReq,
@@ -162,6 +163,15 @@ pub fn src_list_framework_versions(
 }
 
 #[tauri::command]
+pub fn src_list_framework_reviews(
+    framework_version_id: String,
+    state: State<AppState>,
+) -> Result<Vec<FrameworkReviewDto>, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    acquisition::list_framework_reviews(&conn, &framework_version_id)
+}
+
+#[tauri::command]
 pub fn src_create_framework_version(
     req: CreateFrameworkVersionReq,
     state: State<AppState>,
@@ -226,7 +236,7 @@ pub fn src_publish_framework_version(
 
 #[tauri::command]
 pub fn src_list_provenance(
-    target_kind: String,
+    target_kind: AcquisitionProvenanceTargetKind,
     target_id: String,
     state: State<AppState>,
 ) -> Result<Vec<ProvenanceEventDto>, String> {
