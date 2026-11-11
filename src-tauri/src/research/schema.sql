@@ -407,7 +407,7 @@ CREATE TABLE research_hypotheses (
         'project', 'unassigned', 'unknown'
     )),
     lifecycle_status TEXT NOT NULL CHECK (lifecycle_status IN (
-        'legacy_untyped', 'draft', 'review', 'preregistered', 'testing', 'closed'
+        'legacy_untyped', 'draft', 'review', 'preregistered', 'closed'
     )),
     created_by TEXT,
     created_at_us INTEGER NOT NULL,

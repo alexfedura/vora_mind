@@ -1793,8 +1793,7 @@ pub fn transition_hypothesis(
         (current.as_str(), next),
         ("draft", "review" | "closed")
             | ("review", "draft" | "preregistered" | "closed")
-            | ("preregistered", "testing" | "closed")
-            | ("testing", "closed")
+            | ("preregistered", "closed")
     );
     if !allowed {
         return Err(rusqlite::Error::InvalidQuery);
@@ -2130,7 +2129,6 @@ fn query_hypothesis(conn: &Connection, hypothesis_id: &str) -> Result<ResearchHy
                     "draft" => ResearchHypothesisStatus::Draft,
                     "review" => ResearchHypothesisStatus::Review,
                     "preregistered" => ResearchHypothesisStatus::Preregistered,
-                    "testing" => ResearchHypothesisStatus::Testing,
                     "closed" => ResearchHypothesisStatus::Closed,
                     _ => ResearchHypothesisStatus::LegacyUntyped,
                 },

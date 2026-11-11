@@ -132,7 +132,6 @@ pub enum ResearchHypothesisStatus {
     Draft,
     Review,
     Preregistered,
-    Testing,
     Closed,
 }
 
@@ -143,7 +142,6 @@ impl ResearchHypothesisStatus {
             Self::Draft => "draft",
             Self::Review => "review",
             Self::Preregistered => "preregistered",
-            Self::Testing => "testing",
             Self::Closed => "closed",
         }
     }
