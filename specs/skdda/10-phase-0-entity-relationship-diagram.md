@@ -33,6 +33,7 @@ erDiagram
     SCIENTIFIC_ENTITY ||--o| RESEARCH_GAP : "typed subtype"
     SCIENTIFIC_ENTITY ||--o| RESEARCH_QUESTION : "typed subtype"
     SCIENTIFIC_ENTITY ||--o| PHENOMENON : "typed subtype"
+    SCIENTIFIC_ENTITY ||--o| MEASURE_DEFINITION : "typed subtype"
     SCIENTIFIC_ENTITY ||--o| OBSERVATION_PLAN : "typed subtype"
     SCIENTIFIC_ENTITY ||--o| OBSERVATION : "typed subtype"
     SCIENTIFIC_ENTITY ||--o| PATTERN : "typed subtype"
@@ -51,6 +52,7 @@ erDiagram
     SCIENTIFIC_ENTITY ||--o| RESEARCH_FINDING : "typed subtype"
 
     SCIENTIFIC_ENTITY ||--o| MODEL : "typed subtype"
+    SCIENTIFIC_ENTITY ||--o| MODEL_SPECIFICATION : "typed subtype"
     SCIENTIFIC_ENTITY ||--o| MODEL_EVALUATION : "typed subtype"
     SCIENTIFIC_ENTITY ||--o| VALIDATION : "typed subtype"
     SCIENTIFIC_ENTITY ||--o| REPLICATION : "typed subtype"
@@ -66,6 +68,7 @@ erDiagram
     SCIENTIFIC_VERSION ||--o| PRINCIPLE_VERSION : "version subtype"
     SCIENTIFIC_VERSION ||--o| FRAMEWORK_VERSION : "version subtype"
     SCIENTIFIC_VERSION ||--o| LEARNING_OBJECTIVE_VERSION : "version subtype"
+    SCIENTIFIC_VERSION ||--o| MEASURE_DEFINITION_VERSION : "version subtype"
     SCIENTIFIC_VERSION ||--o| ASSESSMENT_VERSION : "version subtype"
     SCIENTIFIC_VERSION ||--o| OBSERVATION_PLAN_VERSION : "version subtype"
     SCIENTIFIC_VERSION ||--o| HYPOTHESIS_VERSION : "version subtype"
@@ -73,6 +76,7 @@ erDiagram
     SCIENTIFIC_VERSION ||--o| DATASET_VERSION : "version subtype"
     SCIENTIFIC_VERSION ||--o| ANALYSIS_DEFINITION_VERSION : "version subtype"
     SCIENTIFIC_VERSION ||--o| MODEL_VERSION : "version subtype"
+    SCIENTIFIC_VERSION ||--o| MODEL_SPECIFICATION_VERSION : "version subtype"
 
     SCIENTIFIC_RELATION_RULE ||--o{ SCIENTIFIC_RELATION : permits
     SCIENTIFIC_ENTITY ||--o{ SCIENTIFIC_RELATION : subject
@@ -112,6 +116,7 @@ erDiagram
     RESEARCH_GAP ||--o{ RESEARCH_QUESTION : motivates
     RESEARCH_PROJECT ||--o{ RESEARCH_QUESTION : owns
     RESEARCH_PROJECT ||--o{ PHENOMENON : investigates
+    PHENOMENON ||--o{ MEASURE_DEFINITION : operationalized_by
     PHENOMENON ||--o{ OBSERVATION_PLAN : observed_by
     OBSERVATION_PLAN ||--o{ OBSERVATION : captures
     EXPERIMENT_RUN ||--o{ OBSERVATION : records
@@ -119,7 +124,7 @@ erDiagram
     DATA_SAMPLE ||--o| TRADE_SAMPLE : specializes
     HYPOTHESIS ||--o{ HYPOTHESIS_VERSION : versions
     HYPOTHESIS_VERSION ||--o{ HYPOTHESIS_ASSESSMENT : assessed_by
-    HYPOTHESIS_ASSESSMENT ||--o{ EXPERIMENT_DESIGN : motivates
+    HYPOTHESIS ||--o{ EXPERIMENT_DESIGN : tested_by
 
     EXPERIMENT_DESIGN ||--o{ EXPERIMENT_DESIGN_VERSION : versions
     EXPERIMENT_DESIGN_VERSION ||--o{ EXPERIMENT_RUN : executed_as
@@ -134,6 +139,7 @@ erDiagram
     EVIDENCE ||--o{ RESEARCH_FINDING : informs
 
     MODEL ||--o{ MODEL_VERSION : versions
+    MODEL_VERSION ||--|| MODEL_SPECIFICATION_VERSION : specifies
     MODEL_VERSION ||--o{ MODEL_EVALUATION : evaluated_by
     DATASET_VERSION ||--o{ MODEL_EVALUATION : evaluated_against
     VALIDATION ||--o{ MODEL_VERSION : validates_exact_version
