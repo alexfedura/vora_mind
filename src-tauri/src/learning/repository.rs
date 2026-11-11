@@ -2515,7 +2515,7 @@ mod tests {
                 title: "Concept mastery".to_string(),
                 description: "Demonstrates the pinned learning objective".to_string(),
                 criteria: vec![CreateCompetencyCriterionReq {
-                    objective_version_id: objective.id,
+                    objective_version_id: objective.id.clone(),
                     criterion: "Accurate explanation".to_string(),
                     minimum_score: 0.7,
                     required: true,
