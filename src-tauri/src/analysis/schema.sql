@@ -479,3 +479,476 @@ CREATE TABLE analysis_finding_relations (
     CHECK (source_version_id <> target_version_id),
     UNIQUE (source_version_id, target_version_id, relation_kind)
 );
+
+CREATE TRIGGER analysis_methods_immutable_update
+BEFORE UPDATE ON analysis_methods
+BEGIN
+    SELECT RAISE(ABORT, 'analysis method identities are immutable');
+END;
+CREATE TRIGGER analysis_methods_immutable_delete
+BEFORE DELETE ON analysis_methods
+BEGIN
+    SELECT RAISE(ABORT, 'analysis method identities cannot be deleted');
+END;
+CREATE TRIGGER analysis_method_versions_immutable_update
+BEFORE UPDATE ON analysis_method_versions
+BEGIN
+    SELECT RAISE(ABORT, 'analysis method versions are immutable');
+END;
+CREATE TRIGGER analysis_method_versions_immutable_delete
+BEFORE DELETE ON analysis_method_versions
+BEGIN
+    SELECT RAISE(ABORT, 'analysis method versions cannot be deleted');
+END;
+CREATE TRIGGER analysis_metric_definitions_immutable_update
+BEFORE UPDATE ON analysis_metric_definitions
+BEGIN
+    SELECT RAISE(ABORT, 'metric definition identities are immutable');
+END;
+CREATE TRIGGER analysis_metric_definitions_immutable_delete
+BEFORE DELETE ON analysis_metric_definitions
+BEGIN
+    SELECT RAISE(ABORT, 'metric definition identities cannot be deleted');
+END;
+CREATE TRIGGER analysis_metric_versions_immutable_update
+BEFORE UPDATE ON analysis_metric_definition_versions
+BEGIN
+    SELECT RAISE(ABORT, 'metric definition versions are immutable');
+END;
+CREATE TRIGGER analysis_metric_versions_immutable_delete
+BEFORE DELETE ON analysis_metric_definition_versions
+BEGIN
+    SELECT RAISE(ABORT, 'metric definition versions cannot be deleted');
+END;
+CREATE TRIGGER analysis_definitions_immutable_update
+BEFORE UPDATE ON analysis_definitions
+BEGIN
+    SELECT RAISE(ABORT, 'analysis definition identities are immutable');
+END;
+CREATE TRIGGER analysis_definitions_immutable_delete
+BEFORE DELETE ON analysis_definitions
+BEGIN
+    SELECT RAISE(ABORT, 'analysis definition identities cannot be deleted');
+END;
+CREATE TRIGGER analysis_definition_versions_immutable_update
+BEFORE UPDATE ON analysis_definition_versions
+BEGIN
+    SELECT RAISE(ABORT, 'analysis definition versions are immutable');
+END;
+CREATE TRIGGER analysis_definition_versions_immutable_delete
+BEFORE DELETE ON analysis_definition_versions
+BEGIN
+    SELECT RAISE(ABORT, 'analysis definition versions cannot be deleted');
+END;
+CREATE TRIGGER analysis_definition_metric_versions_immutable_update
+BEFORE UPDATE ON analysis_definition_metric_versions
+BEGIN
+    SELECT RAISE(ABORT, 'analysis definition metric pins are immutable');
+END;
+CREATE TRIGGER analysis_definition_metric_versions_immutable_delete
+BEFORE DELETE ON analysis_definition_metric_versions
+BEGIN
+    SELECT RAISE(ABORT, 'analysis definition metric pins are immutable');
+END;
+CREATE TRIGGER analysis_definition_events_immutable_update
+BEFORE UPDATE ON analysis_definition_events
+BEGIN
+    SELECT RAISE(ABORT, 'analysis definition events are append-only');
+END;
+CREATE TRIGGER analysis_definition_events_immutable_delete
+BEFORE DELETE ON analysis_definition_events
+BEGIN
+    SELECT RAISE(ABORT, 'analysis definition events are append-only');
+END;
+CREATE TRIGGER analysis_definition_events_transition
+BEFORE INSERT ON analysis_definition_events
+WHEN (
+    (SELECT COUNT(*) FROM analysis_definition_events
+     WHERE definition_version_id = NEW.definition_version_id) = 0
+    AND NEW.status <> 'draft'
+)
+OR (
+    (SELECT status FROM analysis_definition_events
+     WHERE definition_version_id = NEW.definition_version_id
+     ORDER BY occurred_at_us DESC, id DESC LIMIT 1) = 'draft'
+    AND NEW.status NOT IN ('review', 'retired')
+)
+OR (
+    (SELECT status FROM analysis_definition_events
+     WHERE definition_version_id = NEW.definition_version_id
+     ORDER BY occurred_at_us DESC, id DESC LIMIT 1) = 'review'
+    AND NEW.status NOT IN ('locked', 'retired')
+)
+OR (
+    (SELECT status FROM analysis_definition_events
+     WHERE definition_version_id = NEW.definition_version_id
+     ORDER BY occurred_at_us DESC, id DESC LIMIT 1) IN ('locked', 'retired')
+)
+BEGIN
+    SELECT RAISE(ABORT, 'invalid analysis definition lifecycle transition');
+END;
+CREATE TRIGGER analysis_definition_lock_requires_verified_versions
+BEFORE INSERT ON analysis_definition_events
+WHEN NEW.status = 'locked'
+ AND (
+    (SELECT mv.verification_status
+     FROM analysis_definition_versions dv
+     JOIN analysis_method_versions mv ON mv.id = dv.method_version_id
+     WHERE dv.id = NEW.definition_version_id) <> 'passed'
+    OR EXISTS (
+        SELECT 1
+        FROM analysis_definition_metric_versions dm
+        JOIN analysis_metric_definition_versions mv
+          ON mv.id = dm.metric_definition_version_id
+        WHERE dm.definition_version_id = NEW.definition_version_id
+          AND mv.verification_status <> 'passed'
+    )
+    OR NOT EXISTS (
+        SELECT 1 FROM analysis_definition_metric_versions
+        WHERE definition_version_id = NEW.definition_version_id
+    )
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'locking requires verified method and metric versions');
+END;
+CREATE TRIGGER analysis_runs_immutable_update
+BEFORE UPDATE ON analysis_runs
+BEGIN
+    SELECT RAISE(ABORT, 'analysis runs are immutable');
+END;
+CREATE TRIGGER analysis_runs_immutable_delete
+BEFORE DELETE ON analysis_runs
+BEGIN
+    SELECT RAISE(ABORT, 'analysis runs cannot be deleted');
+END;
+CREATE TRIGGER analysis_run_events_transition
+BEFORE INSERT ON analysis_run_events
+WHEN (
+    (SELECT COUNT(*) FROM analysis_run_events WHERE run_id = NEW.run_id) = 0
+    AND NEW.lifecycle_status <> 'queued'
+)
+OR (
+    (SELECT lifecycle_status FROM analysis_run_events
+     WHERE run_id = NEW.run_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1) = 'queued'
+    AND NEW.lifecycle_status NOT IN ('running', 'failed', 'cancelled')
+)
+OR (
+    (SELECT lifecycle_status FROM analysis_run_events
+     WHERE run_id = NEW.run_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1) = 'running'
+    AND NEW.lifecycle_status NOT IN ('completed', 'failed', 'cancelled', 'inconclusive')
+)
+OR (
+    (SELECT lifecycle_status FROM analysis_run_events
+     WHERE run_id = NEW.run_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1)
+      IN ('completed', 'failed', 'cancelled', 'inconclusive')
+)
+OR (
+    NEW.lifecycle_status = 'failed'
+    AND NOT EXISTS (SELECT 1 FROM analysis_run_errors WHERE run_id = NEW.run_id)
+)
+OR (
+    NEW.lifecycle_status = 'completed'
+    AND NOT EXISTS (SELECT 1 FROM analysis_outputs WHERE run_id = NEW.run_id)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'invalid analysis run lifecycle transition or missing terminal record');
+END;
+CREATE TRIGGER analysis_run_events_immutable_update
+BEFORE UPDATE ON analysis_run_events
+BEGIN
+    SELECT RAISE(ABORT, 'analysis run events are append-only');
+END;
+CREATE TRIGGER analysis_run_events_immutable_delete
+BEFORE DELETE ON analysis_run_events
+BEGIN
+    SELECT RAISE(ABORT, 'analysis run events are append-only');
+END;
+
+CREATE TRIGGER analysis_run_inputs_immutable_update
+BEFORE UPDATE ON analysis_run_inputs
+BEGIN
+    SELECT RAISE(ABORT, 'analysis run inputs are immutable');
+END;
+CREATE TRIGGER analysis_run_inputs_immutable_delete
+BEFORE DELETE ON analysis_run_inputs
+BEGIN
+    SELECT RAISE(ABORT, 'analysis run inputs are immutable');
+END;
+CREATE TRIGGER analysis_run_input_samples_immutable_update
+BEFORE UPDATE ON analysis_run_input_samples
+BEGIN
+    SELECT RAISE(ABORT, 'analysis run sample assignments are immutable');
+END;
+CREATE TRIGGER analysis_run_input_samples_immutable_delete
+BEFORE DELETE ON analysis_run_input_samples
+BEGIN
+    SELECT RAISE(ABORT, 'analysis run sample assignments are immutable');
+END;
+CREATE TRIGGER analysis_run_integrity_immutable_update
+BEFORE UPDATE ON analysis_run_integrity_declarations
+BEGIN
+    SELECT RAISE(ABORT, 'analysis integrity declarations are immutable');
+END;
+CREATE TRIGGER analysis_run_integrity_immutable_delete
+BEFORE DELETE ON analysis_run_integrity_declarations
+BEGIN
+    SELECT RAISE(ABORT, 'analysis integrity declarations are immutable');
+END;
+CREATE TRIGGER analysis_integrity_findings_immutable_update
+BEFORE UPDATE ON analysis_integrity_findings
+BEGIN
+    SELECT RAISE(ABORT, 'analysis integrity findings are immutable');
+END;
+CREATE TRIGGER analysis_integrity_findings_immutable_delete
+BEFORE DELETE ON analysis_integrity_findings
+BEGIN
+    SELECT RAISE(ABORT, 'analysis integrity findings are immutable');
+END;
+CREATE TRIGGER analysis_run_logs_immutable_update
+BEFORE UPDATE ON analysis_run_logs
+BEGIN
+    SELECT RAISE(ABORT, 'analysis logs are append-only');
+END;
+CREATE TRIGGER analysis_run_logs_immutable_delete
+BEFORE DELETE ON analysis_run_logs
+BEGIN
+    SELECT RAISE(ABORT, 'analysis logs are append-only');
+END;
+CREATE TRIGGER analysis_run_errors_immutable_update
+BEFORE UPDATE ON analysis_run_errors
+BEGIN
+    SELECT RAISE(ABORT, 'analysis errors are append-only');
+END;
+CREATE TRIGGER analysis_run_errors_immutable_delete
+BEFORE DELETE ON analysis_run_errors
+BEGIN
+    SELECT RAISE(ABORT, 'analysis errors are append-only');
+END;
+CREATE TRIGGER analysis_run_deviations_immutable_update
+BEFORE UPDATE ON analysis_run_deviations
+BEGIN
+    SELECT RAISE(ABORT, 'analysis deviations are append-only');
+END;
+CREATE TRIGGER analysis_run_deviations_immutable_delete
+BEFORE DELETE ON analysis_run_deviations
+BEGIN
+    SELECT RAISE(ABORT, 'analysis deviations are append-only');
+END;
+CREATE TRIGGER analysis_outputs_immutable_update
+BEFORE UPDATE ON analysis_outputs
+BEGIN
+    SELECT RAISE(ABORT, 'analysis outputs are immutable');
+END;
+CREATE TRIGGER analysis_outputs_immutable_delete
+BEFORE DELETE ON analysis_outputs
+BEGIN
+    SELECT RAISE(ABORT, 'analysis outputs are immutable');
+END;
+CREATE TRIGGER analysis_metrics_immutable_update
+BEFORE UPDATE ON analysis_metrics
+BEGIN
+    SELECT RAISE(ABORT, 'analysis metrics are immutable');
+END;
+CREATE TRIGGER analysis_metrics_immutable_delete
+BEFORE DELETE ON analysis_metrics
+BEGIN
+    SELECT RAISE(ABORT, 'analysis metrics are immutable');
+END;
+CREATE TRIGGER analysis_evidence_immutable_update
+BEFORE UPDATE ON analysis_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'evidence is immutable; append an event or create a new record');
+END;
+CREATE TRIGGER analysis_evidence_immutable_delete
+BEFORE DELETE ON analysis_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'evidence cannot be deleted');
+END;
+CREATE TRIGGER analysis_evidence_events_transition
+BEFORE INSERT ON analysis_evidence_events
+WHEN (
+    (SELECT COUNT(*) FROM analysis_evidence_events WHERE evidence_id = NEW.evidence_id) = 0
+    AND NEW.status <> 'recorded'
+)
+OR (
+    (SELECT status FROM analysis_evidence_events
+     WHERE evidence_id = NEW.evidence_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1) = 'recorded'
+    AND NEW.status NOT IN ('assessed', 'contested', 'rejected', 'retracted')
+)
+OR (
+    (SELECT status FROM analysis_evidence_events
+     WHERE evidence_id = NEW.evidence_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1) = 'assessed'
+    AND NEW.status NOT IN ('accepted', 'contested', 'rejected', 'retracted')
+)
+OR (
+    (SELECT status FROM analysis_evidence_events
+     WHERE evidence_id = NEW.evidence_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1) = 'accepted'
+    AND NEW.status NOT IN ('contested', 'superseded', 'retracted')
+)
+OR (
+    (SELECT status FROM analysis_evidence_events
+     WHERE evidence_id = NEW.evidence_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1) = 'contested'
+    AND NEW.status NOT IN ('accepted', 'rejected', 'superseded', 'retracted')
+)
+OR (
+    (SELECT status FROM analysis_evidence_events
+     WHERE evidence_id = NEW.evidence_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1)
+      IN ('rejected', 'superseded', 'retracted')
+)
+BEGIN
+    SELECT RAISE(ABORT, 'invalid evidence lifecycle transition');
+END;
+CREATE TRIGGER analysis_evidence_events_immutable_update
+BEFORE UPDATE ON analysis_evidence_events
+BEGIN
+    SELECT RAISE(ABORT, 'evidence events are append-only');
+END;
+CREATE TRIGGER analysis_evidence_events_immutable_delete
+BEFORE DELETE ON analysis_evidence_events
+BEGIN
+    SELECT RAISE(ABORT, 'evidence events are append-only');
+END;
+CREATE TRIGGER analysis_findings_immutable_update
+BEFORE UPDATE ON analysis_findings
+BEGIN
+    SELECT RAISE(ABORT, 'finding identities are immutable');
+END;
+CREATE TRIGGER analysis_findings_immutable_delete
+BEFORE DELETE ON analysis_findings
+BEGIN
+    SELECT RAISE(ABORT, 'finding identities cannot be deleted');
+END;
+CREATE TRIGGER analysis_finding_versions_immutable_update
+BEFORE UPDATE ON analysis_finding_versions
+BEGIN
+    SELECT RAISE(ABORT, 'finding versions are immutable');
+END;
+CREATE TRIGGER analysis_finding_versions_immutable_delete
+BEFORE DELETE ON analysis_finding_versions
+BEGIN
+    SELECT RAISE(ABORT, 'finding versions cannot be deleted');
+END;
+CREATE TRIGGER analysis_finding_version_runs_immutable_update
+BEFORE UPDATE ON analysis_finding_version_runs
+BEGIN
+    SELECT RAISE(ABORT, 'finding analysis lineage is immutable');
+END;
+CREATE TRIGGER analysis_finding_version_runs_immutable_delete
+BEFORE DELETE ON analysis_finding_version_runs
+BEGIN
+    SELECT RAISE(ABORT, 'finding analysis lineage is immutable');
+END;
+CREATE TRIGGER analysis_finding_version_evidence_immutable_update
+BEFORE UPDATE ON analysis_finding_version_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'finding evidence links are immutable');
+END;
+CREATE TRIGGER analysis_finding_version_evidence_immutable_delete
+BEFORE DELETE ON analysis_finding_version_evidence
+BEGIN
+    SELECT RAISE(ABORT, 'finding evidence links are immutable');
+END;
+CREATE TRIGGER analysis_finding_events_transition
+BEFORE INSERT ON analysis_finding_events
+WHEN (
+    (SELECT COUNT(*) FROM analysis_finding_events
+     WHERE finding_version_id = NEW.finding_version_id) = 0
+    AND NEW.status <> 'draft'
+)
+OR (
+    (SELECT status FROM analysis_finding_events
+     WHERE finding_version_id = NEW.finding_version_id
+     ORDER BY occurred_at_us DESC, id DESC LIMIT 1) = 'draft'
+    AND NEW.status NOT IN ('review', 'retracted')
+)
+OR (
+    (SELECT status FROM analysis_finding_events
+     WHERE finding_version_id = NEW.finding_version_id
+     ORDER BY occurred_at_us DESC, id DESC LIMIT 1) = 'review'
+    AND NEW.status NOT IN ('accepted', 'contested', 'unsupported', 'inconclusive', 'retracted')
+)
+OR (
+    (SELECT status FROM analysis_finding_events
+     WHERE finding_version_id = NEW.finding_version_id
+     ORDER BY occurred_at_us DESC, id DESC LIMIT 1) = 'accepted'
+    AND NEW.status NOT IN ('contested', 'superseded', 'retracted')
+)
+OR (
+    (SELECT status FROM analysis_finding_events
+     WHERE finding_version_id = NEW.finding_version_id
+     ORDER BY occurred_at_us DESC, id DESC LIMIT 1) = 'contested'
+    AND NEW.status NOT IN ('accepted', 'unsupported', 'inconclusive', 'superseded', 'retracted')
+)
+OR (
+    (SELECT status FROM analysis_finding_events
+     WHERE finding_version_id = NEW.finding_version_id
+     ORDER BY occurred_at_us DESC, id DESC LIMIT 1) IN ('unsupported', 'inconclusive')
+    AND NEW.status NOT IN ('contested', 'superseded', 'retracted')
+)
+OR (
+    (SELECT status FROM analysis_finding_events
+     WHERE finding_version_id = NEW.finding_version_id
+     ORDER BY occurred_at_us DESC, id DESC LIMIT 1) IN ('superseded', 'retracted')
+)
+BEGIN
+    SELECT RAISE(ABORT, 'invalid finding lifecycle transition');
+END;
+CREATE TRIGGER analysis_finding_events_immutable_update
+BEFORE UPDATE ON analysis_finding_events
+BEGIN
+    SELECT RAISE(ABORT, 'finding events are append-only');
+END;
+CREATE TRIGGER analysis_finding_events_immutable_delete
+BEFORE DELETE ON analysis_finding_events
+BEGIN
+    SELECT RAISE(ABORT, 'finding events are append-only');
+END;
+CREATE TRIGGER analysis_finding_relations_immutable_update
+BEFORE UPDATE ON analysis_finding_relations
+BEGIN
+    SELECT RAISE(ABORT, 'finding relations are immutable');
+END;
+CREATE TRIGGER analysis_finding_relations_immutable_delete
+BEFORE DELETE ON analysis_finding_relations
+BEGIN
+    SELECT RAISE(ABORT, 'finding relations are immutable');
+END;
+
+CREATE TRIGGER analysis_run_logs_only_while_open
+BEFORE INSERT ON analysis_run_logs
+WHEN (SELECT lifecycle_status FROM analysis_run_events
+      WHERE run_id = NEW.run_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1)
+     NOT IN ('queued', 'running')
+BEGIN
+    SELECT RAISE(ABORT, 'analysis logs may only be added to queued or running analyses');
+END;
+CREATE TRIGGER analysis_run_errors_only_while_open
+BEFORE INSERT ON analysis_run_errors
+WHEN (SELECT lifecycle_status FROM analysis_run_events
+      WHERE run_id = NEW.run_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1)
+     NOT IN ('queued', 'running')
+BEGIN
+    SELECT RAISE(ABORT, 'analysis errors may only be added to queued or running analyses');
+END;
+CREATE TRIGGER analysis_run_deviations_only_while_open
+BEFORE INSERT ON analysis_run_deviations
+WHEN (SELECT lifecycle_status FROM analysis_run_events
+      WHERE run_id = NEW.run_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1)
+     NOT IN ('queued', 'running')
+BEGIN
+    SELECT RAISE(ABORT, 'analysis deviations may only be added to queued or running analyses');
+END;
+CREATE TRIGGER analysis_outputs_only_while_running
+BEFORE INSERT ON analysis_outputs
+WHEN (SELECT lifecycle_status FROM analysis_run_events
+      WHERE run_id = NEW.run_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1) <> 'running'
+BEGIN
+    SELECT RAISE(ABORT, 'analysis outputs may only be finalized while running');
+END;
+CREATE TRIGGER analysis_metrics_only_while_running
+BEFORE INSERT ON analysis_metrics
+WHEN (SELECT lifecycle_status FROM analysis_run_events
+      WHERE run_id = NEW.run_id ORDER BY occurred_at_us DESC, id DESC LIMIT 1) <> 'running'
+BEGIN
+    SELECT RAISE(ABORT, 'analysis metrics may only be finalized while running');
+END;
