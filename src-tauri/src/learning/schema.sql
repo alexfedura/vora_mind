@@ -1,4 +1,4 @@
-CREATE TABLE learning_schema_migrations (
+CREATE TABLE IF NOT EXISTS learning_schema_migrations (
     version INTEGER PRIMARY KEY,
     migration_id TEXT NOT NULL UNIQUE,
     checksum TEXT NOT NULL,
