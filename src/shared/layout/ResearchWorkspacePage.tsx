@@ -7,6 +7,7 @@ import { ExperimentWorkspacePanel } from "@/shared/layout/ExperimentWorkspacePan
 import { AnalysisWorkspacePanel } from "@/shared/layout/AnalysisWorkspacePanel";
 import { ModelWorkspacePanel } from "@/shared/layout/ModelWorkspacePanel";
 import { LearningWorkspacePanel } from "@/shared/layout/LearningWorkspacePanel";
+import { KnowledgeTransferWorkspacePanel } from "@/shared/layout/KnowledgeTransferWorkspacePanel";
 import type {
   ResearchGapDto,
   HypothesisExpectedDirection,
@@ -1038,6 +1039,7 @@ export const ResearchWorkspacePage: React.FC = () => {
       <AnalysisWorkspacePanel projectId={projectId} />
       <ModelWorkspacePanel projectId={projectId} />
       <LearningWorkspacePanel />
+      <KnowledgeTransferWorkspacePanel />
     </div>
   );
 };
