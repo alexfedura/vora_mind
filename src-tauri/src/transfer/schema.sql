@@ -256,6 +256,43 @@ CREATE TABLE knowledge_transfer_downstream_usage (
 CREATE INDEX idx_transfer_downstream_usage
     ON knowledge_transfer_downstream_usage(transfer_id, recorded_at_us, id);
 
+CREATE VIEW knowledge_transfer_artifact_catalog AS
+SELECT 'concept_version' AS artifact_kind, v.id AS artifact_version_id,
+       v.concept_id AS artifact_id, v.title, v.version_no,
+       v.created_in_project_id AS owner_project_id,
+       CASE WHEN v.reviewed_by IS NULL THEN 'unreviewed' ELSE 'reviewed' END
+           AS scientific_status
+FROM knowledge_concept_versions v
+UNION ALL
+SELECT 'principle_version', v.id, v.principle_id, v.title, v.version_no,
+       v.created_in_project_id,
+       CASE WHEN v.reviewed_by IS NULL THEN 'unreviewed' ELSE 'reviewed' END
+FROM knowledge_principle_versions v
+UNION ALL
+SELECT 'framework_version', v.id, v.framework_id, v.title, v.version_no,
+       NULL, v.status
+FROM knowledge_framework_versions v
+UNION ALL
+SELECT 'finding_version', v.id, v.finding_id, v.title, v.version_no,
+       f.project_id,
+       COALESCE((
+           SELECT e.status FROM analysis_finding_events e
+           WHERE e.finding_version_id = v.id
+           ORDER BY e.occurred_at_us DESC, e.id DESC LIMIT 1
+       ), 'unreviewed')
+FROM analysis_finding_versions v
+JOIN analysis_findings f ON f.id = v.finding_id
+UNION ALL
+SELECT 'model_version', v.id, v.model_id, m.display_name, v.version_no,
+       v.created_in_project_id,
+       COALESCE((
+           SELECT e.lifecycle_status FROM model_version_events e
+           WHERE e.model_version_id = v.id
+           ORDER BY e.occurred_at_us DESC, e.id DESC LIMIT 1
+       ), 'draft')
+FROM model_versions v
+JOIN scientific_models m ON m.id = v.model_id;
+
 CREATE TRIGGER knowledge_concept_versions_no_update
 BEFORE UPDATE ON knowledge_concept_versions
 BEGIN
