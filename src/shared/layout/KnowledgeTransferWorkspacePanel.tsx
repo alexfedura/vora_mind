@@ -18,17 +18,6 @@ const TRANSFER_PURPOSES: TransferPurpose[] = [
   "commercial",
   "public_distribution",
 ];
-const DOWNSTREAM_KINDS: DownstreamUseRef["kind"][] = [
-  "analysis_run",
-  "experiment_run",
-  "model_evaluation",
-  "finding_version",
-  "concept_version",
-  "principle_version",
-  "framework_version",
-  "model_version",
-];
-
 const fieldClass =
   "w-full rounded-lg border border-[#343741] bg-[#101114] px-3 py-2 text-sm text-white outline-none focus:border-[#e8ad55]";
 const buttonClass =
@@ -45,7 +34,10 @@ function artifactLabel(artifact: TransferArtifactRef, title: string, versionNo: 
 }
 
 function isTransferPurpose(value: string): value is TransferPurpose {
-  return TRANSFER_PURPOSES.includes(value as TransferPurpose);
+  return value === "research"
+    || value === "learning"
+    || value === "commercial"
+    || value === "public_distribution";
 }
 
 function parseTransferPurpose(value: string): TransferPurpose {
@@ -64,10 +56,24 @@ function parseLineageRelation(value: string): TransferLineageRelation {
 }
 
 function parseDownstreamKind(value: string): DownstreamUseRef["kind"] {
-  if (DOWNSTREAM_KINDS.includes(value as DownstreamUseRef["kind"])) {
-    return value as DownstreamUseRef["kind"];
+  switch (value) {
+    case "analysis_run":
+    case "experiment_run":
+    case "model_evaluation":
+    case "finding_version":
+    case "concept_version":
+    case "principle_version":
+    case "framework_version":
+    case "model_version":
+      return value;
+    default:
+      throw new Error(`Unsupported downstream-use kind: ${value}`);
   }
-  throw new Error(`Unsupported downstream-use kind: ${value}`);
+}
+
+function parseKnowledgeVersionKind(value: string): KnowledgeVersionKind {
+  if (value === "concept" || value === "principle") return value;
+  throw new Error(`Unsupported knowledge version kind: ${value}`);
 }
 
 function isArtifactUseKind(
@@ -530,6 +536,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
                       const eligibility = workspace?.eligibilities.find((item) => item.id === event.target.value);
                       setSelectedEligibilityId(event.target.value);
                       setAttributionText(eligibility?.attributionText ?? "");
+                      setSelectedPurpose(eligibility?.permittedPurposes[0] ?? "research");
                     }}
                     required
                   >
@@ -618,7 +625,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
               <form onSubmit={(event) => void handleCreateKnowledgeVersion(event)} className="space-y-2">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Field label="Knowledge type">
-                    <select className={fieldClass} value={knowledgeKind} onChange={(event) => setKnowledgeKind(event.target.value as KnowledgeVersionKind)}>
+                    <select className={fieldClass} value={knowledgeKind} onChange={(event) => setKnowledgeKind(parseKnowledgeVersionKind(event.target.value))}>
                       <option value="concept">Concept</option>
                       <option value="principle">Principle</option>
                     </select>
