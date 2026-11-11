@@ -2145,3 +2145,307 @@ fn query_progress(conn: &Connection) -> Result<Vec<LearnerProgressDto>> {
     Ok(progress)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    fn create_framework_fixture(conn: &Connection) {
+        conn.execute_batch(
+            "PRAGMA foreign_keys = ON;
+             CREATE TABLE knowledge_frameworks (
+                 id TEXT PRIMARY KEY,
+                 title TEXT NOT NULL
+             );
+             CREATE TABLE knowledge_framework_versions (
+                 id TEXT PRIMARY KEY,
+                 framework_id TEXT NOT NULL REFERENCES knowledge_frameworks(id),
+                 title TEXT NOT NULL,
+                 version_no INTEGER NOT NULL,
+                 status TEXT NOT NULL,
+                 published_at_us INTEGER,
+                 UNIQUE (id, framework_id)
+             );
+             INSERT INTO knowledge_frameworks (id, title) VALUES ('framework-a', 'Framework A');
+             INSERT INTO knowledge_framework_versions
+                 (id, framework_id, title, version_no, status, published_at_us)
+             VALUES
+                 ('framework-a-v1', 'framework-a', 'Framework A', 1, 'published', 1),
+                 ('framework-a-v2', 'framework-a', 'Framework A', 2, 'published', 2);",
+        )
+        .expect("create framework fixture");
+    }
+
+    fn connection() -> Connection {
+        let conn = Connection::open_in_memory().expect("open test database");
+        create_framework_fixture(&conn);
+        initialize_schema(&conn).expect("initialize Learning schema");
+        conn
+    }
+
+    fn persistent_connection(path: &Path) -> Connection {
+        let conn = Connection::open(path).expect("open persistent test database");
+        create_framework_fixture(&conn);
+        initialize_schema(&conn).expect("initialize persistent Learning schema");
+        conn
+    }
+
+    fn create_learning_project(
+        conn: &mut Connection,
+        learner_id: &str,
+        framework_version_id: &str,
+    ) -> LearningProjectDto {
+        create_project(
+            conn,
+            &CreateLearningProjectReq {
+                title: format!("Project for {framework_version_id}"),
+                learner_id: learner_id.to_string(),
+                framework_id: "framework-a".to_string(),
+                framework_version_id: framework_version_id.to_string(),
+                created_by: None,
+            },
+        )
+        .expect("create framework-pinned project")
+    }
+
+    #[test]
+    fn learning_projects_pin_coexisting_framework_versions() {
+        let path = std::env::temp_dir().join(format!("vora-learning-{}.sqlite", id()));
+        let mut conn = persistent_connection(&path);
+        initialize_schema(&conn).expect("repeat migration safely");
+        let learner = create_learner(
+            &mut conn,
+            &CreateLearnerReq {
+                display_name: "Learner".to_string(),
+                created_by: None,
+            },
+        )
+        .expect("create learner");
+
+        let v1_project = create_learning_project(&mut conn, &learner.id, "framework-a-v1");
+        let v2_project = create_learning_project(&mut conn, &learner.id, "framework-a-v2");
+        assert_eq!(v1_project.framework_version_id, "framework-a-v1");
+        assert_eq!(v2_project.framework_version_id, "framework-a-v2");
+
+        let update = conn.execute(
+            "UPDATE learning_projects SET framework_version_id = 'framework-a-v2'
+             WHERE id = ?1",
+            [&v1_project.id],
+        );
+        assert!(update.is_err(), "a project framework pin must be immutable");
+
+        drop(conn);
+        let reopened_conn = Connection::open(&path).expect("reopen persistent test database");
+        initialize_schema(&reopened_conn).expect("verify migration after restart");
+        let framework_version_id: String = reopened_conn
+            .query_row(
+                "SELECT framework_version_id FROM learning_projects WHERE id = ?1",
+                [&v1_project.id],
+                |row| row.get(0),
+            )
+            .expect("read persisted framework pin");
+        assert_eq!(framework_version_id, "framework-a-v1");
+        let project_count: i64 = reopened_conn
+            .query_row("SELECT COUNT(*) FROM learning_projects", [], |row| row.get(0))
+            .expect("read projects after restart");
+        assert_eq!(project_count, 2);
+        drop(reopened_conn);
+        std::fs::remove_file(path).expect("remove persistent test database");
+    }
+
+    #[test]
+    fn submitted_attempt_and_evaluation_corrections_preserve_history() {
+        let mut conn = connection();
+        let learner = create_learner(
+            &mut conn,
+            &CreateLearnerReq {
+                display_name: "Learner".to_string(),
+                created_by: None,
+            },
+        )
+        .expect("create learner");
+        let project = create_learning_project(&mut conn, &learner.id, "framework-a-v1");
+        let objective = create_objective_version(
+            &mut conn,
+            &CreateLearningObjectiveReq {
+                objective_id: None,
+                learning_project_id: project.id.clone(),
+                title: "Explain the concept".to_string(),
+                observable_outcome: "Learner explains the concept".to_string(),
+                criteria_text: "Explanation is accurate".to_string(),
+                level: "introductory".to_string(),
+                parent_version_id: None,
+                prerequisite_version_ids: Vec::new(),
+                created_by: None,
+            },
+        )
+        .expect("create objective version");
+
+        let assessment = create_assessment_version(
+            &mut conn,
+            &CreateAssessmentVersionReq {
+                assessment_id: None,
+                learning_project_id: project.id.clone(),
+                title: "Concept check".to_string(),
+                change_rationale: "Initial assessment version".to_string(),
+                rubric_title: "Concept rubric".to_string(),
+                rubric_pass_threshold: 0.7,
+                questions: vec![CreateAssessmentQuestionReq {
+                    objective_version_id: objective.id.clone(),
+                    question_order: 0,
+                    prompt: "Explain the concept".to_string(),
+                    response_kind: "text".to_string(),
+                    max_points: 1.0,
+                    required: true,
+                }],
+                rubric_criteria: vec![CreateRubricCriterionReq {
+                    objective_version_id: objective.id.clone(),
+                    criterion_key: "accuracy".to_string(),
+                    description: "Accurate explanation".to_string(),
+                    max_points: 1.0,
+                }],
+                created_by: None,
+            },
+        )
+        .expect("create assessment draft");
+        review_assessment(
+            &mut conn,
+            &ReviewAssessmentReq {
+                assessment_version_id: assessment.id.clone(),
+                review_status: AssessmentReviewStatus::Approved,
+                reviewer_id: Some("reviewer".to_string()),
+                rationale: "Reviewed for use".to_string(),
+            },
+        )
+        .expect("approve assessment");
+        transition_assessment_version(
+            &mut conn,
+            &TransitionAssessmentVersionReq {
+                assessment_version_id: assessment.id.clone(),
+                next_status: LearningVersionStatus::Published,
+                actor_id: Some("reviewer".to_string()),
+            },
+        )
+        .expect("publish assessment");
+
+        let attempt = create_attempt(
+            &mut conn,
+            &CreateAssessmentAttemptReq {
+                learning_project_id: project.id.clone(),
+                learner_id: learner.id.clone(),
+                assessment_version_id: assessment.id.clone(),
+            },
+        )
+        .expect("create pinned attempt");
+        assert_eq!(attempt.framework_version_id, "framework-a-v1");
+        save_attempt_response(
+            &conn,
+            &SaveAttemptResponseReq {
+                attempt_id: attempt.id.clone(),
+                assessment_question_id: assessment.questions[0].id.clone(),
+                response: serde_json::json!("A recorded answer"),
+            },
+        )
+        .expect("save answer");
+        submit_attempt(&mut conn, &attempt.id).expect("submit attempt");
+        assert!(
+            save_attempt_response(
+                &conn,
+                &SaveAttemptResponseReq {
+                    attempt_id: attempt.id.clone(),
+                    assessment_question_id: assessment.questions[0].id.clone(),
+                    response: serde_json::json!("Changed answer"),
+                },
+            )
+            .is_err(),
+            "submitted responses cannot be rewritten"
+        );
+
+        let first = evaluate_attempt(
+            &mut conn,
+            &EvaluateAssessmentAttemptReq {
+                attempt_id: attempt.id.clone(),
+                correction_of_id: None,
+                evaluator_id: "reviewer".to_string(),
+                outcome: AssessmentOutcome::Pass,
+                criterion_scores: vec![EvaluationCriterionScoreDto {
+                    rubric_criterion_id: assessment.rubric_criteria[0].id.clone(),
+                    score: 1.0,
+                }],
+                rationale: "Initial evaluation".to_string(),
+                feedback: "Clear explanation".to_string(),
+            },
+        )
+        .expect("evaluate submission");
+        let corrected = evaluate_attempt(
+            &mut conn,
+            &EvaluateAssessmentAttemptReq {
+                attempt_id: attempt.id.clone(),
+                correction_of_id: Some(first.id.clone()),
+                evaluator_id: "reviewer".to_string(),
+                outcome: AssessmentOutcome::Fail,
+                criterion_scores: vec![EvaluationCriterionScoreDto {
+                    rubric_criterion_id: assessment.rubric_criteria[0].id.clone(),
+                    score: 0.0,
+                }],
+                rationale: "Correction after evidence review".to_string(),
+                feedback: "Correction retained as a new revision".to_string(),
+            },
+        )
+        .expect("append evaluation correction");
+        assert_eq!(corrected.revision_no, 2);
+        assert_eq!(corrected.correction_of_id.as_deref(), Some(first.id.as_str()));
+
+        let competency = create_competency(
+            &mut conn,
+            &CreateCompetencyReq {
+                learning_project_id: project.id.clone(),
+                title: "Concept mastery".to_string(),
+                description: "Demonstrates the pinned learning objective".to_string(),
+                criteria: vec![CreateCompetencyCriterionReq {
+                    objective_version_id: objective.id,
+                    criterion: "Accurate explanation".to_string(),
+                    minimum_score: 0.7,
+                    required: true,
+                }],
+                created_by: None,
+            },
+        )
+        .expect("create competency");
+        let mastery_rule = create_mastery_rule_version(
+            &mut conn,
+            &CreateMasteryRuleVersionReq {
+                mastery_rule_id: None,
+                competency_id: competency.id.clone(),
+                title: "One passing evaluation".to_string(),
+                minimum_average_score: 0.7,
+                minimum_evaluated_attempts: 1,
+                all_required_criteria: true,
+                reproduction_required: false,
+                required_reproduction_outcome: AssessmentOutcome::Pass,
+                created_by: None,
+            },
+        )
+        .expect("create explicit mastery rule");
+        let rule_version = &mastery_rule.versions[0];
+        let mastery_record = evaluate_competency(
+            &mut conn,
+            &EvaluateCompetencyReq {
+                competency_id: competency.id,
+                learner_id: learner.id,
+                mastery_rule_version_id: rule_version.id.clone(),
+            },
+        )
+        .expect("evaluate explicit mastery rule");
+        assert_eq!(mastery_record.outcome, MasteryOutcome::NotMastered);
+        assert_eq!(mastery_record.attempt_evaluation_ids, vec![corrected.id.clone()]);
+
+        let stored = query_attempt(&conn, &attempt.id).expect("read attempt history");
+        assert_eq!(stored.status, "submitted");
+        assert_eq!(stored.framework_version_id, "framework-a-v1");
+        assert_eq!(stored.evaluations.len(), 2);
+        assert_eq!(stored.evaluations[0].id, first.id);
+        assert_eq!(stored.evaluations[1].id, corrected.id);
+    }
+}
+
