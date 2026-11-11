@@ -62,6 +62,7 @@ CREATE TABLE experiment_dataset_versions (
     schema_version INTEGER NOT NULL CHECK (schema_version > 0),
     sample_schema_json TEXT NOT NULL CHECK (json_valid(sample_schema_json)),
     expected_sample_count INTEGER NOT NULL CHECK (expected_sample_count >= 0),
+    staged_revision INTEGER NOT NULL DEFAULT 0 CHECK (staged_revision >= 0),
     lifecycle_status TEXT NOT NULL CHECK (lifecycle_status IN ('staged', 'sealed')),
     content_sha256 TEXT CHECK (
         content_sha256 IS NULL OR
@@ -191,7 +192,10 @@ CREATE TABLE experiment_runs (
     ended_at_us INTEGER,
     completion_summary TEXT,
     failure_details TEXT,
-    CHECK ((lifecycle_status = 'running') = (started_at_us IS NOT NULL AND ended_at_us IS NULL)),
+    CHECK (
+        lifecycle_status <> 'running'
+        OR (started_at_us IS NOT NULL AND ended_at_us IS NULL)
+    ),
     CHECK (
         lifecycle_status NOT IN ('completed', 'failed', 'cancelled', 'inconclusive')
         OR ended_at_us IS NOT NULL
@@ -300,9 +304,14 @@ BEGIN
 END;
 CREATE TRIGGER experiment_dataset_asset_delete_guard
 BEFORE DELETE ON experiment_dataset_assets
-WHEN (SELECT lifecycle_status FROM experiment_dataset_versions WHERE id = OLD.dataset_version_id) = 'sealed'
 BEGIN
-    SELECT RAISE(ABORT, 'sealed dataset assets are immutable');
+    SELECT RAISE(ABORT, 'dataset assets are immutable');
+END;
+CREATE TRIGGER experiment_dataset_asset_revision
+AFTER INSERT ON experiment_dataset_assets
+BEGIN
+    UPDATE experiment_dataset_versions SET staged_revision = staged_revision + 1
+    WHERE id = NEW.dataset_version_id AND lifecycle_status = 'staged';
 END;
 CREATE TRIGGER experiment_dataset_sample_staged_insert
 BEFORE INSERT ON experiment_dataset_samples
@@ -319,6 +328,12 @@ CREATE TRIGGER experiment_dataset_sample_no_delete
 BEFORE DELETE ON experiment_dataset_samples
 BEGIN
     SELECT RAISE(ABORT, 'dataset samples are immutable');
+END;
+CREATE TRIGGER experiment_dataset_sample_revision
+AFTER INSERT ON experiment_dataset_samples
+BEGIN
+    UPDATE experiment_dataset_versions SET staged_revision = staged_revision + 1
+    WHERE id = NEW.dataset_version_id AND lifecycle_status = 'staged';
 END;
 CREATE TRIGGER experiment_split_group_staged_insert
 BEFORE INSERT ON experiment_dataset_split_groups
@@ -341,6 +356,77 @@ CREATE TRIGGER experiment_split_assignment_no_delete
 BEFORE DELETE ON experiment_sample_split_assignments
 BEGIN
     SELECT RAISE(ABORT, 'split assignments are immutable');
+END;
+CREATE TRIGGER experiment_split_group_no_update
+BEFORE UPDATE ON experiment_dataset_split_groups
+BEGIN
+    SELECT RAISE(ABORT, 'dataset split groups are immutable');
+END;
+CREATE TRIGGER experiment_split_group_no_delete
+BEFORE DELETE ON experiment_dataset_split_groups
+BEGIN
+    SELECT RAISE(ABORT, 'dataset split groups are immutable');
+END;
+CREATE TRIGGER experiment_split_group_revision
+AFTER INSERT ON experiment_dataset_split_groups
+BEGIN
+    UPDATE experiment_dataset_versions SET staged_revision = staged_revision + 1
+    WHERE id = NEW.dataset_version_id AND lifecycle_status = 'staged';
+END;
+CREATE TRIGGER experiment_split_assignment_revision
+AFTER INSERT ON experiment_sample_split_assignments
+BEGIN
+    UPDATE experiment_dataset_versions SET staged_revision = staged_revision + 1
+    WHERE id = NEW.dataset_version_id AND lifecycle_status = 'staged';
+END;
+CREATE TRIGGER experiment_design_dataset_pin_draft_insert
+BEFORE INSERT ON experiment_design_dataset_pins
+WHEN (SELECT lifecycle_status FROM research_experiment_design_versions WHERE id = NEW.design_version_id) <> 'draft'
+BEGIN
+    SELECT RAISE(ABORT, 'dataset pins can only be added to draft designs');
+END;
+CREATE TRIGGER experiment_design_dataset_pin_no_update
+BEFORE UPDATE ON experiment_design_dataset_pins
+BEGIN
+    SELECT RAISE(ABORT, 'design dataset pins are immutable');
+END;
+CREATE TRIGGER experiment_design_dataset_pin_no_delete
+BEFORE DELETE ON experiment_design_dataset_pins
+BEGIN
+    SELECT RAISE(ABORT, 'design dataset pins are immutable');
+END;
+CREATE TRIGGER experiment_run_dataset_pin_insert
+BEFORE INSERT ON experiment_run_dataset_pins
+WHEN
+    (NEW.usage_kind = 'input' AND
+     (SELECT lifecycle_status FROM experiment_runs WHERE id = NEW.run_id) <> 'created')
+    OR
+    (NEW.usage_kind = 'output' AND
+     (SELECT lifecycle_status FROM experiment_runs WHERE id = NEW.run_id) <> 'running')
+BEGIN
+    SELECT RAISE(ABORT, 'run dataset pins can only be added at creation or finalization');
+END;
+CREATE TRIGGER experiment_run_dataset_pin_no_update
+BEFORE UPDATE ON experiment_run_dataset_pins
+BEGIN
+    SELECT RAISE(ABORT, 'run dataset pins are immutable');
+END;
+CREATE TRIGGER experiment_run_dataset_pin_no_delete
+BEFORE DELETE ON experiment_run_dataset_pins
+BEGIN
+    SELECT RAISE(ABORT, 'run dataset pins are immutable');
+END;
+CREATE TRIGGER experiment_run_transition
+BEFORE UPDATE OF lifecycle_status ON experiment_runs
+WHEN NOT (
+    (OLD.lifecycle_status = 'created' AND NEW.lifecycle_status IN ('ready', 'cancelled'))
+    OR (OLD.lifecycle_status = 'ready' AND NEW.lifecycle_status IN ('running', 'cancelled'))
+    OR (OLD.lifecycle_status = 'running' AND NEW.lifecycle_status IN (
+        'completed', 'failed', 'cancelled', 'inconclusive'
+    ))
+)
+BEGIN
+    SELECT RAISE(ABORT, 'invalid experiment run lifecycle transition');
 END;
 CREATE TRIGGER experiment_run_no_delete
 BEFORE DELETE ON experiment_runs
