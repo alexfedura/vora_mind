@@ -115,9 +115,10 @@ pub fn list_source_versions(
         "SELECT {SOURCE_VERSION_COLUMNS} FROM source_versions
          WHERE source_id = ?1 ORDER BY captured_at_us DESC, id"
     ))?;
-    statement
+    let rows = statement
         .query_map([source_id], map_source_version)?
-        .collect()
+        .collect();
+    rows
 }
 
 fn map_source_location(row: &Row<'_>) -> RepoResult<SourceLocationDto> {
@@ -208,9 +209,10 @@ pub fn list_source_locations(
         "SELECT {SOURCE_LOCATION_COLUMNS} FROM source_version_segments
          WHERE source_version_id = ?1 ORDER BY order_index, id"
     ))?;
-    statement
+    let rows = statement
         .query_map([source_version_id], map_source_location)?
-        .collect()
+        .collect();
+    rows
 }
 
 fn map_extraction(row: &Row<'_>) -> RepoResult<KnowledgeExtractionDto> {
@@ -295,9 +297,10 @@ pub fn list_extractions(
     let mut statement = conn.prepare(&format!(
         "{EXTRACTION_SELECT} WHERE e.source_version_id = ?1 ORDER BY e.created_at_us, e.id"
     ))?;
-    statement
+    let rows = statement
         .query_map([source_version_id], map_extraction)?
-        .collect()
+        .collect();
+    rows
 }
 
 pub fn review_extraction(
@@ -626,15 +629,17 @@ pub fn list_claim_relations(
            FROM source_claim_procedure_relations WHERE source_claim_id = ?1
          ORDER BY target_kind, target_id, relation_kind",
     )?;
-    let rows = statement.query_map([source_claim_id], |row| {
-        Ok(serde_json::json!({
-            "targetKind": row.get::<_, String>(0)?,
-            "targetId": row.get::<_, String>(1)?,
-            "relationKind": row.get::<_, String>(2)?,
-            "rationale": row.get::<_, String>(3)?
-        }))
-    })?;
-    rows.collect()
+    let rows = statement
+        .query_map([source_claim_id], |row| {
+            Ok(serde_json::json!({
+                "targetKind": row.get::<_, String>(0)?,
+                "targetId": row.get::<_, String>(1)?,
+                "relationKind": row.get::<_, String>(2)?,
+                "rationale": row.get::<_, String>(3)?
+            }))
+        })?
+        .collect();
+    rows
 }
 
 pub fn create_framework(
@@ -712,7 +717,7 @@ pub fn list_frameworks(conn: &Connection) -> RepoResult<Vec<FrameworkDto>> {
         "SELECT id, title, description, lifecycle, current_version_id, created_by, created_at_us
          FROM knowledge_frameworks ORDER BY created_at_us DESC, id",
     )?;
-    statement
+    let rows = statement
         .query_map([], |row| {
             Ok(FrameworkDto {
                 id: row.get(0)?,
@@ -724,7 +729,8 @@ pub fn list_frameworks(conn: &Connection) -> RepoResult<Vec<FrameworkDto>> {
                 created_at_us: row.get(6)?,
             })
         })?
-        .collect()
+        .collect();
+    rows
 }
 
 fn load_framework_items(
@@ -800,7 +806,8 @@ pub fn list_framework_versions(
     let rows = statement.query_map([framework_id], |row| {
         map_framework_version(conn, row)
     })?;
-    rows.collect()
+    let versions = rows.collect();
+    versions
 }
 
 pub fn create_framework_version(
