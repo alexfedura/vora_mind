@@ -2110,7 +2110,7 @@ fn query_progress(conn: &Connection) -> Result<Vec<LearnerProgressDto>> {
                     Some(record_id.clone()),
                 )
             }
-            (_, Some((record_id, "mastered", _))) => (
+            (_, Some((record_id, outcome, _))) if outcome == "mastered" => (
                 "mastered".to_string(),
                 "The latest competency record reports mastery under its pinned rule version."
                     .to_string(),
