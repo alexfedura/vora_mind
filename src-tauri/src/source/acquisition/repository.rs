@@ -534,6 +534,7 @@ pub fn create_knowledge_item(
                 KnowledgeItemKind::Concept => "concept_id",
                 KnowledgeItemKind::Principle => "principle_id",
                 KnowledgeItemKind::Procedure => "procedure_id",
+                KnowledgeItemKind::SourceClaim => return Err(rusqlite::Error::InvalidQuery),
             }
         ),
         params![
@@ -875,7 +876,7 @@ pub fn create_framework_version(
                     membership_role, item_order, rationale
              FROM framework_version_items WHERE framework_version_id = ?1 ORDER BY item_order",
         )?;
-        statement
+        let rows = statement
             .query_map([&parent.0], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
@@ -888,7 +889,8 @@ pub fn create_framework_version(
                     row.get::<_, String>(7)?,
                 ))
             })?
-            .collect::<Result<Vec<_>, _>>()?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows
     };
     for (kind, claim, concept, principle, procedure, role, order, rationale) in parent_items {
         tx.execute(
@@ -1205,7 +1207,7 @@ pub fn list_provenance(
          FROM acquisition_provenance_events
          WHERE {column} = ?1 ORDER BY occurred_at_us, id"
     ))?;
-    statement
+    let rows = statement
         .query_map([target_id], |row| {
             Ok(ProvenanceEventDto {
                 id: row.get(0)?,
@@ -1219,5 +1221,6 @@ pub fn list_provenance(
                 after_json: row.get(8)?,
             })
         })?
-        .collect()
+        .collect();
+    rows
 }
