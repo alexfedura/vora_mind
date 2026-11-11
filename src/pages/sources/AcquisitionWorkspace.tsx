@@ -153,20 +153,6 @@ function citedUrl(source: SourceRecord, location: SourceLocationDto): string | n
   }
 }
 
-function itemForFramework(
-  kind: KnowledgeItemKind,
-  id: string,
-  claims: SourceClaimDto[],
-  items: KnowledgeItemDto[],
-): { title: string; kind: KnowledgeItemKind } | null {
-  if (kind === "source_claim") {
-    const claim = claims.find((candidate) => candidate.id === id);
-    return claim ? { title: claim.statement, kind } : null;
-  }
-  const item = items.find((candidate) => candidate.id === id && candidate.kind === kind);
-  return item ? { title: item.title, kind } : null;
-}
-
 function claimRelationTargetKind(
   relation: ClaimRelationDto,
 ): KnowledgeItemKind {
@@ -322,6 +308,13 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
       setError(String(loadError)),
     );
   }, [frameworkId, loadFrameworkVersions]);
+
+  useEffect(() => {
+    if (selectedFrameworkVersion) {
+      setFrameworkDraftTitle(selectedFrameworkVersion.title);
+      setFrameworkDraftDescription(selectedFrameworkVersion.description);
+    }
+  }, [selectedFrameworkVersion?.id]);
 
   useEffect(() => {
     if (!selectedClaimId) {
@@ -602,14 +595,24 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
 
   const latestVersion = frameworkVersions[0] ?? null;
   const canCreateSuccessor = latestVersion?.status === "published";
-  const oldItemIds = new Set((comparedVersion?.items ?? []).map((item) => item.id));
-  const currentItemIds = new Set(
-    (selectedFrameworkVersion?.items ?? []).map((item) => item.id),
+  const membershipKey = (item: FrameworkVersionDto["items"][number]) =>
+    `${item.itemKind}:${item.itemId}`;
+  const oldMemberships = new Map(
+    (comparedVersion?.items ?? []).map((item) => [membershipKey(item), item]),
+  );
+  const currentMemberships = new Map(
+    (selectedFrameworkVersion?.items ?? []).map((item) => [membershipKey(item), item]),
   );
   const addedItems =
-    selectedFrameworkVersion?.items.filter((item) => !oldItemIds.has(item.id)) ?? [];
+    selectedFrameworkVersion?.items.filter((item) => !oldMemberships.has(membershipKey(item))) ?? [];
   const removedItems =
-    comparedVersion?.items.filter((item) => !currentItemIds.has(item.id)) ?? [];
+    comparedVersion?.items.filter((item) => !currentMemberships.has(membershipKey(item))) ?? [];
+  const changedItems =
+    selectedFrameworkVersion?.items.filter((item) => {
+      const previous = oldMemberships.get(membershipKey(item));
+      return previous != null &&
+        (previous.membershipRole !== item.membershipRole || previous.itemOrder !== item.itemOrder);
+    }) ?? [];
 
   const renderProvenance = () =>
     provenanceTarget ? (
@@ -1050,8 +1053,8 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
 
                   {selectedFrameworkVersion.status === "draft" && (
                     <form onSubmit={updateFrameworkDraft} className="mt-3 grid gap-2">
-                      <input value={frameworkDraftTitle || selectedFrameworkVersion.title} onChange={(event) => setFrameworkDraftTitle(event.target.value)} className="rounded border border-[#394153] bg-[#0c1016] px-2 py-1.5 text-xs" aria-label="Framework draft title" />
-                      <textarea value={frameworkDraftDescription || selectedFrameworkVersion.description} onChange={(event) => setFrameworkDraftDescription(event.target.value)} rows={2} className="rounded border border-[#394153] bg-[#0c1016] px-2 py-1.5 text-xs" aria-label="Framework draft description" />
+                      <input value={frameworkDraftTitle} onChange={(event) => setFrameworkDraftTitle(event.target.value)} className="rounded border border-[#394153] bg-[#0c1016] px-2 py-1.5 text-xs" aria-label="Framework draft title" />
+                      <textarea value={frameworkDraftDescription} onChange={(event) => setFrameworkDraftDescription(event.target.value)} rows={2} className="rounded border border-[#394153] bg-[#0c1016] px-2 py-1.5 text-xs" aria-label="Framework draft description" />
                       <button disabled={busy} className="justify-self-start rounded bg-[#263146] px-3 py-1.5 text-xs">Save draft metadata</button>
                     </form>
                   )}
@@ -1110,7 +1113,7 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                       <div className="space-y-2">
                         <h4 className="text-xs font-semibold text-gray-200">Publication</h4>
                         <p className="text-[10px] text-gray-400">Publication requires an approved latest review and at least one member. Publishing seals this snapshot.</p>
-                        <button disabled={busy || selectedFrameworkVersion.status === "published"} onClick={() => void runAction(() => srcPublishFrameworkVersion(selectedFrameworkVersion.id), "Framework version published and sealed.")} className="rounded bg-emerald-700 px-3 py-1.5 text-xs disabled:opacity-50">Publish immutable version</button>
+                        <button disabled={busy} onClick={() => void runAction(() => srcPublishFrameworkVersion(selectedFrameworkVersion.id), "Framework version published and sealed.")} className="rounded bg-emerald-700 px-3 py-1.5 text-xs disabled:opacity-50">Publish immutable version</button>
                       </div>
                     </div>
                   )}
@@ -1158,6 +1161,13 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                       <div>
                         <h4 className="text-[10px] font-semibold text-rose-300">Absent from v{selectedFrameworkVersion.versionNo}</h4>
                         {removedItems.length ? removedItems.map((item) => <p key={item.id} className="mt-1 text-xs text-gray-300">− {item.itemKind}: {item.itemTitle}</p>) : <p className="mt-1 text-xs text-gray-500">No removed members.</p>}
+                      </div>
+                      <div className="md:col-span-2">
+                        <h4 className="text-[10px] font-semibold text-amber-300">Reordered or reclassified members</h4>
+                        {changedItems.length ? changedItems.map((item) => {
+                          const previous = oldMemberships.get(membershipKey(item));
+                          return <p key={item.id} className="mt-1 text-xs text-gray-300">~ {item.itemTitle}: {previous?.membershipRole} / order {previous?.itemOrder} → {item.membershipRole} / order {item.itemOrder}</p>;
+                        }) : <p className="mt-1 text-xs text-gray-500">No membership role or order changes.</p>}
                       </div>
                     </div>
                   )}
