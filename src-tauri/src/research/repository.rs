@@ -1361,3 +1361,471 @@ fn query_observation(conn: &Connection, id: &str) -> Result<ObservationDto> {
     )
 }
 
+pub fn create_pattern(
+    conn: &mut Connection,
+    req: &CreatePatternReq,
+    id: &str,
+    now: i64,
+) -> Result<PatternDto> {
+    let tx = conn.transaction()?;
+    tx.execute(
+        "INSERT INTO research_patterns
+            (id, project_id, title, statement, analysis_method, uncertainty,
+             lifecycle_status, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'candidate', ?7, ?8)",
+        params![
+            id,
+            req.project_id,
+            req.title.trim(),
+            req.statement,
+            req.analysis_method,
+            req.uncertainty,
+            req.created_by,
+            now
+        ],
+    )?;
+    for observation_id in &req.observation_ids {
+        let matches_project: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM research_observations
+             WHERE id = ?1 AND project_id = ?2)",
+            params![observation_id, req.project_id],
+            |row| row.get(0),
+        )?;
+        if !matches_project {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        tx.execute(
+            "INSERT INTO research_pattern_observations (pattern_id, observation_id)
+             VALUES (?1, ?2)",
+            params![id, observation_id],
+        )?;
+    }
+    for dataset_id in &req.dataset_version_reference_ids {
+        let matches_project: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM research_dataset_version_references
+             WHERE id = ?1 AND project_id = ?2)",
+            params![dataset_id, req.project_id],
+            |row| row.get(0),
+        )?;
+        if !matches_project {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        tx.execute(
+            "INSERT INTO research_pattern_dataset_versions
+                (pattern_id, dataset_version_reference_id) VALUES (?1, ?2)",
+            params![id, dataset_id],
+        )?;
+    }
+    insert_event(&tx, "pattern", id, "candidate", req.created_by.as_deref(), "", now)?;
+    tx.commit()?;
+    query_pattern(conn, id)
+}
+
+fn query_pattern(conn: &Connection, id: &str) -> Result<PatternDto> {
+    let mut pattern = conn.query_row(
+        "SELECT id, project_id, title, statement, analysis_method, uncertainty,
+                lifecycle_status, created_by, created_at_us
+         FROM research_patterns WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(PatternDto {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                title: row.get(2)?,
+                statement: row.get(3)?,
+                analysis_method: row.get(4)?,
+                uncertainty: row.get(5)?,
+                lifecycle_status: row.get(6)?,
+                observation_ids: Vec::new(),
+                dataset_version_reference_ids: Vec::new(),
+                created_by: row.get(7)?,
+                created_at_us: row.get(8)?,
+            })
+        },
+    )?;
+    let mut observations = conn.prepare(
+        "SELECT observation_id FROM research_pattern_observations
+         WHERE pattern_id = ?1 ORDER BY observation_id",
+    )?;
+    pattern.observation_ids = observations
+        .query_map([id], |row| row.get(0))?
+        .collect::<Result<Vec<_>>>()?;
+    let mut datasets = conn.prepare(
+        "SELECT dataset_version_reference_id FROM research_pattern_dataset_versions
+         WHERE pattern_id = ?1 ORDER BY dataset_version_reference_id",
+    )?;
+    pattern.dataset_version_reference_ids = datasets
+        .query_map([id], |row| row.get(0))?
+        .collect::<Result<Vec<_>>>()?;
+    Ok(pattern)
+}
+
+pub fn create_idea(
+    conn: &Connection,
+    req: &CreateIdeaReq,
+    id: &str,
+    now: i64,
+) -> Result<IdeaDto> {
+    let origin = [
+        req.phenomenon_id.as_deref(),
+        req.observation_id.as_deref(),
+        req.pattern_id.as_deref(),
+        req.question_id.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .next()
+    .ok_or(rusqlite::Error::InvalidQuery)?;
+    let origin_matches = conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM research_phenomena WHERE id = ?1 AND project_id = ?2
+            UNION ALL
+            SELECT 1 FROM research_observations WHERE id = ?1 AND project_id = ?2
+            UNION ALL
+            SELECT 1 FROM research_patterns WHERE id = ?1 AND project_id = ?2
+            UNION ALL
+            SELECT 1 FROM research_questions WHERE id = ?1 AND project_id = ?2
+         )",
+        params![origin, req.project_id],
+        |row| row.get::<_, bool>(0),
+    )?;
+    if !origin_matches {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    conn.execute(
+        "INSERT INTO research_ideas
+            (id, project_id, title, content, lifecycle_status, phenomenon_id,
+             observation_id, pattern_id, question_id, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, 'captured', ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![
+            id,
+            req.project_id,
+            req.title.trim(),
+            req.content,
+            req.phenomenon_id,
+            req.observation_id,
+            req.pattern_id,
+            req.question_id,
+            req.created_by,
+            now
+        ],
+    )?;
+    query_idea(conn, id)
+}
+
+fn query_idea(conn: &Connection, id: &str) -> Result<IdeaDto> {
+    conn.query_row(
+        "SELECT id, project_id, title, content, lifecycle_status, phenomenon_id,
+                observation_id, pattern_id, question_id, created_by, created_at_us
+         FROM research_ideas WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(IdeaDto {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                title: row.get(2)?,
+                content: row.get(3)?,
+                lifecycle_status: row.get(4)?,
+                phenomenon_id: row.get(5)?,
+                observation_id: row.get(6)?,
+                pattern_id: row.get(7)?,
+                question_id: row.get(8)?,
+                created_by: row.get(9)?,
+                created_at_us: row.get(10)?,
+            })
+        },
+    )
+}
+
+pub fn create_typed_hypothesis(
+    conn: &mut Connection,
+    req: &CreateTypedHypothesisReq,
+    hypothesis_id: &str,
+    legacy_hypothesis_id: &str,
+    version_id: &str,
+    now: i64,
+) -> Result<ResearchHypothesisDto> {
+    let tx = conn.transaction()?;
+    let question_matches: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM research_questions
+         WHERE id = ?1 AND project_id = ?2 AND lifecycle_status = 'accepted')",
+        params![req.research_question_id, req.project_id],
+        |row| row.get(0),
+    )?;
+    if !question_matches {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let legacy_ms = now / 1_000;
+    let independent = req
+        .variables
+        .iter()
+        .filter(|variable| variable.role == HypothesisVariableRole::Independent)
+        .collect::<Vec<_>>();
+    let dependent = req
+        .variables
+        .iter()
+        .filter(|variable| variable.role == HypothesisVariableRole::Dependent)
+        .collect::<Vec<_>>();
+    tx.execute(
+        "INSERT INTO hypotheses
+            (id, inquiry_id, statement_h1, statement_h0, independent_var, dependent_var,
+             metric, success_threshold, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, '', '', 'draft', ?7, ?7)",
+        params![
+            legacy_hypothesis_id,
+            req.research_question_id,
+            req.statement_h1,
+            req.statement_h0,
+            if independent.len() == 1 { independent[0].name.as_str() } else { "" },
+            if dependent.len() == 1 { dependent[0].name.as_str() } else { "" },
+            legacy_ms
+        ],
+    )?;
+    tx.execute(
+        "INSERT INTO research_hypotheses
+            (id, project_id, research_question_id, legacy_hypothesis_id,
+             parent_hypothesis_id, ownership_state, lifecycle_status, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, NULL, 'project', 'draft', ?5, ?6)",
+        params![
+            hypothesis_id,
+            req.project_id,
+            req.research_question_id,
+            legacy_hypothesis_id,
+            req.created_by,
+            now
+        ],
+    )?;
+    tx.execute(
+        "INSERT INTO hypothesis_definition_versions
+            (id, hypothesis_id, version_no, statement_h0, statement_h1,
+             population_scope, research_scope, expected_direction, expected_effect_decimal,
+             expected_effect_unit, falsification_criteria, assumptions, lifecycle_status,
+             created_by, created_at_us)
+         VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'draft', ?12, ?13)",
+        params![
+            version_id,
+            hypothesis_id,
+            req.statement_h0,
+            req.statement_h1,
+            req.population_scope,
+            req.research_scope,
+            req.expected_direction,
+            req.expected_effect_decimal,
+            req.expected_effect_unit,
+            req.falsification_criteria,
+            req.assumptions,
+            req.created_by,
+            now
+        ],
+    )?;
+    for variable in &req.variables {
+        tx.execute(
+            "INSERT INTO hypothesis_variables
+                (id, hypothesis_version_id, role, name, operational_definition,
+                 value_kind, unit, measurement_method)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                Uuid::now_v7().to_string(),
+                version_id,
+                variable.role.as_str(),
+                variable.name.trim(),
+                variable.operational_definition,
+                variable.value_kind.as_str(),
+                variable.unit,
+                variable.measurement_method
+            ],
+        )?;
+    }
+    insert_event(
+        &tx,
+        "hypothesis",
+        hypothesis_id,
+        "draft_definition_created",
+        req.created_by.as_deref(),
+        "",
+        now,
+    )?;
+    insert_event(
+        &tx,
+        "hypothesis_version",
+        version_id,
+        "draft",
+        req.created_by.as_deref(),
+        "",
+        now,
+    )?;
+    tx.commit()?;
+    query_hypothesis(conn, hypothesis_id)
+}
+
+pub fn transition_hypothesis(
+    conn: &Connection,
+    hypothesis_id: &str,
+    next_status: ResearchHypothesisStatus,
+    actor_id: Option<&str>,
+    now: i64,
+) -> Result<ResearchHypothesisDto> {
+    let tx = conn.unchecked_transaction()?;
+    let current: String = tx.query_row(
+        "SELECT lifecycle_status FROM research_hypotheses WHERE id = ?1",
+        [hypothesis_id],
+        |row| row.get(0),
+    )?;
+    let next = next_status.as_str();
+    let allowed = matches!(
+        (current.as_str(), next),
+        ("draft", "review" | "closed") | ("review", "draft" | "preregistered" | "closed")
+            | ("preregistered", "testing" | "closed")
+            | ("testing", "closed")
+    );
+    if !allowed {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    if next == "preregistered" {
+        let version_id: String = tx.query_row(
+            "SELECT id FROM hypothesis_definition_versions
+             WHERE hypothesis_id = ?1 ORDER BY version_no DESC LIMIT 1",
+            [hypothesis_id],
+            |row| row.get(0),
+        )?;
+        let variable_counts = tx.query_row(
+            "SELECT
+                sum(CASE WHEN role = 'independent' THEN 1 ELSE 0 END),
+                sum(CASE WHEN role = 'dependent' THEN 1 ELSE 0 END)
+             FROM hypothesis_variables WHERE hypothesis_version_id = ?1",
+            [&version_id],
+            |row| Ok((row.get::<_, Option<i64>>(0)?.unwrap_or(0), row.get::<_, Option<i64>>(1)?.unwrap_or(0))),
+        )?;
+        if variable_counts.0 == 0 || variable_counts.1 == 0 {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        tx.execute(
+            "UPDATE hypothesis_definition_versions SET lifecycle_status = 'preregistered',
+                preregistered_at_us = ?1 WHERE id = ?2 AND lifecycle_status IN ('draft', 'review')",
+            params![now, version_id],
+        )?;
+    }
+    tx.execute(
+        "UPDATE research_hypotheses SET lifecycle_status = ?1 WHERE id = ?2",
+        params![next, hypothesis_id],
+    )?;
+    insert_event(&tx, "hypothesis", hypothesis_id, next, actor_id, "", now)?;
+    tx.commit()?;
+    query_hypothesis(conn, hypothesis_id)
+}
+
+pub fn link_competing_hypotheses(
+    conn: &Connection,
+    req: &LinkCompetingHypothesesReq,
+    now: i64,
+) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    let same_project = tx.query_row(
+        "SELECT (a.project_id IS b.project_id)
+         FROM research_hypotheses a, research_hypotheses b
+         WHERE a.id = ?1 AND b.id = ?2",
+        params![req.hypothesis_id, req.competing_hypothesis_id],
+        |row| row.get::<_, bool>(0),
+    )?;
+    if !same_project || req.hypothesis_id == req.competing_hypothesis_id {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    tx.execute(
+        "INSERT INTO hypothesis_competitions
+            (hypothesis_id, competing_hypothesis_id, rationale, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            req.hypothesis_id,
+            req.competing_hypothesis_id,
+            req.rationale,
+            req.created_by,
+            now
+        ],
+    )?;
+    tx.execute(
+        "INSERT INTO hypothesis_competitions
+            (hypothesis_id, competing_hypothesis_id, rationale, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            req.competing_hypothesis_id,
+            req.hypothesis_id,
+            req.rationale,
+            req.created_by,
+            now
+        ],
+    )?;
+    tx.commit()
+}
+
+pub fn add_hypothesis_evidence(
+    conn: &Connection,
+    req: &AddHypothesisEvidenceReq,
+    id: &str,
+    now: i64,
+) -> Result<()> {
+    let (hypothesis_project, evidence_project): (Option<String>, Option<String>) =
+        conn.query_row(
+            "SELECT h.project_id,
+                CASE
+                    WHEN ?2 IS NOT NULL THEN (
+                        SELECT h.project_id FROM hypothesis_definition_versions v
+                        JOIN research_hypotheses h ON h.id = v.hypothesis_id WHERE v.id = ?1
+                    )
+                    WHEN ?3 IS NOT NULL THEN (
+                        SELECT project_id FROM research_observations WHERE id = ?3
+                    )
+                    WHEN ?4 IS NOT NULL THEN (
+                        SELECT project_id FROM research_patterns WHERE id = ?4
+                    )
+                    ELSE NULL
+                END
+             FROM hypothesis_definition_versions v
+             JOIN research_hypotheses h ON h.id = v.hypothesis_id
+             WHERE v.id = ?1",
+            params![
+                req.hypothesis_version_id,
+                req.source_claim_id,
+                req.observation_id,
+                req.pattern_id
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+    if req.source_claim_id.is_none() && hypothesis_project != evidence_project {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    if let Some(claim_id) = req.source_claim_id.as_deref() {
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM source_claims WHERE id = ?1)",
+            [claim_id],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+    }
+    let polarity = req.polarity.as_str();
+    if let Some(claim_id) = req.source_claim_id.as_deref() {
+        conn.execute(
+            "INSERT INTO hypothesis_source_claim_evidence
+                (id, hypothesis_version_id, source_claim_id, polarity, rationale, created_by, created_at_us)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![id, req.hypothesis_version_id, claim_id, polarity, req.rationale, req.created_by, now],
+        )?;
+    } else if let Some(observation_id) = req.observation_id.as_deref() {
+        conn.execute(
+            "INSERT INTO hypothesis_observation_evidence
+                (id, hypothesis_version_id, observation_id, polarity, rationale, created_by, created_at_us)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![id, req.hypothesis_version_id, observation_id, polarity, req.rationale, req.created_by, now],
+        )?;
+    } else if let Some(pattern_id) = req.pattern_id.as_deref() {
+        conn.execute(
+            "INSERT INTO hypothesis_pattern_evidence
+                (id, hypothesis_version_id, pattern_id, polarity, rationale, created_by, created_at_us)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![id, req.hypothesis_version_id, pattern_id, polarity, req.rationale, req.created_by, now],
+        )?;
+    }
+    Ok(())
+}
+
