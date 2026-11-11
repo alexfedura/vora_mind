@@ -53,10 +53,12 @@ CREATE TABLE research_project_knowledge_adoptions (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE RESTRICT,
     framework_id TEXT NOT NULL REFERENCES knowledge_frameworks(id) ON DELETE RESTRICT,
-    framework_version_id TEXT NOT NULL REFERENCES knowledge_framework_versions(id) ON DELETE RESTRICT,
+    framework_version_id TEXT NOT NULL,
     use_context TEXT NOT NULL,
     adopted_by TEXT,
     adopted_at_us INTEGER NOT NULL,
+    FOREIGN KEY (framework_version_id, framework_id)
+        REFERENCES knowledge_framework_versions(id, framework_id) ON DELETE RESTRICT,
     UNIQUE (project_id, framework_version_id)
 );
 
@@ -85,8 +87,7 @@ CREATE TABLE literature_review_sources (
         REFERENCES source_versions(id, source_id) ON DELETE RESTRICT,
     FOREIGN KEY (source_location_id, source_id, source_version_id)
         REFERENCES source_version_segments(id, source_id, source_version_id) ON DELETE RESTRICT,
-    FOREIGN KEY (source_claim_id, source_id, source_version_id)
-        REFERENCES source_claims(id, source_id, source_version_id) ON DELETE RESTRICT,
+    FOREIGN KEY (source_claim_id) REFERENCES source_claims(id) ON DELETE RESTRICT,
     CHECK (source_location_id IS NULL OR source_version_id IS NOT NULL),
     CHECK (source_claim_id IS NULL OR source_version_id IS NOT NULL)
 );
@@ -119,8 +120,7 @@ CREATE TABLE prior_knowledge_sources (
         REFERENCES source_versions(id, source_id) ON DELETE RESTRICT,
     FOREIGN KEY (source_location_id, source_id, source_version_id)
         REFERENCES source_version_segments(id, source_id, source_version_id) ON DELETE RESTRICT,
-    FOREIGN KEY (source_claim_id, source_id, source_version_id)
-        REFERENCES source_claims(id, source_id, source_version_id) ON DELETE RESTRICT
+    FOREIGN KEY (source_claim_id) REFERENCES source_claims(id) ON DELETE RESTRICT
 );
 
 CREATE TABLE research_gaps (
