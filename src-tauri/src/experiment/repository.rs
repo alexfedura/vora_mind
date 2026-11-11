@@ -2610,8 +2610,8 @@ mod tests {
                 .total_count,
             2
         );
-        let restored_workspace = workspace(&reopened, "dataset-project")
-            .expect("restore transformation lineage");
+        let restored_workspace =
+            workspace(&reopened, "dataset-project").expect("restore transformation lineage");
         assert_eq!(restored_workspace.transformations.len(), 1);
         assert_eq!(
             restored_workspace.transformations[0].output_dataset_version_id,
