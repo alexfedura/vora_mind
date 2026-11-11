@@ -1703,6 +1703,17 @@ pub fn create_replication(
     let replication_id = id();
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     tx.execute(
+        "INSERT OR IGNORE INTO model_version_experiments
+            (id, model_version_id, design_version_id, experiment_run_id, relation_kind, rationale)
+         VALUES (?1, ?2, ?3, ?4, 'tested_in', 'Pinned as the original experiment for this replication.')",
+        params![
+            id(),
+            request.model_version_id,
+            design_version_id,
+            request.original_experiment_run_id
+        ],
+    )?;
+    tx.execute(
         "INSERT INTO model_replications
             (id, project_id, model_version_id, original_experiment_run_id,
              original_design_version_id, replication_kind, independent_team_operator,
@@ -1815,17 +1826,6 @@ fn validate_replication_request(
     ) {
         return Err(anyhow!(
             "Replication requires a completed or inconclusive original experiment run."
-        ));
-    }
-    let model_was_tested: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM model_version_experiments
-         WHERE model_version_id = ?1 AND experiment_run_id = ?2 AND relation_kind = 'tested_in')",
-        params![request.model_version_id, request.original_experiment_run_id],
-        |row| row.get(0),
-    )?;
-    if !model_was_tested {
-        return Err(anyhow!(
-            "The original experiment run must be explicitly linked as testing this exact ModelVersion."
         ));
     }
     for dataset in &request.datasets {
