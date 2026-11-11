@@ -2126,3 +2126,235 @@ fn find_origin_id(conn: &Connection, artifact: &TransferArtifactRef) -> Result<O
         .query_row(&sql, [artifact.version_id()], |row| row.get(0))
         .optional()?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::backup::Backup;
+    use std::{fs, path::PathBuf, time::Duration};
+
+    fn create_project(conn: &Connection, id: &str, title: &str) -> Result<()> {
+        conn.execute(
+            "INSERT INTO research_projects
+                (id, title, aim, lifecycle_status, created_by, created_at_us, updated_at_us)
+             VALUES (?1, ?2, '', 'active', NULL, 1, 1)",
+            params![id, title],
+        )?;
+        Ok(())
+    }
+
+    fn create_accepted_finding(conn: &Connection, project_id: &str, key: &str) -> Result<String> {
+        let hypothesis_id = format!("hypothesis-{key}");
+        let hypothesis_version_id = format!("hypothesis-version-{key}");
+        let finding_id = format!("finding-{key}");
+        let finding_version_id = format!("finding-version-{key}");
+        conn.execute(
+            "INSERT INTO research_hypotheses
+                (id, project_id, research_question_id, legacy_hypothesis_id,
+                 parent_hypothesis_id, ownership_state, lifecycle_status, created_by, created_at_us)
+             VALUES (?1, ?2, NULL, NULL, NULL, 'project', 'legacy_untyped', NULL, 1)",
+            params![hypothesis_id, project_id],
+        )?;
+        conn.execute(
+            "INSERT INTO hypothesis_definition_versions
+                (id, hypothesis_id, version_no, parent_version_id, statement_h0, statement_h1,
+                 population_scope, research_scope, expected_direction, expected_effect_decimal,
+                 expected_effect_unit, falsification_criteria, assumptions, lifecycle_status,
+                 created_by, created_at_us, preregistered_at_us)
+             VALUES (?1, ?2, 1, NULL, 'No effect', 'There is an effect', 'population',
+                     'study scope', 'non_directional', NULL, NULL, 'falsification rule',
+                     '', 'draft', NULL, 1, NULL)",
+            params![hypothesis_version_id, hypothesis_id],
+        )?;
+        conn.execute(
+            "INSERT INTO analysis_findings (id, project_id, created_by, created_at_us)
+             VALUES (?1, ?2, NULL, 1)",
+            params![finding_id, project_id],
+        )?;
+        conn.execute(
+            "INSERT INTO analysis_finding_versions
+                (id, finding_id, version_no, parent_version_id, change_rationale, title, statement,
+                 target_source_claim_id, target_hypothesis_version_id, scope, applicability,
+                 uncertainty, limitations, conclusion_kind, content_sha256, created_by, created_at_us)
+             VALUES (?1, ?2, 1, NULL, NULL, 'Finding title', 'Finding statement', NULL, ?3,
+                     'declared scope', 'declared applicability', 'uncertainty recorded',
+                     'limitations recorded', 'result', ?4, NULL, 1)",
+            params![
+                finding_version_id,
+                finding_id,
+                hypothesis_version_id,
+                "a".repeat(64)
+            ],
+        )?;
+        for (index, status) in ["draft", "review", "accepted"].iter().enumerate() {
+            conn.execute(
+                "INSERT INTO analysis_finding_events
+                    (id, finding_version_id, status, rationale, actor_id, occurred_at_us)
+                 VALUES (?1, ?2, ?3, 'Lifecycle event recorded', NULL, ?4)",
+                params![format!("finding-event-{key}-{index}"), finding_version_id, status, index as i64 + 1],
+            )?;
+        }
+        Ok(finding_version_id)
+    }
+
+    fn transfer_fixture() -> Result<(Connection, String, String)> {
+        let conn = Connection::open_in_memory()?;
+        crate::mind::portable_db::initialize_workspace_schema(&conn)
+            .map_err(|error| anyhow!(error.to_string()))?;
+        create_project(&conn, "project-a", "Project A")?;
+        create_project(&conn, "project-b", "Project B")?;
+        let source_version_id = create_accepted_finding(&conn, "project-a", "source")?;
+        Ok((conn, source_version_id, "project-b".to_string()))
+    }
+
+    fn create_accepted_transfer(
+        conn: &mut Connection,
+        source_version_id: &str,
+        receiving_project_id: &str,
+    ) -> Result<KnowledgeTransferDto> {
+        let origin = create_origin(
+            conn,
+            &CreateTransferOriginReq {
+                artifact: TransferArtifactRef::FindingVersion {
+                    finding_id: "finding-source".to_string(),
+                    version_id: source_version_id.to_string(),
+                },
+                origin_project_id: "project-a".to_string(),
+                rationale: "Verified project ownership and accepted finding lifecycle.".to_string(),
+                recorded_by: Some("reviewer-a".to_string()),
+            },
+        )?;
+        let eligibility = create_eligibility(
+            conn,
+            &CreateTransferEligibilityReq {
+                origin_id: origin.id,
+                license_identifier: "CC BY 4.0".to_string(),
+                license_uri: Some("https://creativecommons.org/licenses/by/4.0/".to_string()),
+                access_scope: TransferAccessScope::Workspace,
+                permitted_purposes: vec![TransferPurpose::Research],
+                allowed_project_ids: Vec::new(),
+                attribution_text: "Project A, exact finding version".to_string(),
+                permission_basis: "Explicit recorded research reuse permission.".to_string(),
+                permission_granted: true,
+                reviewed_by: "rights-reviewer".to_string(),
+            },
+        )?;
+        adopt_knowledge(
+            conn,
+            &AdoptKnowledgeReq {
+                eligibility_id: eligibility.id,
+                receiving_project_id: receiving_project_id.to_string(),
+                intended_purpose: TransferPurpose::Research,
+                attribution_text: "Project A, exact finding version (attributed)".to_string(),
+                context: "Used as prior evidence for Project B.".to_string(),
+                requested_by: Some("researcher-b".to_string()),
+            },
+        )
+    }
+
+    #[test]
+    fn project_a_to_project_b_adoption_adaptation_and_usage_survive_backup_restore() -> Result<()> {
+        let (mut conn, source_version_id, receiving_project_id) = transfer_fixture()?;
+        let transfer = create_accepted_transfer(&mut conn, &source_version_id, &receiving_project_id)?;
+        assert_eq!(transfer.origin.origin_project_id, "project-a");
+        assert_eq!(transfer.receiving_project_id, "project-b");
+        assert_eq!(transfer.origin.artifact.version_id(), source_version_id);
+        assert_eq!(transfer.state, KnowledgeTransferState::Accepted);
+        assert_eq!(transfer.attribution_text, "Project A, exact finding version (attributed)");
+
+        let destination_version_id = create_accepted_finding(&conn, "project-b", "adapted")?;
+        let adaptation = create_adaptation(
+            &mut conn,
+            &CreateTransferAdaptationReq {
+                transfer_id: transfer.id.clone(),
+                artifact: TransferArtifactRef::FindingVersion {
+                    finding_id: "finding-adapted".to_string(),
+                    version_id: destination_version_id.clone(),
+                },
+                relation_kind: TransferLineageRelation::DerivedFrom,
+                rationale: "Adapted to Project B's population and methods.".to_string(),
+                adapted_by: Some("researcher-b".to_string()),
+            },
+        )?;
+        assert_eq!(adaptation.artifact.version_id(), destination_version_id);
+        assert_ne!(
+            adaptation.artifact.entity_id(),
+            transfer.origin.artifact.entity_id()
+        );
+        record_downstream_usage(
+            &mut conn,
+            &RecordDownstreamUsageReq {
+                transfer_id: transfer.id.clone(),
+                reference: DownstreamUseRef::FindingVersion {
+                    finding_id: "finding-adapted".to_string(),
+                    version_id: destination_version_id,
+                },
+                use_context: "Project B synthesis.".to_string(),
+                recorded_by: Some("researcher-b".to_string()),
+            },
+        )?;
+        let preview = provenance_preview(&conn, &transfer.origin.id)?;
+        assert_eq!(preview.scope, "declared scope");
+        assert!(!preview.provenance.is_empty() || preview.validation_scope.is_empty());
+
+        let eligibility = workspace(&conn)?.eligibilities[0].clone();
+        change_eligibility(
+            &mut conn,
+            &ChangeTransferEligibilityReq {
+                eligibility_id: eligibility.id,
+                state: TransferEligibilityState::Withdrawn,
+                rationale: "Permission withdrawn for future adoption.".to_string(),
+                actor_id: Some("rights-reviewer".to_string()),
+            },
+        )?;
+        assert_eq!(workspace(&conn)?.transfers[0].state, KnowledgeTransferState::Accepted);
+
+        let backup_path: PathBuf =
+            std::env::temp_dir().join(format!("vora-transfer-{}.db", Uuid::now_v7()));
+        {
+            let mut destination = Connection::open(&backup_path)?;
+            let backup = Backup::new(&conn, &mut destination)?;
+            backup.run_to_completion(5, Duration::from_millis(10), None)?;
+        }
+        let restored = Connection::open(&backup_path)?;
+        crate::mind::portable_db::initialize_workspace_schema(&restored)
+            .map_err(|error| anyhow!(error.to_string()))?;
+        let restored_workspace = workspace(&restored)?;
+        assert_eq!(restored_workspace.transfers.len(), 1);
+        assert_eq!(restored_workspace.adaptations.len(), 1);
+        assert_eq!(restored_workspace.downstream_usage.len(), 1);
+        assert_eq!(restored_workspace.lineage.len(), 2);
+        assert_eq!(
+            restored_workspace.transfers[0].origin.artifact.version_id(),
+            source_version_id
+        );
+        drop(restored);
+        fs::remove_file(backup_path)?;
+        Ok(())
+    }
+
+    #[test]
+    fn finding_origin_uses_latest_lifecycle_event_not_any_historical_event() -> Result<()> {
+        let (mut conn, source_version_id, _) = transfer_fixture()?;
+        conn.execute(
+            "INSERT INTO analysis_finding_events
+                (id, finding_version_id, status, rationale, actor_id, occurred_at_us)
+             VALUES ('finding-retracted', ?1, 'retracted', 'Finding retracted.', NULL, 10)",
+            [&source_version_id],
+        )?;
+        let result = create_origin(
+            &mut conn,
+            &CreateTransferOriginReq {
+                artifact: TransferArtifactRef::FindingVersion {
+                    finding_id: "finding-source".to_string(),
+                    version_id: source_version_id,
+                },
+                origin_project_id: "project-a".to_string(),
+                rationale: "Origin assertion.".to_string(),
+                recorded_by: None,
+            },
+        );
+        assert!(result.is_err());
+        Ok(())
+    }
+}
