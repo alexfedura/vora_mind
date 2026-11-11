@@ -21,12 +21,30 @@ pub fn model_create(
 }
 
 #[tauri::command]
+pub fn model_transition(
+    state: State<AppState>,
+    request: TransitionModelReq,
+) -> Result<ModelDto, String> {
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    repository::transition_model(&mut conn, &request).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn model_create_version(
     state: State<AppState>,
     request: CreateModelVersionReq,
 ) -> Result<ModelVersionDto, String> {
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
     repository::create_model_version(&mut conn, &request).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn model_transition_version(
+    state: State<AppState>,
+    request: TransitionModelVersionReq,
+) -> Result<ModelVersionDto, String> {
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    repository::transition_version(&mut conn, &request).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

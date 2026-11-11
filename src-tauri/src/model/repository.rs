@@ -851,6 +851,33 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
 
+    let lifecycle_status: Option<String> = conn
+        .query_row(
+            "SELECT lifecycle_status FROM model_version_events WHERE model_version_id = ?1
+             ORDER BY occurred_at_us DESC, id DESC LIMIT 1",
+            [version_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let lifecycle_status = parse_model_version_status(
+        lifecycle_status
+            .as_deref()
+            .ok_or_else(|| anyhow!("Model version lifecycle state was not found."))?,
+    )?;
+    let mut statement = conn.prepare(
+        "SELECT lifecycle_status, rationale, actor_id, occurred_at_us
+         FROM model_version_events WHERE model_version_id = ?1 ORDER BY occurred_at_us, id",
+    )?;
+    let lifecycle_events = statement
+        .query_map([version_id], |row| {
+            Ok(ModelLifecycleEventDto {
+                status: row.get(0)?,
+                rationale: row.get(1)?,
+                actor_id: row.get(2)?,
+                occurred_at_us: row.get(3)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     let dependencies = parse_json(&row.10)?;
     let machine_readable = conn.query_row(
         "SELECT machine_specification_json FROM model_versions WHERE id = ?1",
@@ -899,7 +926,20 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
         content_sha256: row.12,
         created_by: row.13,
         created_at_us: row.14,
+        lifecycle_status,
+        lifecycle_events,
     })
+}
+
+fn parse_model_version_status(value: &str) -> Result<ModelVersionLifecycleStatus> {
+    match value {
+        "draft" => Ok(ModelVersionLifecycleStatus::Draft),
+        "review" => Ok(ModelVersionLifecycleStatus::Review),
+        "released" => Ok(ModelVersionLifecycleStatus::Released),
+        "superseded" => Ok(ModelVersionLifecycleStatus::Superseded),
+        "withdrawn" => Ok(ModelVersionLifecycleStatus::Withdrawn),
+        _ => Err(anyhow!("Invalid model-version status: {value}")),
+    }
 }
 
 fn query_relations(conn: &Connection, sql: &str, version_id: &str) -> Result<Vec<ModelRelationReq>> {
