@@ -441,8 +441,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     const hypothesis = projectHypotheses.find((item) => item.id === selectedHypothesisId);
     const definition = hypothesis ? latest(hypothesis.definitions) : undefined;
     if (!definition) return;
-    const kind = String(form.get("evidenceKind") ?? "");
-    const id = String(form.get("evidenceId") ?? "");
+    const [kind, id] = String(form.get("evidenceId") ?? "").split("|", 2);
     const polarityValue = String(form.get("polarity") ?? "supports");
     const polarity = polarityValue === "contradicts"
       ? "contradicts"
