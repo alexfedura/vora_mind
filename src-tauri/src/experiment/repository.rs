@@ -2533,7 +2533,7 @@ mod tests {
 
     #[test]
     fn untyped_legacy_designs_remain_visible_but_cannot_start_runs() {
-        let conn = Connection::open_in_memory().expect("open in-memory workspace");
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
         initialize(&conn);
         project(&conn, "legacy-design-project");
         conn.execute(
@@ -2553,17 +2553,15 @@ mod tests {
         assert_eq!(designs.design_versions.len(), 1);
         assert!(designs.design_versions[0].specification.is_none());
         assert!(designs.design_versions[0].preregistration.is_none());
-        assert!(
-            create_run(
-                &mut conn.unchecked_transaction().unwrap(),
-                &CreateExperimentRunReq {
-                    design_version_id: "legacy-design-v1".into(),
-                    dataset_pins: vec![],
-                    created_by: None,
-                }
-            )
-            .is_err()
-        );
+        assert!(create_run(
+            &mut conn,
+            &CreateExperimentRunReq {
+                design_version_id: "legacy-design-v1".into(),
+                dataset_pins: vec![],
+                created_by: None,
+            }
+        )
+        .is_err());
     }
 
     #[test]
