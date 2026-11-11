@@ -796,3 +796,578 @@ pub fn evaluate_attempt(
     query_attempt_evaluation(conn, &evaluation_id)
 }
 
+pub fn create_competency(
+    conn: &mut Connection,
+    request: &CreateCompetencyReq,
+) -> Result<CompetencyDto> {
+    required(&request.title, "Competency title")?;
+    if request.criteria.is_empty() || !request.criteria.iter().any(|criterion| criterion.required) {
+        return Err(anyhow!("A competency needs at least one required criterion."));
+    }
+    let (_, framework_id, framework_version_id) = project_context(conn, &request.learning_project_id)?;
+    let competency_id = id();
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    tx.execute(
+        "INSERT INTO competencies
+            (id, learning_project_id, framework_id, framework_version_id,
+             title, description, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            competency_id,
+            request.learning_project_id,
+            framework_id,
+            framework_version_id,
+            request.title.trim(),
+            request.description.trim(),
+            request.created_by,
+            now_us()?
+        ],
+    )?;
+    for criterion in &request.criteria {
+        required(&criterion.criterion, "Competency criterion")?;
+        valid_unit_score(criterion.minimum_score, "Competency criterion threshold")?;
+        tx.execute(
+            "INSERT INTO competency_criteria
+                (id, competency_id, learning_project_id, framework_id,
+                 framework_version_id, objective_version_id, criterion,
+                 minimum_score, required)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                id(),
+                competency_id,
+                request.learning_project_id,
+                framework_id,
+                framework_version_id,
+                criterion.objective_version_id,
+                criterion.criterion.trim(),
+                criterion.minimum_score,
+                i64::from(criterion.required)
+            ],
+        )?;
+    }
+    tx.commit()?;
+    query_competency(conn, &competency_id)
+}
+
+pub fn create_mastery_rule_version(
+    conn: &mut Connection,
+    request: &CreateMasteryRuleVersionReq,
+) -> Result<MasteryRuleDto> {
+    required(&request.title, "Mastery rule title")?;
+    valid_unit_score(request.minimum_average_score, "Mastery average score threshold")?;
+    if request.minimum_evaluated_attempts <= 0 {
+        return Err(anyhow!("Minimum evaluated attempts must be positive."));
+    }
+    if request.reproduction_required && request.required_reproduction_outcome != AssessmentOutcome::Pass {
+        return Err(anyhow!(
+            "Mastery requiring independent reproduction must require a passing evaluated reproduction."
+        ));
+    }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let (rule_id, version_no) = if let Some(rule_id) = &request.mastery_rule_id {
+        let competency_id: String = tx.query_row(
+            "SELECT competency_id FROM mastery_rules WHERE id = ?1",
+            [rule_id],
+            |row| row.get(0),
+        )?;
+        if competency_id != request.competency_id {
+            return Err(anyhow!("Mastery rule versions cannot change their competency."));
+        }
+        let version_no: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(version_no), 0) + 1
+             FROM mastery_rule_versions WHERE mastery_rule_id = ?1",
+            [rule_id],
+            |row| row.get(0),
+        )?;
+        (rule_id.clone(), version_no)
+    } else {
+        let rule_id = id();
+        tx.execute(
+            "INSERT INTO mastery_rules (id, competency_id, title, created_by, created_at_us)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                rule_id,
+                request.competency_id,
+                request.title.trim(),
+                request.created_by,
+                now_us()?
+            ],
+        )?;
+        (rule_id, 1)
+    };
+    let rule_version_id = id();
+    tx.execute(
+        "INSERT INTO mastery_rule_versions
+            (id, mastery_rule_id, competency_id, version_no, minimum_average_score,
+             minimum_evaluated_attempts, all_required_criteria, reproduction_required,
+             required_reproduction_outcome, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![
+            rule_version_id,
+            rule_id,
+            request.competency_id,
+            version_no,
+            request.minimum_average_score,
+            request.minimum_evaluated_attempts,
+            i64::from(request.all_required_criteria),
+            i64::from(request.reproduction_required),
+            request.required_reproduction_outcome.as_str(),
+            request.created_by,
+            now_us()?
+        ],
+    )?;
+    tx.commit()?;
+    query_mastery_rule(conn, &rule_id)
+}
+
+pub fn evaluate_competency(
+    conn: &mut Connection,
+    request: &EvaluateCompetencyReq,
+) -> Result<CompetencyRecordDto> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let (learning_project_id, framework_version_id, learner_id): (String, String, String) =
+        tx.query_row(
+            "SELECT c.learning_project_id, c.framework_version_id, p.learner_id
+             FROM competencies c JOIN learning_projects p ON p.id = c.learning_project_id
+             WHERE c.id = ?1",
+            [&request.competency_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+    if learner_id != request.learner_id {
+        return Err(anyhow!("Competency evaluation learner does not own this learning project."));
+    }
+    let rule: (String, f64, i64, bool, bool, String) = tx.query_row(
+        "SELECT competency_id, minimum_average_score, minimum_evaluated_attempts,
+                all_required_criteria, reproduction_required, required_reproduction_outcome
+         FROM mastery_rule_versions WHERE id = ?1",
+        [&request.mastery_rule_version_id],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get::<_, i64>(3)? != 0,
+                row.get::<_, i64>(4)? != 0,
+                row.get(5)?,
+            ))
+        },
+    )?;
+    if rule.0 != request.competency_id {
+        return Err(anyhow!("Mastery rule version targets a different competency."));
+    }
+    let criteria = query_competency(conn, &request.competency_id)?.criteria;
+    let mut statement = tx.prepare(
+        "SELECT e.id, e.attempt_id, e.score, e.outcome
+         FROM attempt_evaluations e
+         JOIN assessment_attempts a ON a.id = e.attempt_id
+         WHERE a.learning_project_id = ?1 AND a.learner_id = ?2
+           AND a.framework_version_id = ?3 AND a.status = 'submitted'
+           AND EXISTS (
+               SELECT 1 FROM assessment_version_objectives avo
+               JOIN competency_criteria cc ON cc.objective_version_id = avo.objective_version_id
+               WHERE avo.assessment_version_id = a.assessment_version_id
+                 AND cc.competency_id = ?4
+           )
+           AND NOT EXISTS (
+               SELECT 1 FROM attempt_evaluations later
+               WHERE later.attempt_id = e.attempt_id AND later.revision_no > e.revision_no
+           )
+         ORDER BY e.created_at_us, e.id",
+    )?;
+    let attempt_evaluations = statement
+        .query_map(
+            params![
+                learning_project_id,
+                request.learner_id,
+                framework_version_id,
+                request.competency_id
+            ],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, f64>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            },
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(statement);
+
+    let mut criterion_results = Vec::new();
+    for criterion in &criteria {
+        let satisfied: bool = tx.query_row(
+            "SELECT EXISTS (
+                SELECT 1 FROM attempt_evaluations e
+                JOIN assessment_attempts a ON a.id = e.attempt_id
+                JOIN attempt_evaluation_scores s ON s.evaluation_id = e.id
+                JOIN assessment_rubric_criteria rc
+                  ON rc.id = s.rubric_criterion_id
+                 AND rc.objective_version_id = ?4
+                WHERE a.learning_project_id = ?1 AND a.learner_id = ?2
+                  AND a.framework_version_id = ?3 AND a.status = 'submitted'
+                  AND s.score / rc.max_points >= ?5
+                  AND NOT EXISTS (
+                      SELECT 1 FROM attempt_evaluations later
+                      WHERE later.attempt_id = e.attempt_id
+                        AND later.revision_no > e.revision_no
+                  )
+            )",
+            params![
+                learning_project_id,
+                request.learner_id,
+                framework_version_id,
+                criterion.objective_version_id,
+                criterion.minimum_score
+            ],
+            |row| row.get(0),
+        )?;
+        criterion_results.push((criterion.clone(), satisfied));
+    }
+
+    let reproduction_evaluations = {
+        let mut statement = tx.prepare(
+            "SELECT e.id, e.outcome FROM reproduction_evaluations e
+             JOIN reproduction_submissions s ON s.id = e.submission_id
+             JOIN reproduction_tasks t ON t.id = s.task_id
+             WHERE s.learner_id = ?1 AND t.learning_project_id = ?2
+               AND t.framework_version_id = ?3
+               AND t.objective_version_id IN (
+                   SELECT objective_version_id FROM competency_criteria
+                   WHERE competency_id = ?4
+               )
+             ORDER BY e.created_at_us, e.id",
+        )?;
+        statement
+            .query_map(
+                params![
+                    request.learner_id,
+                    learning_project_id,
+                    framework_version_id,
+                    request.competency_id
+                ],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+
+    let average_score = if attempt_evaluations.is_empty() {
+        0.0
+    } else {
+        attempt_evaluations.iter().map(|evaluation| evaluation.2).sum::<f64>()
+            / attempt_evaluations.len() as f64
+    };
+    let minimum_attempts_met =
+        attempt_evaluations.len() >= usize::try_from(rule.2).unwrap_or(usize::MAX);
+    let required_criteria_satisfied = criterion_results
+        .iter()
+        .filter(|(criterion, _)| criterion.required)
+        .all(|(_, satisfied)| *satisfied);
+    let all_criteria_satisfied = criterion_results.iter().all(|(_, satisfied)| *satisfied);
+    let criteria_satisfied = if rule.3 {
+        all_criteria_satisfied
+    } else {
+        required_criteria_satisfied
+    };
+    let reproduction_satisfied = !rule.4
+        || reproduction_evaluations
+            .iter()
+            .any(|(_, outcome)| outcome == &rule.5);
+    let score_satisfied = average_score >= rule.1;
+    let mastered = minimum_attempts_met
+        && criteria_satisfied
+        && reproduction_satisfied
+        && score_satisfied;
+    let outcome = if mastered {
+        MasteryOutcome::Mastered
+    } else {
+        MasteryOutcome::NotMastered
+    };
+    let mut explanation = format!(
+        "Average evaluated score {:.3} / {:.3}; {} qualifying assessment evaluations (minimum {}). ",
+        average_score,
+        rule.1,
+        attempt_evaluations.len(),
+        rule.2
+    );
+    if criteria_satisfied {
+        explanation.push_str("Required competency criteria are satisfied. ");
+    } else {
+        let unmet = criterion_results
+            .iter()
+            .filter(|(criterion, satisfied)| {
+                (rule.3 || criterion.required) && !satisfied
+            })
+            .map(|(criterion, _)| criterion.criterion.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        explanation.push_str(&format!("Unmet criteria: {unmet}. "));
+    }
+    if rule.4 {
+        explanation.push_str(if reproduction_satisfied {
+            "A passing independent reproduction evaluation is present. "
+        } else {
+            "A passing independent reproduction evaluation is required. "
+        });
+    }
+    if !minimum_attempts_met {
+        explanation.push_str("The minimum number of evaluated attempts has not been reached. ");
+    }
+    if !score_satisfied {
+        explanation.push_str("The minimum average score has not been reached.");
+    }
+
+    let record_id = id();
+    let created_at = now_us()?;
+    tx.execute(
+        "INSERT INTO competency_records
+            (id, competency_id, learning_project_id, learner_id, framework_version_id,
+             mastery_rule_version_id, outcome, explanation, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            record_id,
+            request.competency_id,
+            learning_project_id,
+            request.learner_id,
+            framework_version_id,
+            request.mastery_rule_version_id,
+            outcome.as_str(),
+            explanation,
+            created_at
+        ],
+    )?;
+    for (criterion, satisfied) in &criterion_results {
+        tx.execute(
+            "INSERT INTO competency_record_criteria
+                (competency_record_id, competency_criterion_id, satisfied, rationale)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                record_id,
+                criterion.id,
+                i64::from(*satisfied),
+                if *satisfied {
+                    "Criterion threshold met by pinned assessment evidence."
+                } else {
+                    "No pinned assessment criterion score met the configured threshold."
+                }
+            ],
+        )?;
+        tx.execute(
+            "INSERT OR IGNORE INTO competency_record_objectives
+                (competency_record_id, objective_version_id) VALUES (?1, ?2)",
+            params![record_id, criterion.objective_version_id],
+        )?;
+    }
+    for (evaluation_id, _, _, _) in &attempt_evaluations {
+        tx.execute(
+            "INSERT INTO competency_record_attempt_evaluations
+                (competency_record_id, evaluation_id) VALUES (?1, ?2)",
+            params![record_id, evaluation_id],
+        )?;
+    }
+    for (evaluation_id, _) in &reproduction_evaluations {
+        tx.execute(
+            "INSERT INTO competency_record_reproduction_evaluations
+                (competency_record_id, evaluation_id) VALUES (?1, ?2)",
+            params![record_id, evaluation_id],
+        )?;
+    }
+    tx.commit()?;
+    query_competency_record(conn, &record_id)
+}
+
+pub fn create_reproduction_task(
+    conn: &mut Connection,
+    request: &CreateReproductionTaskReq,
+) -> Result<ReproductionTaskDto> {
+    required(&request.title, "Reproduction task title")?;
+    required(&request.task_description, "Reproduction task description")?;
+    required(&request.conditions, "Reproduction conditions")?;
+    if request.expected_result.is_null() || request.expected_result == serde_json::json!({}) {
+        return Err(anyhow!("Reproduction task requires a non-empty expected result."));
+    }
+    let (_, framework_id, framework_version_id) = project_context(conn, &request.learning_project_id)?;
+    let task_id = id();
+    let expected_result = json(&request.expected_result)?;
+    conn.execute(
+        "INSERT INTO reproduction_tasks
+            (id, learning_project_id, framework_id, framework_version_id,
+             objective_version_id, rubric_version_id, title, task_description,
+             conditions, expected_result_json, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![
+            task_id,
+            request.learning_project_id,
+            framework_id,
+            framework_version_id,
+            request.objective_version_id,
+            request.rubric_version_id,
+            request.title.trim(),
+            request.task_description.trim(),
+            request.conditions.trim(),
+            expected_result,
+            request.created_by,
+            now_us()?
+        ],
+    )?;
+    query_reproduction_task(conn, &task_id)
+}
+
+pub fn submit_reproduction(
+    conn: &mut Connection,
+    request: &SubmitReproductionReq,
+) -> Result<ReproductionSubmissionDto> {
+    required(&request.learner_id, "Reproduction learner identity")?;
+    let uri = request.artifact_uri.as_deref().map(str::trim).filter(|value| !value.is_empty());
+    let checksum = request
+        .artifact_sha256
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if uri.is_some() != checksum.is_some() {
+        return Err(anyhow!("A reproduction artifact requires both URI and SHA-256 checksum."));
+    }
+    if let Some(value) = checksum {
+        if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(anyhow!("Reproduction artifact checksum must be a SHA-256 digest."));
+        }
+    }
+    let result_json = request.result.as_ref().map(json).transpose()?;
+    let has_result = request
+        .result
+        .as_ref()
+        .is_some_and(|result| !result.is_null() && result != &serde_json::json!({}));
+    if uri.is_none() && !has_result {
+        return Err(anyhow!("A reproduction submission requires an artifact or a non-empty result."));
+    }
+    let submission_id = id();
+    conn.execute(
+        "INSERT INTO reproduction_submissions
+            (id, task_id, learner_id, artifact_uri, artifact_sha256,
+             result_json, deviations, submitted_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            submission_id,
+            request.task_id,
+            request.learner_id,
+            uri,
+            checksum.map(|value| value.to_ascii_lowercase()),
+            result_json,
+            request.deviations.trim(),
+            now_us()?
+        ],
+    )?;
+    query_reproduction_submission(conn, &submission_id)
+}
+
+pub fn evaluate_reproduction(
+    conn: &mut Connection,
+    request: &EvaluateReproductionReq,
+) -> Result<ReproductionEvaluationDto> {
+    required(&request.evaluator_id, "Reproduction evaluator identity")?;
+    required(&request.rationale, "Reproduction evaluation rationale")?;
+    required(&request.evidence_description, "Reproduction evidence description")?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let (learner_id, rubric_version_id, pass_threshold): (String, String, f64) = tx.query_row(
+        "SELECT s.learner_id, t.rubric_version_id, rv.pass_threshold
+         FROM reproduction_submissions s
+         JOIN reproduction_tasks t ON t.id = s.task_id
+         JOIN assessment_rubric_versions rv ON rv.id = t.rubric_version_id
+         WHERE s.id = ?1",
+        [&request.submission_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    if request.evaluator_id.trim() == learner_id {
+        return Err(anyhow!("Independent reproduction requires an evaluator distinct from the learner."));
+    }
+    let score = validate_rubric_scores(
+        &tx,
+        &rubric_version_id,
+        &request.criterion_scores,
+        pass_threshold,
+        request.outcome,
+    )?;
+    let evaluation_id = id();
+    let created_at = now_us()?;
+    tx.execute(
+        "INSERT INTO reproduction_evaluations
+            (id, submission_id, rubric_version_id, evaluator_id, outcome, score,
+             rationale, evidence_description, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            evaluation_id,
+            request.submission_id,
+            rubric_version_id,
+            request.evaluator_id.trim(),
+            request.outcome.as_str(),
+            score,
+            request.rationale.trim(),
+            request.evidence_description.trim(),
+            created_at
+        ],
+    )?;
+    insert_reproduction_scores(&tx, &evaluation_id, &request.criterion_scores)?;
+    tx.commit()?;
+    query_reproduction_evaluation(conn, &evaluation_id)
+}
+
+fn validate_rubric_scores(
+    conn: &Connection,
+    rubric_version_id: &str,
+    scores: &[EvaluationCriterionScoreDto],
+    pass_threshold: f64,
+    outcome: AssessmentOutcome,
+) -> Result<f64> {
+    let mut seen = HashSet::new();
+    for item in scores {
+        if !item.score.is_finite() || item.score < 0.0 || !seen.insert(&item.rubric_criterion_id) {
+            return Err(anyhow!("Rubric scores must be unique finite non-negative values."));
+        }
+    }
+    let criteria: HashMap<String, f64> = {
+        let mut statement = conn.prepare(
+            "SELECT id, max_points FROM assessment_rubric_criteria WHERE rubric_version_id = ?1",
+        )?;
+        statement
+            .query_map([rubric_version_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<HashMap<_, _>>>()?
+    };
+    if criteria.is_empty() || criteria.len() != scores.len() {
+        return Err(anyhow!("Every pinned rubric criterion must be scored exactly once."));
+    }
+    let mut total_score = 0.0;
+    let mut total_max = 0.0;
+    for score in scores {
+        let max = criteria
+            .get(&score.rubric_criterion_id)
+            .ok_or_else(|| anyhow!("Score references a criterion outside the pinned rubric."))?;
+        if score.score > *max {
+            return Err(anyhow!("Rubric criterion score exceeds its maximum."));
+        }
+        total_score += score.score;
+        total_max += *max;
+    }
+    let normalized = total_score / total_max;
+    if outcome != AssessmentOutcome::Inconclusive
+        && ((outcome == AssessmentOutcome::Pass) != (normalized >= pass_threshold))
+    {
+        return Err(anyhow!("Evaluation outcome does not agree with the pinned rubric threshold."));
+    }
+    Ok(normalized)
+}
+
+fn insert_reproduction_scores(
+    tx: &Transaction<'_>,
+    evaluation_id: &str,
+    scores: &[EvaluationCriterionScoreDto],
+) -> Result<()> {
+    for score in scores {
+        tx.execute(
+            "INSERT INTO reproduction_evaluation_scores
+                (evaluation_id, rubric_criterion_id, score) VALUES (?1, ?2, ?3)",
+            params![evaluation_id, score.rubric_criterion_id, score.score],
+        )?;
+    }
+    Ok(())
+}
+
