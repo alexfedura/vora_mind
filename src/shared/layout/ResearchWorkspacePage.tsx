@@ -3,6 +3,7 @@ import { AlertCircle, BookOpenCheck, Plus, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useResearchWorkspace } from "@/hooks/useResearchWorkspace";
 import { researchService } from "@/mind/services/researchService";
+import { ExperimentWorkspacePanel } from "@/shared/layout/ExperimentWorkspacePanel";
 import type {
   ResearchGapDto,
   HypothesisExpectedDirection,
@@ -1021,7 +1022,7 @@ export const ResearchWorkspacePage: React.FC = () => {
                     <p>Design v{design.versionNo} · {design.title} · {design.lifecycleStatus} · no execution data in this phase</p>
                     <div className="mt-2 flex gap-2">
                       {design.lifecycleStatus === "draft" && <button type="button" onClick={() => void act(() => researchService.transitionDesign(design.id, "review", null))} className="rounded border border-[#343741] px-2 py-1 text-xs">Review design</button>}
-                      {design.lifecycleStatus === "review" && <button type="button" onClick={() => void act(() => researchService.transitionDesign(design.id, "preregistered", null))} className="rounded border border-emerald-800 px-2 py-1 text-xs text-emerald-300">Preregister design</button>}
+                      {design.lifecycleStatus === "review" && <p className="text-[11px] text-amber-300">Legacy design: create a typed version in the experimental workspace before preregistration or execution.</p>}
                     </div>
                   </div>
                 ))}
@@ -1030,6 +1031,7 @@ export const ResearchWorkspacePage: React.FC = () => {
           </section>
         </>
       )}
+      <ExperimentWorkspacePanel projectId={projectId} research={workspace} />
     </div>
   );
 };

@@ -203,7 +203,7 @@ function parseTransformationInputs(raw: string): DatasetTransformationInputReq[]
 
 function parseJsonValue(raw: string, fieldName: string): unknown {
   try {
-    return JSON.parse(raw) as unknown;
+    return JSON.parse(raw);
   } catch (reason) {
     throw new Error(`${fieldName} must be valid JSON: ${reason instanceof Error ? reason.message : String(reason)}`);
   }
@@ -597,6 +597,26 @@ export function ExperimentWorkspacePanel({
     }
   };
 
+  const createDatasetTransformation = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    const target = event.currentTarget;
+    const form = new FormData(target);
+    try {
+      const request: CreateDatasetTransformationReq = {
+        outputDatasetVersionId: String(form.get("outputDatasetVersionId") ?? ""),
+        method: String(form.get("method") ?? ""),
+        parameters: parseJsonValue(String(form.get("parameters") ?? ""), "Transformation parameters"),
+        provenance: parseJsonValue(String(form.get("provenance") ?? ""), "Transformation provenance"),
+        inputs: parseTransformationInputs(String(form.get("inputs") ?? "")),
+        createdBy: null,
+      };
+      const created = await act(() => experimentService.createDatasetTransformation(request));
+      if (created) target.reset();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
   const inspectSamples = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -887,6 +907,24 @@ export function ExperimentWorkspacePanel({
               <textarea className={`${inputClass} font-mono`} name="assignments" rows={4} placeholder={'[{"sampleId":"s1","role":"training","splitKey":"train"}]'} required />
             </Field>
             <button className={buttonClass} type="submit">Save split assignments</button>
+          </form>
+          <form onSubmit={(event) => void createDatasetTransformation(event)} className="space-y-2 border-t border-[#292c34] pt-3">
+            <h5 className="text-xs text-gray-300">Declare dataset transformation lineage</h5>
+            <Field label="Staged output dataset version">
+              <select className={inputClass} name="outputDatasetVersionId" required defaultValue="">
+                <option value="">Select output version</option>
+                {allDatasetVersions.filter((version) => version.lifecycleStatus === "staged").map((version) => <option key={version.id} value={version.id}>{version.datasetTitle} · v{version.versionNo}</option>)}
+              </select>
+            </Field>
+            <Field label="Transformation method"><input className={inputClass} name="method" required /></Field>
+            <Field label="Input dataset versions with explicit roles (JSON)">
+              <textarea className={`${inputClass} font-mono`} name="inputs" rows={3} required placeholder={'[{"datasetVersionId":"exact-version-id","role":"exploratory"}]'} />
+            </Field>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Field label="Parameters (JSON)"><textarea className={`${inputClass} font-mono`} name="parameters" rows={3} required defaultValue="{}" /></Field>
+              <Field label="Transformation provenance (JSON)"><textarea className={`${inputClass} font-mono`} name="provenance" rows={3} required defaultValue="{}" /></Field>
+            </div>
+            <button className={buttonClass} type="submit">Record transformation lineage</button>
           </form>
         </section>
 
