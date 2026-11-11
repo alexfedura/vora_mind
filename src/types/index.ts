@@ -247,6 +247,8 @@ export type FrameworkChangeClass =
   | "extension"
   | "revision"
   | "replacement";
+export type FrameworkLifecycle = "draft" | "review" | "published" | "withdrawn" | "retired";
+export type FrameworkVersionStatus = "draft" | "review" | "published" | "withdrawn";
 export type FrameworkReviewStatus = "approved" | "changes_requested" | "rejected";
 export type AcquisitionProvenanceTargetKind =
   | "source"
@@ -442,7 +444,7 @@ export interface FrameworkDto {
   id: string;
   title: string;
   description: string;
-  lifecycle: string;
+  lifecycle: FrameworkLifecycle;
   currentVersionId: string | null;
   createdBy: string | null;
   createdAtUs: number;
