@@ -31,8 +31,8 @@ Each canonical entity has exactly one owning domain. “Used by” domains may r
 | **Experiment and Evidence** | `ExperimentDesign`/`ExperimentDesignVersion`, `ExperimentRun`, `Dataset`/`DatasetVersion`, `DataSample` and its `TradeSample` specialization, `AnalysisDefinition`/`AnalysisDefinitionVersion`, `AnalysisRun`, `Evidence`, `ResearchFinding`; protocol execution and evidence synthesis. | Source-attributed claims, model identity/version, or mastery judgments. |
 | **Model Development** | `Model`/`ModelVersion`, `ModelSpecification`/`ModelSpecificationVersion`, version-bound parameters, `ModelEvaluation`, `Validation`, `Replication`; model lifecycle and scoped evaluation. | Hypothesis lifecycle, experiment-run execution, or learner competency. |
 | **Lineage and Knowledge Transfer** | `ScientificRelation`, `ResearchLineage`, `KnowledgeTransfer`, `ProvenanceEvent`, and the controlled predicate/type-pair catalog. | Domain entity payloads or inferred scientific meaning. |
-| **Canvas and Visualization** | Boards, visual objects, placements, visual edges, view state, and snapshots. A visual reference may point to a canonical scientific ID/version. | Any scientific entity, scientific version, canonical evidence link, or scientific lifecycle. |
-| **Persistence and Migrations** | Workspace metadata, migration ledger, database connection policy, immutable asset manifest/storage coordination, integrity checks, backup/restore. | Domain transitions or scientific interpretation. |
+| **Canvas and Visualization** | `CanvasBoard`, `CanvasObject`, placements, visual edges, view state, and visual snapshots. A visual reference may point to a canonical scientific ID/version. | Any scientific entity, scientific version, canonical evidence link, or scientific lifecycle. |
+| **Persistence and Migrations** | `WorkspaceMetadata`, `WorkspaceAsset`, `SchemaMigration` ledger, database connection policy, integrity checks, backup/restore. | Domain transitions or scientific interpretation. |
 
 `ResearchDomain` is reusable workspace taxonomy, not a project container. `ResearchProject` owns its research plan; project-domain membership is explicit. Knowledge objects may be workspace-owned or originate in a project. Adoption by another project does not transfer or change the origin owner.
 
@@ -123,10 +123,22 @@ All IDs below are independent opaque IDs. A “version” is a distinct immutabl
 | `ScientificRelation` | One validated directed assertion between typed registry endpoints with a controlled predicate, project context, applicable exact version pins, and provenance. | Append-only assertion. Retract/supersede with a new ProvenanceEvent; do not delete the old relation. |
 | `ProvenanceEvent` | Append-only actor/action/time record for creation, correction, review, lifecycle transition, relation retraction, import, or migration. Carries typed target identity, reason, and optional before/after hashes; raw payload is not required. | Immutable. Unknown legacy actor/time is explicit and is never fabricated. |
 
+### 3.6 Workspace and visualization records
+
+These are persistence/UI records, not scientific knowledge records. They still have one owner and must not be used as substitute scientific entities.
+
+| Entity | Owner and contract |
+|---|---|
+| `WorkspaceMetadata` | Persistence-owned stable workspace ID and metadata for the one logical workspace represented by a main SQLite file. File path is not identity. |
+| `WorkspaceAsset` | Persistence-owned immutable content manifest (asset ID, digest, size, media type, storage key, integrity/availability). Domain records reference it by FK. |
+| `SchemaMigration` | Persistence-owned version, migration ID/checksum, application time and app version. It is an operational audit record, not a scientific provenance event. |
+| `CanvasBoard`, `CanvasObject`, placements, visual edges and `CanvasSnapshot` | Canvas-owned layout, visual state, and visual history. A visual reference points to scientific IDs/versions; editing or removing it cannot mutate the target scientific record/relation. |
+
 ## 4. Stable identities and versions
 
 - New IDs are opaque lowercase UUIDv7 strings (the repository already depends on `uuid` with v7/Serde support). IDs are never derived from titles, paths, status, timestamps, or ordinal sequence.
 - Rust uses per-domain ID newtypes serialized as strings. TypeScript uses branded string ID aliases in the canonical type module. Legacy IDs remain unchanged and are not rewritten to UUIDs.
+- A `SourceVersion`, `FrameworkVersion`, `ModelVersion`, `DatasetVersion`, and other named version record has its own `*_version_id`; it is not also a row in the stable entity registry. The exact reference is `(stable_entity_id, version_id)`. The stable Source/Framework/Model/Dataset keeps its own identity and owns its version records.
 - Each versioned family has a stable identity ID and distinct `*_version_id`. Version rows carry `entity_id`, monotonic sequence within that identity, parent-version link(s), author/time, change class/reason and content checksum where relevant.
 - Version number/sequence is not the version identity. A version ID remains stable if display numbering is later corrected.
 - Draft versions are immutable snapshots too; edits create a replacement version or explicit draft revision. Lock/preregister/release makes the exact version usable by downstream runs.
