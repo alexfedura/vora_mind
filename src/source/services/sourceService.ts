@@ -21,6 +21,7 @@ import type {
   FrameworkVersionDto,
   KnowledgeExtractionDto,
   KnowledgeItemDto,
+  LegacySourceEntityKind,
   ProvenanceEventDto,
   ReorderFrameworkItemsReq,
   ReviewExtractionReq,
@@ -28,6 +29,7 @@ import type {
   SourceClaimDto,
   SourceLocationDto,
   SourceVersionDto,
+  SourceRevisionDto,
   UpdateFrameworkVersionReq,
 } from "@/types";
 
@@ -243,6 +245,16 @@ export async function srcCreateLink(req: CreateLinkReq): Promise<string> {
 /** Mark a pending-review extract as reviewed by the user. */
 export async function srcMarkExtractReviewed(id: string): Promise<void> {
   return invoke<void>("src_mark_extract_reviewed", { id });
+}
+
+export async function srcListSourceRevisions(
+  entityKind: LegacySourceEntityKind,
+  entityId: string,
+): Promise<SourceRevisionDto[]> {
+  return invoke<SourceRevisionDto[]>("src_list_source_revisions", {
+    entityKind,
+    entityId,
+  });
 }
 
 export async function srcListSourceVersions(sourceId: string): Promise<SourceVersionDto[]> {
