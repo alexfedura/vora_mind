@@ -1099,7 +1099,7 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                   )}
 
                   <ol className="mt-3 space-y-2">
-                    {selectedFrameworkVersion.items.map((item) => (
+                    {selectedFrameworkVersion.items.map((item, index) => (
                       <li key={item.id} className="flex items-start justify-between gap-2 rounded border border-[#283143] p-2">
                         <div>
                           <span className="text-[10px] text-sky-300">{item.itemOrder + 1}. {item.itemKind} · {item.membershipRole}</span>
@@ -1108,8 +1108,8 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                         </div>
                         {selectedFrameworkVersion.status === "draft" && (
                           <div className="flex shrink-0 gap-2">
-                            <button disabled={busy || item.itemOrder === 0} onClick={() => reorderFrameworkItem(item.id, -1)} className="text-[10px] text-gray-300 disabled:opacity-40">Up</button>
-                            <button disabled={busy || item.itemOrder === selectedFrameworkVersion.items.length - 1} onClick={() => reorderFrameworkItem(item.id, 1)} className="text-[10px] text-gray-300 disabled:opacity-40">Down</button>
+                            <button disabled={busy || index === 0} onClick={() => reorderFrameworkItem(item.id, -1)} className="text-[10px] text-gray-300 disabled:opacity-40">Up</button>
+                            <button disabled={busy || index === selectedFrameworkVersion.items.length - 1} onClick={() => reorderFrameworkItem(item.id, 1)} className="text-[10px] text-gray-300 disabled:opacity-40">Down</button>
                             <button disabled={busy} onClick={() => void runAction(() => srcRemoveFrameworkItem(item.id), "Framework member removed from draft.")} className="text-[10px] text-rose-300">Remove</button>
                           </div>
                         )}
