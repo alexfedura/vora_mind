@@ -5,13 +5,17 @@ CREATE TABLE knowledge_concept_versions (
     created_in_project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE RESTRICT,
     title TEXT NOT NULL CHECK (length(trim(title)) > 0),
     definition TEXT NOT NULL CHECK (length(trim(definition)) > 0),
-    parent_version_id TEXT REFERENCES knowledge_concept_versions(id) ON DELETE RESTRICT,
+    parent_version_id TEXT,
     rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
     reviewed_by TEXT,
+    reviewed_at_us INTEGER NOT NULL,
     created_by TEXT,
     created_at_us INTEGER NOT NULL,
     UNIQUE (concept_id, version_no),
+    UNIQUE (id, concept_id),
     UNIQUE (id, concept_id, created_in_project_id),
+    FOREIGN KEY (parent_version_id, concept_id)
+        REFERENCES knowledge_concept_versions(id, concept_id) ON DELETE RESTRICT,
     CHECK (parent_version_id IS NULL OR parent_version_id <> id)
 );
 
@@ -22,13 +26,17 @@ CREATE TABLE knowledge_principle_versions (
     created_in_project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE RESTRICT,
     title TEXT NOT NULL CHECK (length(trim(title)) > 0),
     statement TEXT NOT NULL CHECK (length(trim(statement)) > 0),
-    parent_version_id TEXT REFERENCES knowledge_principle_versions(id) ON DELETE RESTRICT,
+    parent_version_id TEXT,
     rationale TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
     reviewed_by TEXT,
+    reviewed_at_us INTEGER NOT NULL,
     created_by TEXT,
     created_at_us INTEGER NOT NULL,
     UNIQUE (principle_id, version_no),
+    UNIQUE (id, principle_id),
     UNIQUE (id, principle_id, created_in_project_id),
+    FOREIGN KEY (parent_version_id, principle_id)
+        REFERENCES knowledge_principle_versions(id, principle_id) ON DELETE RESTRICT,
     CHECK (parent_version_id IS NULL OR parent_version_id <> id)
 );
 
@@ -260,13 +268,12 @@ CREATE VIEW knowledge_transfer_artifact_catalog AS
 SELECT 'concept_version' AS artifact_kind, v.id AS artifact_version_id,
        v.concept_id AS artifact_id, v.title, v.version_no,
        v.created_in_project_id AS owner_project_id,
-       CASE WHEN v.reviewed_by IS NULL THEN 'unreviewed' ELSE 'reviewed' END
-           AS scientific_status
+       'reviewed' AS scientific_status
 FROM knowledge_concept_versions v
 UNION ALL
 SELECT 'principle_version', v.id, v.principle_id, v.title, v.version_no,
        v.created_in_project_id,
-       CASE WHEN v.reviewed_by IS NULL THEN 'unreviewed' ELSE 'reviewed' END
+       'reviewed'
 FROM knowledge_principle_versions v
 UNION ALL
 SELECT 'framework_version', v.id, v.framework_id, v.title, v.version_no,
