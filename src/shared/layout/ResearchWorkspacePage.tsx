@@ -72,6 +72,7 @@ export const ResearchWorkspacePage: React.FC = () => {
   const [questionProjectId, setQuestionProjectId] = useState("");
   const [selectedSourceKey, setSelectedSourceKey] = useState("");
   const [selectedPlanVersionId, setSelectedPlanVersionId] = useState("");
+  const [selectedDatasetVersionId, setSelectedDatasetVersionId] = useState("");
   const [selectedHypothesisId, setSelectedHypothesisId] = useState("");
 
   const sourceVersions = workspace?.sourceVersions ?? [];
@@ -297,7 +298,7 @@ export const ResearchWorkspacePage: React.FC = () => {
       phenomenonId: plan.phenomenonId,
       planId: plan.id,
       planVersionId: version.id,
-      datasetVersionReferenceId: null,
+      datasetVersionReferenceId: selectedDatasetVersionId || null,
       measuredAtUs: Date.now() * 1000,
       valueDecimal: state === "observed" ? String(form.get("value") ?? "") : null,
       valueState: state,
@@ -307,6 +308,29 @@ export const ResearchWorkspacePage: React.FC = () => {
       sampleIdentifier: String(form.get("sampleId") ?? "") || null,
       createdBy: null,
     }));
+    target.reset();
+  };
+
+  const createDatasetVersion = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    const target = event.currentTarget;
+    const form = new FormData(target);
+    const sourceVersion = sourceVersions.find(
+      (source) => source.sourceVersionId === String(form.get("sourceVersionId") ?? ""),
+    );
+    if (!sourceVersion) return;
+    await act(async () => {
+      const dataset = await researchService.createDatasetVersionReference({
+        projectId,
+        title: String(form.get("title") ?? ""),
+        versionLabel: String(form.get("version") ?? ""),
+        externalUri: null,
+        contentSha256: null,
+        sourceVersionId: sourceVersion.sourceVersionId,
+        createdBy: null,
+      });
+      setSelectedDatasetVersionId(dataset.id);
+    });
     target.reset();
   };
 
@@ -683,8 +707,16 @@ export const ResearchWorkspacePage: React.FC = () => {
                   </div>
                 ))}
               </div>
+              <form onSubmit={(event) => void createDatasetVersion(event)} className="space-y-2 border-t border-[#292c34] pt-3">
+                <p className="text-xs font-semibold text-gray-300">Immutable dataset-version reference</p>
+                <Field label="Dataset title"><input className={inputClass} name="title" required /></Field>
+                <Field label="Dataset version"><input className={inputClass} name="version" required /></Field>
+                <Field label="Source version"><select className={inputClass} name="sourceVersionId" required><option value="">Select an acquired source version</option>{sourceVersions.map((source, index) => <option key={`${source.sourceVersionId}-${index}`} value={source.sourceVersionId}>{sourceOptionLabel(source)} · {source.sourceVersionId}</option>)}</select></Field>
+                <button className={buttonClass} disabled={sourceVersions.length === 0}><Plus size={14} /> Save exact dataset version</button>
+              </form>
               <form onSubmit={(event) => void createObservation(event)} className="space-y-2 border-t border-[#292c34] pt-3">
                 <Field label="Reviewed plan version"><select className={inputClass} value={selectedPlanVersionId} onChange={(event) => setSelectedPlanVersionId(event.target.value)} required><option value="">Select reviewed plan</option>{planVersions.filter((version) => version.lifecycleStatus === "reviewed" || version.lifecycleStatus === "preregistered").map((version) => <option key={version.id} value={version.id}>{version.id} · {version.lifecycleStatus}</option>)}</select></Field>
+                <Field label="Dataset version (optional)"><select className={inputClass} value={selectedDatasetVersionId} onChange={(event) => setSelectedDatasetVersionId(event.target.value)}><option value="">No external dataset reference</option>{workspace.datasetVersions.filter((dataset) => dataset.projectId === projectId).map((dataset) => <option key={dataset.id} value={dataset.id}>{dataset.title} · {dataset.versionLabel} · source version {dataset.sourceVersionId}</option>)}</select></Field>
                 <Field label="Value state"><select className={inputClass} name="valueState"><option value="observed">Observed value</option><option value="not_measured">Not measured</option><option value="not_recorded">Not recorded</option><option value="unknown">Unknown</option><option value="not_applicable">Not applicable</option><option value="withheld">Withheld</option><option value="invalid">Invalid</option></select></Field>
                 <div className="grid grid-cols-2 gap-2"><Field label="Value"><input className={inputClass} name="value" /></Field><Field label="Unit"><input className={inputClass} name="unit" /></Field></div>
                 <Field label="Observed conditions"><input className={inputClass} name="conditions" required /></Field>
