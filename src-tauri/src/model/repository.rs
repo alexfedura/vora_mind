@@ -2362,10 +2362,16 @@ mod tests {
         .expect("insert analysis run");
         conn.execute(
             "INSERT INTO analysis_run_events (id, run_id, lifecycle_status, occurred_at_us)
-             VALUES (?1, ?2, 'completed', 2)",
-            params![format!("analysis-event-{project_id}"), run_id],
+             VALUES (?1, ?2, 'queued', 1)",
+            params![format!("analysis-queued-{project_id}"), run_id],
         )
-        .expect("complete analysis run");
+        .expect("queue analysis run");
+        conn.execute(
+            "INSERT INTO analysis_run_events (id, run_id, lifecycle_status, occurred_at_us)
+             VALUES (?1, ?2, 'running', 2)",
+            params![format!("analysis-running-{project_id}"), run_id],
+        )
+        .expect("start analysis run");
         conn.execute(
             "INSERT INTO analysis_run_inputs
                 (id, run_id, dataset_version_id, role, dataset_checksum, sample_count,
@@ -2381,6 +2387,12 @@ mod tests {
             params![output_id, run_id, "5".repeat(64)],
         )
         .expect("insert analysis output");
+        conn.execute(
+            "INSERT INTO analysis_run_events (id, run_id, lifecycle_status, occurred_at_us)
+             VALUES (?1, ?2, 'completed', 3)",
+            params![format!("analysis-completed-{project_id}"), run_id],
+        )
+        .expect("complete analysis run");
         conn.execute(
             "INSERT INTO analysis_metrics
                 (id, run_id, output_id, metric_definition_version_id, method_version_id,
