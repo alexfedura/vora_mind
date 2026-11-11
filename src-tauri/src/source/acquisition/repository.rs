@@ -1137,9 +1137,10 @@ pub fn reorder_framework_items(
             "SELECT id FROM framework_version_items
              WHERE framework_version_id = ?1 ORDER BY item_order, id",
         )?;
-        statement
+        let rows = statement
             .query_map([framework_version_id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows
     };
     if existing_item_ids.len() != ordered_item_ids.len()
         || existing_item_ids.iter().any(|id| !ordered_item_ids.contains(id))
