@@ -2463,6 +2463,7 @@ pub fn run() {
             research::ipc::research_assign_domain,
             research::ipc::research_adopt_framework_version,
             research::ipc::research_create_literature_review,
+            research::ipc::research_create_reviewed_literature_review,
             research::ipc::research_add_literature_source,
             research::ipc::research_review_literature_review,
             research::ipc::research_create_prior_assessment,

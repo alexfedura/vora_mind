@@ -412,6 +412,68 @@ pub fn create_literature_review(
     query_literature_review(conn, id)
 }
 
+pub fn create_reviewed_literature_review(
+    conn: &Connection,
+    req: &CreateReviewedLiteratureReviewReq,
+    review_id: &str,
+    source_link_id: &str,
+    now: i64,
+) -> Result<LiteratureReviewDto> {
+    let tx = conn.unchecked_transaction()?;
+    if let Some(claim_id) = req.source_claim_id.as_deref() {
+        let matches_version: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM source_claims
+             WHERE id = ?1 AND source_id = ?2 AND source_version_id = ?3)",
+            params![claim_id, req.source_id, req.source_version_id],
+            |row| row.get(0),
+        )?;
+        if !matches_version {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+    }
+    tx.execute(
+        "INSERT INTO literature_reviews
+            (id, project_id, title, search_scope, lifecycle_status,
+             reviewer_id, reviewed_at_us, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, 'reviewed', ?5, ?6, ?7, ?6)",
+        params![
+            review_id,
+            req.project_id,
+            req.title.trim(),
+            req.search_scope,
+            req.reviewer_id,
+            now,
+            req.created_by
+        ],
+    )?;
+    tx.execute(
+        "INSERT INTO literature_review_sources
+            (id, literature_review_id, source_id, source_version_id,
+             source_location_id, source_claim_id, citation_note)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            source_link_id,
+            review_id,
+            req.source_id,
+            req.source_version_id,
+            req.source_location_id,
+            req.source_claim_id,
+            req.citation_note
+        ],
+    )?;
+    insert_event(
+        &tx,
+        "literature_review",
+        review_id,
+        "reviewed",
+        req.reviewer_id.as_deref(),
+        "Created with an exact source-version citation.",
+        now,
+    )?;
+    tx.commit()?;
+    query_literature_review(conn, review_id)
+}
+
 pub fn add_literature_source(
     conn: &Connection,
     req: &AddLiteratureSourceReq,

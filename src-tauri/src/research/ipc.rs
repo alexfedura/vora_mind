@@ -67,6 +67,15 @@ pub fn research_create_literature_review(
 }
 
 #[tauri::command]
+pub fn research_create_reviewed_literature_review(
+    state: State<AppState>,
+    request: CreateReviewedLiteratureReviewReq,
+) -> Result<LiteratureReviewDto, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    create_reviewed_literature_review(&conn, request)
+}
+
+#[tauri::command]
 pub fn research_add_literature_source(
     state: State<AppState>,
     request: AddLiteratureSourceReq,
