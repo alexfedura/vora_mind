@@ -4,6 +4,7 @@ import { Check, CheckCircle2, GripVertical, ListTodo, Plus, Sparkles, Trash2 } f
 import { InquiryTriagePanel } from "@/shared/layout/InquiryTriagePanel";
 import { HypothesesList } from "@/shared/layout/HypothesesList";
 import { QuestionsBoardPage } from "@/shared/layout/QuestionsBoardPage";
+import { ResearchWorkspacePage } from "@/shared/layout/ResearchWorkspacePage";
 import { useAppStore } from "@/shared/store/useAppStore";
 import type { TaskFlowItem, TaskFlowType } from "@/types";
 
@@ -26,7 +27,7 @@ interface TaskFlowPageProps {
 export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"tasks" | "queue" | "triage" | "lab">(
+  const [activeTab, setActiveTab] = useState<"tasks" | "queue" | "triage" | "lab" | "research">(
     () => isLabNavigationState(location.state) ? "lab" : "queue"
   );
   const tasks = useAppStore((state) => state.taskFlowItems);
@@ -191,6 +192,8 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
                     ? "Prioritize your inquiries and select the next one to pursue."
                       : activeTab === "lab"
                         ? "Run tests, record evidence, and decide what your hypotheses show."
+                      : activeTab === "research"
+                        ? "Plan evidence-backed inquiry and preserve the distinction between observations, interpretations, and hypotheses."
                       : "Keep your priorities in order. Drag any task to move it through your timeline."}
             </p>
           </div>
@@ -207,7 +210,7 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
             ["queue", "Queue"],
             ["triage", "Triage"],
             ["tasks", "Tasks"],
-            ...(taskType === "task" ? [["lab", "Lab"] as const] : []),
+            ...(taskType === "task" ? [["research", "Research"] as const, ["lab", "Lab"] as const] : []),
           ] as const).map(([tab, label]) => (
             <button
               key={tab}
@@ -230,6 +233,8 @@ export const TaskFlowPage: React.FC<TaskFlowPageProps> = ({ taskType }) => {
           <InquiryTriagePanel />
         ) : activeTab === "lab" ? (
           <HypothesesList />
+        ) : activeTab === "research" ? (
+          <ResearchWorkspacePage />
         ) : (
         <div className="mx-auto w-full max-w-4xl">
           <form onSubmit={(event) => void handleCreate(event)} className="flex gap-2">
