@@ -2780,3 +2780,245 @@ export interface EvaluateReproductionReq {
   evidenceDescription: string;
 }
 
+export type TransferArtifactKind =
+  | "finding_version"
+  | "concept_version"
+  | "principle_version"
+  | "framework_version"
+  | "model_version";
+
+export type TransferArtifactRef =
+  | { kind: "finding_version"; findingId: string; versionId: string }
+  | { kind: "concept_version"; conceptId: string; versionId: string }
+  | { kind: "principle_version"; principleId: string; versionId: string }
+  | { kind: "framework_version"; frameworkId: string; versionId: string }
+  | { kind: "model_version"; modelId: string; versionId: string };
+
+export type TransferPurpose = "research" | "learning" | "commercial" | "public_distribution";
+export type TransferAccessScope = "workspace" | "selected_projects";
+export type TransferEligibilityState = "eligible" | "restricted" | "withdrawn";
+export type KnowledgeTransferState = "accepted" | "rejected" | "withdrawn";
+export type KnowledgeVersionKind = "concept" | "principle";
+export type KnowledgeVersionStatus = "draft" | "reviewed" | "deprecated";
+export type TransferLineageRelation = "adopted" | "derived_from" | "based_on";
+
+export interface ResearchTransferProjectDto {
+  id: string;
+  title: string;
+  lifecycleStatus: string;
+}
+
+export interface TransferArtifactCatalogDto {
+  artifact: TransferArtifactRef;
+  title: string;
+  versionNo: number;
+  ownerProjectId: string | null;
+  lifecycleStatus: string;
+  originId: string | null;
+  eligibilityIds: string[];
+}
+
+export interface KnowledgeTransferOriginDto {
+  id: string;
+  artifact: TransferArtifactRef;
+  originProjectId: string;
+  originProjectTitle: string;
+  rationale: string;
+  recordedBy: string | null;
+  recordedAtUs: number;
+}
+
+export interface TransferEligibilityDto {
+  id: string;
+  origin: KnowledgeTransferOriginDto;
+  licenseIdentifier: string;
+  licenseUri: string | null;
+  accessScope: TransferAccessScope;
+  permittedPurposes: TransferPurpose[];
+  allowedProjectIds: string[];
+  attributionText: string;
+  permissionBasis: string;
+  reviewedBy: string;
+  reviewedAtUs: number;
+  state: TransferEligibilityState;
+  stateRationale: string;
+}
+
+export interface KnowledgeTransferEventDto {
+  id: string;
+  state: KnowledgeTransferState;
+  rationale: string;
+  actorId: string | null;
+  occurredAtUs: number;
+}
+
+export interface KnowledgeTransferDto {
+  id: string;
+  eligibilityId: string;
+  origin: KnowledgeTransferOriginDto;
+  receivingProjectId: string;
+  receivingProjectTitle: string;
+  intendedPurpose: TransferPurpose;
+  attributionText: string;
+  context: string;
+  requestedBy: string | null;
+  requestedAtUs: number;
+  state: KnowledgeTransferState;
+  events: KnowledgeTransferEventDto[];
+}
+
+export interface TransferAdaptationDto {
+  id: string;
+  transferId: string;
+  origin: KnowledgeTransferOriginDto;
+  receivingProjectId: string;
+  artifact: TransferArtifactRef;
+  title: string;
+  rationale: string;
+  adaptedBy: string | null;
+  createdAtUs: number;
+}
+
+export type DownstreamUseRef =
+  | { kind: "finding_version"; findingId: string; versionId: string }
+  | { kind: "concept_version"; conceptId: string; versionId: string }
+  | { kind: "principle_version"; principleId: string; versionId: string }
+  | { kind: "framework_version"; frameworkId: string; versionId: string }
+  | { kind: "model_version"; modelId: string; versionId: string }
+  | { kind: "model_evaluation"; id: string }
+  | { kind: "analysis_run"; id: string }
+  | { kind: "experiment_run"; id: string };
+
+export interface DownstreamUsageDto {
+  id: string;
+  transferId: string;
+  projectId: string;
+  reference: DownstreamUseRef;
+  useContext: string;
+  recordedBy: string | null;
+  recordedAtUs: number;
+}
+
+export interface ResearchLineageDto {
+  id: string;
+  transferId: string;
+  origin: TransferArtifactRef;
+  originProjectId: string;
+  receivingProjectId: string;
+  relationKind: TransferLineageRelation;
+  adaptation: TransferArtifactRef | null;
+  rationale: string;
+  occurredAtUs: number;
+}
+
+export interface TransferProvenanceRecordDto {
+  recordKind: string;
+  recordId: string;
+  label: string;
+  relationship: string;
+  details: string;
+}
+
+export interface TransferProvenancePreviewDto {
+  origin: KnowledgeTransferOriginDto;
+  title: string;
+  versionNo: number;
+  lifecycleStatus: string;
+  scope: string;
+  applicability: string;
+  uncertainty: string;
+  limitations: string;
+  validationScope: string[];
+  provenance: TransferProvenanceRecordDto[];
+}
+
+export interface TransferWorkspaceDto {
+  projects: ResearchTransferProjectDto[];
+  artifacts: TransferArtifactCatalogDto[];
+  origins: KnowledgeTransferOriginDto[];
+  eligibilities: TransferEligibilityDto[];
+  transfers: KnowledgeTransferDto[];
+  adaptations: TransferAdaptationDto[];
+  downstreamUsage: DownstreamUsageDto[];
+  lineage: ResearchLineageDto[];
+}
+
+export interface CreateConceptVersionReq {
+  conceptId: string | null;
+  projectId: string;
+  parentVersionId: string | null;
+  title: string;
+  definition: string;
+  rationale: string;
+  createdBy: string | null;
+}
+
+export interface CreatePrincipleVersionReq {
+  principleId: string | null;
+  projectId: string;
+  parentVersionId: string | null;
+  title: string;
+  statement: string;
+  rationale: string;
+  createdBy: string | null;
+}
+
+export interface ReviewKnowledgeVersionReq {
+  versionId: string;
+  kind: KnowledgeVersionKind;
+  status: KnowledgeVersionStatus;
+  rationale: string;
+  actorId: string | null;
+}
+
+export interface CreateTransferOriginReq {
+  artifact: TransferArtifactRef;
+  originProjectId: string;
+  rationale: string;
+  recordedBy: string | null;
+}
+
+export interface CreateTransferEligibilityReq {
+  originId: string;
+  licenseIdentifier: string;
+  licenseUri: string | null;
+  accessScope: TransferAccessScope;
+  permittedPurposes: TransferPurpose[];
+  allowedProjectIds: string[];
+  attributionText: string;
+  permissionBasis: string;
+  permissionGranted: boolean;
+  reviewedBy: string;
+}
+
+export interface ChangeTransferEligibilityReq {
+  eligibilityId: string;
+  state: TransferEligibilityState;
+  rationale: string;
+  actorId: string | null;
+}
+
+export interface AdoptKnowledgeReq {
+  eligibilityId: string;
+  receivingProjectId: string;
+  intendedPurpose: TransferPurpose;
+  attributionText: string;
+  context: string;
+  requestedBy: string | null;
+}
+
+export interface CreateTransferAdaptationReq {
+  transferId: string;
+  artifact: TransferArtifactRef;
+  relationKind: TransferLineageRelation;
+  rationale: string;
+  adaptedBy: string | null;
+}
+
+export interface RecordDownstreamUsageReq {
+  transferId: string;
+  reference: DownstreamUseRef;
+  useContext: string;
+  recordedBy: string | null;
+}
+
