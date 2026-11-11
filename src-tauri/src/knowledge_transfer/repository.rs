@@ -423,9 +423,9 @@ pub fn review_knowledge_version(
 ) -> Result<()> {
     if !matches!(
         request.status,
-        KnowledgeVersionStatus::Reviewed | KnowledgeVersionStatus::Superseded
+        KnowledgeVersionStatus::Reviewed | KnowledgeVersionStatus::Deprecated
     ) {
-        bail!("Knowledge versions can only be moved to reviewed or superseded through this operation.");
+        bail!("Knowledge versions can only be moved to reviewed or deprecated through this operation.");
     }
     required(&request.rationale, "Review rationale")?;
     required(request.version_id.as_str(), "Version")?;
@@ -868,18 +868,6 @@ fn insert_downstream_usage(
     project_id: &str,
     now: i64,
 ) -> Result<()> {
-    let common = |kind: &str| {
-        (
-            kind,
-            None::<&str>,
-            None::<&str>,
-            None::<&str>,
-            None::<&str>,
-            None::<&str>,
-            None::<&str>,
-            None::<&str>,
-        )
-    };
     let (kind, finding, concept, principle, framework, model, evaluation, analysis, experiment) =
         match &request.reference {
             DownstreamUseRef::FindingVersion { version_id, .. } => (
@@ -971,7 +959,6 @@ fn insert_downstream_usage(
                 Some(id.as_str()),
             ),
         };
-    let _ = common;
     tx.execute(
         "INSERT INTO downstream_usage
             (id, transfer_id, project_id, usage_kind, finding_version_id,
@@ -1034,19 +1021,12 @@ fn query_origin(conn: &Connection, origin_id: &str) -> Result<KnowledgeTransferO
         String,
         Option<String>,
         i64,
-        String,
     ) = conn.query_row(
         "SELECT o.artifact_kind,
                 COALESCE(o.finding_version_id, o.concept_version_id, o.principle_version_id,
                          o.framework_version_id, o.model_version_id),
-                o.origin_project_id, o.rationale, o.recorded_by, o.recorded_at_us,
-                COALESCE(fv.finding_id, cv.concept_id, pv.principle_id, fw.framework_id, mv.model_id)
+                o.origin_project_id, o.rationale, o.recorded_by, o.recorded_at_us
          FROM knowledge_transfer_origins o
-         LEFT JOIN analysis_finding_versions fv ON fv.id = o.finding_version_id
-         LEFT JOIN knowledge_concept_versions cv ON cv.id = o.concept_version_id
-         LEFT JOIN knowledge_principle_versions pv ON pv.id = o.principle_version_id
-         LEFT JOIN knowledge_framework_versions fw ON fw.id = o.framework_version_id
-         LEFT JOIN model_versions mv ON mv.id = o.model_version_id
          WHERE o.id = ?1",
         [origin_id],
         |row| {
@@ -1061,8 +1041,8 @@ fn query_origin(conn: &Connection, origin_id: &str) -> Result<KnowledgeTransferO
             ))
         },
     )?;
-    let artifact = enum_artifact(&kind, project_or_entity(&kind, project_id.clone(), &version_id, conn)?, version_id)?;
-    let info = artifact_info(conn, &artifact)?;
+    let entity_id = project_or_entity(&kind, project_id.clone(), &version_id, conn)?;
+    let artifact = enum_artifact(&kind, entity_id, version_id)?;
     let project_title = conn.query_row(
         "SELECT title FROM research_projects WHERE id = ?1",
         [&project_id],

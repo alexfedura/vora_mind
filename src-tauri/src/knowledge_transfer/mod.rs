@@ -176,8 +176,7 @@ impl KnowledgeVersionKind {
 pub enum KnowledgeVersionStatus {
     Draft,
     Reviewed,
-    Rejected,
-    Superseded,
+    Deprecated,
 }
 
 impl KnowledgeVersionStatus {
@@ -185,8 +184,7 @@ impl KnowledgeVersionStatus {
         match self {
             Self::Draft => "draft",
             Self::Reviewed => "reviewed",
-            Self::Rejected => "rejected",
-            Self::Superseded => "superseded",
+            Self::Deprecated => "deprecated",
         }
     }
 }
