@@ -2,11 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { learningService } from "@/mind/services/learningService";
 import type {
-  AssessmentAttemptDto,
-  AssessmentVersionDto,
   LearningAssessmentOutcome,
   LearningWorkspaceDto,
-  ReproductionSubmissionDto,
 } from "@/types";
 
 const fieldClass =
@@ -33,9 +30,21 @@ function Field({
 
 function parseJson(raw: string, label: string): unknown {
   try {
-    return JSON.parse(raw) as unknown;
+    const parsed: unknown = JSON.parse(raw);
+    return parsed;
   } catch {
     throw new Error(`${label} must be valid JSON.`);
+  }
+}
+
+function assessmentOutcome(value: string): LearningAssessmentOutcome {
+  switch (value) {
+    case "pass":
+    case "fail":
+    case "inconclusive":
+      return value;
+    default:
+      throw new Error("Choose a supported assessment outcome.");
   }
 }
 
@@ -218,7 +227,7 @@ export function LearningWorkspacePanel(): React.JSX.Element {
       attemptId,
       correctionOfId: evaluation?.id ?? null,
       evaluatorId: String(form.get("evaluatorId") ?? ""),
-      outcome: String(form.get("outcome") ?? "inconclusive") as LearningAssessmentOutcome,
+      outcome: assessmentOutcome(String(form.get("outcome") ?? "inconclusive")),
       criterionScores: selectedAttemptAssessment.rubricCriteria.map((criterion) => ({
         rubricCriterionId: criterion.id,
         score: Number(form.get(`score:${criterion.id}`)),
@@ -296,7 +305,7 @@ export function LearningWorkspacePanel(): React.JSX.Element {
     return learningService.evaluateReproduction({
       submissionId,
       evaluatorId: String(form.get("evaluatorId") ?? ""),
-      outcome: String(form.get("outcome") ?? "inconclusive") as LearningAssessmentOutcome,
+      outcome: assessmentOutcome(String(form.get("outcome") ?? "inconclusive")),
       criterionScores: selectedReproductionRubric.rubricCriteria.map((criterion) => ({
         rubricCriterionId: criterion.id,
         score: Number(form.get(`score:${criterion.id}`)),
@@ -640,7 +649,7 @@ export function LearningWorkspacePanel(): React.JSX.Element {
                 {!workspace.progress.some((item) => item.learningProjectId === projectId) && (
                   <p className="text-xs text-gray-500">No progress is inferred from activity or completion. Evaluated records will appear here with their explanation.</p>
                 )}
-                {attempts.map((attempt: AssessmentAttemptDto) => (
+                {attempts.map((attempt) => (
                   <p key={attempt.id} className="text-[10px] text-gray-600">
                     Historical attempt {attempt.id} · assessment {attempt.assessmentVersionId} · submitted {attempt.submittedAtUs ? formatTime(attempt.submittedAtUs) : "not submitted"}
                   </p>
