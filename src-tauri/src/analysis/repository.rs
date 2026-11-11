@@ -2858,7 +2858,6 @@ pub fn create_finding_version(
     nonempty(&req.applicability, "Finding applicability")?;
     nonempty(&req.uncertainty, "Finding uncertainty")?;
     nonempty(&req.limitations, "Finding limitations")?;
-    nonempty(&req.change_rationale, "Finding version rationale, if supplied")?;
     if req.analysis_run_ids.is_empty() || req.evidence.is_empty() {
         return Err(anyhow!(
             "Findings require at least one analysis lineage record and evidence link."
@@ -3086,4 +3085,76 @@ pub fn findings_for_project(conn: &Connection, project_id: &str) -> Result<Vec<F
     ids.iter()
         .map(|version_id| query_finding_version(conn, version_id))
         .collect()
+}
+
+pub fn workspace(conn: &Connection, project_id: &str) -> Result<AnalysisWorkspaceDto> {
+    project_exists(conn, project_id)?;
+
+    let method_ids = {
+        let mut statement = conn.prepare(
+            "SELECT v.id FROM analysis_method_versions v
+             JOIN analysis_methods m ON m.id = v.method_id
+             WHERE m.project_id = ?1 ORDER BY m.name, v.version_no",
+        )?;
+        statement
+            .query_map([project_id], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    let methods = method_ids
+        .iter()
+        .map(|version_id| query_method_version(conn, version_id))
+        .collect::<Result<Vec<_>>>()?;
+
+    let metric_ids = {
+        let mut statement = conn.prepare(
+            "SELECT v.id FROM analysis_metric_definition_versions v
+             JOIN analysis_metric_definitions m ON m.id = v.metric_definition_id
+             WHERE m.project_id = ?1 ORDER BY m.metric_key, v.version_no",
+        )?;
+        statement
+            .query_map([project_id], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    let metrics = metric_ids
+        .iter()
+        .map(|version_id| query_metric_version(conn, version_id))
+        .collect::<Result<Vec<_>>>()?;
+
+    let definition_ids = {
+        let mut statement = conn.prepare(
+            "SELECT v.id FROM analysis_definition_versions v
+             JOIN analysis_definitions d ON d.id = v.definition_id
+             WHERE d.project_id = ?1 ORDER BY d.title, v.version_no",
+        )?;
+        statement
+            .query_map([project_id], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    let definitions = definition_ids
+        .iter()
+        .map(|version_id| query_definition_version(conn, version_id))
+        .collect::<Result<Vec<_>>>()?;
+
+    let run_ids = {
+        let mut statement = conn.prepare(
+            "SELECT id FROM analysis_runs WHERE project_id = ?1
+             ORDER BY created_at_us, id",
+        )?;
+        statement
+            .query_map([project_id], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    let runs = run_ids
+        .iter()
+        .map(|run_id| query_run(conn, run_id))
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(AnalysisWorkspaceDto {
+        methods,
+        metrics,
+        definitions,
+        runs,
+        evidence: evidence_for_project(conn, project_id)?,
+        findings: findings_for_project(conn, project_id)?,
+    })
 }
