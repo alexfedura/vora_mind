@@ -2,6 +2,7 @@ extern crate self as vora_lib;
 
 pub mod experiment;
 pub mod analysis;
+pub mod model;
 pub mod forge;
 pub mod mind;
 pub mod research;
@@ -2527,6 +2528,14 @@ pub fn run() {
             analysis::ipc::analysis_create_finding_version,
             analysis::ipc::analysis_transition_finding,
             analysis::ipc::analysis_create_finding_relation,
+            model::ipc::model_get_workspace,
+            model::ipc::model_create,
+            model::ipc::model_create_version,
+            model::ipc::model_create_evidence,
+            model::ipc::model_create_evaluation,
+            model::ipc::model_create_validation,
+            model::ipc::model_finalize_validation,
+            model::ipc::model_create_replication,
             triage_question,
             untriage_question,
             archive_question,
