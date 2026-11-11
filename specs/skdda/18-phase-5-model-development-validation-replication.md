@@ -65,7 +65,15 @@ immutability triggers as well as repository transaction rules.
 
 ## Typed contribution, contradiction, and evidence links
 
-Use concrete foreign-key tables for:
+Use concrete foreign-key tables for each target category, exposed through a
+stable `ModelContribution` record shape. Every relation has a stable relation
+ID, actor (when available), creation timestamp, rationale, typed relation kind,
+and concrete foreign keys; do not merge these into an unvalidated polymorphic
+endpoint pair. Contribution inspection returns the unified typed records while
+retaining the category-specific storage and referential constraints. The
+historical relation tables remain immutable.
+
+Store:
 
 - Model version ↔ exact hypothesis definition version, with relation
   `contributes_to` or `contradicts`.

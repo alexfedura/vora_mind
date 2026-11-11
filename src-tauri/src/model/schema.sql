@@ -437,6 +437,19 @@ WHEN NOT EXISTS (
 BEGIN
     SELECT RAISE(ABORT, 'replication evidence must target the replicated model version');
 END;
+CREATE TRIGGER model_version_evidence_identity_match
+BEFORE INSERT ON model_version_evidence
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM model_versions target
+    JOIN model_evidence e ON e.id = NEW.evidence_id
+    JOIN model_versions evidence_version ON evidence_version.id = e.model_version_id
+    WHERE target.id = NEW.model_version_id
+      AND target.model_id = evidence_version.model_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'model evidence contributions must remain within one model identity');
+END;
 
 CREATE TRIGGER model_identity_no_update
 BEFORE UPDATE ON scientific_models
