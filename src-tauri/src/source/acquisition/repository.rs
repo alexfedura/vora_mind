@@ -787,7 +787,7 @@ pub fn create_framework(
         id: framework_id.to_string(),
         title: req.title.clone(),
         description: req.description.clone().unwrap_or_default(),
-        lifecycle: "draft".to_string(),
+        lifecycle: FrameworkLifecycle::Draft,
         current_version_id: None,
         created_by: created_by.map(str::to_string),
         created_at_us: now,
@@ -803,11 +803,13 @@ pub fn list_frameworks(conn: &Connection) -> RepoResult<Vec<FrameworkDto>> {
     )?;
     let rows = statement
         .query_map([], |row| {
+            let lifecycle: String = row.get(3)?;
             Ok(FrameworkDto {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 description: row.get(2)?,
-                lifecycle: row.get(3)?,
+                lifecycle: FrameworkLifecycle::parse(&lifecycle)
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
                 current_version_id: row.get(4)?,
                 created_by: row.get(5)?,
                 created_at_us: row.get(6)?,
@@ -835,6 +837,7 @@ fn load_framework_items(
     )?;
     let rows = statement.query_map([version_id], |row| {
         let kind: String = row.get(2)?;
+        let role: String = row.get(7)?;
         let id = row
             .get::<_, Option<String>>(3)?
             .or(row.get::<_, Option<String>>(4)?)
@@ -847,7 +850,8 @@ fn load_framework_items(
             item_kind: KnowledgeItemKind::parse(&kind)
                 .map_err(|_| rusqlite::Error::InvalidQuery)?,
             item_id: id,
-            membership_role: row.get(7)?,
+            membership_role: FrameworkMembershipRole::parse(&role)
+                .map_err(|_| rusqlite::Error::InvalidQuery)?,
             item_order: row.get(8)?,
             rationale: row.get(9)?,
             item_title: row.get(10)?,
@@ -858,6 +862,8 @@ fn load_framework_items(
 
 fn map_framework_version(conn: &Connection, row: &Row<'_>) -> RepoResult<FrameworkVersionDto> {
     let id: String = row.get(0)?;
+    let status: String = row.get(6)?;
+    let change_class: Option<String> = row.get(7)?;
     Ok(FrameworkVersionDto {
         items: load_framework_items(conn, &id)?,
         id,
@@ -866,8 +872,13 @@ fn map_framework_version(conn: &Connection, row: &Row<'_>) -> RepoResult<Framewo
         parent_version_id: row.get(3)?,
         title: row.get(4)?,
         description: row.get(5)?,
-        status: row.get(6)?,
-        change_class: row.get(7)?,
+        status: FrameworkVersionStatus::parse(&status)
+            .map_err(|_| rusqlite::Error::InvalidQuery)?,
+        change_class: change_class
+            .as_deref()
+            .map(FrameworkChangeClass::parse)
+            .transpose()
+            .map_err(|_| rusqlite::Error::InvalidQuery)?,
         change_rationale: row.get(8)?,
         created_by: row.get(9)?,
         created_at_us: row.get(10)?,
@@ -904,10 +915,12 @@ pub fn list_framework_reviews(
          WHERE framework_version_id = ?1 ORDER BY reviewed_at_us, id",
     )?;
     let rows = statement.query_map([framework_version_id], |row| {
+        let review_status: String = row.get(2)?;
         Ok(FrameworkReviewDto {
             id: row.get(0)?,
             framework_version_id: row.get(1)?,
-            review_status: row.get(2)?,
+            review_status: FrameworkReviewStatus::parse(&review_status)
+                .map_err(|_| rusqlite::Error::InvalidQuery)?,
             reviewer_id: row.get(3)?,
             rationale: row.get(4)?,
             reviewed_at_us: row.get(5)?,
