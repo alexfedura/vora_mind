@@ -340,6 +340,15 @@ pub fn research_create_design(
 }
 
 #[tauri::command]
+pub fn research_create_linked_design(
+    state: State<AppState>,
+    request: CreateLinkedResearchDesignReq,
+) -> Result<ResearchExperimentDesignVersionDto, String> {
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    create_linked_research_design(&mut conn, request)
+}
+
+#[tauri::command]
 pub fn research_transition_design(
     state: State<AppState>,
     design_version_id: String,
