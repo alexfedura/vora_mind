@@ -304,6 +304,26 @@ pub fn assign_domain(
     Ok(())
 }
 
+fn validate_project_domain(
+    conn: &Connection,
+    project_id: &str,
+    domain_id: Option<&str>,
+) -> Result<()> {
+    let Some(domain_id) = domain_id else {
+        return Ok(());
+    };
+    let assigned: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM research_project_domains
+         WHERE project_id = ?1 AND domain_id = ?2)",
+        params![project_id, domain_id],
+        |row| row.get(0),
+    )?;
+    if !assigned {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    Ok(())
+}
+
 pub fn adopt_framework_version(
     conn: &Connection,
     id: &str,
@@ -577,6 +597,9 @@ pub fn create_gap(
     id: &str,
     now: i64,
 ) -> Result<ResearchGapDto> {
+    if let Some(domain_id) = req.domain_id.as_deref() {
+        validate_project_domain(conn, &req.project_id, Some(domain_id))?;
+    }
     conn.execute(
         "INSERT INTO research_gaps
             (id, project_id, domain_id, title, statement, lifecycle_status,
@@ -754,13 +777,43 @@ pub fn create_question(
     now: i64,
 ) -> Result<ResearchQuestionDto> {
     let tx = conn.transaction()?;
+    let mut project_id = req.project_id.clone();
+    let mut domain_id = req.domain_id.clone();
+    if let Some(gap_id) = req.research_gap_id.as_deref() {
+        let gap = tx.query_row(
+            "SELECT project_id, domain_id, lifecycle_status
+             FROM research_gaps WHERE id = ?1",
+            [gap_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )?;
+        if gap.2 != "accepted" || project_id.as_deref().is_some_and(|id| id != gap.0) {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        project_id = Some(gap.0);
+        if domain_id.is_none() {
+            domain_id = gap.1;
+        }
+    }
+    if let Some(project_id) = project_id.as_deref() {
+        if let Some(domain_id) = domain_id.as_deref() {
+            validate_project_domain(&tx, project_id, Some(domain_id))?;
+        }
+    } else if req.research_gap_id.is_some() {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
     let legacy_ms = now / 1_000;
     tx.execute(
         "INSERT INTO questions (id, title, description, status, created_at, updated_at)
          VALUES (?1, ?2, ?3, 'parked', ?4, ?4)",
         params![id, req.title.trim(), req.description, legacy_ms],
     )?;
-    let ownership = if req.project_id.is_some() {
+    let ownership = if project_id.is_some() {
         "project"
     } else {
         "unassigned"
@@ -772,9 +825,9 @@ pub fn create_question(
          VALUES (?1, ?2, ?3, ?4, 'draft', ?5, NULL, ?6, ?7, ?8)",
         params![
             id,
-            req.project_id,
+            project_id,
             req.research_gap_id,
-            req.domain_id,
+            domain_id,
             ownership,
             req.rationale,
             req.created_by,
@@ -1019,6 +1072,9 @@ pub fn create_phenomenon(
     id: &str,
     now: i64,
 ) -> Result<PhenomenonDto> {
+    if let Some(domain_id) = req.domain_id.as_deref() {
+        validate_project_domain(conn, &req.project_id, Some(domain_id))?;
+    }
     conn.execute(
         "INSERT INTO research_phenomena
             (id, project_id, domain_id, title, description, population_scope,
@@ -1555,6 +1611,17 @@ pub fn create_typed_hypothesis(
     if !question_matches {
         return Err(rusqlite::Error::InvalidQuery);
     }
+    if let Some(parent_id) = req.parent_hypothesis_id.as_deref() {
+        let parent_matches: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM research_hypotheses
+             WHERE id = ?1 AND project_id = ?2)",
+            params![parent_id, req.project_id],
+            |row| row.get(0),
+        )?;
+        if !parent_matches || parent_id == hypothesis_id {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+    }
     let legacy_ms = now / 1_000;
     let independent = req
         .variables
@@ -1585,16 +1652,33 @@ pub fn create_typed_hypothesis(
         "INSERT INTO research_hypotheses
             (id, project_id, research_question_id, legacy_hypothesis_id,
              parent_hypothesis_id, ownership_state, lifecycle_status, created_by, created_at_us)
-         VALUES (?1, ?2, ?3, ?4, NULL, 'project', 'draft', ?5, ?6)",
+         VALUES (?1, ?2, ?3, ?4, ?5, 'project', 'draft', ?6, ?7)",
         params![
             hypothesis_id,
             req.project_id,
             req.research_question_id,
             legacy_hypothesis_id,
+            req.parent_hypothesis_id,
             req.created_by,
             now
         ],
     )?;
+    if let Some(parent_id) = req.parent_hypothesis_id.as_deref() {
+        tx.execute(
+            "INSERT INTO research_hypothesis_lineage
+                (id, parent_hypothesis_id, derived_hypothesis_id, relation_kind,
+                 rationale, created_by, created_at_us)
+             VALUES (?1, ?2, ?3, 'derived_from', ?4, ?5, ?6)",
+            params![
+                Uuid::now_v7().to_string(),
+                parent_id,
+                hypothesis_id,
+                req.lineage_rationale.as_deref().unwrap_or_default(),
+                req.created_by,
+                now
+            ],
+        )?;
+    }
     tx.execute(
         "INSERT INTO hypothesis_definition_versions
             (id, hypothesis_id, version_no, statement_h0, statement_h1,
