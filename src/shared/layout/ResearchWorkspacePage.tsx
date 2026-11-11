@@ -117,6 +117,9 @@ export const ResearchWorkspacePage: React.FC = () => {
   const projectPhenomena = (workspace?.phenomena ?? []).filter(
     (phenomenon) => phenomenon.projectId === projectId,
   );
+  const projectDomains = (workspace?.domains ?? []).filter((domain) =>
+    workspace?.projects.find((project) => project.id === projectId)?.domainIds.includes(domain.id),
+  );
   const projectObservations = (workspace?.observations ?? []).filter(
     (observation) => observation.projectId === projectId,
   );
@@ -243,9 +246,10 @@ export const ResearchWorkspacePage: React.FC = () => {
     const target = event.currentTarget;
     const form = new FormData(target);
     try {
+      const domainId = String(form.get("domainId") ?? "");
       const gap = await run(() => researchService.createGap({
         projectId,
-        domainId: null,
+        domainId: domainId || null,
         title: String(form.get("title") ?? ""),
         statement: String(form.get("statement") ?? ""),
         createdBy: null,
@@ -300,7 +304,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     const form = new FormData(target);
     await act(() => researchService.createPhenomenon({
       projectId,
-      domainId: null,
+      domainId: String(form.get("domainId") ?? "") || null,
       title: String(form.get("title") ?? ""),
       description: String(form.get("description") ?? ""),
       populationScope: String(form.get("population") ?? ""),
@@ -716,6 +720,7 @@ export const ResearchWorkspacePage: React.FC = () => {
             <form onSubmit={(event) => void createGap(event)} className="grid gap-3 md:grid-cols-2">
               <Field label="Gap title"><input className={inputClass} name="title" required /></Field>
               <Field label="Gap statement"><input className={inputClass} name="statement" required /></Field>
+              <Field label="Domain (optional)"><select className={inputClass} name="domainId"><option value="">No domain</option>{projectDomains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></Field>
               <Field label="Evidence type">
                 <select className={inputClass} name="evidenceKind">
                   <option value="prior">Prior-knowledge assessment</option>
@@ -830,6 +835,7 @@ export const ResearchWorkspacePage: React.FC = () => {
                 <Field label="Phenomenon"><input className={inputClass} name="title" required /></Field>
                 <Field label="Description"><textarea className={inputClass} name="description" required rows={2} /></Field>
                 <Field label="Population / scope"><input className={inputClass} name="population" required /></Field>
+                <Field label="Domain (optional)"><select className={inputClass} name="domainId"><option value="">No domain</option>{projectDomains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></Field>
                 <Field label="Conditions and context"><input className={inputClass} name="context" /></Field>
                 <Field label="Temporal boundary"><input className={inputClass} name="temporalBoundary" /></Field>
                 <button className={buttonClass}><Plus size={14} /> Register phenomenon</button>
