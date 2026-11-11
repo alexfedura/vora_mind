@@ -211,13 +211,6 @@ export function LearningWorkspacePanel(): React.JSX.Element {
       assessmentVersionId: String(form.get("assessmentVersionId") ?? ""),
     });
 
-  const saveAttemptResponse = (form: FormData): Promise<unknown> =>
-    learningService.saveAttemptResponse({
-      attemptId,
-      assessmentQuestionId: String(form.get("questionId") ?? ""),
-      response: String(form.get("response") ?? ""),
-    });
-
   const evaluateAttempt = (form: FormData): Promise<unknown> => {
     if (!selectedAttempt || !selectedAttemptAssessment) {
       throw new Error("Choose an assessment attempt to evaluate.");
