@@ -132,20 +132,29 @@ pub fn experiment_get_dataset_samples(
 
 #[tauri::command]
 pub fn experiment_create_run(
+    app: AppHandle,
     state: State<AppState>,
     request: CreateExperimentRunReq,
 ) -> Result<ExperimentRunDto, String> {
-    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
-    repository::create_run(&mut conn, &request).map_err(|error| error.to_string())
+    let assets_root = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    service::create_run(&state.db, &request, &assets_root).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 pub fn experiment_transition_run(
+    app: AppHandle,
     state: State<AppState>,
     request: TransitionExperimentRunReq,
 ) -> Result<ExperimentRunDto, String> {
-    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
-    repository::transition_run(&mut conn, &request).map_err(|error| error.to_string())
+    let assets_root = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    service::transition_run(&state.db, &request, &assets_root)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
