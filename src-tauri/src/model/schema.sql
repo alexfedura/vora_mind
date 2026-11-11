@@ -352,6 +352,79 @@ CREATE TABLE model_replication_model_evidence (
     PRIMARY KEY (replication_id, evidence_id)
 );
 
+CREATE TRIGGER model_version_dataset_uses_require_sealed
+BEFORE INSERT ON model_version_dataset_uses
+WHEN (SELECT lifecycle_status FROM experiment_dataset_versions
+      WHERE id = NEW.dataset_version_id) <> 'sealed'
+BEGIN
+    SELECT RAISE(ABORT, 'model dataset uses require a sealed dataset version');
+END;
+CREATE TRIGGER model_evaluation_exact_pins
+BEFORE INSERT ON model_evaluations
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM analysis_runs r
+    JOIN analysis_run_inputs i ON i.id = NEW.analysis_run_input_id
+    JOIN analysis_metrics m ON m.id = NEW.analysis_metric_id
+    JOIN experiment_dataset_versions d ON d.id = NEW.dataset_version_id
+    JOIN analysis_run_events e ON e.run_id = r.id AND e.lifecycle_status = 'completed'
+    WHERE r.id = NEW.analysis_run_id
+      AND r.project_id = NEW.project_id
+      AND i.run_id = r.id
+      AND i.dataset_version_id = NEW.dataset_version_id
+      AND i.role = NEW.role
+      AND i.split_group_id IS NEW.split_group_id
+      AND m.run_id = r.id
+      AND d.lifecycle_status = 'sealed'
+      AND NOT EXISTS (
+          SELECT 1 FROM analysis_run_events later
+          WHERE later.run_id = r.id
+            AND (later.occurred_at_us > e.occurred_at_us
+                 OR (later.occurred_at_us = e.occurred_at_us AND later.id > e.id))
+      )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'model evaluation must pin a completed run, exact input, dataset, role, split, and metric');
+END;
+CREATE TRIGGER model_experiment_run_design_match
+BEFORE INSERT ON model_version_experiments
+WHEN NEW.experiment_run_id IS NOT NULL
+ AND NOT EXISTS (
+     SELECT 1 FROM experiment_runs
+     WHERE id = NEW.experiment_run_id AND design_version_id = NEW.design_version_id
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'model experiment relation must pin the run design version');
+END;
+CREATE TRIGGER model_replication_original_pin
+BEFORE INSERT ON model_replications
+WHEN NOT EXISTS (
+    SELECT 1 FROM experiment_runs r
+    WHERE r.id = NEW.original_experiment_run_id
+      AND r.design_version_id = NEW.original_design_version_id
+      AND r.lifecycle_status IN ('completed', 'inconclusive')
+)
+BEGIN
+    SELECT RAISE(ABORT, 'replication must pin a completed or inconclusive original run and design');
+END;
+CREATE TRIGGER model_replication_dataset_sealed
+BEFORE INSERT ON model_replication_datasets
+WHEN (SELECT lifecycle_status FROM experiment_dataset_versions
+      WHERE id = NEW.dataset_version_id) <> 'sealed'
+BEGIN
+    SELECT RAISE(ABORT, 'replication dataset pins require sealed versions');
+END;
+CREATE TRIGGER model_replication_evidence_version_match
+BEFORE INSERT ON model_replication_model_evidence
+WHEN NOT EXISTS (
+    SELECT 1 FROM model_replications r
+    JOIN model_evidence e ON e.id = NEW.evidence_id
+    WHERE r.id = NEW.replication_id AND r.model_version_id = e.model_version_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'replication evidence must target the replicated model version');
+END;
+
 CREATE TRIGGER model_identity_no_update
 BEFORE UPDATE ON scientific_models
 BEGIN
