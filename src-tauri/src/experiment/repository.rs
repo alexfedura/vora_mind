@@ -1936,3 +1936,691 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<ExperimentWorksp
         transformations,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+    use std::sync::Mutex;
+
+    fn temporary_workspace_path() -> PathBuf {
+        std::env::temp_dir().join(format!("vora-experiment-{}.vora", Uuid::now_v7()))
+    }
+
+    fn initialize(conn: &Connection) {
+        crate::mind::portable_db::initialize_workspace_schema(conn)
+            .expect("initialize complete workspace schema");
+    }
+
+    fn project(conn: &Connection, id: &str) {
+        conn.execute(
+            "INSERT INTO research_projects
+                (id, title, aim, lifecycle_status, created_at_us, updated_at_us)
+             VALUES (?1, ?2, '', 'active', 1, 1)",
+            params![id, format!("Project {id}")],
+        )
+        .expect("create project");
+    }
+
+    fn schema() -> DatasetSampleSchemaDto {
+        DatasetSampleSchemaDto {
+            schema_id: "market.observation".into(),
+            schema_version: 1,
+            fields: vec![DatasetFieldDefinitionDto {
+                key: "price".into(),
+                value_kind: DatasetSampleValueKind::Decimal,
+                required: true,
+                unit: Some("USD".into()),
+            }],
+            allow_additional_fields: false,
+        }
+    }
+
+    fn data_sample(version_id: &str, sample_id: &str, value: &str) -> DatasetSampleDto {
+        DatasetSampleDto::DataSample(DataSampleDto {
+            sample_id: sample_id.into(),
+            dataset_version_id: version_id.into(),
+            occurred_at_us: Some(1_700_000_000_000_000),
+            entity_ref: None,
+            values: BTreeMap::from([(
+                "price".into(),
+                DatasetSampleValue::Decimal {
+                    value: value.into(),
+                    unit: "USD".into(),
+                    uncertainty: None,
+                },
+            )]),
+            provenance: vec![],
+        })
+    }
+
+    fn valid_specification(
+        datasets: Vec<DatasetRolePinDto>,
+    ) -> ExperimentDesignSpecificationDto {
+        ExperimentDesignSpecificationDto {
+            target_research_question_id: None,
+            target_hypothesis_version_id: None,
+            target_model_version_id: Some("unresolved-model-version-v1".into()),
+            estimand: "Difference in mean outcome".into(),
+            study_type: StudyType::Other,
+            intervention: Some("Treatment A".into()),
+            control: Some("Control".into()),
+            comparison_groups: vec![
+                ComparisonGroupDto {
+                    name: "treatment".into(),
+                    description: "Receives Treatment A".into(),
+                    intervention: true,
+                },
+                ComparisonGroupDto {
+                    name: "control".into(),
+                    description: "Receives the control".into(),
+                    intervention: false,
+                },
+            ],
+            factors: vec![],
+            outcomes: vec![OperationalDefinitionDto {
+                name: "primary outcome".into(),
+                definition: "Observed outcome under the declared protocol".into(),
+                unit: Some("USD".into()),
+                measurement_method: Some("Recorded measurement".into()),
+            }],
+            covariates: vec![],
+            unit_of_analysis: "individual observation".into(),
+            sampling_frame: "Eligible study observations".into(),
+            eligibility_rules: vec!["Consent recorded".into()],
+            exclusion_rules: vec![],
+            planned_sample_size: Some(100),
+            sample_size_rationale: "Predeclared target".into(),
+            stopping_rule: "Stop at the planned sample size".into(),
+            randomization: Some("Random assignment within blocks".into()),
+            blinding: Some("Outcome assessor blinded".into()),
+            instruments: vec!["instrument-v1".into()],
+            operational_definitions: vec![],
+            data_collection_schedule: vec![DataCollectionScheduleEntryDto {
+                stage: "baseline".into(),
+                schedule: "Before intervention".into(),
+                instrument_ids: vec!["instrument-v1".into()],
+            }],
+            primary_outcomes: vec!["primary outcome".into()],
+            secondary_outcomes: vec!["safety outcome".into()],
+            preregistered_analysis_plan: "Estimate the declared estimand".into(),
+            multiplicity_strategy: "One primary outcome; secondary outcomes exploratory".into(),
+            deviations_policy: "Record deviations before interpretation".into(),
+            datasets,
+            dataset_plan_rationale: "Prospective data plan is documented".into(),
+            code_environment: CodeEnvironmentIdentityDto {
+                code_uri: "repo://vora/experiment".into(),
+                code_revision: Some("abc123".into()),
+                environment: "Vora test environment".into(),
+                dependency_lock_sha256: None,
+            },
+            random_seeds: vec!["seed-2026".into()],
+            reproducibility_instructions: "Use the pinned code, environment, and seed".into(),
+            market_context: None,
+        }
+    }
+
+    fn create_typed_design(
+        conn: &mut Connection,
+        project_id: &str,
+        title: &str,
+        specification: ExperimentDesignSpecificationDto,
+    ) -> ExperimentDesignVersionDto {
+        create_design_version(
+            conn,
+            &CreateExperimentDesignVersionReq {
+                project_id: project_id.into(),
+                design_id: None,
+                parent_version_id: None,
+                title: title.into(),
+                description: "Design intent".into(),
+                protocol: "Intended procedure".into(),
+                change_rationale: String::new(),
+                specification,
+                created_by: Some("researcher".into()),
+            },
+        )
+        .expect("create typed design")
+    }
+
+    fn review_design(conn: &Connection, version_id: &str) {
+        crate::research::repository::transition_research_design(
+            conn,
+            version_id,
+            "review",
+            Some("reviewer"),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("review typed design");
+    }
+
+    #[test]
+    fn preregistered_design_versions_are_immutable_and_failed_runs_persist() {
+        let database_path = temporary_workspace_path();
+        let mut conn = Connection::open(&database_path).expect("open workspace");
+        initialize(&conn);
+        project(&conn, "run-project");
+        let first = create_typed_design(
+            &mut conn,
+            "run-project",
+            "First design",
+            valid_specification(vec![]),
+        );
+        review_design(&conn, &first.id);
+        let preregistered = preregister_design(
+            &mut conn,
+            &PreregisterExperimentDesignReq {
+                design_version_id: first.id.clone(),
+                reviewer_id: Some("reviewer".into()),
+                rationale: "Specification and required fields reviewed.".into(),
+            },
+        )
+        .expect("preregister design");
+        assert!(preregistered.preregistration.is_some());
+        assert_eq!(
+            preregistered.lifecycle_status,
+            crate::research::ResearchDesignStatus::Preregistered
+        );
+        assert!(
+            conn.execute(
+                "UPDATE experiment_design_version_specs
+                 SET specification_json = '{}' WHERE design_version_id = ?1",
+                [&first.id]
+            )
+            .is_err(),
+            "preregistered design spec cannot be changed"
+        );
+        assert!(
+            crate::research::repository::transition_research_design(
+                &conn,
+                &first.id,
+                "preregistered",
+                Some("reviewer"),
+                now_ts_us().expect("timestamp")
+            )
+            .is_err(),
+            "the legacy transition cannot bypass preregistration validation"
+        );
+
+        let failed_start = create_run(
+            &mut conn,
+            &CreateExperimentRunReq {
+                design_version_id: first.id.clone(),
+                dataset_pins: vec![],
+                created_by: Some("operator".into()),
+            },
+        )
+        .expect("create independent run");
+        assert_eq!(failed_start.lifecycle_status, ExperimentRunStatus::Created);
+        assert!(
+            transition_run(
+                &mut conn,
+                &TransitionExperimentRunReq {
+                    run_id: failed_start.id.clone(),
+                    next_status: ExperimentRunStatus::Running,
+                    actor_id: Some("operator".into()),
+                    details: "invalid skip".into(),
+                    completion_summary: None,
+                    failure_details: None,
+                    output_dataset_pins: vec![],
+                }
+            )
+            .is_err(),
+            "created runs cannot skip the ready state"
+        );
+        transition_run(
+            &mut conn,
+            &TransitionExperimentRunReq {
+                run_id: failed_start.id.clone(),
+                next_status: ExperimentRunStatus::Ready,
+                actor_id: Some("operator".into()),
+                details: "inputs checked".into(),
+                completion_summary: None,
+                failure_details: None,
+                output_dataset_pins: vec![],
+            },
+        )
+        .expect("mark run ready");
+        transition_run(
+            &mut conn,
+            &TransitionExperimentRunReq {
+                run_id: failed_start.id.clone(),
+                next_status: ExperimentRunStatus::Running,
+                actor_id: Some("operator".into()),
+                details: "execution started".into(),
+                completion_summary: None,
+                failure_details: None,
+                output_dataset_pins: vec![],
+            },
+        )
+        .expect("persist running before work");
+        add_run_deviation(
+            &mut conn,
+            &AddExperimentRunDeviationReq {
+                run_id: failed_start.id.clone(),
+                description: "Instrument reset during capture".into(),
+                rationale: "The reading procedure was interrupted".into(),
+                impact_assessment: "Affected one planned measurement".into(),
+                recorded_by: Some("operator".into()),
+            },
+        )
+        .expect("record deviation");
+        add_run_log(
+            &mut conn,
+            &AddExperimentRunLogReq {
+                run_id: failed_start.id.clone(),
+                severity: RunLogSeverity::Error,
+                message: "Worker stopped unexpectedly".into(),
+                details: serde_json::json!({"exitCode": 17}),
+            },
+        )
+        .expect("record failed execution log");
+        let failed = transition_run(
+            &mut conn,
+            &TransitionExperimentRunReq {
+                run_id: failed_start.id.clone(),
+                next_status: ExperimentRunStatus::Failed,
+                actor_id: Some("operator".into()),
+                details: "Worker exited before completion".into(),
+                completion_summary: None,
+                failure_details: Some("worker exit code 17".into()),
+                output_dataset_pins: vec![],
+            },
+        )
+        .expect("retain failed run");
+        assert_eq!(failed.lifecycle_status, ExperimentRunStatus::Failed);
+        assert_eq!(failed.deviations.len(), 1);
+        assert_eq!(failed.logs.len(), 1);
+        assert!(conn
+            .execute("DELETE FROM experiment_runs WHERE id = ?1", [&failed.id])
+            .is_err());
+
+        let revision = create_design_version(
+            &mut conn,
+            &CreateExperimentDesignVersionReq {
+                project_id: "run-project".into(),
+                design_id: Some(first.design_id.clone()),
+                parent_version_id: Some(first.id.clone()),
+                title: "Revised design".into(),
+                description: "Revised design intent".into(),
+                protocol: "Revised intended procedure".into(),
+                change_rationale: "Clarified the protocol without changing the prior snapshot."
+                    .into(),
+                specification: valid_specification(vec![]),
+                created_by: Some("researcher".into()),
+            },
+        )
+        .expect("create immutable design revision");
+        assert_eq!(revision.version_no, 2);
+        assert_eq!(revision.parent_version_id.as_deref(), Some(first.id.as_str()));
+        assert_eq!(query_design_version(&conn, &first.id).unwrap().title, "First design");
+        assert_eq!(failed.design_version_id, first.id);
+
+        drop(conn);
+        let reopened = Connection::open(&database_path).expect("reopen workspace");
+        initialize(&reopened);
+        let restored = workspace(&reopened, "run-project").expect("restore workspace");
+        assert_eq!(restored.runs.len(), 1);
+        assert_eq!(restored.runs[0].lifecycle_status, ExperimentRunStatus::Failed);
+        assert_eq!(restored.design_versions.len(), 2);
+        drop(reopened);
+        fs::remove_file(database_path).expect("remove temporary workspace database");
+    }
+
+    #[test]
+    fn dataset_versions_validate_assets_samples_splits_and_exact_run_pins() {
+        let database_path = temporary_workspace_path();
+        let assets_root = std::env::temp_dir().join(format!("vora-assets-{}", Uuid::now_v7()));
+        fs::create_dir_all(&assets_root).expect("create test asset directory");
+        let source_file = assets_root.join("market.csv");
+        fs::write(&source_file, b"sample,price\ns1,10.5\ns2,11.0\n")
+            .expect("write fixture asset");
+        let file_hash = format!(
+            "{:x}",
+            Sha256::digest(fs::read(&source_file).expect("read source asset"))
+        );
+        let db = Mutex::new(Connection::open(&database_path).expect("open workspace"));
+        initialize(&db.lock().expect("lock").as_ref());
+        project(&db.lock().expect("lock"), "dataset-project");
+
+        let dataset = {
+            let mut conn = db.lock().expect("lock");
+            create_dataset(
+                &mut conn,
+                &CreateDatasetReq {
+                    project_id: "dataset-project".into(),
+                    title: "Market observations".into(),
+                    description: "Version-pinned sample dataset".into(),
+                    created_by: Some("researcher".into()),
+                },
+            )
+            .expect("create dataset")
+        };
+        let version = {
+            let mut conn = db.lock().expect("lock");
+            create_dataset_version(
+                &mut conn,
+                &CreateDatasetVersionReq {
+                    dataset_id: dataset.id.clone(),
+                    schema: schema(),
+                    expected_sample_count: 2,
+                    created_by: Some("researcher".into()),
+                },
+            )
+            .expect("create staged dataset version")
+        };
+        {
+            let mut conn = db.lock().expect("lock");
+            add_dataset_samples(
+                &mut conn,
+                &AddDatasetSamplesReq {
+                    dataset_version_id: version.id.clone(),
+                    samples: vec![
+                        data_sample(&version.id, "s1", "10.5"),
+                        data_sample(&version.id, "s2", "11.0"),
+                    ],
+                },
+            )
+            .expect("insert queryable samples");
+            assert!(
+                add_dataset_samples(
+                    &mut conn,
+                    &AddDatasetSamplesReq {
+                        dataset_version_id: version.id.clone(),
+                        samples: vec![data_sample(&version.id, "s1", "10.5")],
+                    }
+                )
+                .is_err(),
+                "duplicate stable sample IDs must be rejected"
+            );
+            assert!(
+                add_dataset_split_group(
+                    &mut conn,
+                    &AddDatasetSplitGroupReq {
+                        dataset_version_id: version.id.clone(),
+                        split_group_key: "leakage-checked".into(),
+                        require_disjoint: true,
+                        assignments: vec![
+                            DatasetSplitAssignmentReq {
+                                sample_id: "s1".into(),
+                                role: DatasetRole::Training,
+                                split_key: "train".into(),
+                            },
+                            DatasetSplitAssignmentReq {
+                                sample_id: "s1".into(),
+                                role: DatasetRole::Test,
+                                split_key: "test".into(),
+                            },
+                        ],
+                    }
+                )
+                .is_err(),
+                "disjoint split membership rejects duplicate sample assignment"
+            );
+            add_dataset_split_group(
+                &mut conn,
+                &AddDatasetSplitGroupReq {
+                    dataset_version_id: version.id.clone(),
+                    split_group_key: "leakage-checked".into(),
+                    require_disjoint: true,
+                    assignments: vec![
+                        DatasetSplitAssignmentReq {
+                            sample_id: "s1".into(),
+                            role: DatasetRole::Training,
+                            split_key: "train".into(),
+                        },
+                        DatasetSplitAssignmentReq {
+                            sample_id: "s2".into(),
+                            role: DatasetRole::Test,
+                            split_key: "test".into(),
+                        },
+                    ],
+                },
+            )
+            .expect("create disjoint train/test split");
+        }
+        assert!(
+            service::register_dataset_asset(
+                &db,
+                &RegisterDatasetAssetReq {
+                    dataset_version_id: version.id.clone(),
+                    source_path: source_file.to_string_lossy().into_owned(),
+                    original_name: "market.csv".into(),
+                    media_type: "text/csv".into(),
+                    expected_sha256: Some("0".repeat(64)),
+                },
+                &assets_root
+            )
+            .is_err(),
+            "asset checksum mismatch must fail before manifest registration"
+        );
+        let asset = service::register_dataset_asset(
+            &db,
+            &RegisterDatasetAssetReq {
+                dataset_version_id: version.id.clone(),
+                source_path: source_file.to_string_lossy().into_owned(),
+                original_name: "market.csv".into(),
+                media_type: "text/csv".into(),
+                expected_sha256: Some(file_hash.clone()),
+            },
+            &assets_root,
+        )
+        .expect("register and hash managed dataset asset");
+        let sealed = service::seal_dataset_version(&db, &version.id, &assets_root)
+            .expect("verify and seal dataset version");
+        assert_eq!(sealed.actual_sample_count, 2);
+        assert!(sealed.content_sha256.is_some());
+        service::verify_dataset_version(&db, &version.id, &assets_root)
+            .expect("verify sealed dataset assets and manifest");
+
+        let pin = DatasetRolePinDto {
+            dataset_version_id: version.id.clone(),
+            role: DatasetRole::Training,
+            rationale: "Pinned source version".into(),
+        };
+        let design = {
+            let mut conn = db.lock().expect("lock");
+            create_typed_design(
+                &mut conn,
+                "dataset-project",
+                "Pinned dataset design",
+                valid_specification(vec![pin.clone()]),
+            )
+        };
+        {
+            let conn = db.lock().expect("lock");
+            review_design(&conn, &design.id);
+        }
+        {
+            let mut conn = db.lock().expect("lock");
+            preregister_design(
+                &mut conn,
+                &PreregisterExperimentDesignReq {
+                    design_version_id: design.id.clone(),
+                    reviewer_id: Some("reviewer".into()),
+                    rationale: "Exact dataset version and analysis plan reviewed.".into(),
+                },
+            )
+            .expect("preregister exact dataset pin");
+        }
+        let run = service::create_run(
+            &db,
+            &CreateExperimentRunReq {
+                design_version_id: design.id.clone(),
+                dataset_pins: vec![pin.clone()],
+                created_by: Some("operator".into()),
+            },
+            &assets_root,
+        )
+        .expect("create run with exact sealed dataset version");
+        assert_eq!(run.dataset_pins.len(), 1);
+        assert_eq!(run.dataset_pins[0].dataset_version_id, version.id);
+        assert!(
+            service::create_run(
+                &db,
+                &CreateExperimentRunReq {
+                    design_version_id: design.id.clone(),
+                    dataset_pins: vec![DatasetRolePinDto {
+                        dataset_version_id: pin.dataset_version_id.clone(),
+                        role: DatasetRole::Validation,
+                        rationale: "mismatched role".into(),
+                    }],
+                    created_by: None,
+                },
+                &assets_root,
+            )
+            .is_err(),
+            "run cannot replace a design-pinned dataset role"
+        );
+        let managed_asset = assets_root.join(&asset.storage_key);
+        fs::write(&managed_asset, b"modified asset").expect("modify managed file");
+        assert!(
+            service::verify_dataset_version(&db, &version.id, &assets_root).is_err(),
+            "changed asset contents fail checksum verification"
+        );
+        assert!(
+            service::transition_run(
+                &db,
+                &TransitionExperimentRunReq {
+                    run_id: run.id.clone(),
+                    next_status: ExperimentRunStatus::Ready,
+                    actor_id: Some("operator".into()),
+                    details: "validate inputs".into(),
+                    completion_summary: None,
+                    failure_details: None,
+                    output_dataset_pins: vec![],
+                },
+                &assets_root,
+            )
+            .is_err(),
+            "a run cannot become ready with a changed pinned asset"
+        );
+        fs::write(&managed_asset, fs::read(&source_file).expect("read source asset"))
+            .expect("restore managed file");
+        let samples = {
+            let conn = db.lock().expect("lock");
+            get_dataset_samples(&conn, &version.id, Some("s"), 0, 20)
+                .expect("query samples by stable ID")
+        };
+        assert_eq!(samples.total_count, 2);
+        assert_eq!(samples.samples[0].data_sample().sample_id, "s1");
+        let workspace_state = {
+            let conn = db.lock().expect("lock");
+            workspace(&conn, "dataset-project").expect("query experimental workspace")
+        };
+        assert_eq!(
+            workspace_state.split_groups[0].assignments.len(),
+            2
+        );
+        assert!(workspace_state.transformations.is_empty());
+
+        drop(db);
+        let reopened = Connection::open(&database_path).expect("reopen workspace");
+        initialize(&reopened);
+        let restored = workspace(&reopened, "dataset-project").expect("restore dataset state");
+        assert_eq!(restored.datasets[0].versions[0].content_sha256, sealed.content_sha256);
+        assert_eq!(restored.runs[0].dataset_pins[0].dataset_version_id, version.id);
+        assert_eq!(
+            get_dataset_samples(&reopened, &version.id, None, 0, 20)
+                .expect("query restored samples")
+                .total_count,
+            2
+        );
+        drop(reopened);
+        fs::remove_file(database_path).expect("remove temporary workspace database");
+        fs::remove_dir_all(assets_root).expect("remove temporary asset directory");
+    }
+
+    #[test]
+    fn untyped_legacy_designs_remain_visible_but_cannot_start_runs() {
+        let conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        project(&conn, "legacy-design-project");
+        conn.execute(
+            "INSERT INTO research_experiment_designs
+                (id, project_id, title, created_at_us)
+             VALUES ('legacy-design', 'legacy-design-project', 'Legacy design', 1);
+             INSERT INTO research_experiment_design_versions
+                (id, design_id, version_no, description, protocol, lifecycle_status,
+                 created_at_us, preregistered_at_us)
+             VALUES ('legacy-design-v1', 'legacy-design', 1, 'Legacy description',
+                     'Legacy protocol', 'preregistered', 1, 1);",
+            [],
+        )
+        .expect("insert legacy design");
+        initialize_schema(&conn).expect("repeat experiment migration");
+        let designs = workspace(&conn, "legacy-design-project").expect("read legacy design");
+        assert_eq!(designs.design_versions.len(), 1);
+        assert!(designs.design_versions[0].specification.is_none());
+        assert!(designs.design_versions[0].preregistration.is_none());
+        assert!(
+            create_run(
+                &mut conn.unchecked_transaction().unwrap(),
+                &CreateExperimentRunReq {
+                    design_version_id: "legacy-design-v1".into(),
+                    dataset_pins: vec![],
+                    created_by: None,
+                }
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn decimals_and_trade_sample_fields_preserve_units_and_time_order() {
+        assert!(validate_decimal("-0.003").is_ok());
+        assert!(validate_decimal("+1.0").is_err());
+        assert!(validate_decimal("01.0").is_err());
+        let trade = DatasetSampleDto::TradeSample(TradeSampleDto {
+            sample: DataSampleDto {
+                sample_id: "trade-1".into(),
+                dataset_version_id: "dataset-v1".into(),
+                occurred_at_us: Some(10),
+                entity_ref: Some("instrument:XYZ".into()),
+                values: BTreeMap::from([(
+                    "price".into(),
+                    DatasetSampleValue::Decimal {
+                        value: "12.5".into(),
+                        unit: "USD".into(),
+                        uncertainty: None,
+                    },
+                )]),
+                provenance: vec![],
+            },
+            instrument: "XYZ".into(),
+            order_side: Some(MarketOrderSide::Buy),
+            order_type: Some(MarketOrderType::Limit),
+            order_quantity: Some(DecimalMeasurement {
+                value: "3".into(),
+                unit: "shares".into(),
+            }),
+            execution_price: Some(DecimalMeasurement {
+                value: "12.5".into(),
+                unit: "USD/share".into(),
+            }),
+            fees: Some(DecimalMeasurement {
+                value: "0.10".into(),
+                unit: "USD".into(),
+            }),
+            slippage: Some(DecimalMeasurement {
+                value: "0.02".into(),
+                unit: "USD/share".into(),
+            }),
+            venue: Some("exchange".into()),
+            market_session: Some("regular".into()),
+            session_assumptions: vec!["regular session only".into()],
+            decision_at_us: Some(9),
+            execution_at_us: Some(10),
+        });
+        assert!(validate_sample(&schema(), &trade).is_ok());
+        let DatasetSampleDto::TradeSample(mut invalid_trade) = trade else {
+            unreachable!();
+        };
+        invalid_trade.execution_at_us = Some(8);
+        assert!(validate_sample(
+            &schema(),
+            &DatasetSampleDto::TradeSample(invalid_trade)
+        )
+        .is_err());
+    }
+}
