@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AlertCircle, BookOpenCheck, Plus, RefreshCw } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useResearchWorkspace } from "@/hooks/useResearchWorkspace";
 import { researchService } from "@/mind/services/researchService";
 import type {
@@ -145,6 +146,23 @@ export const ResearchWorkspacePage: React.FC = () => {
       await researchService.assignDomain(projectId, domain.id, "Assigned to this research project.");
     });
     target.reset();
+  };
+
+  const adoptFrameworkVersion = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const version = workspace?.frameworkVersions.find(
+      (item) => item.frameworkVersionId === String(form.get("frameworkVersionId") ?? ""),
+    );
+    if (!version) return;
+    await act(() => researchService.adoptFrameworkVersion(
+      projectId,
+      version.frameworkId,
+      version.frameworkVersionId,
+      String(form.get("context") ?? ""),
+      null,
+    ));
+    event.currentTarget.reset();
   };
 
   const createPriorAssessment = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -412,6 +430,69 @@ export const ResearchWorkspacePage: React.FC = () => {
       ],
       createdBy: null,
     }));
+    target.reset();
+  };
+
+  const addHypothesisEvidence = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    const target = event.currentTarget;
+    const form = new FormData(target);
+    const hypothesis = projectHypotheses.find((item) => item.id === selectedHypothesisId);
+    const definition = hypothesis ? latest(hypothesis.definitions) : undefined;
+    if (!definition) return;
+    const kind = String(form.get("evidenceKind") ?? "");
+    const id = String(form.get("evidenceId") ?? "");
+    await act(() => researchService.addHypothesisEvidence({
+      hypothesisVersionId: definition.id,
+      sourceClaimId: kind === "source_claim" ? id : null,
+      observationId: kind === "observation" ? id : null,
+      patternId: kind === "pattern" ? id : null,
+      polarity: String(form.get("polarity") ?? "supports") as "supports" | "contradicts" | "qualifies",
+      rationale: String(form.get("rationale") ?? ""),
+      createdBy: null,
+    }));
+    target.reset();
+  };
+
+  const addCompetingHypotheses = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    const target = event.currentTarget;
+    const form = new FormData(target);
+    await act(() => researchService.linkCompetingHypotheses({
+      hypothesisId: String(form.get("hypothesisId") ?? ""),
+      competingHypothesisId: String(form.get("competingId") ?? ""),
+      rationale: String(form.get("rationale") ?? ""),
+      createdBy: null,
+    }));
+    target.reset();
+  };
+
+  const addModelReference = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    const target = event.currentTarget;
+    const form = new FormData(target);
+    await act(() => researchService.addHypothesisModelReference({
+      hypothesisId: String(form.get("hypothesisId") ?? ""),
+      modelId: String(form.get("modelId") ?? ""),
+      modelVersionId: String(form.get("modelVersionId") ?? ""),
+      label: String(form.get("label") ?? ""),
+      rationale: String(form.get("rationale") ?? ""),
+      createdBy: null,
+    }));
+    target.reset();
+  };
+
+  const refineQuestion = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    const target = event.currentTarget;
+    const form = new FormData(target);
+    await act(() => researchService.refineQuestion(
+      String(form.get("parentQuestionId") ?? ""),
+      String(form.get("title") ?? ""),
+      String(form.get("description") ?? ""),
+      String(form.get("rationale") ?? ""),
+      null,
+    ));
     target.reset();
   };
 
