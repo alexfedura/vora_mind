@@ -708,9 +708,10 @@ pub fn evaluate_attempt(
             "SELECT id, max_points FROM assessment_rubric_criteria
              WHERE rubric_version_id = ?1",
         )?;
-        statement
+        let rows = statement
             .query_map([&rubric_version_id], |row| Ok((row.get(0)?, row.get(1)?)))?
-            .collect::<rusqlite::Result<HashMap<_, _>>>()?
+            .collect::<rusqlite::Result<HashMap<_, _>>>()?;
+        rows
     };
     if expected.is_empty() || expected.len() != request.criterion_scores.len() {
         return Err(anyhow!("Every criterion in the pinned rubric must be evaluated exactly once."));
@@ -1038,7 +1039,7 @@ pub fn evaluate_competency(
                )
              ORDER BY e.created_at_us, e.id",
         )?;
-        statement
+        let rows = statement
             .query_map(
                 params![
                     request.learner_id,
@@ -1048,7 +1049,8 @@ pub fn evaluate_competency(
                 ],
                 |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
             )?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
 
     let average_score = if attempt_evaluations.is_empty() {
@@ -1328,9 +1330,10 @@ fn validate_rubric_scores(
         let mut statement = conn.prepare(
             "SELECT id, max_points FROM assessment_rubric_criteria WHERE rubric_version_id = ?1",
         )?;
-        statement
+        let rows = statement
             .query_map([rubric_version_id], |row| Ok((row.get(0)?, row.get(1)?)))?
-            .collect::<rusqlite::Result<HashMap<_, _>>>()?
+            .collect::<rusqlite::Result<HashMap<_, _>>>()?;
+        rows
     };
     if criteria.is_empty() || criteria.len() != scores.len() {
         return Err(anyhow!("Every pinned rubric criterion must be scored exactly once."));
@@ -1382,7 +1385,7 @@ pub fn workspace(conn: &Connection) -> Result<LearningWorkspaceDto> {
              WHERE v.status = 'published'
              ORDER BY v.title, v.version_no DESC",
         )?;
-        statement
+        let rows = statement
             .query_map([], |row| {
                 Ok(LearningFrameworkVersionDto {
                     framework_id: row.get(0)?,
@@ -1392,7 +1395,8 @@ pub fn workspace(conn: &Connection) -> Result<LearningWorkspaceDto> {
                     published_at_us: row.get(4)?,
                 })
             })?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     let objectives = query_many(
         conn,
@@ -1458,9 +1462,10 @@ fn query_many<T>(
 ) -> Result<Vec<T>> {
     let ids = {
         let mut statement = conn.prepare(id_sql)?;
-        statement
+        let rows = statement
             .query_map([], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     ids.iter().map(|record_id| mapper(conn, record_id)).collect()
 }
@@ -1543,9 +1548,10 @@ fn query_objective(conn: &Connection, version_id: &str) -> Result<LearningObject
             "SELECT prerequisite_version_id FROM learning_objective_prerequisites
              WHERE objective_version_id = ?1 ORDER BY prerequisite_version_id",
         )?;
-        statement
+        let rows = statement
             .query_map([version_id], |row| row.get(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     Ok(dto)
 }
@@ -1597,7 +1603,7 @@ fn query_assessment_version(conn: &Connection, version_id: &str) -> Result<Asses
              FROM assessment_questions WHERE assessment_version_id = ?1
              ORDER BY question_order, id",
         )?;
-        statement
+        let rows = statement
             .query_map([version_id], |row| {
                 Ok(AssessmentQuestionDto {
                     id: row.get(0)?,
@@ -1609,7 +1615,8 @@ fn query_assessment_version(conn: &Connection, version_id: &str) -> Result<Asses
                     required: row.get::<_, i64>(6)? != 0,
                 })
             })?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     dto.rubric_criteria = {
         let mut statement = conn.prepare(
@@ -1617,7 +1624,7 @@ fn query_assessment_version(conn: &Connection, version_id: &str) -> Result<Asses
              FROM assessment_rubric_criteria WHERE rubric_version_id = ?1
              ORDER BY criterion_key, id",
         )?;
-        statement
+        let rows = statement
             .query_map([&dto.rubric_version_id], |row| {
                 Ok(AssessmentRubricCriterionDto {
                     id: row.get(0)?,
@@ -1627,16 +1634,18 @@ fn query_assessment_version(conn: &Connection, version_id: &str) -> Result<Asses
                     max_points: row.get(4)?,
                 })
             })?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     dto.objective_version_ids = {
         let mut statement = conn.prepare(
             "SELECT objective_version_id FROM assessment_version_objectives
              WHERE assessment_version_id = ?1 ORDER BY objective_version_id",
         )?;
-        statement
+        let rows = statement
             .query_map([version_id], |row| row.get(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     dto.reviews = {
         let mut statement = conn.prepare(
@@ -1644,7 +1653,7 @@ fn query_assessment_version(conn: &Connection, version_id: &str) -> Result<Asses
              FROM assessment_reviews WHERE assessment_version_id = ?1
              ORDER BY reviewed_at_us, id",
         )?;
-        statement
+        let rows = statement
             .query_map([version_id], |row| {
                 let review_status: String = row.get(1)?;
                 let review_status = match review_status.as_str() {
@@ -1661,7 +1670,8 @@ fn query_assessment_version(conn: &Connection, version_id: &str) -> Result<Asses
                     reviewed_at_us: row.get(4)?,
                 })
             })?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     Ok(dto)
 }
@@ -1692,7 +1702,7 @@ fn query_attempt(conn: &Connection, attempt_id: &str) -> Result<AssessmentAttemp
             "SELECT id, assessment_question_id, response_json, updated_at_us
              FROM attempt_responses WHERE attempt_id = ?1 ORDER BY created_at_us, id",
         )?;
-        statement
+        let rows = statement
             .query_map([attempt_id], |row| {
                 Ok(AttemptResponseDto {
                     id: row.get(0)?,
@@ -1701,7 +1711,8 @@ fn query_attempt(conn: &Connection, attempt_id: &str) -> Result<AssessmentAttemp
                     updated_at_us: row.get(3)?,
                 })
             })?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     let evaluation_ids = query_ids(
         conn,
@@ -1750,9 +1761,10 @@ fn query_attempt_evaluation(conn: &Connection, evaluation_id: &str) -> Result<At
             "SELECT feedback FROM evaluator_feedback WHERE evaluation_id = ?1
              ORDER BY created_at_us, id",
         )?;
-        statement
+        let rows = statement
             .query_map([evaluation_id], |row| row.get(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     Ok(dto)
 }
@@ -1772,7 +1784,7 @@ fn query_score_rows(
     parent_id: &str,
 ) -> Result<Vec<EvaluationCriterionScoreDto>> {
     let mut statement = conn.prepare(sql)?;
-    statement
+    let rows = statement
         .query_map([parent_id], |row| {
             Ok(EvaluationCriterionScoreDto {
                 rubric_criterion_id: row.get(0)?,
@@ -1780,7 +1792,8 @@ fn query_score_rows(
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)
+        .map_err(Into::into)?;
+    Ok(rows)
 }
 
 fn query_competency(conn: &Connection, competency_id: &str) -> Result<CompetencyDto> {
@@ -2025,19 +2038,21 @@ fn query_reproduction_evaluation(
 
 fn query_ids(conn: &Connection, sql: &str, parent_id: &str) -> Result<Vec<String>> {
     let mut statement = conn.prepare(sql)?;
-    statement
+    let rows = statement
         .query_map([parent_id], |row| row.get(0))?
         .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)
+        .map_err(Into::into)?;
+    Ok(rows)
 }
 
 fn query_progress(conn: &Connection) -> Result<Vec<LearnerProgressDto>> {
     let objective_ids = {
         let mut statement =
             conn.prepare("SELECT id FROM learning_objective_versions ORDER BY learning_project_id, id")?;
-        statement
+        let rows = statement
             .query_map([], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
     };
     let mut progress = Vec::new();
     for objective_id in objective_ids {
