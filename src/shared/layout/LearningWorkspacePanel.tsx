@@ -574,6 +574,16 @@ export function LearningWorkspacePanel(): React.JSX.Element {
                     <article key={record.id} className="rounded bg-[#17191f] p-2 text-xs">
                       <p className={record.outcome === "mastered" ? "text-emerald-300" : "text-amber-300"}>{record.outcome.replace("_", " ")} · rule {record.masteryRuleVersionId}</p>
                       <p className="mt-1 text-gray-400">{record.explanation}</p>
+                      <p className="mt-1 text-[10px] text-gray-500">
+                        Objective versions: {record.objectiveVersionIds.join(", ") || "none"}
+                        {" · "}Assessment evaluations: {record.attemptEvaluationIds.join(", ") || "none"}
+                        {" · "}Reproduction evaluations: {record.reproductionEvaluationIds.join(", ") || "none"}
+                      </p>
+                      {record.criteria.map((criterion) => (
+                        <p key={criterion.competencyCriterionId} className="mt-1 text-[10px] text-gray-500">
+                          {criterion.satisfied ? "Satisfied" : "Not satisfied"}: {criterion.rationale}
+                        </p>
+                      ))}
                     </article>
                   ))}
                 </section>

@@ -18,6 +18,7 @@ import type {
   EvaluateCompetencyReq,
   EvaluateReproductionReq,
   LearningLearnerDto,
+  LearningObjectiveVersionDto,
   LearningProjectDto,
   LearningWorkspaceDto,
   MasteryRuleDto,
@@ -37,7 +38,7 @@ export const learningService = {
   createProject: (request: CreateLearningProjectReq) =>
     invoke<LearningProjectDto>("learning_create_project", { request }),
   createObjective: (request: CreateLearningObjectiveReq) =>
-    invoke("learning_create_objective", { request }),
+    invoke<LearningObjectiveVersionDto>("learning_create_objective", { request }),
   createAssessmentVersion: (request: CreateAssessmentVersionReq) =>
     invoke<AssessmentVersionDto>("learning_create_assessment_version", { request }),
   reviewAssessment: (request: ReviewAssessmentReq) =>
