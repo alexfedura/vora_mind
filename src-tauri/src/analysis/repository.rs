@@ -1742,3 +1742,421 @@ pub fn finalize_run(
     tx.commit()?;
     query_run(conn, &req.run_id)
 }
+
+fn query_run_inputs(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisInputDto>> {
+    let rows = {
+        let mut statement = conn.prepare(
+            "SELECT id, dataset_version_id, dataset_checksum, role, split_group_id,
+                    sample_count, transformation_lineage_json
+             FROM analysis_run_inputs WHERE run_id = ?1
+             ORDER BY role, dataset_version_id",
+        )?;
+        statement
+            .query_map([run_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, String>(6)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    rows.into_iter()
+        .map(
+            |(
+                input_id,
+                dataset_version_id,
+                dataset_checksum,
+                role,
+                split_group_id,
+                sample_count,
+                lineage,
+            )| {
+                let samples = {
+                    let mut statement = conn.prepare(
+                        "SELECT sample_id, split_key, feature_available_at_us,
+                                prediction_at_us, decision_at_us, outcome_available_at_us
+                         FROM analysis_run_input_samples WHERE input_id = ?1
+                         ORDER BY sample_id",
+                    )?;
+                    statement
+                        .query_map([&input_id], |row| {
+                            Ok(AnalysisInputSampleDto {
+                                sample_id: row.get(0)?,
+                                split_key: row.get(1)?,
+                                feature_available_at_us: row.get(2)?,
+                                prediction_at_us: row.get(3)?,
+                                decision_at_us: row.get(4)?,
+                                outcome_available_at_us: row.get(5)?,
+                            })
+                        })?
+                        .collect::<rusqlite::Result<Vec<_>>>()?
+                };
+                Ok(AnalysisInputDto {
+                    id: input_id,
+                    dataset_version_id,
+                    dataset_checksum,
+                    role: parse_dataset_role(&role)?,
+                    split_group_id,
+                    sample_count,
+                    transformation_lineage: parse_json(&lineage)?,
+                    samples,
+                })
+            },
+        )
+        .collect()
+}
+
+fn query_run_outputs(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisOutputDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, output_key, output_kind, title, payload_json, payload_sha256,
+                artifact_uri, artifact_sha256, media_type, byte_length, created_at_us
+         FROM analysis_outputs WHERE run_id = ?1 ORDER BY created_at_us, id",
+    )?;
+    let rows = statement
+        .query_map([run_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, Option<String>>(6)?,
+                row.get::<_, Option<String>>(7)?,
+                row.get::<_, Option<String>>(8)?,
+                row.get::<_, Option<i64>>(9)?,
+                row.get::<_, i64>(10)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(
+            |(
+                id,
+                output_key,
+                output_kind,
+                title,
+                payload,
+                payload_sha256,
+                artifact_uri,
+                artifact_sha256,
+                media_type,
+                byte_length,
+                created_at_us,
+            )| {
+                Ok(AnalysisOutputDto {
+                    id,
+                    output_key,
+                    output_kind,
+                    title,
+                    payload: parse_json(&payload)?,
+                    payload_sha256,
+                    artifact_uri,
+                    artifact_sha256,
+                    media_type,
+                    byte_length,
+                    created_at_us,
+                })
+            },
+        )
+        .collect()
+}
+
+fn query_run_metrics(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisMetricDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, output_id, metric_definition_version_id, method_version_id,
+                estimand, sample_size, effect_estimate, unit, uncertainty_kind,
+                uncertainty_lower, uncertainty_upper, uncertainty_level,
+                uncertainty_reason, assumptions_json, exclusions_json,
+                missing_data_json, multiplicity_treatment, p_value
+         FROM analysis_metrics WHERE run_id = ?1 ORDER BY id",
+    )?;
+    let rows = statement
+        .query_map([run_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, String>(8)?,
+                row.get::<_, Option<String>>(9)?,
+                row.get::<_, Option<String>>(10)?,
+                row.get::<_, Option<String>>(11)?,
+                row.get::<_, Option<String>>(12)?,
+                row.get::<_, String>(13)?,
+                row.get::<_, String>(14)?,
+                row.get::<_, String>(15)?,
+                row.get::<_, String>(16)?,
+                row.get::<_, Option<String>>(17)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(
+            |(
+                id,
+                output_id,
+                metric_definition_version_id,
+                method_version_id,
+                estimand,
+                sample_size,
+                effect_estimate,
+                unit,
+                uncertainty_kind,
+                lower,
+                upper,
+                level,
+                reason,
+                assumptions,
+                exclusions,
+                missing_data,
+                multiplicity_treatment,
+                p_value,
+            )| {
+                let uncertainty = match uncertainty_kind.as_str() {
+                    "interval" => UncertaintyReportDto::Interval {
+                        interval: AnalysisUncertaintyIntervalDto {
+                            lower: lower.ok_or_else(|| {
+                                anyhow!("Stored uncertainty interval is missing its lower bound.")
+                            })?,
+                            upper: upper.ok_or_else(|| {
+                                anyhow!("Stored uncertainty interval is missing its upper bound.")
+                            })?,
+                            level: level.ok_or_else(|| {
+                                anyhow!("Stored uncertainty interval is missing its level.")
+                            })?,
+                        },
+                    },
+                    "not_meaningful" => UncertaintyReportDto::NotMeaningful {
+                        reason: reason.ok_or_else(|| {
+                            anyhow!("Stored uncertainty reason is missing.")
+                        })?,
+                    },
+                    _ => return Err(anyhow!("Invalid stored uncertainty report kind.")),
+                };
+                Ok(AnalysisMetricDto {
+                    id,
+                    output_id,
+                    metric_definition_version_id,
+                    method_version_id,
+                    estimand,
+                    sample_size,
+                    effect_estimate,
+                    unit,
+                    uncertainty,
+                    assumptions: parse_json(&assumptions)?,
+                    exclusions: parse_json(&exclusions)?,
+                    missing_data: parse_json(&missing_data)?,
+                    multiplicity_treatment,
+                    p_value,
+                })
+            },
+        )
+        .collect()
+}
+
+fn query_run_logs(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisRunLogDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, severity, message, details_json, recorded_by, recorded_at_us
+         FROM analysis_run_logs WHERE run_id = ?1 ORDER BY recorded_at_us, id",
+    )?;
+    let rows = statement
+        .query_map([run_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(
+            |(id, severity, message, details, recorded_by, recorded_at_us)| {
+                Ok(AnalysisRunLogDto {
+                    id,
+                    severity: AnalysisLogSeverity::parse(&severity).map_err(anyhow::Error::msg)?,
+                    message,
+                    details: parse_json(&details)?,
+                    recorded_by,
+                    recorded_at_us,
+                })
+            },
+        )
+        .collect()
+}
+
+fn query_run_errors(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisErrorDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, error_kind, message, details_json, recorded_at_us
+         FROM analysis_run_errors WHERE run_id = ?1 ORDER BY recorded_at_us, id",
+    )?;
+    let rows = statement
+        .query_map([run_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(|(id, error_kind, message, details, recorded_at_us)| {
+            Ok(AnalysisErrorDto {
+                id,
+                error_kind,
+                message,
+                details: parse_json(&details)?,
+                recorded_at_us,
+            })
+        })
+        .collect()
+}
+
+fn query_run_deviations(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisDeviationDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, description, rationale, impact_assessment, recorded_by, recorded_at_us
+         FROM analysis_run_deviations WHERE run_id = ?1 ORDER BY recorded_at_us, id",
+    )?;
+    let rows = statement
+        .query_map([run_id], |row| {
+            Ok(AnalysisDeviationDto {
+                id: row.get(0)?,
+                description: row.get(1)?,
+                rationale: row.get(2)?,
+                impact_assessment: row.get(3)?,
+                recorded_by: row.get(4)?,
+                recorded_at_us: row.get(5)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+fn query_run_integrity_findings(
+    conn: &Connection,
+    run_id: &str,
+) -> Result<Vec<AnalysisIntegrityFindingDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, category, code, severity, message
+         FROM analysis_integrity_findings WHERE run_id = ?1 ORDER BY category, id",
+    )?;
+    let rows = statement
+        .query_map([run_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(|(id, category, code, severity, message)| {
+            let severity = match severity.as_str() {
+                "warning" => AnalysisIntegritySeverity::Warning,
+                "blocking" => AnalysisIntegritySeverity::Blocking,
+                _ => return Err(anyhow!("Invalid stored integrity finding severity.")),
+            };
+            Ok(AnalysisIntegrityFindingDto {
+                id,
+                category,
+                code,
+                severity,
+                message,
+            })
+        })
+        .collect()
+}
+
+pub fn query_run(conn: &Connection, run_id: &str) -> Result<AnalysisRunDto> {
+    let row: (
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        i64,
+        String,
+        Option<i64>,
+        Option<i64>,
+        Option<String>,
+        Option<String>,
+    ) = conn.query_row(
+        "SELECT r.id, r.project_id, r.definition_version_id, r.parameters_json,
+                r.environment_json, r.random_seeds_json, r.protocol_version,
+                r.created_by, r.created_at_us,
+                (SELECT lifecycle_status FROM analysis_run_events e
+                 WHERE e.run_id = r.id ORDER BY e.occurred_at_us DESC, e.id DESC LIMIT 1),
+                (SELECT MIN(occurred_at_us) FROM analysis_run_events
+                 WHERE run_id = r.id AND lifecycle_status = 'running'),
+                (SELECT occurred_at_us FROM analysis_run_events
+                 WHERE run_id = r.id AND lifecycle_status IN
+                    ('completed', 'failed', 'cancelled', 'inconclusive')
+                 ORDER BY occurred_at_us DESC, id DESC LIMIT 1),
+                (SELECT summary FROM analysis_run_events
+                 WHERE run_id = r.id ORDER BY occurred_at_us DESC, id DESC LIMIT 1),
+                (SELECT NULLIF(failure_summary, '') FROM analysis_run_events
+                 WHERE run_id = r.id ORDER BY occurred_at_us DESC, id DESC LIMIT 1)
+         FROM analysis_runs r WHERE r.id = ?1",
+        [run_id],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+                row.get(8)?,
+                row.get(9)?,
+                row.get(10)?,
+                row.get(11)?,
+                row.get(12)?,
+                row.get(13)?,
+            ))
+        },
+    )?;
+    let lifecycle_status = AnalysisRunStatus::parse(&row.9).map_err(anyhow::Error::msg)?;
+    Ok(AnalysisRunDto {
+        id: row.0,
+        project_id: row.1,
+        definition_version_id: row.2,
+        lifecycle_status,
+        parameters: parse_json(&row.3)?,
+        environment: parse_json(&row.4)?,
+        random_seeds: parse_json(&row.5)?,
+        protocol_version: row.6,
+        created_by: row.7,
+        created_at_us: row.8,
+        started_at_us: row.10,
+        ended_at_us: row.11,
+        completion_summary: row.12.filter(|summary| !summary.trim().is_empty()),
+        failure_summary: row.13,
+        inputs: query_run_inputs(conn, run_id)?,
+        integrity_findings: query_run_integrity_findings(conn, run_id)?,
+        outputs: query_run_outputs(conn, run_id)?,
+        metrics: query_run_metrics(conn, run_id)?,
+        logs: query_run_logs(conn, run_id)?,
+        errors: query_run_errors(conn, run_id)?,
+        deviations: query_run_deviations(conn, run_id)?,
+    })
+}
