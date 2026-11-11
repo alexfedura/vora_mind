@@ -2967,14 +2967,16 @@ mod tests {
         conn: &mut Connection,
         project_id: &str,
         question_id: &str,
+        parent_hypothesis_id: Option<&str>,
     ) -> ResearchHypothesisDto {
         create_typed_hypothesis(
             conn,
             &CreateTypedHypothesisReq {
                 project_id: project_id.into(),
                 research_question_id: question_id.into(),
-                parent_hypothesis_id: None,
-                lineage_rationale: None,
+                parent_hypothesis_id: parent_hypothesis_id.map(str::to_string),
+                lineage_rationale: parent_hypothesis_id
+                    .map(|_| "Derived to examine a child proposition.".into()),
                 statement_h0: "The treatment has no effect.".into(),
                 statement_h1: "The treatment changes the outcome.".into(),
                 population_scope: "Adults".into(),
@@ -3186,8 +3188,18 @@ mod tests {
         )
         .expect("accept refined question");
 
-        let parent_hypothesis = typed_hypothesis(&mut conn, &project.id, &child.id);
-        let competing = typed_hypothesis(&mut conn, &project.id, &child.id);
+        let parent_hypothesis = typed_hypothesis(&mut conn, &project.id, &child.id, None);
+        let competing = typed_hypothesis(&mut conn, &project.id, &child.id, None);
+        let child_hypothesis = typed_hypothesis(
+            &mut conn,
+            &project.id,
+            &child.id,
+            Some(&parent_hypothesis.id),
+        );
+        assert_eq!(
+            child_hypothesis.parent_hypothesis_id.as_deref(),
+            Some(parent_hypothesis.id.as_str())
+        );
         link_competing_hypotheses(
             &conn,
             &LinkCompetingHypothesesReq {
