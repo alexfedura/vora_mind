@@ -822,3 +822,266 @@ fn query_all_versions(conn: &Connection) -> Result<Vec<ModelVersionDto>> {
         .collect::<rusqlite::Result<Vec<_>>>()?;
     ids.iter().map(|version_id| query_version(conn, version_id)).collect()
 }
+
+pub fn create_evidence(
+    conn: &mut Connection,
+    request: &CreateModelEvidenceReq,
+) -> Result<ModelEvidenceDto> {
+    required(&request.scope, "Evidence scope")?;
+    required(&request.quality_rationale, "Evidence quality rationale")?;
+    required(&request.limitations, "Evidence limitations")?;
+    exists(
+        conn,
+        "SELECT EXISTS(SELECT 1 FROM model_versions WHERE id = ?1)",
+        &request.model_version_id,
+        "Evidence target model version was not found.",
+    )?;
+    let evidence_id = id();
+    let created_at = now_us()?;
+    let artifact_columns = match &request.artifact {
+        ModelArtifactRef::AnalysisOutput(value) => (Some(value.as_str()), None, None, None, None, None, None),
+        ModelArtifactRef::ExperimentRun(value) => (None, Some(value.as_str()), None, None, None, None, None),
+        ModelArtifactRef::DatasetVersion(value) => (None, None, Some(value.as_str()), None, None, None, None),
+        ModelArtifactRef::ResearchObservation(value) => (None, None, None, Some(value.as_str()), None, None, None),
+        ModelArtifactRef::SourceVersionSegment(value) => (None, None, None, None, Some(value.as_str()), None, None),
+        ModelArtifactRef::SourceClaim(value) => (None, None, None, None, None, Some(value.as_str()), None),
+        ModelArtifactRef::FindingVersion(value) => (None, None, None, None, None, None, Some(value.as_str())),
+    };
+    conn.execute(
+        "INSERT INTO model_evidence
+            (id, model_version_id, artifact_analysis_output_id, artifact_experiment_run_id,
+             artifact_dataset_version_id, artifact_observation_id, artifact_source_segment_id,
+             artifact_source_claim_id, artifact_finding_version_id, polarity, scope,
+             quality_rationale, limitations, provenance_json, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+        params![
+            evidence_id,
+            request.model_version_id,
+            artifact_columns.0,
+            artifact_columns.1,
+            artifact_columns.2,
+            artifact_columns.3,
+            artifact_columns.4,
+            artifact_columns.5,
+            artifact_columns.6,
+            request.polarity.as_str(),
+            request.scope.trim(),
+            request.quality_rationale.trim(),
+            request.limitations.trim(),
+            json(&request.provenance)?,
+            request.created_by,
+            created_at
+        ],
+    )?;
+    query_evidence(conn, &evidence_id)
+}
+
+fn query_evidence(conn: &Connection, evidence_id: &str) -> Result<ModelEvidenceDto> {
+    let values = conn.query_row(
+        "SELECT id, model_version_id, artifact_analysis_output_id, artifact_experiment_run_id,
+                artifact_dataset_version_id, artifact_observation_id, artifact_source_segment_id,
+                artifact_source_claim_id, artifact_finding_version_id, polarity, scope,
+                quality_rationale, limitations, provenance_json, created_by, created_at_us
+         FROM model_evidence WHERE id = ?1",
+        [evidence_id],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<String>>(6)?,
+                row.get::<_, Option<String>>(7)?,
+                row.get::<_, Option<String>>(8)?,
+                row.get::<_, String>(9)?,
+                row.get::<_, String>(10)?,
+                row.get::<_, String>(11)?,
+                row.get::<_, String>(12)?,
+                row.get::<_, String>(13)?,
+                row.get::<_, Option<String>>(14)?,
+                row.get::<_, i64>(15)?,
+            ))
+        },
+    )?;
+    let artifact = match (
+        values.2, values.3, values.4, values.5, values.6, values.7, values.8,
+    ) {
+        (Some(value), None, None, None, None, None, None) => ModelArtifactRef::AnalysisOutput(value),
+        (None, Some(value), None, None, None, None, None) => ModelArtifactRef::ExperimentRun(value),
+        (None, None, Some(value), None, None, None, None) => ModelArtifactRef::DatasetVersion(value),
+        (None, None, None, Some(value), None, None, None) => ModelArtifactRef::ResearchObservation(value),
+        (None, None, None, None, Some(value), None, None) => ModelArtifactRef::SourceVersionSegment(value),
+        (None, None, None, None, None, Some(value), None) => ModelArtifactRef::SourceClaim(value),
+        (None, None, None, None, None, None, Some(value)) => ModelArtifactRef::FindingVersion(value),
+        _ => return Err(anyhow!("Model evidence has an invalid artifact endpoint.")),
+    };
+    let polarity = match values.9.as_str() {
+        "supports" => ModelEvidencePolarity::Supports,
+        "contradicts" => ModelEvidencePolarity::Contradicts,
+        "qualifies" => ModelEvidencePolarity::Qualifies,
+        "neutral" => ModelEvidencePolarity::Neutral,
+        _ => return Err(anyhow!("Model evidence has an invalid polarity.")),
+    };
+    Ok(ModelEvidenceDto {
+        id: values.0,
+        model_version_id: values.1,
+        artifact,
+        polarity,
+        scope: values.10,
+        quality_rationale: values.11,
+        limitations: values.12,
+        provenance: parse_json(&values.13)?,
+        created_by: values.14,
+        created_at_us: values.15,
+    })
+}
+
+pub fn create_evaluation(
+    conn: &mut Connection,
+    request: &CreateModelEvaluationReq,
+) -> Result<ModelEvaluationDto> {
+    validate_dataset_role(&request.role)?;
+    required(&request.limitations, "Evaluation limitations")?;
+    let run: Option<(String, String)> = conn
+        .query_row(
+            "SELECT r.project_id, e.lifecycle_status
+             FROM analysis_runs r
+             JOIN analysis_run_events e ON e.run_id = r.id
+             WHERE r.id = ?1
+             ORDER BY e.occurred_at_us DESC, e.id DESC LIMIT 1",
+            [&request.analysis_run_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    let Some((run_project, run_status)) = run else {
+        return Err(anyhow!("Analysis run or its lifecycle status was not found."));
+    };
+    if run_status != "completed" {
+        return Err(anyhow!(
+            "Model evaluations require a completed AnalysisRun."
+        ));
+    }
+    if run_project != request.project_id {
+        return Err(anyhow!(
+            "Model evaluation project must match the AnalysisRun project."
+        ));
+    }
+    let input: Option<(String, String, Option<String>)> = conn
+        .query_row(
+            "SELECT run_id, role, split_group_id FROM analysis_run_inputs
+             WHERE id = ?1 AND dataset_version_id = ?2",
+            params![request.analysis_run_input_id, request.dataset_version_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?;
+    let Some((input_run, input_role, input_split)) = input else {
+        return Err(anyhow!(
+            "Evaluation input does not pin the requested dataset version."
+        ));
+    };
+    if input_run != request.analysis_run_id
+        || input_role != request.role
+        || input_split != request.split_group_id
+    {
+        return Err(anyhow!(
+            "Evaluation run, dataset, role, and split must match the exact AnalysisRun input."
+        ));
+    }
+    let sealed: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM experiment_dataset_versions
+         WHERE id = ?1 AND lifecycle_status = 'sealed')",
+        [&request.dataset_version_id],
+        |row| row.get(0),
+    )?;
+    if !sealed {
+        return Err(anyhow!("Model evaluation requires a sealed DatasetVersion."));
+    }
+    let metric_run: Option<String> = conn
+        .query_row(
+            "SELECT run_id FROM analysis_metrics WHERE id = ?1",
+            [&request.analysis_metric_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if metric_run.as_deref() != Some(request.analysis_run_id.as_str()) {
+        return Err(anyhow!(
+            "Evaluation metric must belong to the exact AnalysisRun."
+        ));
+    }
+    let evaluation_id = id();
+    conn.execute(
+        "INSERT INTO model_evaluations
+            (id, project_id, model_version_id, analysis_run_id, analysis_run_input_id,
+             dataset_version_id, analysis_metric_id, role, split_group_id, limitations,
+             created_by, evaluated_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![
+            evaluation_id,
+            request.project_id,
+            request.model_version_id,
+            request.analysis_run_id,
+            request.analysis_run_input_id,
+            request.dataset_version_id,
+            request.analysis_metric_id,
+            request.role,
+            request.split_group_id,
+            request.limitations.trim(),
+            request.created_by,
+            now_us()?
+        ],
+    )?;
+    query_evaluation(conn, &evaluation_id)
+}
+
+fn query_evaluation(conn: &Connection, evaluation_id: &str) -> Result<ModelEvaluationDto> {
+    Ok(conn.query_row(
+        "SELECT e.id, e.project_id, e.model_version_id, e.analysis_run_id,
+                e.analysis_run_input_id, e.dataset_version_id, e.role, e.split_group_id,
+                e.analysis_metric_id, m.metric_definition_version_id, m.estimand,
+                m.sample_size, m.effect_estimate, m.unit, m.uncertainty_kind,
+                m.uncertainty_lower, m.uncertainty_upper, m.uncertainty_level,
+                m.uncertainty_reason, e.limitations, e.created_by, e.evaluated_at_us
+         FROM model_evaluations e
+         JOIN analysis_metrics m ON m.id = e.analysis_metric_id
+         WHERE e.id = ?1",
+        [evaluation_id],
+        |row| {
+            Ok(ModelEvaluationDto {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                model_version_id: row.get(2)?,
+                analysis_run_id: row.get(3)?,
+                analysis_run_input_id: row.get(4)?,
+                dataset_version_id: row.get(5)?,
+                role: row.get(6)?,
+                split_group_id: row.get(7)?,
+                analysis_metric_id: row.get(8)?,
+                metric_definition_version_id: row.get(9)?,
+                estimand: row.get(10)?,
+                sample_size: row.get(11)?,
+                effect_estimate: row.get(12)?,
+                unit: row.get(13)?,
+                uncertainty_kind: row.get(14)?,
+                uncertainty_lower: row.get(15)?,
+                uncertainty_upper: row.get(16)?,
+                uncertainty_level: row.get(17)?,
+                uncertainty_reason: row.get(18)?,
+                limitations: row.get(19)?,
+                created_by: row.get(20)?,
+                evaluated_at_us: row.get(21)?,
+            })
+        },
+    )?)
+}
+
+fn query_evaluations(conn: &Connection, project_id: &str) -> Result<Vec<ModelEvaluationDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id FROM model_evaluations WHERE project_id = ?1 ORDER BY evaluated_at_us, id",
+    )?;
+    let ids = statement
+        .query_map([project_id], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    ids.iter().map(|evaluation_id| query_evaluation(conn, evaluation_id)).collect()
+}
