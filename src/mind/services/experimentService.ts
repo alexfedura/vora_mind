@@ -13,6 +13,7 @@ import type {
   DatasetSamplePageDto,
   ExperimentDatasetAssetDto,
   ExperimentDatasetDto,
+  ExperimentDatasetSplitGroupDto,
   ExperimentDatasetTransformationDto,
   ExperimentDatasetVersionDto,
   ExperimentDesignVersionDto,
@@ -49,10 +50,7 @@ export const experimentService = {
   registerDatasetAsset: (request: RegisterDatasetAssetReq) =>
     invoke<ExperimentDatasetAssetDto>("experiment_register_dataset_asset", { request }),
   addDatasetSplitGroup: (request: AddDatasetSplitGroupReq) =>
-    invoke<import("@/types").ExperimentDatasetSplitGroupDto>(
-      "experiment_add_dataset_split_group",
-      { request },
-    ),
+    invoke<ExperimentDatasetSplitGroupDto>("experiment_add_dataset_split_group", { request }),
   createDatasetTransformation: (request: CreateDatasetTransformationReq) =>
     invoke<string>("experiment_create_dataset_transformation", { request }),
   sealDatasetVersion: (datasetVersionId: string) =>
