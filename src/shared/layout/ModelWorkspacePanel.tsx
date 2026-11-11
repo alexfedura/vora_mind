@@ -217,6 +217,15 @@ function validationTarget(kind: string, id: string): ModelValidationTarget {
   }
 }
 
+function modelEvidenceForTarget(
+  evidence: ModelWorkspaceDto["evidence"],
+  versionId: string,
+): Array<{ id: string; polarity: string; scope: string }> {
+  return evidence
+    .filter((item) => item.modelVersionId === versionId)
+    .map((item) => ({ id: item.id, polarity: item.polarity, scope: item.scope }));
+}
+
 function ModelFormLabel({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
   return <label className="block space-y-1 text-xs text-gray-400"><span>{title}</span>{children}</label>;
 }
