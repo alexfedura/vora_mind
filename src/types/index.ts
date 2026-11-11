@@ -846,6 +846,16 @@ export interface HypothesisModelReferenceDto {
   resolutionStatus: "unresolved";
 }
 
+export interface HypothesisEvidenceDto {
+  targetKind: "source_claim" | "observation" | "pattern";
+  targetId: string;
+  polarity: ResearchPolarity;
+  rationale: string;
+  sourceId: string | null;
+  sourceVersionId: string | null;
+  sourceLocationId: string | null;
+}
+
 export interface ResearchHypothesisDto {
   id: string;
   projectId: string | null;
@@ -857,6 +867,7 @@ export interface ResearchHypothesisDto {
   definitions: HypothesisDefinitionVersionDto[];
   competingHypothesisIds: string[];
   modelReferences: HypothesisModelReferenceDto[];
+  evidence: HypothesisEvidenceDto[];
   createdBy: string | null;
   createdAtUs: number;
 }

@@ -544,6 +544,18 @@ pub struct HypothesisModelReferenceDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct HypothesisEvidenceDto {
+    pub target_kind: String,
+    pub target_id: String,
+    pub polarity: ResearchPolarity,
+    pub rationale: String,
+    pub source_id: Option<String>,
+    pub source_version_id: Option<String>,
+    pub source_location_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ResearchHypothesisDto {
     pub id: String,
     pub project_id: Option<String>,
@@ -555,6 +567,7 @@ pub struct ResearchHypothesisDto {
     pub definitions: Vec<HypothesisDefinitionVersionDto>,
     pub competing_hypothesis_ids: Vec<String>,
     pub model_references: Vec<HypothesisModelReferenceDto>,
+    pub evidence: Vec<HypothesisEvidenceDto>,
     pub created_by: Option<String>,
     pub created_at_us: i64,
 }
