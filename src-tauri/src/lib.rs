@@ -2572,6 +2572,7 @@ pub fn run() {
             crate::source::ipc::src_create_extract,
             crate::source::ipc::src_create_link,
             crate::source::ipc::src_mark_extract_reviewed,
+            crate::source::ipc::src_list_source_revisions,
             crate::source::acquisition_ipc::src_list_source_versions,
             crate::source::acquisition_ipc::src_create_source_version,
             crate::source::acquisition_ipc::src_list_source_locations,

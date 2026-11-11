@@ -261,6 +261,8 @@ export type AcquisitionProvenanceTargetKind =
   | "procedure"
   | "framework"
   | "framework_version";
+export type LegacySourceEntityKind = "source" | "segment" | "extract" | "link";
+export type LegacySourceRevisionType = "create" | "update" | "correct" | "retract" | "review";
 export type FrameworkMembershipRole =
   | "core"
   | "supporting"
@@ -538,4 +540,16 @@ export interface ProvenanceEventDto {
   reason: string;
   beforeJson: string | null;
   afterJson: string | null;
+}
+
+export interface SourceRevisionDto {
+  id: string;
+  entityKind: LegacySourceEntityKind;
+  entityId: string;
+  revisionType: LegacySourceRevisionType;
+  beforeJson: string | null;
+  afterJson: string;
+  reason: string;
+  createdBy: string;
+  createdAt: number;
 }
