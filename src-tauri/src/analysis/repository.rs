@@ -470,6 +470,126 @@ fn validate_required_text(value: &str, field: &str) -> Result<()> {
     nonempty(value, field)
 }
 
+fn json_value_matches_type(value: &serde_json::Value, expected: &str) -> bool {
+    match expected {
+        "object" => value.is_object(),
+        "array" => value.is_array(),
+        "string" => value.is_string(),
+        "number" => value.as_f64().is_some(),
+        "integer" => value.as_i64().is_some() || value.as_u64().is_some(),
+        "boolean" => value.is_boolean(),
+        "null" => value.is_null(),
+        _ => false,
+    }
+}
+
+fn validate_parameter_schema(schema: &serde_json::Value) -> Result<()> {
+    let Some(schema) = schema.as_object() else {
+        return Err(anyhow!("Analysis parameter schema must be a JSON object."));
+    };
+    if schema
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|kind| kind != "object")
+    {
+        return Err(anyhow!("Analysis parameters schema must describe an object."));
+    }
+    if schema
+        .get("properties")
+        .is_some_and(|properties| !properties.is_object())
+    {
+        return Err(anyhow!("Parameter schema properties must be an object."));
+    }
+    if let Some(required) = schema.get("required") {
+        let Some(required) = required.as_array() else {
+            return Err(anyhow!("Parameter schema required must be an array."));
+        };
+        if required.iter().any(|name| name.as_str().is_none()) {
+            return Err(anyhow!(
+                "Every required parameter name must be a string."
+            ));
+        }
+    }
+    if let Some(properties) = schema.get("properties").and_then(|value| value.as_object()) {
+        for (name, definition) in properties {
+            if !definition.is_object() {
+                return Err(anyhow!(
+                    "Parameter schema for {name} must be an object."
+                ));
+            }
+            if let Some(kind) = definition.get("type").and_then(serde_json::Value::as_str) {
+                if !matches!(
+                    kind,
+                    "object" | "array" | "string" | "number" | "integer" | "boolean" | "null"
+                ) {
+                    return Err(anyhow!(
+                        "Parameter schema for {name} declares unsupported type {kind}."
+                    ));
+                }
+            }
+            if definition
+                .get("enum")
+                .is_some_and(|values| !values.is_array())
+            {
+                return Err(anyhow!("Parameter schema enum for {name} must be an array."));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_parameters(schema: &serde_json::Value, parameters: &serde_json::Value) -> Result<()> {
+    validate_parameter_schema(schema)?;
+    let Some(parameters) = parameters.as_object() else {
+        return Err(anyhow!("Analysis parameters must be a JSON object."));
+    };
+    let schema = schema.as_object().ok_or_else(|| {
+        anyhow!("Analysis parameter schema must be a JSON object.")
+    })?;
+    if let Some(required) = schema.get("required").and_then(serde_json::Value::as_array) {
+        for name in required.iter().filter_map(serde_json::Value::as_str) {
+            if !parameters.contains_key(name) {
+                return Err(anyhow!("Required analysis parameter {name} is missing."));
+            }
+        }
+    }
+    if let Some(properties) = schema.get("properties").and_then(serde_json::Value::as_object) {
+        for (name, value) in parameters {
+            let Some(property_schema) = properties.get(name) else {
+                if schema
+                    .get("additionalProperties")
+                    .and_then(serde_json::Value::as_bool)
+                    == Some(false)
+                {
+                    return Err(anyhow!("Unexpected analysis parameter {name}."));
+                }
+                continue;
+            };
+            if let Some(expected_type) = property_schema
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+            {
+                if !json_value_matches_type(value, expected_type) {
+                    return Err(anyhow!(
+                        "Analysis parameter {name} does not match required type {expected_type}."
+                    ));
+                }
+            }
+            if let Some(allowed) = property_schema
+                .get("enum")
+                .and_then(serde_json::Value::as_array)
+            {
+                if !allowed.contains(value) {
+                    return Err(anyhow!(
+                        "Analysis parameter {name} is outside its declared allowed values."
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_applicability<T>(
     category: &str,
     control: &Applicability<T>,
@@ -607,8 +727,11 @@ pub fn create_definition_version(
     if roles.len() != req.specification.required_input_roles.len() {
         return Err(anyhow!("Required dataset roles must be unique."));
     }
-    if !req.specification.parameters_schema.is_object() {
-        return Err(anyhow!("Analysis parameter schema must be a JSON object."));
+    validate_parameter_schema(&req.specification.parameters_schema)?;
+    if req.definition_id.is_some() != req.parent_version_id.is_some() {
+        return Err(anyhow!(
+            "A revised analysis definition must specify both its identity and parent version."
+        ));
     }
     validate_integrity_plan(&req.specification.integrity)?;
     if req.metric_definition_version_ids.is_empty() {
@@ -690,7 +813,13 @@ pub fn create_definition_version(
             [parent_id],
             |row| row.get(0),
         )?;
-        if parent_definition != definition_id {
+        let latest_parent: String = tx.query_row(
+            "SELECT id FROM analysis_definition_versions
+             WHERE definition_id = ?1 ORDER BY version_no DESC LIMIT 1",
+            [&definition_id],
+            |row| row.get(0),
+        )?;
+        if parent_definition != definition_id || latest_parent != parent_id {
             return Err(anyhow!("Parent version must belong to this analysis definition."));
         }
     }
@@ -807,16 +936,6 @@ pub fn transition_definition(
     )?;
     tx.commit()?;
     query_definition_version(conn, &req.version_id)
-}
-
-fn definition_status(conn: &Connection, version_id: &str) -> Result<String> {
-    Ok(conn.query_row(
-        "SELECT status FROM analysis_definition_events
-         WHERE definition_version_id = ?1
-         ORDER BY occurred_at_us DESC, id DESC LIMIT 1",
-        [version_id],
-        |row| row.get(0),
-    )?)
 }
 
 fn insert_control<T: Serialize>(
@@ -957,10 +1076,10 @@ fn validate_temporal_sample(
             }
             if sample
                 .outcome_available_at_us
-                .is_some_and(|outcome| outcome < prediction)
+                .is_some_and(|outcome| outcome < decision)
             {
                 return Err(anyhow!(
-                    "Sample {} has an outcome available before its prediction timestamp.",
+                    "Sample {} has an outcome available before its decision timestamp.",
                     sample.sample_id
                 ));
             }
@@ -1102,10 +1221,6 @@ fn validate_input(
     Ok((checksum, lineage, assignments))
 }
 
-fn control_is_not_assessed<T>(control: &Applicability<T>) -> bool {
-    matches!(control, Applicability::NotAssessed { .. })
-}
-
 fn insert_integrity_declarations(
     tx: &Transaction<'_>,
     run_id: &str,
@@ -1170,6 +1285,10 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
     if definition.lifecycle_status != AnalysisDefinitionStatus::Locked {
         return Err(anyhow!("Analysis run requires a locked definition version."));
     }
+    validate_parameters(
+        &definition.specification.parameters_schema,
+        &req.parameters,
+    )?;
     let method = query_method_version(&tx, &definition.method_version_id)?;
     if method.verification_status != AnalysisVerificationStatus::Passed {
         return Err(anyhow!("Analysis method test report has not passed."));
