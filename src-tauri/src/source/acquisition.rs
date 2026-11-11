@@ -1046,6 +1046,7 @@ mod tests {
             list_source_locations(&conn, &second.id).unwrap()[0].source_version_id,
             second.id
         );
+        assert_eq!(second_location.source_version_id, second.id);
 
         let extract = extraction(
             &conn,
@@ -1096,13 +1097,19 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(replacement.parent_extraction_id.as_deref(), Some(&original.id));
+        assert_eq!(
+            replacement.parent_extraction_id.as_deref(),
+            Some(original.id.as_str())
+        );
         assert_eq!(replacement.review_status, ExtractionReviewStatus::Unreviewed);
 
         let history = list_extractions(&conn, &source_version.id).unwrap();
         let retained_original = history.iter().find(|item| item.id == original.id).unwrap();
         assert_eq!(retained_original.content, "Original source proposition.");
-        assert_eq!(retained_original.superseded_by_id.as_deref(), Some(&replacement.id));
+        assert_eq!(
+            retained_original.superseded_by_id.as_deref(),
+            Some(replacement.id.as_str())
+        );
         assert_eq!(history.len(), 2);
 
         review_extraction(&conn, accept_extraction(&replacement.id)).unwrap();
@@ -1243,7 +1250,10 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(next.parent_version_id.as_deref(), Some(&initial_version.id));
+        assert_eq!(
+            next.parent_version_id.as_deref(),
+            Some(initial_version.id.as_str())
+        );
         assert_eq!(next.items.len(), 1);
         assert_eq!(
             list_framework_versions(&conn, &framework.id).unwrap().len(),
