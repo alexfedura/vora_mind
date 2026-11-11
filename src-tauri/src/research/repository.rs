@@ -2247,7 +2247,11 @@ fn query_hypothesis(conn: &Connection, hypothesis_id: &str) -> Result<ResearchHy
             .collect::<Result<Vec<_>>>()?,
     );
     for (table, target_kind, id_column) in [
-        ("hypothesis_observation_evidence", "observation", "observation_id"),
+        (
+            "hypothesis_observation_evidence",
+            "observation",
+            "observation_id",
+        ),
         ("hypothesis_pattern_evidence", "pattern", "pattern_id"),
     ] {
         let sql = format!(

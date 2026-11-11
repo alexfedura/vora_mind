@@ -1295,8 +1295,13 @@ pub fn add_hypothesis_model_reference(
     validate_required(&req.model_version_id, "model version id")?;
     validate_required(&req.label, "model reference label")?;
     validate_required(&req.rationale, "model reference rationale")?;
-    repository::add_hypothesis_model_reference(conn, &req, &new_id("hypothesis_model_reference"), now_ts_us()?)
-        .map_err(|error| error.to_string())
+    repository::add_hypothesis_model_reference(
+        conn,
+        &req,
+        &new_id("hypothesis_model_reference"),
+        now_ts_us()?,
+    )
+    .map_err(|error| error.to_string())
 }
 
 pub fn add_hypothesis_evidence(
