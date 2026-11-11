@@ -2049,6 +2049,29 @@ export type ModelValidationTarget =
   | { kind: "finding_version"; id: string }
   | { kind: "source_claim"; id: string };
 export type ModelValidationOutcome = "pass" | "fail" | "inconclusive";
+export type ModelStatus = "proposed" | "active" | "deprecated" | "replaced" | "retired";
+export type ModelVersionLifecycleStatus = "draft" | "review" | "released" | "superseded" | "withdrawn";
+
+export interface ModelLifecycleEventDto {
+  status: ModelStatus | ModelVersionLifecycleStatus;
+  rationale: string;
+  actorId: string | null;
+  occurredAtUs: number;
+}
+
+export interface TransitionModelReq {
+  modelId: string;
+  nextStatus: ModelStatus;
+  rationale: string;
+  actorId: string | null;
+}
+
+export interface TransitionModelVersionReq {
+  versionId: string;
+  nextStatus: ModelVersionLifecycleStatus;
+  rationale: string;
+  actorId: string | null;
+}
 
 export interface CreateModelReq {
   displayName: string;
@@ -2064,9 +2087,12 @@ export interface ModelDto {
   description: string;
   originProjectId: string | null;
   domainId: string | null;
-  status: "proposed" | "active" | "deprecated" | "replaced" | "retired";
+  status: ModelStatus;
+  events: ModelLifecycleEventDto[];
   createdBy: string | null;
   createdAtUs: number;
+  lifecycleStatus: ModelVersionLifecycleStatus;
+  lifecycleEvents: ModelLifecycleEventDto[];
 }
 
 export interface ModelSpecificationDto {
