@@ -2419,6 +2419,38 @@ mod tests {
         service::verify_dataset_version(&db, &version.id, &assets_root)
             .expect("verify sealed dataset assets and manifest");
 
+        let transformed_version = {
+            let mut conn = db.lock().expect("lock");
+            create_dataset_version(
+                &mut conn,
+                &CreateDatasetVersionReq {
+                    dataset_id: dataset.id.clone(),
+                    schema: schema(),
+                    expected_sample_count: 0,
+                    created_by: Some("researcher".into()),
+                },
+            )
+            .expect("create staged transformation output version")
+        };
+        let transformation_id = {
+            let mut conn = db.lock().expect("lock");
+            create_dataset_transformation(
+                &mut conn,
+                &CreateDatasetTransformationReq {
+                    output_dataset_version_id: transformed_version.id.clone(),
+                    method: "declared row filter".into(),
+                    parameters: serde_json::json!({"rule": "retain observed samples"}),
+                    provenance: serde_json::json!({"record": "protocol-1"}),
+                    inputs: vec![DatasetTransformationInputReq {
+                        dataset_version_id: version.id.clone(),
+                        role: DatasetRole::Exploratory,
+                    }],
+                    created_by: Some("researcher".into()),
+                },
+            )
+            .expect("record exact dataset transformation lineage")
+        };
+
         let pin = DatasetRolePinDto {
             dataset_version_id: version.id.clone(),
             role: DatasetRole::Training,
@@ -2518,7 +2550,16 @@ mod tests {
             workspace(&conn, "dataset-project").expect("query experimental workspace")
         };
         assert_eq!(workspace_state.split_groups[0].assignments.len(), 2);
-        assert!(workspace_state.transformations.is_empty());
+        assert_eq!(workspace_state.transformations.len(), 1);
+        assert_eq!(workspace_state.transformations[0].id, transformation_id);
+        assert_eq!(
+            workspace_state.transformations[0].output_dataset_version_id,
+            transformed_version.id
+        );
+        assert_eq!(
+            workspace_state.transformations[0].inputs[0].dataset_version_id,
+            version.id
+        );
 
         drop(db);
         let reopened = Connection::open(&database_path).expect("reopen workspace");
@@ -2537,6 +2578,13 @@ mod tests {
                 .expect("query restored samples")
                 .total_count,
             2
+        );
+        let restored_workspace = workspace(&reopened, "dataset-project")
+            .expect("restore transformation lineage");
+        assert_eq!(restored_workspace.transformations.len(), 1);
+        assert_eq!(
+            restored_workspace.transformations[0].output_dataset_version_id,
+            transformed_version.id
         );
         drop(reopened);
         fs::remove_file(database_path).expect("remove temporary workspace database");
