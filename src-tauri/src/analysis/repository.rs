@@ -901,11 +901,10 @@ fn transformation_lineage(conn: &Connection, version_id: &str) -> Result<serde_j
                      WHERE transformation_id = ?1
                      ORDER BY input_dataset_version_id, input_role",
                 )?;
-                statement
-                    .query_map([&transformation_id], |row| {
-                        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-                    })?
-                    .collect::<rusqlite::Result<Vec<_>>>()?
+                let rows = statement.query_map([&transformation_id], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?;
+                rows.collect::<rusqlite::Result<Vec<_>>>()?
             };
             for (input_version_id, _) in &inputs {
                 pending.push(input_version_id.clone());
@@ -1755,8 +1754,7 @@ fn query_run_inputs(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisInput
              FROM analysis_run_inputs WHERE run_id = ?1
              ORDER BY role, dataset_version_id",
         )?;
-        statement
-            .query_map([run_id], |row| {
+        let rows = statement.query_map([run_id], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
@@ -1766,8 +1764,8 @@ fn query_run_inputs(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisInput
                     row.get::<_, i64>(5)?,
                     row.get::<_, String>(6)?,
                 ))
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+            })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
     rows.into_iter()
         .map(
@@ -1787,8 +1785,7 @@ fn query_run_inputs(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisInput
                          FROM analysis_run_input_samples WHERE input_id = ?1
                          ORDER BY sample_id",
                     )?;
-                    statement
-                        .query_map([&input_id], |row| {
+                    let rows = statement.query_map([&input_id], |row| {
                             Ok(AnalysisInputSampleDto {
                                 sample_id: row.get(0)?,
                                 split_key: row.get(1)?,
@@ -1797,8 +1794,8 @@ fn query_run_inputs(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisInput
                                 decision_at_us: row.get(4)?,
                                 outcome_available_at_us: row.get(5)?,
                             })
-                        })?
-                        .collect::<rusqlite::Result<Vec<_>>>()?
+                        })?;
+                    rows.collect::<rusqlite::Result<Vec<_>>>()?
                 };
                 Ok(AnalysisInputDto {
                     id: input_id,
@@ -2793,9 +2790,8 @@ pub fn query_finding_version(conn: &Connection, version_id: &str) -> Result<Find
             "SELECT run_id FROM analysis_finding_version_runs
              WHERE finding_version_id = ?1 ORDER BY run_id",
         )?;
-        statement
-            .query_map([version_id], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
+        let rows = statement.query_map([version_id], |row| row.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
     let conclusion_kind = match row.14.as_str() {
         "result" => FindingConclusionKind::Result,
