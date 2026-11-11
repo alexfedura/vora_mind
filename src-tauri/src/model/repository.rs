@@ -142,6 +142,12 @@ pub fn create_model(conn: &mut Connection, request: &CreateModelReq) -> Result<M
         ],
     )?;
     tx.execute(
+        "INSERT INTO model_version_events
+            (id, model_version_id, lifecycle_status, rationale, actor_id, occurred_at_us)
+         VALUES (?1, ?2, 'draft', 'Immutable version created.', ?3, ?4)",
+        params![id(), model_version_id, request.created_by, created_at],
+    )?;
+    tx.execute(
         "INSERT INTO model_status_events (id, model_id, status, rationale, actor_id, occurred_at_us)
          VALUES (?1, ?2, 'proposed', 'Model identity created.', ?3, ?4)",
         params![id(), model_id, request.created_by, now],
@@ -158,13 +164,14 @@ fn model_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ModelDto> {
         origin_project_id: row.get(3)?,
         domain_id: row.get(4)?,
         status: row.get(5)?,
+        events: Vec::new(),
         created_by: row.get(6)?,
         created_at_us: row.get(7)?,
     })
 }
 
 pub fn query_model(conn: &Connection, model_id: &str) -> Result<ModelDto> {
-    Ok(conn.query_row(
+    let mut model = conn.query_row(
         "SELECT m.id, m.display_name, m.description, m.origin_project_id, m.domain_id,
                 COALESCE((SELECT e.status FROM model_status_events e
                           WHERE e.model_id = m.id ORDER BY e.occurred_at_us DESC, e.id DESC LIMIT 1),
@@ -173,7 +180,138 @@ pub fn query_model(conn: &Connection, model_id: &str) -> Result<ModelDto> {
          FROM scientific_models m WHERE m.id = ?1",
         [model_id],
         model_from_row,
-    )?)
+    )?;
+    let mut statement = conn.prepare(
+        "SELECT status, rationale, actor_id, occurred_at_us FROM model_status_events
+         WHERE model_id = ?1 ORDER BY occurred_at_us, id",
+    )?;
+    model.events = statement
+        .query_map([model_id], |row| {
+            Ok(ModelLifecycleEventDto {
+                status: row.get(0)?,
+                rationale: row.get(1)?,
+                actor_id: row.get(2)?,
+                occurred_at_us: row.get(3)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(model)
+}
+
+pub fn transition_model(
+    conn: &mut Connection,
+    request: &TransitionModelReq,
+) -> Result<ModelDto> {
+    required(&request.rationale, "Model status rationale")?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let current: Option<String> = tx
+        .query_row(
+            "SELECT status FROM model_status_events WHERE model_id = ?1
+             ORDER BY occurred_at_us DESC, id DESC LIMIT 1",
+            [&request.model_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(current) = current else {
+        return Err(anyhow!("Model identity was not found."));
+    };
+    let allowed = match current.as_str() {
+        "proposed" => matches!(
+            request.next_status,
+            ModelStatus::Active | ModelStatus::Deprecated | ModelStatus::Retired
+        ),
+        "active" => matches!(
+            request.next_status,
+            ModelStatus::Deprecated | ModelStatus::Replaced | ModelStatus::Retired
+        ),
+        "deprecated" => matches!(
+            request.next_status,
+            ModelStatus::Active | ModelStatus::Replaced | ModelStatus::Retired
+        ),
+        "replaced" => request.next_status == ModelStatus::Retired,
+        "retired" => false,
+        _ => return Err(anyhow!("Stored model status is invalid.")),
+    };
+    if !allowed {
+        return Err(anyhow!(
+            "Invalid model status transition from {current} to {}.",
+            request.next_status.as_str()
+        ));
+    }
+    tx.execute(
+        "INSERT INTO model_status_events
+            (id, model_id, status, rationale, actor_id, occurred_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            id(),
+            request.model_id,
+            request.next_status.as_str(),
+            request.rationale.trim(),
+            request.actor_id,
+            now_us()?
+        ],
+    )?;
+    tx.commit()?;
+    query_model(conn, &request.model_id)
+}
+
+pub fn transition_version(
+    conn: &mut Connection,
+    request: &TransitionModelVersionReq,
+) -> Result<ModelVersionDto> {
+    required(&request.rationale, "Model version lifecycle rationale")?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let current: Option<String> = tx
+        .query_row(
+            "SELECT lifecycle_status FROM model_version_events
+             WHERE model_version_id = ?1 ORDER BY occurred_at_us DESC, id DESC LIMIT 1",
+            [&request.version_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(current) = current else {
+        return Err(anyhow!("Model version was not found."));
+    };
+    let allowed = match current.as_str() {
+        "draft" => matches!(
+            request.next_status,
+            ModelVersionLifecycleStatus::Review | ModelVersionLifecycleStatus::Withdrawn
+        ),
+        "review" => matches!(
+            request.next_status,
+            ModelVersionLifecycleStatus::Draft
+                | ModelVersionLifecycleStatus::Released
+                | ModelVersionLifecycleStatus::Withdrawn
+        ),
+        "released" => matches!(
+            request.next_status,
+            ModelVersionLifecycleStatus::Superseded | ModelVersionLifecycleStatus::Withdrawn
+        ),
+        "superseded" => request.next_status == ModelVersionLifecycleStatus::Withdrawn,
+        "withdrawn" => false,
+        _ => return Err(anyhow!("Stored model-version status is invalid.")),
+    };
+    if !allowed {
+        return Err(anyhow!(
+            "Invalid model-version transition from {current} to {}.",
+            request.next_status.as_str()
+        ));
+    }
+    tx.execute(
+        "INSERT INTO model_version_events
+            (id, model_version_id, lifecycle_status, rationale, actor_id, occurred_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            id(),
+            request.version_id,
+            request.next_status.as_str(),
+            request.rationale.trim(),
+            request.actor_id,
+            now_us()?
+        ],
+    )?;
+    tx.commit()?;
+    query_version(conn, &request.version_id)
 }
 
 pub fn create_model_version(
