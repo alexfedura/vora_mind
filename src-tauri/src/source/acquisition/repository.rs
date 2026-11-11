@@ -894,6 +894,28 @@ pub fn list_framework_versions(
     versions
 }
 
+pub fn list_framework_reviews(
+    conn: &Connection,
+    framework_version_id: &str,
+) -> RepoResult<Vec<FrameworkReviewDto>> {
+    let mut statement = conn.prepare(
+        "SELECT id, framework_version_id, review_status, reviewer_id, rationale, reviewed_at_us
+         FROM framework_version_reviews
+         WHERE framework_version_id = ?1 ORDER BY reviewed_at_us, id",
+    )?;
+    let rows = statement.query_map([framework_version_id], |row| {
+        Ok(FrameworkReviewDto {
+            id: row.get(0)?,
+            framework_version_id: row.get(1)?,
+            review_status: row.get(2)?,
+            reviewer_id: row.get(3)?,
+            rationale: row.get(4)?,
+            reviewed_at_us: row.get(5)?,
+        })
+    })?;
+    rows.collect()
+}
+
 pub fn create_framework_version(
     conn: &Connection,
     req: &CreateFrameworkVersionReq,
@@ -1332,21 +1354,21 @@ pub fn publish_framework_version(
 
 pub fn list_provenance(
     conn: &Connection,
-    target_kind: &str,
+    target_kind: &AcquisitionProvenanceTargetKind,
     target_id: &str,
 ) -> RepoResult<Vec<ProvenanceEventDto>> {
-    let (column, sql_kind) = match target_kind {
-        "source" => ("source_id", "source"),
-        "source_version" => ("source_version_id", "source_version"),
-        "source_location" => ("source_segment_id", "source_location"),
-        "extraction" => ("extraction_id", "extraction"),
-        "source_claim" => ("source_claim_id", "source_claim"),
-        "concept" => ("concept_id", "concept"),
-        "principle" => ("principle_id", "principle"),
-        "procedure" => ("procedure_id", "procedure"),
-        "framework" => ("framework_id", "framework"),
-        "framework_version" => ("framework_version_id", "framework_version"),
-        _ => return Err(rusqlite::Error::InvalidQuery),
+    let sql_kind = target_kind.as_str();
+    let column = match target_kind {
+        AcquisitionProvenanceTargetKind::Source => "source_id",
+        AcquisitionProvenanceTargetKind::SourceVersion => "source_version_id",
+        AcquisitionProvenanceTargetKind::SourceLocation => "source_segment_id",
+        AcquisitionProvenanceTargetKind::Extraction => "extraction_id",
+        AcquisitionProvenanceTargetKind::SourceClaim => "source_claim_id",
+        AcquisitionProvenanceTargetKind::Concept => "concept_id",
+        AcquisitionProvenanceTargetKind::Principle => "principle_id",
+        AcquisitionProvenanceTargetKind::Procedure => "procedure_id",
+        AcquisitionProvenanceTargetKind::Framework => "framework_id",
+        AcquisitionProvenanceTargetKind::FrameworkVersion => "framework_version_id",
     };
     let mut statement = conn.prepare(&format!(
         "SELECT id, '{sql_kind}', {column}, event_kind, actor_id, occurred_at_us,
@@ -1356,9 +1378,11 @@ pub fn list_provenance(
     ))?;
     let rows = statement
         .query_map([target_id], |row| {
+            let target_kind: String = row.get(1)?;
             Ok(ProvenanceEventDto {
                 id: row.get(0)?,
-                target_kind: row.get(1)?,
+                target_kind: AcquisitionProvenanceTargetKind::parse(&target_kind)
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
                 target_id: row.get(2)?,
                 event_kind: row.get(3)?,
                 actor_id: row.get(4)?,
