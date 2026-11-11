@@ -1208,7 +1208,8 @@ pub fn add_gap_evidence(conn: &Connection, req: AddGapEvidenceReq) -> Result<(),
 
 pub fn review_gap_exception(conn: &Connection, req: ReviewGapExceptionReq) -> Result<(), String> {
     validate_required(&req.rationale, "review exception rationale")?;
-    repository::review_gap_exception(conn, &req, now_ts_us()?).map_err(|error| error.to_string())
+    repository::review_gap_exception(conn, &req, &new_id("gap_review_exception"), now_ts_us()?)
+        .map_err(|error| error.to_string())
 }
 
 pub fn transition_gap(
