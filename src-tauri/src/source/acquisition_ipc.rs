@@ -7,7 +7,7 @@ use super::acquisition::{
     CreateKnowledgeExtractionReq, CreateKnowledgeItemReq, CreateSourceClaimReq,
     CreateSourceLocationReq, CreateSourceVersionReq, CorrectExtractionReq,
     KnowledgeExtractionDto, KnowledgeItemDto, ProvenanceEventDto, PublishFrameworkVersionReq,
-    ReviewExtractionReq, ReviewFrameworkReq, SourceClaimDto, SourceLocationDto,
+    ReorderFrameworkItemsReq, ReviewExtractionReq, ReviewFrameworkReq, SourceClaimDto, SourceLocationDto,
     SourceVersionDto, UpdateFrameworkVersionReq,
 };
 #[tauri::command]
@@ -186,6 +186,15 @@ pub fn src_remove_framework_item(
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;
     acquisition::remove_framework_item(&conn, &item_id)
+}
+
+#[tauri::command]
+pub fn src_reorder_framework_items(
+    req: ReorderFrameworkItemsReq,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    acquisition::reorder_framework_items(&conn, req)
 }
 
 #[tauri::command]
