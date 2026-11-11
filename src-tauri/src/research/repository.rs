@@ -2290,6 +2290,107 @@ fn parse_polarity(value: &str) -> rusqlite::Result<ResearchPolarity> {
     }
 }
 
+fn parse_domain_status(value: &str) -> rusqlite::Result<ResearchDomainStatus> {
+    match value {
+        "proposed" => Ok(ResearchDomainStatus::Proposed),
+        "active" => Ok(ResearchDomainStatus::Active),
+        "deprecated" => Ok(ResearchDomainStatus::Deprecated),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn parse_review_status(value: &str) -> rusqlite::Result<ReviewLifecycleStatus> {
+    match value {
+        "draft" => Ok(ReviewLifecycleStatus::Draft),
+        "reviewed" => Ok(ReviewLifecycleStatus::Reviewed),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn parse_phenomenon_status(value: &str) -> rusqlite::Result<PhenomenonStatus> {
+    match value {
+        "identified" => Ok(PhenomenonStatus::Identified),
+        "characterized" => Ok(PhenomenonStatus::Characterized),
+        "retired" => Ok(PhenomenonStatus::Retired),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn parse_plan_status(value: &str) -> rusqlite::Result<ObservationPlanStatus> {
+    match value {
+        "draft" => Ok(ObservationPlanStatus::Draft),
+        "reviewed" => Ok(ObservationPlanStatus::Reviewed),
+        "preregistered" => Ok(ObservationPlanStatus::Preregistered),
+        "withdrawn" => Ok(ObservationPlanStatus::Withdrawn),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn parse_observation_value_state(value: &str) -> rusqlite::Result<ObservationValueState> {
+    match value {
+        "observed" => Ok(ObservationValueState::Observed),
+        "not_measured" => Ok(ObservationValueState::NotMeasured),
+        "not_recorded" => Ok(ObservationValueState::NotRecorded),
+        "unknown" => Ok(ObservationValueState::Unknown),
+        "not_applicable" => Ok(ObservationValueState::NotApplicable),
+        "withheld" => Ok(ObservationValueState::Withheld),
+        "invalid" => Ok(ObservationValueState::Invalid),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn parse_observation_quality_status(value: &str) -> rusqlite::Result<ObservationQualityStatus> {
+    match value {
+        "unreviewed" => Ok(ObservationQualityStatus::Unreviewed),
+        "accepted" => Ok(ObservationQualityStatus::Accepted),
+        "excluded" => Ok(ObservationQualityStatus::Excluded),
+        "retracted" => Ok(ObservationQualityStatus::Retracted),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn parse_pattern_status(value: &str) -> rusqlite::Result<PatternStatus> {
+    match value {
+        "candidate" => Ok(PatternStatus::Candidate),
+        "examined" => Ok(PatternStatus::Examined),
+        "supported" => Ok(PatternStatus::Supported),
+        "unsupported" => Ok(PatternStatus::Unsupported),
+        "retired" => Ok(PatternStatus::Retired),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn parse_idea_status(value: &str) -> rusqlite::Result<IdeaStatus> {
+    match value {
+        "captured" => Ok(IdeaStatus::Captured),
+        "explored" => Ok(IdeaStatus::Explored),
+        "promoted" => Ok(IdeaStatus::Promoted),
+        "abandoned" => Ok(IdeaStatus::Abandoned),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn parse_expected_direction(value: &str) -> rusqlite::Result<HypothesisExpectedDirection> {
+    match value {
+        "positive" => Ok(HypothesisExpectedDirection::Positive),
+        "negative" => Ok(HypothesisExpectedDirection::Negative),
+        "non_directional" => Ok(HypothesisExpectedDirection::NonDirectional),
+        "equivalence" => Ok(HypothesisExpectedDirection::Equivalence),
+        "other" => Ok(HypothesisExpectedDirection::Other),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn parse_design_status(value: &str) -> rusqlite::Result<ResearchDesignStatus> {
+    match value {
+        "draft" => Ok(ResearchDesignStatus::Draft),
+        "review" => Ok(ResearchDesignStatus::Review),
+        "preregistered" => Ok(ResearchDesignStatus::Preregistered),
+        "withdrawn" => Ok(ResearchDesignStatus::Withdrawn),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
 fn query_hypothesis_definition(
     conn: &Connection,
     version_id: &str,
