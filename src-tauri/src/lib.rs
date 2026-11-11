@@ -4,6 +4,7 @@ pub mod experiment;
 pub mod analysis;
 pub mod learning;
 pub mod model;
+pub mod knowledge_transfer;
 pub mod forge;
 pub mod mind;
 pub mod research;
@@ -2556,6 +2557,17 @@ pub fn run() {
             learning::ipc::learning_create_reproduction_task,
             learning::ipc::learning_submit_reproduction,
             learning::ipc::learning_evaluate_reproduction,
+            knowledge_transfer::ipc::knowledge_transfer_get_workspace,
+            knowledge_transfer::ipc::knowledge_transfer_get_provenance_preview,
+            knowledge_transfer::ipc::knowledge_transfer_create_concept_version,
+            knowledge_transfer::ipc::knowledge_transfer_create_principle_version,
+            knowledge_transfer::ipc::knowledge_transfer_review_knowledge_version,
+            knowledge_transfer::ipc::knowledge_transfer_create_origin,
+            knowledge_transfer::ipc::knowledge_transfer_create_eligibility,
+            knowledge_transfer::ipc::knowledge_transfer_change_eligibility,
+            knowledge_transfer::ipc::knowledge_transfer_adopt,
+            knowledge_transfer::ipc::knowledge_transfer_create_adaptation,
+            knowledge_transfer::ipc::knowledge_transfer_record_usage,
             triage_question,
             untriage_question,
             archive_question,
