@@ -2179,6 +2179,7 @@ fn query_hypothesis(conn: &Connection, hypothesis_id: &str) -> Result<ResearchHy
                 definitions: Vec::new(),
                 competing_hypothesis_ids: Vec::new(),
                 model_references: Vec::new(),
+                evidence: Vec::new(),
                 created_by: row.get(7)?,
                 created_at_us: row.get(8)?,
             })
@@ -2220,7 +2221,69 @@ fn query_hypothesis(conn: &Connection, hypothesis_id: &str) -> Result<ResearchHy
             })
         })?
         .collect::<Result<Vec<_>>>()?;
+    let mut source_evidence = conn.prepare(
+        "SELECT e.source_claim_id, e.polarity, e.rationale, c.source_id,
+                c.source_version_id, x.source_segment_id
+         FROM hypothesis_source_claim_evidence e
+         JOIN source_claims c ON c.id = e.source_claim_id
+         JOIN knowledge_extractions x ON x.id = c.extraction_id
+         JOIN hypothesis_definition_versions v ON v.id = e.hypothesis_version_id
+         WHERE v.hypothesis_id = ?1 ORDER BY e.created_at_us, e.id",
+    )?;
+    hypothesis.evidence.extend(
+        source_evidence
+            .query_map([hypothesis_id], |row| {
+                let polarity = row.get::<_, String>(1)?;
+                Ok(HypothesisEvidenceDto {
+                    target_kind: "source_claim".into(),
+                    target_id: row.get(0)?,
+                    polarity: parse_polarity(&polarity)?,
+                    rationale: row.get(2)?,
+                    source_id: row.get(3)?,
+                    source_version_id: row.get(4)?,
+                    source_location_id: row.get(5)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?,
+    );
+    for (table, target_kind, id_column) in [
+        ("hypothesis_observation_evidence", "observation", "observation_id"),
+        ("hypothesis_pattern_evidence", "pattern", "pattern_id"),
+    ] {
+        let sql = format!(
+            "SELECT e.{id_column}, e.polarity, e.rationale
+             FROM {table} e JOIN hypothesis_definition_versions v
+               ON v.id = e.hypothesis_version_id
+             WHERE v.hypothesis_id = ?1 ORDER BY e.created_at_us, e.id"
+        );
+        let mut statement = conn.prepare(&sql)?;
+        hypothesis.evidence.extend(
+            statement
+                .query_map([hypothesis_id], |row| {
+                    let polarity = row.get::<_, String>(1)?;
+                    Ok(HypothesisEvidenceDto {
+                        target_kind: target_kind.into(),
+                        target_id: row.get(0)?,
+                        polarity: parse_polarity(&polarity)?,
+                        rationale: row.get(2)?,
+                        source_id: None,
+                        source_version_id: None,
+                        source_location_id: None,
+                    })
+                })?
+                .collect::<Result<Vec<_>>>()?,
+        );
+    }
     Ok(hypothesis)
+}
+
+fn parse_polarity(value: &str) -> rusqlite::Result<ResearchPolarity> {
+    match value {
+        "supports" => Ok(ResearchPolarity::Supports),
+        "contradicts" => Ok(ResearchPolarity::Contradicts),
+        "qualifies" => Ok(ResearchPolarity::Qualifies),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
 }
 
 fn query_hypothesis_definition(
