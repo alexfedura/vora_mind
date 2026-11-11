@@ -836,6 +836,16 @@ export interface HypothesisDefinitionVersionDto {
   variables: HypothesisVariableDto[];
 }
 
+export interface HypothesisModelReferenceDto {
+  id: string;
+  hypothesisId: string;
+  modelId: string;
+  modelVersionId: string;
+  label: string;
+  rationale: string;
+  resolutionStatus: "unresolved";
+}
+
 export interface ResearchHypothesisDto {
   id: string;
   projectId: string | null;
@@ -846,6 +856,7 @@ export interface ResearchHypothesisDto {
   lifecycleStatus: ResearchHypothesisStatus;
   definitions: HypothesisDefinitionVersionDto[];
   competingHypothesisIds: string[];
+  modelReferences: HypothesisModelReferenceDto[];
   createdBy: string | null;
   createdAtUs: number;
 }
@@ -1055,6 +1066,15 @@ export interface CreateTypedHypothesisReq {
 export interface LinkCompetingHypothesesReq {
   hypothesisId: string;
   competingHypothesisId: string;
+  rationale: string;
+  createdBy: string | null;
+}
+
+export interface AddHypothesisModelReferenceReq {
+  hypothesisId: string;
+  modelId: string;
+  modelVersionId: string;
+  label: string;
   rationale: string;
   createdBy: string | null;
 }

@@ -304,6 +304,15 @@ pub fn research_link_competing_hypotheses(
 }
 
 #[tauri::command]
+pub fn research_add_hypothesis_model_reference(
+    state: State<AppState>,
+    request: AddHypothesisModelReferenceReq,
+) -> Result<HypothesisModelReferenceDto, String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    add_hypothesis_model_reference(&conn, request)
+}
+
+#[tauri::command]
 pub fn research_add_hypothesis_evidence(
     state: State<AppState>,
     request: AddHypothesisEvidenceReq,

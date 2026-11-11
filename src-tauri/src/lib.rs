@@ -2485,6 +2485,7 @@ pub fn run() {
             research::ipc::research_create_typed_hypothesis,
             research::ipc::research_transition_hypothesis,
             research::ipc::research_link_competing_hypotheses,
+            research::ipc::research_add_hypothesis_model_reference,
             research::ipc::research_add_hypothesis_evidence,
             research::ipc::research_create_design,
             research::ipc::research_transition_design,

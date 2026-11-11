@@ -1885,7 +1885,8 @@ pub fn add_hypothesis_model_reference(
     id: &str,
     now: i64,
 ) -> Result<HypothesisModelReferenceDto> {
-    conn.execute(
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
         "INSERT INTO hypothesis_model_references
             (id, hypothesis_id, model_id, model_version_id, label, rationale,
              resolution_status, created_by, created_at_us)
@@ -1901,7 +1902,6 @@ pub fn add_hypothesis_model_reference(
             now
         ],
     )?;
-    let tx = conn.unchecked_transaction()?;
     insert_event(
         &tx,
         "hypothesis",
