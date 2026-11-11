@@ -174,6 +174,133 @@ pub enum ClaimRelationKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum FrameworkLifecycle {
+    Draft,
+    Review,
+    Published,
+    Withdrawn,
+    Retired,
+}
+
+impl FrameworkLifecycle {
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "draft" => Ok(Self::Draft),
+            "review" => Ok(Self::Review),
+            "published" => Ok(Self::Published),
+            "withdrawn" => Ok(Self::Withdrawn),
+            "retired" => Ok(Self::Retired),
+            _ => Err(format!("invalid framework lifecycle: {value}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameworkVersionStatus {
+    Draft,
+    Review,
+    Published,
+    Withdrawn,
+}
+
+impl FrameworkVersionStatus {
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "draft" => Ok(Self::Draft),
+            "review" => Ok(Self::Review),
+            "published" => Ok(Self::Published),
+            "withdrawn" => Ok(Self::Withdrawn),
+            _ => Err(format!("invalid framework version status: {value}")),
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::Review => "review",
+            Self::Published => "published",
+            Self::Withdrawn => "withdrawn",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameworkChangeClass {
+    Refinement,
+    Extension,
+    Revision,
+    Replacement,
+}
+
+impl FrameworkChangeClass {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Refinement => "refinement",
+            Self::Extension => "extension",
+            Self::Revision => "revision",
+            Self::Replacement => "replacement",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameworkReviewStatus {
+    Approved,
+    ChangesRequested,
+    Rejected,
+}
+
+impl FrameworkReviewStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Approved => "approved",
+            Self::ChangesRequested => "changes_requested",
+            Self::Rejected => "rejected",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameworkMembershipRole {
+    Core,
+    Supporting,
+    Counterpoint,
+    Method,
+    Example,
+    Context,
+}
+
+impl FrameworkMembershipRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Core => "core",
+            Self::Supporting => "supporting",
+            Self::Counterpoint => "counterpoint",
+            Self::Method => "method",
+            Self::Example => "example",
+            Self::Context => "context",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "core" => Ok(Self::Core),
+            "supporting" => Ok(Self::Supporting),
+            "counterpoint" => Ok(Self::Counterpoint),
+            "method" => Ok(Self::Method),
+            "example" => Ok(Self::Example),
+            "context" => Ok(Self::Context),
+            _ => Err(format!("invalid framework membership role: {value}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum AcquisitionProvenanceTargetKind {
     Source,
     SourceVersion,
@@ -448,7 +575,7 @@ pub struct FrameworkDto {
     pub id: String,
     pub title: String,
     pub description: String,
-    pub lifecycle: String,
+    pub lifecycle: FrameworkLifecycle,
     pub current_version_id: Option<String>,
     pub created_by: Option<String>,
     pub created_at_us: i64,
@@ -461,7 +588,7 @@ pub struct FrameworkVersionItemDto {
     pub framework_version_id: String,
     pub item_kind: KnowledgeItemKind,
     pub item_id: String,
-    pub membership_role: String,
+    pub membership_role: FrameworkMembershipRole,
     pub item_order: i64,
     pub rationale: String,
     pub item_title: String,
@@ -476,8 +603,8 @@ pub struct FrameworkVersionDto {
     pub parent_version_id: Option<String>,
     pub title: String,
     pub description: String,
-    pub status: String,
-    pub change_class: Option<String>,
+    pub status: FrameworkVersionStatus,
+    pub change_class: Option<FrameworkChangeClass>,
     pub change_rationale: Option<String>,
     pub created_by: Option<String>,
     pub created_at_us: i64,
@@ -497,7 +624,7 @@ pub struct CreateFrameworkReq {
 #[serde(rename_all = "camelCase")]
 pub struct CreateFrameworkVersionReq {
     pub framework_id: String,
-    pub change_class: String,
+    pub change_class: FrameworkChangeClass,
     pub change_rationale: String,
     pub affected_claim_ids: Vec<String>,
     pub assumption_claim_ids: Vec<String>,
@@ -510,7 +637,7 @@ pub struct AddFrameworkItemReq {
     pub framework_version_id: String,
     pub item_kind: KnowledgeItemKind,
     pub item_id: String,
-    pub membership_role: String,
+    pub membership_role: FrameworkMembershipRole,
     pub item_order: i64,
     pub rationale: Option<String>,
 }
@@ -540,7 +667,7 @@ pub struct RemoveFrameworkItemReq {
 #[serde(rename_all = "camelCase")]
 pub struct ReviewFrameworkReq {
     pub framework_version_id: String,
-    pub review_status: String,
+    pub review_status: FrameworkReviewStatus,
     pub reviewer_id: Option<String>,
     pub rationale: Option<String>,
 }
@@ -570,7 +697,7 @@ pub struct ProvenanceEventDto {
 pub struct FrameworkReviewDto {
     pub id: String,
     pub framework_version_id: String,
-    pub review_status: String,
+    pub review_status: FrameworkReviewStatus,
     pub reviewer_id: Option<String>,
     pub rationale: String,
     pub reviewed_at_us: i64,
