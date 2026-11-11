@@ -3372,7 +3372,7 @@ mod tests {
                 &LinkHypothesisDesignReq {
                     hypothesis_version_id: parent_hypothesis.definitions[0].id.clone(),
                     design_version_id: design.id,
-                    relationship_kind: "tests".into(),
+                    relationship_kind: HypothesisDesignRelation::Tests,
                     rationale: "Design targets this hypothesis.".into(),
                     created_by: None,
                 },
