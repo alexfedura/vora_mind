@@ -1171,8 +1171,8 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
     if method.verification_status != AnalysisVerificationStatus::Passed {
         return Err(anyhow!("Analysis method test report has not passed."));
     }
-    if method.environment != req.environment && req.environment.as_object().is_none_or(|value| value.is_empty()) {
-        return Err(anyhow!("Run environment must be recorded."));
+    if req.environment.as_object().is_some_and(serde_json::Map::is_empty) {
+        return Err(anyhow!("Run environment must contain the captured runtime identity."));
     }
     let project_id = definition.project_id.clone();
     if let Applicability::Applicable { details } = &definition.specification.integrity.reproducibility {
@@ -1183,7 +1183,7 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
         }
     }
     let look_ahead_applicable = matches!(
-        definition.specification.integrity.look_ahead,
+        &definition.specification.integrity.look_ahead,
         Applicability::Applicable { .. }
     );
     let disjoint_required = match &definition.specification.integrity.dataset_separation {
@@ -1194,6 +1194,7 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
     let mut actual_roles = BTreeSet::new();
     let mut inputs_seen = HashSet::new();
     let mut selected_by_version: HashMap<(String, String), String> = HashMap::new();
+    let mut pending_findings = Vec::new();
     let mut checked_inputs = Vec::with_capacity(req.inputs.len());
     for input in &req.inputs {
         add_role(&mut actual_roles, &input.role);
@@ -1244,18 +1245,15 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
             ));
         }
         if details.model_selection_usage != ModelSelectionUsage::NotUsed {
-            insert_integrity_finding(
-                &tx,
-                &run_id,
+            pending_findings.push((
                 "out_of_sample",
                 "evaluation_role_used_for_selection",
-                AnalysisIntegritySeverity::Warning,
                 "The declared test/evaluation data was used for model selection; it is not an untouched out-of-sample evaluation.",
-            )?;
+            ));
         }
     }
     if matches!(
-        definition.specification.integrity.walk_forward,
+        &definition.specification.integrity.walk_forward,
         Applicability::Applicable { .. }
     ) && !["training", "validation", "test"]
         .iter()
@@ -1266,7 +1264,7 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
         ));
     }
     if let Applicability::Applicable { details } = &definition.specification.integrity.forward_testing {
-        let required_role = match details.execution_kind {
+        let required_role = match &details.execution_kind {
             ForwardExecutionKind::Prospective => "prospective",
             ForwardExecutionKind::Paper | ForwardExecutionKind::Live => "forward",
         };
@@ -1309,6 +1307,16 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
         &run_id,
         &definition.specification.integrity,
     )?;
+    for (category, code, message) in pending_findings {
+        insert_integrity_finding(
+            &tx,
+            &run_id,
+            category,
+            code,
+            AnalysisIntegritySeverity::Warning,
+            message,
+        )?;
+    }
 
     for (input, checksum, lineage, assignments) in checked_inputs {
         let input_id = id();
