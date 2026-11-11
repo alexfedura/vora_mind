@@ -574,6 +574,10 @@ fn query_dataset_version(conn: &Connection, version_id: &str) -> Result<Experime
     Ok(version)
 }
 
+pub fn get_dataset_version(conn: &Connection, version_id: &str) -> Result<ExperimentDatasetVersionDto> {
+    query_dataset_version(conn, version_id)
+}
+
 fn query_dataset_assets(conn: &Connection, version_id: &str) -> Result<Vec<ExperimentDatasetAssetDto>> {
     let mut statement = conn.prepare(
         "SELECT id, dataset_version_id, storage_key, original_name, media_type,
