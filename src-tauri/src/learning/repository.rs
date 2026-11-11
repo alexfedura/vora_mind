@@ -2505,7 +2505,7 @@ mod tests {
                 minimum_average_score: 0.7,
                 minimum_evaluated_attempts: 1,
                 all_required_criteria: true,
-                reproduction_required: false,
+                reproduction_required: true,
                 required_reproduction_outcome: AssessmentOutcome::Pass,
                 created_by: None,
             },
@@ -2523,6 +2523,10 @@ mod tests {
         .expect("evaluate explicit mastery rule");
         assert_eq!(mastery_record.outcome, MasteryOutcome::NotMastered);
         assert_eq!(mastery_record.attempt_evaluation_ids, vec![corrected.id.clone()]);
+        assert_eq!(
+            mastery_record.reproduction_evaluation_ids,
+            vec![reproduction_evaluation.id]
+        );
 
         let stored = query_attempt(&conn, &attempt.id).expect("read attempt history");
         assert_eq!(stored.status, "submitted");
