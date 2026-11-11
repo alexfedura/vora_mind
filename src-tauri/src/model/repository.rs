@@ -445,13 +445,17 @@ pub fn create_model_version(
         }
         tx.execute(
             "INSERT INTO model_version_hypotheses
-                (model_version_id, hypothesis_version_id, relation_kind, rationale)
-             VALUES (?1, ?2, ?3, ?4)",
+                (id, model_version_id, hypothesis_version_id, relation_kind, rationale,
+                 created_by, created_at_us)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
+                id(),
                 model_version_id,
                 relation.target_id,
                 relation.relation_kind.as_str(),
-                relation.rationale.trim()
+                relation.rationale.trim(),
+                request.created_by,
+                created_at
             ],
         )?;
     }
@@ -461,13 +465,17 @@ pub fn create_model_version(
         }
         tx.execute(
             "INSERT INTO model_version_findings
-                (model_version_id, finding_version_id, relation_kind, rationale)
-             VALUES (?1, ?2, ?3, ?4)",
+                (id, model_version_id, finding_version_id, relation_kind, rationale,
+                 created_by, created_at_us)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
+                id(),
                 model_version_id,
                 relation.target_id,
                 relation.relation_kind.as_str(),
-                relation.rationale.trim()
+                relation.rationale.trim(),
+                request.created_by,
+                created_at
             ],
         )?;
     }
@@ -501,15 +509,18 @@ pub fn create_model_version(
         }
         tx.execute(
             "INSERT INTO model_version_experiments
-                (id, model_version_id, design_version_id, experiment_run_id, relation_kind, rationale)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                (id, model_version_id, design_version_id, experiment_run_id, relation_kind,
+                 rationale, created_by, created_at_us)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 id(),
                 model_version_id,
                 relation.design_version_id,
                 relation.experiment_run_id,
                 relation.relation_kind,
-                relation.rationale.trim()
+                relation.rationale.trim(),
+                request.created_by,
+                created_at
             ],
         )?;
     }
@@ -529,15 +540,18 @@ pub fn create_model_version(
         }
         tx.execute(
             "INSERT INTO model_version_dataset_uses
-                (id, model_version_id, dataset_version_id, role, split_group_id, rationale)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                (id, model_version_id, dataset_version_id, role, split_group_id, rationale,
+                 created_by, created_at_us)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 id(),
                 model_version_id,
                 use_record.dataset_version_id,
                 use_record.role,
                 use_record.split_group_id,
-                use_record.rationale.trim()
+                use_record.rationale.trim(),
+                request.created_by,
+                created_at
             ],
         )?;
     }
@@ -551,9 +565,10 @@ pub fn create_model_version(
             return Err(anyhow!("Model evidence reference was not found."));
         }
         tx.execute(
-            "INSERT INTO model_version_evidence (model_version_id, evidence_id, rationale)
-             VALUES (?1, ?2, 'Referenced during immutable model-version creation.')",
-            params![model_version_id, evidence_id],
+            "INSERT INTO model_version_evidence
+                (id, model_version_id, evidence_id, rationale, created_by, created_at_us)
+             VALUES (?1, ?2, ?3, 'Referenced during immutable model-version creation.', ?4, ?5)",
+            params![id(), model_version_id, evidence_id, request.created_by, created_at],
         )?;
     }
 
@@ -1768,16 +1783,22 @@ pub fn create_replication(
         |row| row.get(0),
     )?;
     let replication_id = id();
+    let contribution_id = id();
+    let created_at = now_us()?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     tx.execute(
         "INSERT OR IGNORE INTO model_version_experiments
-            (id, model_version_id, design_version_id, experiment_run_id, relation_kind, rationale)
-         VALUES (?1, ?2, ?3, ?4, 'tested_in', 'Pinned as the original experiment for this replication.')",
+            (id, model_version_id, design_version_id, experiment_run_id, relation_kind,
+             rationale, created_by, created_at_us)
+         VALUES (?1, ?2, ?3, ?4, 'tested_in',
+             'Pinned as the original experiment for this replication.', ?5, ?6)",
         params![
             id(),
             request.model_version_id,
             design_version_id,
-            request.original_experiment_run_id
+            request.original_experiment_run_id,
+            request.created_by,
+            created_at
         ],
     )?;
     tx.execute(
