@@ -207,6 +207,7 @@ pub struct TransferAdaptationDto {
     pub transfer_id: String,
     pub receiving_project_id: String,
     pub artifact_kind: TransferArtifactKind,
+    pub artifact_id: String,
     pub artifact_version_id: String,
     pub artifact_title: String,
     pub rationale: String,
@@ -359,7 +360,7 @@ pub fn create_artifact_version(
     request: CreateArtifactVersionReq,
 ) -> Result<TransferArtifactDto, String> {
     if !matches!(
-        request.artifact_kind,
+        &request.artifact_kind,
         TransferArtifactKind::ConceptVersion | TransferArtifactKind::PrincipleVersion
     ) {
         return Err("only concept and principle versions are created by this workflow".into());
@@ -408,7 +409,7 @@ pub fn create_eligibility(
     if request.allowed_purposes.is_empty() {
         return Err("at least one permitted use purpose is required".into());
     }
-    match request.access_scope {
+    match &request.access_scope {
         TransferAccessScope::Workspace if !request.allowed_project_ids.is_empty() => {
             return Err("workspace-scoped eligibility must not list individual projects".into());
         }

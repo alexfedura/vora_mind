@@ -114,7 +114,7 @@ pub fn create_artifact_version(
     now: i64,
 ) -> Result<TransferArtifactDto> {
     let tx = conn.transaction()?;
-    let version_no = match request.artifact_kind {
+    let version_no = match &request.artifact_kind {
         TransferArtifactKind::ConceptVersion => {
             exists(&tx, "SELECT EXISTS(SELECT 1 FROM knowledge_concepts WHERE id = ?1)", &request.artifact_id, "concept")?;
             insert_concept_version(&tx, request, id, now)?
@@ -676,7 +676,7 @@ fn validate_eligibility_for_use(
     if !eligibility.allowed_purposes.contains(purpose) {
         return Err(anyhow!("the declared license does not permit this intended use"));
     }
-    match eligibility.access_scope {
+    match &eligibility.access_scope {
         TransferAccessScope::Workspace => {}
         TransferAccessScope::SelectedProjects
             if eligibility.allowed_project_ids.iter().any(|id| id == recipient_id) => {}
