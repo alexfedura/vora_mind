@@ -12,6 +12,12 @@ const EXPERIMENT_MIGRATION_ID: &str = "phase3-experiments-001";
 #[derive(Debug)]
 pub struct ExperimentError(String);
 
+impl ExperimentError {
+    pub fn message(message: impl Into<String>) -> Self {
+        Self(message.into())
+    }
+}
+
 impl std::fmt::Display for ExperimentError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(&self.0)
