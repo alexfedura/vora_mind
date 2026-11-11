@@ -1782,6 +1782,13 @@ export interface AnalysisIntegrityFindingDto {
   message: string;
 }
 
+export interface AnalysisIntegrityDeclarationDto {
+  category: string;
+  applicability: "applicable" | "not_applicable" | "not_assessed";
+  rationale: string;
+  details: unknown;
+}
+
 export interface AnalysisOutputDto {
   id: string;
   outputKey: string;
@@ -1865,6 +1872,7 @@ export interface AnalysisRunDto {
   completionSummary: string | null;
   failureSummary: string | null;
   inputs: AnalysisInputDto[];
+  integrityDeclarations: AnalysisIntegrityDeclarationDto[];
   integrityFindings: AnalysisIntegrityFindingDto[];
   outputs: AnalysisOutputDto[];
   metrics: AnalysisMetricDto[];
@@ -1991,5 +1999,37 @@ export interface TransitionFindingReq {
   nextStatus: FindingStatus;
   rationale: string;
   actorId: string | null;
+}
+
+export interface FindingEvidenceLinkReq {
+  evidenceId: string;
+  synthesisPolarity: EvidencePolarity;
+  rationale: string;
+}
+
+export interface CreateFindingVersionReq {
+  projectId: string;
+  findingId: string | null;
+  parentVersionId: string | null;
+  title: string;
+  statement: string;
+  proposition: PropositionRefDto;
+  scope: string;
+  applicability: string;
+  uncertainty: string;
+  limitations: string;
+  conclusionKind: FindingConclusionKind;
+  analysisRunIds: string[];
+  evidence: FindingEvidenceLinkReq[];
+  changeRationale: string;
+  createdBy: string | null;
+}
+
+export interface CreateFindingRelationReq {
+  sourceVersionId: string;
+  targetVersionId: string;
+  relationKind: FindingRelationKind;
+  rationale: string;
+  createdBy: string | null;
 }
 
