@@ -1124,7 +1124,10 @@ mod tests {
             .expect("run foreign-key check")
             .collect::<Result<_, _>>()
             .expect("read foreign-key violations");
-        assert!(foreign_key_violations.is_empty(), "{foreign_key_violations:?}");
+        assert!(
+            foreign_key_violations.is_empty(),
+            "{foreign_key_violations:?}"
+        );
     }
 
     #[test]
