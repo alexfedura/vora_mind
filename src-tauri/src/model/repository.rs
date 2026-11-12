@@ -69,6 +69,25 @@ fn ensure_project_owns(
     Ok(())
 }
 
+fn ensure_workspace_source_claim(conn: &Connection, claim_id: &str) -> Result<()> {
+    exists(
+        conn,
+        "SELECT EXISTS(
+            SELECT 1
+            FROM source_claims c
+            JOIN source_versions v
+              ON v.id = c.source_version_id AND v.source_id = c.source_id
+            JOIN knowledge_extractions e
+              ON e.id = c.extraction_id
+             AND e.source_id = c.source_id
+             AND e.source_version_id = c.source_version_id
+            WHERE c.id = ?1
+         )",
+        claim_id,
+        "Source claim was not found.",
+    )
+}
+
 fn ensure_project_writable(conn: &Connection, project_id: &str) -> Result<()> {
     let status: Option<String> = conn
         .query_row(
@@ -763,12 +782,9 @@ fn validate_version_request(conn: &Connection, request: &CreateModelVersionReq) 
                     ));
                 }
             }
-            ModelImpactTarget::SourceClaim { claim_id } => exists(
-                conn,
-                "SELECT EXISTS(SELECT 1 FROM source_claims WHERE id = ?1)",
-                claim_id,
-                "Affected source claim was not found.",
-            )?,
+            ModelImpactTarget::SourceClaim { claim_id } => {
+                ensure_workspace_source_claim(conn, claim_id)?
+            }
             ModelImpactTarget::HypothesisVersion {
                 hypothesis_version_id,
             } => exists(
@@ -1362,6 +1378,7 @@ pub fn create_evidence(
             (None, None, None, None, Some(value.as_str()), None, None)
         }
         ModelArtifactRef::SourceClaim(value) => {
+            ensure_workspace_source_claim(conn, value)?;
             (None, None, None, None, None, Some(value.as_str()), None)
         }
         ModelArtifactRef::FindingVersion(value) => {
@@ -1763,12 +1780,9 @@ fn validate_validation_request(
                 ));
             }
         }
-        ModelValidationTarget::SourceClaim(claim_id) => exists(
-            conn,
-            "SELECT EXISTS(SELECT 1 FROM source_claims WHERE id = ?1)",
-            claim_id,
-            "Validation source claim was not found.",
-        )?,
+        ModelValidationTarget::SourceClaim(claim_id) => {
+            ensure_workspace_source_claim(conn, claim_id)?
+        }
     }
     Ok(())
 }
