@@ -51,6 +51,25 @@ fn exists(conn: &Connection, sql: &str, value: &str, message: &str) -> Result<()
     Ok(())
 }
 
+fn ensure_project_writable(conn: &Connection, project_id: &str) -> Result<()> {
+    let status: Option<String> = conn
+        .query_row(
+            "SELECT lifecycle_status FROM research_projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(status) = status else {
+        return Err(anyhow!("Research project was not found."));
+    };
+    if status == "archived" {
+        return Err(anyhow!(
+            "Archived research projects cannot be modified."
+        ));
+    }
+    Ok(())
+}
+
 pub fn initialize_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "PRAGMA foreign_keys = ON;
@@ -115,6 +134,7 @@ pub fn create_model(conn: &mut Connection, request: &CreateModelReq) -> Result<M
             project_id,
             "Model origin project was not found.",
         )?;
+        ensure_project_writable(conn, project_id)?;
     }
     if let Some(domain_id) = &request.domain_id {
         exists(
@@ -1189,9 +1209,10 @@ fn query_all_versions(conn: &Connection, project_id: &str) -> Result<Vec<ModelVe
     }
     let placeholders = model_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
     let sql = format!(
-        "SELECT id FROM model_versions WHERE model_id IN ({placeholders}) ORDER BY model_id, version_no"
+        "SELECT id FROM model_versions WHERE model_id IN ({placeholders}) AND created_in_project_id = ?1 ORDER BY model_id, version_no"
     );
-    let params: Vec<&str> = model_ids.iter().map(String::as_str).collect();
+    let mut params: Vec<&str> = model_ids.iter().map(String::as_str).collect();
+    params.push(project_id);
     let mut statement = conn.prepare(&sql)?;
     let ids = statement
         .query_map(rusqlite::params_from_iter(params.iter().copied()), |row| row.get::<_, String>(0))?
@@ -1210,10 +1231,23 @@ pub fn create_evidence(
     required(&request.limitations, "Evidence limitations")?;
     exists(
         conn,
-        "SELECT EXISTS(SELECT 1 FROM model_versions WHERE id = ?1)",
-        &request.model_version_id,
-        "Evidence target model version was not found.",
+        "SELECT EXISTS(SELECT 1 FROM research_projects WHERE id = ?1)",
+        &request.project_id,
+        "Evidence project was not found.",
     )?;
+    ensure_project_writable(conn, &request.project_id)?;
+    let created_in_project: Option<String> = conn
+        .query_row(
+            "SELECT created_in_project_id FROM model_versions WHERE id = ?1",
+            [&request.model_version_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if created_in_project.as_deref() != Some(request.project_id.as_str()) {
+        return Err(anyhow!(
+            "Evidence must target a model version created in the requesting project."
+        ));
+    }
     let evidence_id = id();
     let created_at = now_us()?;
     let artifact_columns = match &request.artifact {

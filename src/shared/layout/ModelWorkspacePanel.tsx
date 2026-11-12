@@ -403,6 +403,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
       return;
     }
     await perform(() => modelService.createEvidence({
+      projectId,
       modelVersionId: String(values.get("modelVersionId") ?? ""),
       artifact,
       polarity: evidencePolarity(String(values.get("polarity") ?? "supports")),
