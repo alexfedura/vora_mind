@@ -1100,6 +1100,34 @@ mod tests {
     }
 
     #[test]
+    fn full_workspace_schema_is_idempotent_and_integrity_checks_pass() {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        super::initialize_workspace_schema(&conn).expect("initialize fresh workspace schema");
+        super::initialize_workspace_schema(&conn).expect("repeat workspace initialization");
+
+        let foreign_keys_enabled: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .expect("read foreign-key setting");
+        assert_eq!(foreign_keys_enabled, 1);
+
+        let integrity_result: String = conn
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+            .expect("run SQLite integrity check");
+        assert_eq!(integrity_result, "ok");
+
+        let foreign_key_violations: Vec<(String, i64, String, i64)> = conn
+            .prepare("PRAGMA foreign_key_check")
+            .expect("prepare foreign-key check")
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
+            .expect("run foreign-key check")
+            .collect::<Result<_, _>>()
+            .expect("read foreign-key violations");
+        assert!(foreign_key_violations.is_empty(), "{foreign_key_violations:?}");
+    }
+
+    #[test]
     fn portable_schema_can_be_initialized_repeatedly_without_a_settings_table() {
         let conn = Connection::open_in_memory().expect("open in-memory database");
         init_vora_schema(&conn).expect("initialize portable schema");
