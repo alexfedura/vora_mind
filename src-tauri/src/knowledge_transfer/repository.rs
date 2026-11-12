@@ -704,6 +704,9 @@ pub fn adopt_knowledge(
     if eligibility.state != TransferEligibilityState::Eligible {
         bail!("This transfer eligibility is no longer active.");
     }
+    if request.attribution_text.trim() != eligibility.attribution_text.trim() {
+        bail!("Transfer attribution must match the reviewed rights and attribution record exactly.");
+    }
     if eligibility
         .origin
         .origin_project_id
@@ -2647,6 +2650,18 @@ mod tests {
             },
         );
         assert!(disallowed_project.is_err());
+        let changed_attribution = adopt_knowledge(
+            &mut conn,
+            &AdoptKnowledgeReq {
+                eligibility_id: eligibility.id.clone(),
+                receiving_project_id: "project-b".to_string(),
+                intended_purpose: TransferPurpose::Research,
+                attribution_text: "Unrelated attribution".to_string(),
+                context: "Attribution mismatch".to_string(),
+                requested_by: None,
+            },
+        );
+        assert!(changed_attribution.is_err());
         assert!(workspace(&conn)?.transfers.is_empty());
 
         let transfer = adopt_knowledge(
