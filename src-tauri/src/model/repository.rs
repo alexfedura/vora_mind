@@ -2265,6 +2265,7 @@ fn validate_replication_request(
             Option<String>,
             Option<String>,
             Option<String>,
+            Option<String>,
         )> = conn
             .query_row(
                 "SELECT project_id, target_source_claim_id, target_hypothesis_version_id,
@@ -2283,6 +2284,7 @@ fn validate_replication_request(
                         row.get(5)?,
                         row.get(6)?,
                         row.get(7)?,
+                        row.get(8)?,
                     ))
                 },
             )
@@ -2296,6 +2298,7 @@ fn validate_replication_request(
             artifact_dataset,
             artifact_output,
             observation,
+            artifact_source_claim,
         )) = evidence
         else {
             return Err(anyhow!("Replication Analysis evidence was not found."));
@@ -2386,9 +2389,6 @@ fn validate_replication_request(
                 &request.project_id,
                 "Replication evidence observation must belong to the requesting project.",
             )?;
-        }
-        if let Some(claim_id) = target_claim.as_deref() {
-            ensure_workspace_source_claim(conn, claim_id)?;
         }
         if let Some(claim_id) = evidence_source_claim_id(&evidence) {
             ensure_workspace_source_claim(conn, claim_id)?;
