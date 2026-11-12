@@ -58,11 +58,7 @@ fn ensure_project_owns(
     project_id: &str,
     message: &str,
 ) -> Result<()> {
-    let owned: bool = conn.query_row(
-        sql,
-        params![resource_id, project_id],
-        |row| row.get(0),
-    )?;
+    let owned: bool = conn.query_row(sql, params![resource_id, project_id], |row| row.get(0))?;
     if !owned {
         return Err(anyhow!(message.to_string()));
     }
@@ -2226,7 +2222,7 @@ fn validate_replication_request(
                  FROM experiment_dataset_versions v
                  JOIN experiment_datasets d ON d.id = v.dataset_id
                  WHERE v.id = ?1",
-            [&dataset.dataset_version_id],
+                [&dataset.dataset_version_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
@@ -3019,9 +3015,7 @@ mod tests {
                 &CreateModelEvidenceReq {
                     project_id: project_id.to_string(),
                     model_version_id: target.version_id.clone(),
-                    artifact: ModelArtifactRef::DatasetVersion(
-                        local.dataset_version_id.clone()
-                    ),
+                    artifact: ModelArtifactRef::DatasetVersion(local.dataset_version_id.clone()),
                     polarity: ModelEvidencePolarity::Supports,
                     scope: "unauthorized cross-project evidence".to_string(),
                     quality_rationale: "Negative isolation test.".to_string(),
@@ -3095,9 +3089,7 @@ mod tests {
             &CreateModelEvidenceReq {
                 project_id: "project-a".to_string(),
                 model_version_id: project_a.version_id.clone(),
-                artifact: ModelArtifactRef::DatasetVersion(
-                    project_b.dataset_version_id.clone()
-                ),
+                artifact: ModelArtifactRef::DatasetVersion(project_b.dataset_version_id.clone()),
                 polarity: ModelEvidencePolarity::Supports,
                 scope: "Foreign dataset reference".to_string(),
                 quality_rationale: "Negative isolation test.".to_string(),
