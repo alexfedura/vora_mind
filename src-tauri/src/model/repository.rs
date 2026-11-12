@@ -1160,22 +1160,41 @@ fn query_impacts(conn: &Connection, version_id: &str) -> Result<Vec<ModelImpactR
     Ok(rows)
 }
 
-fn query_all_models(conn: &Connection) -> Result<Vec<ModelDto>> {
-    let mut statement =
-        conn.prepare("SELECT id FROM scientific_models ORDER BY display_name, id")?;
+fn project_model_ids(conn: &Connection, project_id: &str) -> Result<Vec<String>> {
+    let mut statement = conn.prepare(
+        "SELECT DISTINCT m.id
+         FROM scientific_models m
+         LEFT JOIN model_versions v ON v.model_id = m.id
+         WHERE m.origin_project_id = ?1
+            OR v.created_in_project_id = ?1
+         ORDER BY m.display_name, m.id",
+    )?;
     let ids = statement
-        .query_map([], |row| row.get::<_, String>(0))?
+        .query_map([project_id], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(ids)
+}
+
+fn query_all_models(conn: &Connection, project_id: &str) -> Result<Vec<ModelDto>> {
+    let ids = project_model_ids(conn, project_id)?;
     ids.iter()
         .map(|model_id| query_model(conn, model_id))
         .collect()
 }
 
-fn query_all_versions(conn: &Connection) -> Result<Vec<ModelVersionDto>> {
-    let mut statement =
-        conn.prepare("SELECT id FROM model_versions ORDER BY model_id, version_no")?;
+fn query_all_versions(conn: &Connection, project_id: &str) -> Result<Vec<ModelVersionDto>> {
+    let model_ids = project_model_ids(conn, project_id)?;
+    if model_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = model_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let sql = format!(
+        "SELECT id FROM model_versions WHERE model_id IN ({placeholders}) ORDER BY model_id, version_no"
+    );
+    let params: Vec<&str> = model_ids.iter().map(String::as_str).collect();
+    let mut statement = conn.prepare(&sql)?;
     let ids = statement
-        .query_map([], |row| row.get::<_, String>(0))?
+        .query_map(rusqlite::params_from_iter(params.iter().copied()), |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     ids.iter()
         .map(|version_id| query_version(conn, version_id))
@@ -2149,10 +2168,23 @@ fn query_replications(conn: &Connection, project_id: &str) -> Result<Vec<ModelRe
         .collect()
 }
 
-fn query_evidence_list(conn: &Connection) -> Result<Vec<ModelEvidenceDto>> {
-    let mut statement = conn.prepare("SELECT id FROM model_evidence ORDER BY created_at_us, id")?;
+fn query_evidence_list(conn: &Connection, project_id: &str) -> Result<Vec<ModelEvidenceDto>> {
+    let model_ids = project_model_ids(conn, project_id)?;
+    if model_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = model_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let sql = format!(
+        "SELECT e.id
+         FROM model_evidence e
+         JOIN model_versions v ON v.id = e.model_version_id
+         WHERE v.model_id IN ({placeholders})
+         ORDER BY e.created_at_us, e.id"
+    );
+    let params: Vec<&str> = model_ids.iter().map(String::as_str).collect();
+    let mut statement = conn.prepare(&sql)?;
     let ids = statement
-        .query_map([], |row| row.get::<_, String>(0))?
+        .query_map(rusqlite::params_from_iter(params.iter().copied()), |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     ids.iter()
         .map(|evidence_id| query_evidence(conn, evidence_id))
@@ -2167,9 +2199,9 @@ pub fn workspace(conn: &Connection, project_id: &str) -> Result<ModelWorkspaceDt
         "Research project was not found.",
     )?;
     Ok(ModelWorkspaceDto {
-        models: query_all_models(conn)?,
-        versions: query_all_versions(conn)?,
-        evidence: query_evidence_list(conn)?,
+        models: query_all_models(conn, project_id)?,
+        versions: query_all_versions(conn, project_id)?,
+        evidence: query_evidence_list(conn, project_id)?,
         evaluations: query_evaluations(conn, project_id)?,
         validations: query_validations(conn, project_id)?,
         replications: query_replications(conn, project_id)?,
