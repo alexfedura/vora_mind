@@ -1767,18 +1767,17 @@ fn validate_validation_request(
             }
         }
         ModelValidationTarget::FindingVersion(finding_id) => {
-            let owning_project: Option<String> = conn
-                .query_row(
-                    "SELECT project_id FROM analysis_finding_versions WHERE id = ?1",
-                    [finding_id],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            if owning_project.as_deref() != Some(request.project_id.as_str()) {
-                return Err(anyhow!(
-                    "Validation finding must belong to the selected project."
-                ));
-            }
+            ensure_project_owns(
+                conn,
+                "SELECT EXISTS(
+                    SELECT 1 FROM analysis_finding_versions v
+                    JOIN analysis_findings f ON f.id = v.finding_id
+                    WHERE v.id = ?1 AND f.project_id = ?2
+                 )",
+                finding_id,
+                &request.project_id,
+                "Validation finding must belong to the selected project.",
+            )?;
         }
         ModelValidationTarget::SourceClaim(claim_id) => {
             ensure_workspace_source_claim(conn, claim_id)?
@@ -1806,7 +1805,8 @@ pub fn finalize_validation(
             "A validation result requires at least one underlying evidence record."
         ));
     }
-    let target: Option<(Option<String>, Option<String>, Option<String>, String)> = conn
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let target: Option<(Option<String>, Option<String>, Option<String>, String)> = tx
         .query_row(
             "SELECT target_model_version_id, target_finding_version_id,
                     target_source_claim_id, project_id
@@ -1818,7 +1818,46 @@ pub fn finalize_validation(
     let Some((model_version, finding_version, source_claim, project_id)) = target else {
         return Err(anyhow!("Validation record was not found."));
     };
-    let existing_result: bool = conn.query_row(
+    let owning_project = if let Some(version_id) = model_version.as_deref() {
+        Some(
+            tx.query_row(
+                "SELECT created_in_project_id FROM model_versions WHERE id = ?1",
+                [version_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .ok_or_else(|| anyhow!("Validation model version was not found."))?,
+        )
+    } else if let Some(finding_id) = finding_version.as_deref() {
+        Some(
+            tx.query_row(
+                "SELECT f.project_id
+                 FROM analysis_finding_versions v
+                 JOIN analysis_findings f ON f.id = v.finding_id
+                 WHERE v.id = ?1",
+                [finding_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .ok_or_else(|| anyhow!("Validation finding was not found."))?,
+        )
+    } else if let Some(claim_id) = source_claim.as_deref() {
+        ensure_workspace_source_claim(&tx, claim_id)?;
+        None
+    } else {
+        return Err(anyhow!("Validation target was not found."));
+    };
+    if let Some(owning_project) = owning_project.as_deref() {
+        if owning_project != project_id {
+            return Err(anyhow!(
+                "Validation target must belong to the recorded project."
+            ));
+        }
+        ensure_project_writable(&tx, owning_project)?;
+    } else {
+        ensure_project_writable(&tx, &project_id)?;
+    }
+    let existing_result: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM model_validation_events WHERE validation_id = ?1)",
         [&request.validation_id],
         |row| row.get(0),
@@ -1866,7 +1905,6 @@ pub fn finalize_validation(
             ));
         }
     }
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     tx.execute(
         "INSERT INTO model_validation_events
             (id, validation_id, outcome, rationale, deviations_json, actor_id, occurred_at_us)
@@ -1895,8 +1933,9 @@ pub fn finalize_validation(
             params![request.validation_id, evidence_id],
         )?;
     }
+    let validation = query_validation(&tx, &request.validation_id)?;
     tx.commit()?;
-    query_validation(conn, &request.validation_id)
+    Ok(validation)
 }
 
 fn query_validation(conn: &Connection, validation_id: &str) -> Result<ModelValidationDto> {
