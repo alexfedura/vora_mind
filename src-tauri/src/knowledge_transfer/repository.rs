@@ -2239,6 +2239,11 @@ fn find_origin_id(conn: &Connection, artifact: &TransferArtifactRef) -> Result<O
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{
+        repository as model_repository, CreateModelReq, CreateModelVersionReq, ModelAssumptionReq,
+        ModelChangeClass, ModelImpactKind, ModelImpactReq, ModelImpactTarget,
+        ModelSpecificationDto, ModelVersionLifecycleStatus, TransitionModelVersionReq,
+    };
     use rusqlite::backup::Backup;
     use std::{fs, path::PathBuf, time::Duration};
 
@@ -2405,6 +2410,104 @@ mod tests {
         Ok((conn, source_version_id, "project-b".to_string()))
     }
 
+    fn insert_workspace_source_claim(conn: &Connection) -> Result<String> {
+        conn.execute(
+            "INSERT INTO sources (id, kind, title, created_at, updated_at)
+             VALUES ('source-shared-model-transfer', 'document', 'Shared source', 1, 1)",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO source_versions
+                (id, source_id, capture_kind, captured_at_us, created_by, created_at_us)
+             VALUES ('source-version-shared-model-transfer',
+                     'source-shared-model-transfer', 'retrieval', 1, 'test', 1)",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO source_version_segments
+                (id, source_id, source_version_id, label, location_kind, created_at_us)
+             VALUES ('source-segment-shared-model-transfer',
+                     'source-shared-model-transfer',
+                     'source-version-shared-model-transfer',
+                     'Shared excerpt', 'unknown', 1)",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO knowledge_extractions
+                (id, source_id, source_version_id, source_segment_id, kind,
+                 content, created_by, created_at_us)
+             VALUES ('extraction-shared-model-transfer',
+                     'source-shared-model-transfer',
+                     'source-version-shared-model-transfer',
+                     'source-segment-shared-model-transfer',
+                     'source_claim', 'Shared claim', 'test', 1)",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO extraction_reviews
+                (id, extraction_id, review_status, reviewed_at_us)
+             VALUES ('extraction-review-shared-model-transfer',
+                     'extraction-shared-model-transfer', 'accepted', 1)",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO source_claims
+                (id, source_id, source_version_id, extraction_id, statement, created_at_us)
+             VALUES ('claim-shared-model-transfer',
+                     'source-shared-model-transfer',
+                     'source-version-shared-model-transfer',
+                     'extraction-shared-model-transfer',
+                     'A workspace-shared model claim.', 1)",
+            [],
+        )?;
+        Ok("claim-shared-model-transfer".to_string())
+    }
+
+    fn model_version_request(
+        project_id: &str,
+        model_id: &str,
+        specification: &str,
+        shared_claim_id: &str,
+    ) -> CreateModelVersionReq {
+        CreateModelVersionReq {
+            project_id: project_id.to_string(),
+            model_id: model_id.to_string(),
+            change_class: ModelChangeClass::Revision,
+            change_rationale: "Register the project's independent model baseline.".to_string(),
+            expected_implications: "Preserve project-specific model provenance.".to_string(),
+            specification: ModelSpecificationDto {
+                human_readable: specification.to_string(),
+                machine_readable: serde_json::json!({"project": project_id}),
+            },
+            assumptions: vec![ModelAssumptionReq {
+                key: "scope".to_string(),
+                statement: "Applies only to the declared project population.".to_string(),
+            }],
+            scope: format!("{project_id} study population"),
+            dependencies: vec![],
+            environment: serde_json::json!({"runtime": "captured"}),
+            parents: vec![],
+            parameters: vec![],
+            artifacts: vec![],
+            impacts: vec![ModelImpactReq {
+                target: ModelImpactTarget::SourceClaim {
+                    claim_id: shared_claim_id.to_string(),
+                },
+                impact_kind: ModelImpactKind::Affected,
+                previous_statement: None,
+                current_statement: Some("The shared claim informs this baseline.".to_string()),
+                rationale: "Record the shared source claim without transferring ownership."
+                    .to_string(),
+            }],
+            hypotheses: vec![],
+            findings: vec![],
+            experiments: vec![],
+            dataset_uses: vec![],
+            evidence_ids: vec![],
+            created_by: Some(format!("{project_id}-author")),
+        }
+    }
+
     fn create_accepted_transfer(
         conn: &mut Connection,
         source_version_id: &str,
@@ -2448,6 +2551,310 @@ mod tests {
                 requested_by: Some("researcher-b".to_string()),
             },
         )
+    }
+
+    #[test]
+    fn model_version_transfer_creates_project_local_adaptation_with_persistent_lineage(
+    ) -> Result<()> {
+        let mut conn = Connection::open_in_memory()?;
+        crate::mind::portable_db::initialize_workspace_schema(&conn)
+            .map_err(|error| anyhow!(error.to_string()))?;
+        create_project(&conn, "project-a", "Project A")?;
+        create_project(&conn, "project-b", "Project B")?;
+        create_project(&conn, "project-c", "Project C")?;
+        let shared_claim_id = insert_workspace_source_claim(&conn)?;
+
+        let model_a = model_repository::create_model(
+            &mut conn,
+            &CreateModelReq {
+                display_name: "Project A model".to_string(),
+                description: "Origin model identity.".to_string(),
+                origin_project_id: Some("project-a".to_string()),
+                domain_id: None,
+                created_by: Some("project-a-author".to_string()),
+            },
+        )?;
+        let version_a1 = model_repository::create_model_version(
+            &mut conn,
+            &model_version_request(
+                "project-a",
+                &model_a.id,
+                "Private Project A model contents.",
+                &shared_claim_id,
+            ),
+        )?;
+        model_repository::transition_version(
+            &mut conn,
+            &TransitionModelVersionReq {
+                version_id: version_a1.id.clone(),
+                next_status: ModelVersionLifecycleStatus::Review,
+                rationale: "Review the origin version.".to_string(),
+                actor_id: Some("reviewer-a".to_string()),
+            },
+        )?;
+        let version_a1 = model_repository::transition_version(
+            &mut conn,
+            &TransitionModelVersionReq {
+                version_id: version_a1.id.clone(),
+                next_status: ModelVersionLifecycleStatus::Released,
+                rationale: "Release the transfer source version.".to_string(),
+                actor_id: Some("reviewer-a".to_string()),
+            },
+        )?;
+        let model_a_before_transfer = model_repository::query_model(&conn, &model_a.id)?;
+        let version_a1_before_transfer = model_repository::query_version(&conn, &version_a1.id)?;
+
+        let origin = create_origin(
+            &mut conn,
+            &CreateTransferOriginReq {
+                artifact: TransferArtifactRef::ModelVersion {
+                    model_id: model_a.id.clone(),
+                    version_id: version_a1.id.clone(),
+                },
+                origin_project_id: "project-a".to_string(),
+                rationale: "Project A owns the exact released model version.".to_string(),
+                recorded_by: Some("reviewer-a".to_string()),
+            },
+        )?;
+        let eligibility = create_eligibility(
+            &mut conn,
+            &CreateTransferEligibilityReq {
+                origin_id: origin.id.clone(),
+                license_identifier: "CC BY 4.0".to_string(),
+                license_uri: None,
+                access_scope: TransferAccessScope::SelectedProjects,
+                permitted_purposes: vec![TransferPurpose::Research],
+                allowed_project_ids: vec!["project-b".to_string()],
+                attribution_text: "Project A, released model version A1".to_string(),
+                permission_basis: "Explicit reviewed permission for Project B research."
+                    .to_string(),
+                permission_granted: true,
+                reviewed_by: "rights-reviewer".to_string(),
+            },
+        )?;
+        let unauthorized_recipient = adopt_knowledge(
+            &mut conn,
+            &AdoptKnowledgeReq {
+                eligibility_id: eligibility.id.clone(),
+                receiving_project_id: "project-c".to_string(),
+                intended_purpose: TransferPurpose::Research,
+                attribution_text: eligibility.attribution_text.clone(),
+                context: "Outside the selected recipient scope.".to_string(),
+                requested_by: Some("researcher-c".to_string()),
+            },
+        );
+        assert!(unauthorized_recipient.is_err());
+        assert!(workspace(&conn)?.transfers.is_empty());
+
+        let transfer = adopt_knowledge(
+            &mut conn,
+            &AdoptKnowledgeReq {
+                eligibility_id: eligibility.id.clone(),
+                receiving_project_id: "project-b".to_string(),
+                intended_purpose: TransferPurpose::Research,
+                attribution_text: eligibility.attribution_text.clone(),
+                context: "Project B research adaptation.".to_string(),
+                requested_by: Some("researcher-b".to_string()),
+            },
+        )?;
+        assert_eq!(transfer.state, KnowledgeTransferState::Accepted);
+        assert_eq!(transfer.eligibility_id, eligibility.id);
+        assert_eq!(transfer.origin.origin_project_id, "project-a");
+        assert_eq!(transfer.receiving_project_id, "project-b");
+        assert_eq!(
+            transfer.attribution_text,
+            "Project A, released model version A1"
+        );
+        assert_eq!(
+            eligibility.allowed_project_ids,
+            vec!["project-b".to_string()]
+        );
+        assert_eq!(
+            transfer.origin.artifact,
+            TransferArtifactRef::ModelVersion {
+                model_id: model_a.id.clone(),
+                version_id: version_a1.id.clone(),
+            }
+        );
+        assert_eq!(
+            transfer.events.last().map(|event| event.state),
+            Some(KnowledgeTransferState::Accepted)
+        );
+
+        let model_b = model_repository::create_model(
+            &mut conn,
+            &CreateModelReq {
+                display_name: "Project B adapted model".to_string(),
+                description: "Independent receiving-project model identity.".to_string(),
+                origin_project_id: Some("project-b".to_string()),
+                domain_id: None,
+                created_by: Some("researcher-b".to_string()),
+            },
+        )?;
+        assert_ne!(model_a.id, model_b.id);
+        assert_eq!(model_b.origin_project_id.as_deref(), Some("project-b"));
+        let version_b1 = model_repository::create_model_version(
+            &mut conn,
+            &model_version_request(
+                "project-b",
+                &model_b.id,
+                "Private Project B adapted model contents.",
+                &shared_claim_id,
+            ),
+        )?;
+        assert_eq!(version_b1.created_in_project_id, "project-b");
+        let adaptation = create_adaptation(
+            &mut conn,
+            &CreateTransferAdaptationReq {
+                transfer_id: transfer.id.clone(),
+                artifact: TransferArtifactRef::ModelVersion {
+                    model_id: model_b.id.clone(),
+                    version_id: version_b1.id.clone(),
+                },
+                relation_kind: TransferLineageRelation::DerivedFrom,
+                rationale: "Adapted under Project B's independent model identity.".to_string(),
+                adapted_by: Some("researcher-b".to_string()),
+            },
+        )?;
+        assert_eq!(adaptation.receiving_project_id, "project-b");
+        assert_eq!(
+            adaptation.artifact,
+            TransferArtifactRef::ModelVersion {
+                model_id: model_b.id.clone(),
+                version_id: version_b1.id.clone(),
+            }
+        );
+        assert_eq!(adaptation.origin.artifact, transfer.origin.artifact);
+
+        let versions_before_rejected_write: i64 =
+            conn.query_row("SELECT COUNT(*) FROM model_versions", [], |row| row.get(0))?;
+        let foreign_version_request = model_version_request(
+            "project-b",
+            &model_a.id,
+            "Unauthorized Project B version of Project A's model.",
+            &shared_claim_id,
+        );
+        assert!(
+            model_repository::create_model_version(&mut conn, &foreign_version_request).is_err()
+        );
+        let versions_after_rejected_write: i64 =
+            conn.query_row("SELECT COUNT(*) FROM model_versions", [], |row| row.get(0))?;
+        assert_eq!(
+            versions_after_rejected_write,
+            versions_before_rejected_write
+        );
+
+        let workspace_a = model_repository::workspace(&conn, "project-a")?;
+        let workspace_b = model_repository::workspace(&conn, "project-b")?;
+        assert!(workspace_a
+            .models
+            .iter()
+            .any(|model| model.id == model_a.id));
+        assert!(workspace_a
+            .models
+            .iter()
+            .all(|model| model.id != model_b.id));
+        assert!(workspace_b
+            .models
+            .iter()
+            .any(|model| model.id == model_b.id));
+        assert!(workspace_b
+            .models
+            .iter()
+            .all(|model| model.id != model_a.id));
+        assert!(workspace_a
+            .versions
+            .iter()
+            .any(|version| version.id == version_a1.id));
+        assert!(workspace_a
+            .versions
+            .iter()
+            .all(|version| version.id != version_b1.id));
+        assert!(workspace_b
+            .versions
+            .iter()
+            .any(|version| version.id == version_b1.id));
+        assert!(workspace_b
+            .versions
+            .iter()
+            .all(|version| version.id != version_a1.id));
+        assert!(workspace_a.versions.iter().any(|version| {
+            version.specification.human_readable == "Private Project A model contents."
+        }));
+        assert!(workspace_a.versions.iter().all(|version| {
+            version.specification.human_readable != "Private Project B adapted model contents."
+        }));
+        assert!(workspace_b.versions.iter().any(|version| {
+            version.specification.human_readable == "Private Project B adapted model contents."
+        }));
+        assert!(workspace_b.versions.iter().all(|version| {
+            version.specification.human_readable != "Private Project A model contents."
+        }));
+        for project_workspace in [&workspace_a, &workspace_b] {
+            assert!(project_workspace.versions.iter().all(|version| {
+                version.impacts.iter().any(|impact| {
+                    matches!(
+                        &impact.target,
+                        ModelImpactTarget::SourceClaim { claim_id } if claim_id == &shared_claim_id
+                    )
+                })
+            }));
+        }
+        assert_eq!(
+            model_repository::query_model(&conn, &model_a.id)?,
+            model_a_before_transfer
+        );
+        assert_eq!(
+            model_repository::query_version(&conn, &version_a1.id)?,
+            version_a1_before_transfer
+        );
+
+        let backup_path: PathBuf =
+            std::env::temp_dir().join(format!("vora-model-transfer-{}.db", Uuid::now_v7()));
+        {
+            let mut destination = Connection::open(&backup_path)?;
+            let backup = Backup::new(&conn, &mut destination)?;
+            backup.run_to_completion(5, Duration::from_millis(10), None)?;
+        }
+        let restored = Connection::open(&backup_path)?;
+        crate::mind::portable_db::initialize_workspace_schema(&restored)
+            .map_err(|error| anyhow!(error.to_string()))?;
+        let restored_transfer_workspace = workspace(&restored)?;
+        let restored_model_workspace_a = model_repository::workspace(&restored, "project-a")?;
+        let restored_model_workspace_b = model_repository::workspace(&restored, "project-b")?;
+        assert_eq!(restored_transfer_workspace.transfers.len(), 1);
+        assert_eq!(restored_transfer_workspace.adaptations.len(), 1);
+        assert_eq!(restored_transfer_workspace.lineage.len(), 2);
+        assert_eq!(
+            restored_transfer_workspace.transfers[0].origin.artifact,
+            transfer.origin.artifact
+        );
+        assert!(restored_transfer_workspace.lineage.iter().any(|lineage| {
+            lineage.origin_project_id == "project-a"
+                && lineage.receiving_project_id == "project-b"
+                && lineage.origin == transfer.origin.artifact
+                && lineage.adaptation.as_ref() == Some(&adaptation.artifact)
+                && lineage.relation_kind == TransferLineageRelation::DerivedFrom
+        }));
+        assert!(restored_model_workspace_a
+            .versions
+            .iter()
+            .any(|version| version.id == version_a1.id));
+        assert!(restored_model_workspace_a
+            .versions
+            .iter()
+            .all(|version| version.id != version_b1.id));
+        assert!(restored_model_workspace_b
+            .versions
+            .iter()
+            .any(|version| version.id == version_b1.id));
+        assert!(restored_model_workspace_b
+            .versions
+            .iter()
+            .all(|version| version.id != version_a1.id));
+        drop(restored);
+        fs::remove_file(backup_path)?;
+        Ok(())
     }
 
     #[test]
