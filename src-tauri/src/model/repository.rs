@@ -1380,6 +1380,25 @@ pub fn create_evaluation(
 ) -> Result<ModelEvaluationDto> {
     validate_dataset_role(&request.role)?;
     required(&request.limitations, "Evaluation limitations")?;
+    exists(
+        conn,
+        "SELECT EXISTS(SELECT 1 FROM research_projects WHERE id = ?1)",
+        &request.project_id,
+        "Evaluation project was not found.",
+    )?;
+    ensure_project_writable(conn, &request.project_id)?;
+    let created_in_project: Option<String> = conn
+        .query_row(
+            "SELECT created_in_project_id FROM model_versions WHERE id = ?1",
+            [&request.model_version_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if created_in_project.as_deref() != Some(request.project_id.as_str()) {
+        return Err(anyhow!(
+            "Evaluation model version must belong to the requesting project."
+        ));
+    }
     let run: Option<(String, String)> = conn
         .query_row(
             "SELECT r.project_id, e.lifecycle_status
@@ -1587,6 +1606,7 @@ fn validate_validation_request(
         &request.project_id,
         "Validation research project was not found.",
     )?;
+    ensure_project_writable(conn, &request.project_id)?;
     if request.criteria.is_empty()
         || request.criteria.iter().any(|criterion| match criterion {
             serde_json::Value::String(value) => value.trim().is_empty(),
@@ -1614,12 +1634,26 @@ fn validate_validation_request(
         )?;
     }
     match &request.target {
-        ModelValidationTarget::ModelVersion(version_id) => exists(
-            conn,
-            "SELECT EXISTS(SELECT 1 FROM model_versions WHERE id = ?1)",
-            version_id,
-            "Validation model version was not found.",
-        )?,
+        ModelValidationTarget::ModelVersion(version_id) => {
+            exists(
+                conn,
+                "SELECT EXISTS(SELECT 1 FROM model_versions WHERE id = ?1)",
+                version_id,
+                "Validation model version was not found.",
+            )?;
+            let created_in_project: Option<String> = conn
+                .query_row(
+                    "SELECT created_in_project_id FROM model_versions WHERE id = ?1",
+                    [version_id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if created_in_project.as_deref() != Some(request.project_id.as_str()) {
+                return Err(anyhow!(
+                    "Validation model version must belong to the requesting project."
+                ));
+            }
+        }
         ModelValidationTarget::FindingVersion(finding_id) => {
             let owning_project: Option<String> = conn
                 .query_row(
@@ -1997,12 +2031,25 @@ fn validate_replication_request(
         &request.project_id,
         "Replication project was not found.",
     )?;
+    ensure_project_writable(conn, &request.project_id)?;
     exists(
         conn,
         "SELECT EXISTS(SELECT 1 FROM model_versions WHERE id = ?1)",
         &request.model_version_id,
         "Replication model version was not found.",
     )?;
+    let created_in_project: Option<String> = conn
+        .query_row(
+            "SELECT created_in_project_id FROM model_versions WHERE id = ?1",
+            [&request.model_version_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if created_in_project.as_deref() != Some(request.project_id.as_str()) {
+        return Err(anyhow!(
+            "Replication model version must belong to the requesting project."
+        ));
+    }
     let original_status: Option<String> = conn
         .query_row(
             "SELECT lifecycle_status FROM experiment_runs
@@ -2213,9 +2260,11 @@ fn query_evidence_list(conn: &Connection, project_id: &str) -> Result<Vec<ModelE
          FROM model_evidence e
          JOIN model_versions v ON v.id = e.model_version_id
          WHERE v.model_id IN ({placeholders})
+           AND v.created_in_project_id = ?1
          ORDER BY e.created_at_us, e.id"
     );
-    let params: Vec<&str> = model_ids.iter().map(String::as_str).collect();
+    let mut params: Vec<&str> = model_ids.iter().map(String::as_str).collect();
+    params.push(project_id);
     let mut statement = conn.prepare(&sql)?;
     let ids = statement
         .query_map(rusqlite::params_from_iter(params.iter().copied()), |row| row.get::<_, String>(0))?
