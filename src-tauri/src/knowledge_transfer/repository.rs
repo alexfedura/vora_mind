@@ -2443,7 +2443,7 @@ mod tests {
                 eligibility_id: eligibility.id,
                 receiving_project_id: receiving_project_id.to_string(),
                 intended_purpose: TransferPurpose::Research,
-                attribution_text: "Project A, exact finding version (attributed)".to_string(),
+                attribution_text: "Project A, exact finding version".to_string(),
                 context: "Used as prior evidence for Project B.".to_string(),
                 requested_by: Some("researcher-b".to_string()),
             },
@@ -2461,7 +2461,7 @@ mod tests {
         assert_eq!(transfer.state, KnowledgeTransferState::Accepted);
         assert_eq!(
             transfer.attribution_text,
-            "Project A, exact finding version (attributed)"
+            "Project A, exact finding version"
         );
         add_source_segment_evidence(
             &conn,
@@ -2672,7 +2672,7 @@ mod tests {
                 eligibility_id: eligibility.id.clone(),
                 receiving_project_id: "project-b".to_string(),
                 intended_purpose: TransferPurpose::Research,
-                attribution_text: "Project A".to_string(),
+                attribution_text: "Project A attribution".to_string(),
                 context: "Permitted research use.".to_string(),
                 requested_by: None,
             },
@@ -2692,7 +2692,7 @@ mod tests {
                 eligibility_id: eligibility.id,
                 receiving_project_id: "project-b".to_string(),
                 intended_purpose: TransferPurpose::Research,
-                attribution_text: "Project A".to_string(),
+                attribution_text: "Project A attribution".to_string(),
                 context: "Should be blocked.".to_string(),
                 requested_by: None,
             },
