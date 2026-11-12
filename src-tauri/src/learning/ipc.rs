@@ -114,8 +114,7 @@ pub fn learning_create_mastery_rule(
     request: CreateMasteryRuleVersionReq,
 ) -> Result<MasteryRuleDto, String> {
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
-    repository::create_mastery_rule_version(&mut conn, &request)
-        .map_err(|error| error.to_string())
+    repository::create_mastery_rule_version(&mut conn, &request).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

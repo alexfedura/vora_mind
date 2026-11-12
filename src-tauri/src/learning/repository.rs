@@ -59,7 +59,9 @@ pub fn initialize_schema(conn: &Connection) -> Result<()> {
     )?;
     let foreign_keys: i64 = conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
     if foreign_keys != 1 {
-        return Err(anyhow!("SQLite foreign-key enforcement is required for Learning writes."));
+        return Err(anyhow!(
+            "SQLite foreign-key enforcement is required for Learning writes."
+        ));
     }
 
     conn.execute_batch("BEGIN IMMEDIATE")?;
@@ -100,10 +102,7 @@ pub fn initialize_schema(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn project_context(
-    conn: &Connection,
-    project_id: &str,
-) -> Result<(String, String, String)> {
+fn project_context(conn: &Connection, project_id: &str) -> Result<(String, String, String)> {
     conn.query_row(
         "SELECT learner_id, framework_id, framework_version_id
          FROM learning_projects WHERE id = ?1",
@@ -123,7 +122,12 @@ pub fn create_learner(
     conn.execute(
         "INSERT INTO learning_learners (id, display_name, created_by, created_at_us)
          VALUES (?1, ?2, ?3, ?4)",
-        params![learner_id, request.display_name.trim(), request.created_by, created_at_us],
+        params![
+            learner_id,
+            request.display_name.trim(),
+            request.created_by,
+            created_at_us
+        ],
     )?;
     Ok(LearningLearnerDto {
         id: learner_id,
@@ -179,7 +183,9 @@ pub fn create_objective_version(
             |row| row.get(0),
         )?;
         if objective_project != request.learning_project_id {
-            return Err(anyhow!("Learning objective belongs to a different learning project."));
+            return Err(anyhow!(
+                "Learning objective belongs to a different learning project."
+            ));
         }
         objective_id.clone()
     } else {
@@ -211,10 +217,14 @@ pub fn create_objective_version(
             |row| row.get(0),
         )?;
         if parent_objective != objective_id {
-            return Err(anyhow!("Objective revisions must parent the same objective identity."));
+            return Err(anyhow!(
+                "Objective revisions must parent the same objective identity."
+            ));
         }
     } else if version_no > 1 {
-        return Err(anyhow!("A revised objective version must pin its parent version."));
+        return Err(anyhow!(
+            "A revised objective version must pin its parent version."
+        ));
     }
     let objective_version_id = id();
     tx.execute(
@@ -279,7 +289,8 @@ pub fn create_assessment_version(
             "An assessment version requires at least one question and one rubric criterion."
         ));
     }
-    let (_, framework_id, framework_version_id) = project_context(conn, &request.learning_project_id)?;
+    let (_, framework_id, framework_version_id) =
+        project_context(conn, &request.learning_project_id)?;
     let now = now_us()?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let (assessment_id, version_no, rubric_id, rubric_version_no) =
@@ -399,7 +410,9 @@ pub fn create_assessment_version(
             return Err(anyhow!("Unsupported assessment response kind."));
         }
         if question.question_order < 0 || !question_orders.insert(question.question_order) {
-            return Err(anyhow!("Assessment question order must be unique and non-negative."));
+            return Err(anyhow!(
+                "Assessment question order must be unique and non-negative."
+            ));
         }
         valid_positive_score(question.max_points, "Question maximum points")?;
         objective_versions.insert(question.objective_version_id.clone());
@@ -485,7 +498,9 @@ pub fn review_assessment(
         |row| row.get(0),
     )?;
     if !matches!(status.as_str(), "draft" | "review") {
-        return Err(anyhow!("Only draft or review assessments may receive review."));
+        return Err(anyhow!(
+            "Only draft or review assessments may receive review."
+        ));
     }
     tx.execute(
         "INSERT INTO assessment_reviews
@@ -544,7 +559,9 @@ pub fn transition_assessment_version(
                 params![now, rubric_id],
             )?;
         } else if rubric_status != "published" {
-            return Err(anyhow!("Assessment rubric is deprecated and cannot be published."));
+            return Err(anyhow!(
+                "Assessment rubric is deprecated and cannot be published."
+            ));
         }
         tx.execute(
             "UPDATE assessment_versions
@@ -565,15 +582,16 @@ pub fn create_attempt(
     conn: &mut Connection,
     request: &CreateAssessmentAttemptReq,
 ) -> Result<AssessmentAttemptDto> {
-    let (framework_id, framework_version_id, status): (String, String, String) =
-        conn.query_row(
-            "SELECT framework_id, framework_version_id, status
+    let (framework_id, framework_version_id, status): (String, String, String) = conn.query_row(
+        "SELECT framework_id, framework_version_id, status
              FROM assessment_versions WHERE id = ?1 AND learning_project_id = ?2",
-            params![request.assessment_version_id, request.learning_project_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )?;
+        params![request.assessment_version_id, request.learning_project_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
     if status != "published" {
-        return Err(anyhow!("Only a published exact assessment version can be attempted."));
+        return Err(anyhow!(
+            "Only a published exact assessment version can be attempted."
+        ));
     }
     let (project_learner, project_framework, project_framework_version) =
         project_context(conn, &request.learning_project_id)?;
@@ -581,7 +599,9 @@ pub fn create_attempt(
         || framework_id != project_framework
         || framework_version_id != project_framework_version
     {
-        return Err(anyhow!("Attempt learner or framework context does not match the project."));
+        return Err(anyhow!(
+            "Attempt learner or framework context does not match the project."
+        ));
     }
     let attempt_id = id();
     conn.execute(
@@ -646,7 +666,9 @@ pub fn submit_attempt(conn: &mut Connection, attempt_id: &str) -> Result<Assessm
         |row| row.get(0),
     )?;
     if status != "in_progress" {
-        return Err(anyhow!("Only an in-progress assessment attempt can be submitted."));
+        return Err(anyhow!(
+            "Only an in-progress assessment attempt can be submitted."
+        ));
     }
     let missing_required: bool = tx.query_row(
         "SELECT EXISTS(
@@ -662,7 +684,9 @@ pub fn submit_attempt(conn: &mut Connection, attempt_id: &str) -> Result<Assessm
         |row| row.get(0),
     )?;
     if missing_required {
-        return Err(anyhow!("Every required assessment question needs a response before submission."));
+        return Err(anyhow!(
+            "Every required assessment question needs a response before submission."
+        ));
     }
     tx.execute(
         "UPDATE assessment_attempts
@@ -701,7 +725,9 @@ pub fn evaluate_attempt(
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )?;
     if request.evaluator_id.trim() == learner_id {
-        return Err(anyhow!("An assessment learner cannot evaluate their own attempt."));
+        return Err(anyhow!(
+            "An assessment learner cannot evaluate their own attempt."
+        ));
     }
     let expected: HashMap<String, f64> = {
         let mut statement = tx.prepare(
@@ -714,7 +740,9 @@ pub fn evaluate_attempt(
         rows
     };
     if expected.is_empty() || expected.len() != request.criterion_scores.len() {
-        return Err(anyhow!("Every criterion in the pinned rubric must be evaluated exactly once."));
+        return Err(anyhow!(
+            "Every criterion in the pinned rubric must be evaluated exactly once."
+        ));
     }
     let mut total_score = 0.0;
     let mut total_max = 0.0;
@@ -751,9 +779,21 @@ pub fn evaluate_attempt(
         {
             (previous_revision + 1, Some(previous_id))
         }
-        (None, Some(_)) => return Err(anyhow!("An initial evaluation cannot correct a prior record.")),
-        (Some(_), None) => return Err(anyhow!("A later evaluation must explicitly correct the latest evaluation.")),
-        (Some(_), Some(_)) => return Err(anyhow!("Evaluation correction must target the latest revision.")),
+        (None, Some(_)) => {
+            return Err(anyhow!(
+                "An initial evaluation cannot correct a prior record."
+            ))
+        }
+        (Some(_), None) => {
+            return Err(anyhow!(
+                "A later evaluation must explicitly correct the latest evaluation."
+            ))
+        }
+        (Some(_), Some(_)) => {
+            return Err(anyhow!(
+                "Evaluation correction must target the latest revision."
+            ))
+        }
     };
     let evaluation_id = id();
     tx.execute(
@@ -803,9 +843,12 @@ pub fn create_competency(
 ) -> Result<CompetencyDto> {
     required(&request.title, "Competency title")?;
     if request.criteria.is_empty() || !request.criteria.iter().any(|criterion| criterion.required) {
-        return Err(anyhow!("A competency needs at least one required criterion."));
+        return Err(anyhow!(
+            "A competency needs at least one required criterion."
+        ));
     }
-    let (_, framework_id, framework_version_id) = project_context(conn, &request.learning_project_id)?;
+    let (_, framework_id, framework_version_id) =
+        project_context(conn, &request.learning_project_id)?;
     let competency_id = id();
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     tx.execute(
@@ -855,11 +898,16 @@ pub fn create_mastery_rule_version(
     request: &CreateMasteryRuleVersionReq,
 ) -> Result<MasteryRuleDto> {
     required(&request.title, "Mastery rule title")?;
-    valid_unit_score(request.minimum_average_score, "Mastery average score threshold")?;
+    valid_unit_score(
+        request.minimum_average_score,
+        "Mastery average score threshold",
+    )?;
     if request.minimum_evaluated_attempts <= 0 {
         return Err(anyhow!("Minimum evaluated attempts must be positive."));
     }
-    if request.reproduction_required && request.required_reproduction_outcome != AssessmentOutcome::Pass {
+    if request.reproduction_required
+        && request.required_reproduction_outcome != AssessmentOutcome::Pass
+    {
         return Err(anyhow!(
             "Mastery requiring independent reproduction must require a passing evaluated reproduction."
         ));
@@ -872,7 +920,9 @@ pub fn create_mastery_rule_version(
             |row| row.get(0),
         )?;
         if competency_id != request.competency_id {
-            return Err(anyhow!("Mastery rule versions cannot change their competency."));
+            return Err(anyhow!(
+                "Mastery rule versions cannot change their competency."
+            ));
         }
         let version_no: i64 = tx.query_row(
             "SELECT COALESCE(MAX(version_no), 0) + 1
@@ -926,8 +976,8 @@ pub fn evaluate_competency(
     request: &EvaluateCompetencyReq,
 ) -> Result<CompetencyRecordDto> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let (learning_project_id, framework_version_id, learner_id): (String, String, String) =
-        tx.query_row(
+    let (learning_project_id, framework_version_id, learner_id): (String, String, String) = tx
+        .query_row(
             "SELECT c.learning_project_id, c.framework_version_id, p.learner_id
              FROM competencies c JOIN learning_projects p ON p.id = c.learning_project_id
              WHERE c.id = ?1",
@@ -935,7 +985,9 @@ pub fn evaluate_competency(
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
     if learner_id != request.learner_id {
-        return Err(anyhow!("Competency evaluation learner does not own this learning project."));
+        return Err(anyhow!(
+            "Competency evaluation learner does not own this learning project."
+        ));
     }
     let rule: (String, f64, i64, bool, bool, String) = tx.query_row(
         "SELECT competency_id, minimum_average_score, minimum_evaluated_attempts,
@@ -954,7 +1006,9 @@ pub fn evaluate_competency(
         },
     )?;
     if rule.0 != request.competency_id {
-        return Err(anyhow!("Mastery rule version targets a different competency."));
+        return Err(anyhow!(
+            "Mastery rule version targets a different competency."
+        ));
     }
     let criteria = query_competency(&tx, &request.competency_id)?.criteria;
     let mut statement = tx.prepare(
@@ -1058,7 +1112,10 @@ pub fn evaluate_competency(
     let average_score = if attempt_evaluations.is_empty() {
         0.0
     } else {
-        attempt_evaluations.iter().map(|evaluation| evaluation.2).sum::<f64>()
+        attempt_evaluations
+            .iter()
+            .map(|evaluation| evaluation.2)
+            .sum::<f64>()
             / attempt_evaluations.len() as f64
     };
     let minimum_attempts_met =
@@ -1078,10 +1135,8 @@ pub fn evaluate_competency(
             .iter()
             .any(|(_, outcome)| outcome == &rule.5);
     let score_satisfied = average_score >= rule.1;
-    let mastered = minimum_attempts_met
-        && criteria_satisfied
-        && reproduction_satisfied
-        && score_satisfied;
+    let mastered =
+        minimum_attempts_met && criteria_satisfied && reproduction_satisfied && score_satisfied;
     let outcome = if mastered {
         MasteryOutcome::Mastered
     } else {
@@ -1099,9 +1154,7 @@ pub fn evaluate_competency(
     } else {
         let unmet = criterion_results
             .iter()
-            .filter(|(criterion, satisfied)| {
-                (rule.3 || criterion.required) && !satisfied
-            })
+            .filter(|(criterion, satisfied)| (rule.3 || criterion.required) && !satisfied)
             .map(|(criterion, _)| criterion.criterion.as_str())
             .collect::<Vec<_>>()
             .join(", ");
@@ -1188,9 +1241,12 @@ pub fn create_reproduction_task(
     required(&request.task_description, "Reproduction task description")?;
     required(&request.conditions, "Reproduction conditions")?;
     if request.expected_result.is_null() || request.expected_result == serde_json::json!({}) {
-        return Err(anyhow!("Reproduction task requires a non-empty expected result."));
+        return Err(anyhow!(
+            "Reproduction task requires a non-empty expected result."
+        ));
     }
-    let (_, framework_id, framework_version_id) = project_context(conn, &request.learning_project_id)?;
+    let (_, framework_id, framework_version_id) =
+        project_context(conn, &request.learning_project_id)?;
     let task_id = id();
     let expected_result = json(&request.expected_result)?;
     conn.execute(
@@ -1222,18 +1278,26 @@ pub fn submit_reproduction(
     request: &SubmitReproductionReq,
 ) -> Result<ReproductionSubmissionDto> {
     required(&request.learner_id, "Reproduction learner identity")?;
-    let uri = request.artifact_uri.as_deref().map(str::trim).filter(|value| !value.is_empty());
+    let uri = request
+        .artifact_uri
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
     let checksum = request
         .artifact_sha256
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
     if uri.is_some() != checksum.is_some() {
-        return Err(anyhow!("A reproduction artifact requires both URI and SHA-256 checksum."));
+        return Err(anyhow!(
+            "A reproduction artifact requires both URI and SHA-256 checksum."
+        ));
     }
     if let Some(value) = checksum {
         if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return Err(anyhow!("Reproduction artifact checksum must be a SHA-256 digest."));
+            return Err(anyhow!(
+                "Reproduction artifact checksum must be a SHA-256 digest."
+            ));
         }
     }
     let result_json = request.result.as_ref().map(json).transpose()?;
@@ -1242,7 +1306,9 @@ pub fn submit_reproduction(
         .as_ref()
         .is_some_and(|result| !result.is_null() && result != &serde_json::json!({}));
     if uri.is_none() && !has_result {
-        return Err(anyhow!("A reproduction submission requires an artifact or a non-empty result."));
+        return Err(anyhow!(
+            "A reproduction submission requires an artifact or a non-empty result."
+        ));
     }
     let submission_id = id();
     conn.execute(
@@ -1270,7 +1336,10 @@ pub fn evaluate_reproduction(
 ) -> Result<ReproductionEvaluationDto> {
     required(&request.evaluator_id, "Reproduction evaluator identity")?;
     required(&request.rationale, "Reproduction evaluation rationale")?;
-    required(&request.evidence_description, "Reproduction evidence description")?;
+    required(
+        &request.evidence_description,
+        "Reproduction evidence description",
+    )?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let (learner_id, rubric_version_id, pass_threshold): (String, String, f64) = tx.query_row(
         "SELECT s.learner_id, t.rubric_version_id, rv.pass_threshold
@@ -1282,7 +1351,9 @@ pub fn evaluate_reproduction(
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )?;
     if request.evaluator_id.trim() == learner_id {
-        return Err(anyhow!("Independent reproduction requires an evaluator distinct from the learner."));
+        return Err(anyhow!(
+            "Independent reproduction requires an evaluator distinct from the learner."
+        ));
     }
     let score = validate_rubric_scores(
         &tx,
@@ -1325,7 +1396,9 @@ fn validate_rubric_scores(
     let mut seen = HashSet::new();
     for item in scores {
         if !item.score.is_finite() || item.score < 0.0 || !seen.insert(&item.rubric_criterion_id) {
-            return Err(anyhow!("Rubric scores must be unique finite non-negative values."));
+            return Err(anyhow!(
+                "Rubric scores must be unique finite non-negative values."
+            ));
         }
     }
     let criteria: HashMap<String, f64> = {
@@ -1338,7 +1411,9 @@ fn validate_rubric_scores(
         rows
     };
     if criteria.is_empty() || criteria.len() != scores.len() {
-        return Err(anyhow!("Every pinned rubric criterion must be scored exactly once."));
+        return Err(anyhow!(
+            "Every pinned rubric criterion must be scored exactly once."
+        ));
     }
     let mut total_score = 0.0;
     let mut total_max = 0.0;
@@ -1356,7 +1431,9 @@ fn validate_rubric_scores(
     if outcome != AssessmentOutcome::Inconclusive
         && ((outcome == AssessmentOutcome::Pass) != (normalized >= pass_threshold))
     {
-        return Err(anyhow!("Evaluation outcome does not agree with the pinned rubric threshold."));
+        return Err(anyhow!(
+            "Evaluation outcome does not agree with the pinned rubric threshold."
+        ));
     }
     Ok(normalized)
 }
@@ -1377,8 +1454,16 @@ fn insert_reproduction_scores(
 }
 
 pub fn workspace(conn: &Connection) -> Result<LearningWorkspaceDto> {
-    let learners = query_many(conn, "SELECT id FROM learning_learners ORDER BY display_name, id", query_learner)?;
-    let projects = query_many(conn, "SELECT id FROM learning_projects ORDER BY created_at_us DESC, id", query_project)?;
+    let learners = query_many(
+        conn,
+        "SELECT id FROM learning_learners ORDER BY display_name, id",
+        query_learner,
+    )?;
+    let projects = query_many(
+        conn,
+        "SELECT id FROM learning_projects ORDER BY created_at_us DESC, id",
+        query_project,
+    )?;
     let framework_versions = {
         let mut statement = conn.prepare(
             "SELECT f.id, v.id, v.title, v.version_no, v.published_at_us
@@ -1469,7 +1554,9 @@ fn query_many<T>(
             .collect::<rusqlite::Result<Vec<_>>>()?;
         rows
     };
-    ids.iter().map(|record_id| mapper(conn, record_id)).collect()
+    ids.iter()
+        .map(|record_id| mapper(conn, record_id))
+        .collect()
 }
 
 fn query_learner(conn: &Connection, learner_id: &str) -> Result<LearningLearnerDto> {
@@ -1728,7 +1815,10 @@ fn query_attempt(conn: &Connection, attempt_id: &str) -> Result<AssessmentAttemp
     Ok(dto)
 }
 
-fn query_attempt_evaluation(conn: &Connection, evaluation_id: &str) -> Result<AttemptEvaluationDto> {
+fn query_attempt_evaluation(
+    conn: &Connection,
+    evaluation_id: &str,
+) -> Result<AttemptEvaluationDto> {
     let mut dto = conn.query_row(
         "SELECT id, attempt_id, rubric_version_id, revision_no, correction_of_id,
                 evaluator_id, outcome, score, rationale, created_at_us
@@ -1981,10 +2071,7 @@ fn query_reproduction_submission(
                 learner_id: row.get(2)?,
                 artifact_uri: row.get(3)?,
                 artifact_sha256: row.get(4)?,
-                result: result_json
-                    .as_deref()
-                    .map(parse_json)
-                    .transpose()?,
+                result: result_json.as_deref().map(parse_json).transpose()?,
                 deviations: row.get(6)?,
                 submitted_at_us: row.get(7)?,
                 evaluations: Vec::new(),
@@ -2047,8 +2134,9 @@ fn query_ids(conn: &Connection, sql: &str, parent_id: &str) -> Result<Vec<String
 
 fn query_progress(conn: &Connection) -> Result<Vec<LearnerProgressDto>> {
     let objective_ids = {
-        let mut statement =
-            conn.prepare("SELECT id FROM learning_objective_versions ORDER BY learning_project_id, id")?;
+        let mut statement = conn.prepare(
+            "SELECT id FROM learning_objective_versions ORDER BY learning_project_id, id",
+        )?;
         let rows = statement
             .query_map([], |row| row.get::<_, String>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -2272,11 +2360,16 @@ mod tests {
             .expect("read persisted framework pin");
         assert_eq!(framework_version_id, "framework-a-v1");
         let project_count: i64 = reopened_conn
-            .query_row("SELECT COUNT(*) FROM learning_projects", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM learning_projects", [], |row| {
+                row.get(0)
+            })
             .expect("read projects after restart");
         assert_eq!(project_count, 2);
         let persisted_workspace = workspace(&reopened_conn).expect("restore Learning workspace");
-        assert!(persisted_workspace.objectives.iter().any(|item| item.id == objective.id));
+        assert!(persisted_workspace
+            .objectives
+            .iter()
+            .any(|item| item.id == objective.id));
         let progress = persisted_workspace
             .progress
             .iter()
@@ -2418,9 +2511,11 @@ mod tests {
             evaluate_reproduction(&mut conn, &reproduction_request(learner.id.clone())).is_err(),
             "the learner cannot evaluate their own reproduction"
         );
-        let reproduction_evaluation =
-            evaluate_reproduction(&mut conn, &reproduction_request("independent-evaluator".to_string()))
-                .expect("evaluate independent reproduction");
+        let reproduction_evaluation = evaluate_reproduction(
+            &mut conn,
+            &reproduction_request("independent-evaluator".to_string()),
+        )
+        .expect("evaluate independent reproduction");
         assert_eq!(reproduction_evaluation.outcome, AssessmentOutcome::Pass);
 
         let attempt = create_attempt(
@@ -2489,7 +2584,10 @@ mod tests {
         )
         .expect("append evaluation correction");
         assert_eq!(corrected.revision_no, 2);
-        assert_eq!(corrected.correction_of_id.as_deref(), Some(first.id.as_str()));
+        assert_eq!(
+            corrected.correction_of_id.as_deref(),
+            Some(first.id.as_str())
+        );
         let inconclusive = evaluate_attempt(
             &mut conn,
             &EvaluateAssessmentAttemptReq {
@@ -2502,7 +2600,8 @@ mod tests {
                     score: 1.0,
                 }],
                 rationale: "Evidence does not support a determinate assessment.".to_string(),
-                feedback: "An inconclusive result is retained but does not award mastery.".to_string(),
+                feedback: "An inconclusive result is retained but does not award mastery."
+                    .to_string(),
             },
         )
         .expect("record inconclusive evaluation correction");
@@ -2581,4 +2680,3 @@ mod tests {
         assert_eq!(stored.evaluations[2].id, inconclusive.id);
     }
 }
-

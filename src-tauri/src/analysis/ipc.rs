@@ -103,8 +103,7 @@ pub fn analysis_add_run_deviation(
     request: AnalysisDeviationReq,
 ) -> Result<AnalysisDeviationDto, String> {
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
-    repository::add_run_deviation(&mut conn, &run_id, &request)
-        .map_err(|error| error.to_string())
+    repository::add_run_deviation(&mut conn, &run_id, &request).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -117,10 +116,7 @@ pub fn analysis_finalize_run(
 }
 
 #[tauri::command]
-pub fn analysis_get_run(
-    state: State<AppState>,
-    run_id: String,
-) -> Result<AnalysisRunDto, String> {
+pub fn analysis_get_run(state: State<AppState>, run_id: String) -> Result<AnalysisRunDto, String> {
     let conn = state.db.lock().map_err(|error| error.to_string())?;
     repository::query_run(&conn, &run_id).map_err(|error| error.to_string())
 }

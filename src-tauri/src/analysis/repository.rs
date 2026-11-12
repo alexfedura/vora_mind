@@ -54,8 +54,7 @@ pub fn initialize_schema(conn: &Connection) -> Result<()> {
              applied_at_us INTEGER NOT NULL
          );",
     )?;
-    let foreign_keys_enabled: i64 =
-        conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
+    let foreign_keys_enabled: i64 = conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
     if foreign_keys_enabled != 1 {
         return Err(anyhow!(
             "SQLite foreign-key enforcement is required for Analysis writes."
@@ -134,10 +133,18 @@ fn method_version_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Analysis
         code_revision: row.get(7)?,
         dependency_lock_sha256: row.get(8)?,
         environment: serde_json::from_str(&row.get::<_, String>(9)?).map_err(|_| {
-            rusqlite::Error::InvalidColumnType(9, "environment_json".into(), rusqlite::types::Type::Text)
+            rusqlite::Error::InvalidColumnType(
+                9,
+                "environment_json".into(),
+                rusqlite::types::Type::Text,
+            )
         })?,
         assumptions: serde_json::from_str(&row.get::<_, String>(10)?).map_err(|_| {
-            rusqlite::Error::InvalidColumnType(10, "assumptions_json".into(), rusqlite::types::Type::Text)
+            rusqlite::Error::InvalidColumnType(
+                10,
+                "assumptions_json".into(),
+                rusqlite::types::Type::Text,
+            )
         })?,
         test_suite_uri: row.get(11)?,
         test_suite_sha256: row.get(12)?,
@@ -178,7 +185,9 @@ pub fn create_method_version(
         return Err(anyhow!("Method environment must be a JSON object."));
     }
     if req.assumptions.iter().any(|value| value.trim().is_empty()) {
-        return Err(anyhow!("Method assumptions must not contain empty entries."));
+        return Err(anyhow!(
+            "Method assumptions must not contain empty entries."
+        ));
     }
     if let Some(checksum) = req.dependency_lock_sha256.as_deref() {
         valid_sha256(checksum, "Dependency lock checksum")?;
@@ -206,14 +215,24 @@ pub fn create_method_version(
             .optional()?;
         match existing {
             Some((project_id, name)) if project_id == req.project_id && name == req.name => {}
-            Some(_) => return Err(anyhow!("The method identity does not match this project and name.")),
+            Some(_) => {
+                return Err(anyhow!(
+                    "The method identity does not match this project and name."
+                ))
+            }
             None => return Err(anyhow!("Analysis method was not found.")),
         }
     } else {
         tx.execute(
             "INSERT INTO analysis_methods (id, project_id, name, created_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![method_id, req.project_id, req.name.trim(), req.created_by, now],
+            params![
+                method_id,
+                req.project_id,
+                req.name.trim(),
+                req.created_by,
+                now
+            ],
         )?;
     }
 
@@ -254,7 +273,9 @@ pub fn create_method_version(
     query_method_version(conn, &version_id)
 }
 
-fn metric_version_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MetricDefinitionVersionDto> {
+fn metric_version_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<MetricDefinitionVersionDto> {
     let verification_status: String = row.get(11)?;
     Ok(MetricDefinitionVersionDto {
         id: row.get(0)?,
@@ -324,7 +345,11 @@ pub fn create_metric_definition_version(
         match existing {
             Some((project_id, key, name))
                 if project_id == req.project_id && key == req.key && name == req.name => {}
-            Some(_) => return Err(anyhow!("The metric identity does not match this project and key.")),
+            Some(_) => {
+                return Err(anyhow!(
+                    "The metric identity does not match this project and key."
+                ))
+            }
             None => return Err(anyhow!("Metric definition was not found.")),
         }
     } else {
@@ -492,7 +517,9 @@ fn validate_parameter_schema(schema: &serde_json::Value) -> Result<()> {
         .and_then(serde_json::Value::as_str)
         .is_some_and(|kind| kind != "object")
     {
-        return Err(anyhow!("Analysis parameters schema must describe an object."));
+        return Err(anyhow!(
+            "Analysis parameters schema must describe an object."
+        ));
     }
     if schema
         .get("properties")
@@ -505,17 +532,13 @@ fn validate_parameter_schema(schema: &serde_json::Value) -> Result<()> {
             return Err(anyhow!("Parameter schema required must be an array."));
         };
         if required.iter().any(|name| name.as_str().is_none()) {
-            return Err(anyhow!(
-                "Every required parameter name must be a string."
-            ));
+            return Err(anyhow!("Every required parameter name must be a string."));
         }
     }
     if let Some(properties) = schema.get("properties").and_then(|value| value.as_object()) {
         for (name, definition) in properties {
             if !definition.is_object() {
-                return Err(anyhow!(
-                    "Parameter schema for {name} must be an object."
-                ));
+                return Err(anyhow!("Parameter schema for {name} must be an object."));
             }
             if let Some(kind) = definition.get("type").and_then(serde_json::Value::as_str) {
                 if !matches!(
@@ -531,7 +554,9 @@ fn validate_parameter_schema(schema: &serde_json::Value) -> Result<()> {
                 .get("enum")
                 .is_some_and(|values| !values.is_array())
             {
-                return Err(anyhow!("Parameter schema enum for {name} must be an array."));
+                return Err(anyhow!(
+                    "Parameter schema enum for {name} must be an array."
+                ));
             }
         }
     }
@@ -543,9 +568,9 @@ fn validate_parameters(schema: &serde_json::Value, parameters: &serde_json::Valu
     let Some(parameters) = parameters.as_object() else {
         return Err(anyhow!("Analysis parameters must be a JSON object."));
     };
-    let schema = schema.as_object().ok_or_else(|| {
-        anyhow!("Analysis parameter schema must be a JSON object.")
-    })?;
+    let schema = schema
+        .as_object()
+        .ok_or_else(|| anyhow!("Analysis parameter schema must be a JSON object."))?;
     if let Some(required) = schema.get("required").and_then(serde_json::Value::as_array) {
         for name in required.iter().filter_map(serde_json::Value::as_str) {
             if !parameters.contains_key(name) {
@@ -553,7 +578,10 @@ fn validate_parameters(schema: &serde_json::Value, parameters: &serde_json::Valu
             }
         }
     }
-    if let Some(properties) = schema.get("properties").and_then(serde_json::Value::as_object) {
+    if let Some(properties) = schema
+        .get("properties")
+        .and_then(serde_json::Value::as_object)
+    {
         for (name, value) in parameters {
             let Some(property_schema) = properties.get(name) else {
                 if schema
@@ -599,8 +627,13 @@ fn validate_applicability<T>(
         Applicability::Applicable { details } => check_details(details)?,
         Applicability::NotApplicable { reason } => nonempty(reason, &format!("{category} reason"))?,
         Applicability::NotAssessed { rationale } => {
-            if rationale.as_deref().is_some_and(|value| value.trim().is_empty()) {
-                return Err(anyhow!("{category} rationale must not be empty when supplied."));
+            if rationale
+                .as_deref()
+                .is_some_and(|value| value.trim().is_empty())
+            {
+                return Err(anyhow!(
+                    "{category} rationale must not be empty when supplied."
+                ));
             }
         }
     }
@@ -609,7 +642,10 @@ fn validate_applicability<T>(
 
 fn validate_integrity_plan(plan: &StatisticalIntegrityPlanDto) -> Result<()> {
     validate_applicability("Overfitting", &plan.overfitting, |details| {
-        validate_required_text(&details.training_tuning_separation, "Training/tuning separation")?;
+        validate_required_text(
+            &details.training_tuning_separation,
+            "Training/tuning separation",
+        )?;
         validate_required_text(&details.parameter_search_space, "Parameter search space")?;
         validate_required_text(&details.model_selection_process, "Model selection process")?;
         validate_required_text(&details.complexity_reporting, "Complexity reporting")?;
@@ -618,20 +654,38 @@ fn validate_integrity_plan(plan: &StatisticalIntegrityPlanDto) -> Result<()> {
     validate_applicability("Data leakage", &plan.data_leakage, |details| {
         validate_required_text(&details.data_cutoffs, "Data cutoffs")?;
         validate_required_text(&details.transformation_order, "Transformation order")?;
-        validate_required_text(&details.feature_selection_provenance, "Feature-selection provenance")?;
-        validate_required_text(&details.evaluation_data_isolation, "Evaluation-data isolation")
+        validate_required_text(
+            &details.feature_selection_provenance,
+            "Feature-selection provenance",
+        )?;
+        validate_required_text(
+            &details.evaluation_data_isolation,
+            "Evaluation-data isolation",
+        )
     })?;
     validate_applicability("Selection bias", &plan.selection_bias, |details| {
         validate_required_text(&details.sampling_frame, "Sampling frame")?;
         validate_required_text(&details.inclusion_rules, "Inclusion rules")?;
         validate_required_text(&details.exclusion_rules, "Exclusion rules")?;
-        validate_required_text(&details.filtered_and_missing_cases, "Filtered/missing cases")?;
+        validate_required_text(
+            &details.filtered_and_missing_cases,
+            "Filtered/missing cases",
+        )?;
         validate_required_text(&details.survivor_population, "Survivor population")
     })?;
     validate_applicability("Look-ahead", &plan.look_ahead, |details| {
-        validate_required_text(&details.feature_availability_policy, "Feature-availability policy")?;
-        validate_required_text(&details.prediction_timestamp_policy, "Prediction timestamp policy")?;
-        validate_required_text(&details.decision_timestamp_policy, "Decision timestamp policy")
+        validate_required_text(
+            &details.feature_availability_policy,
+            "Feature-availability policy",
+        )?;
+        validate_required_text(
+            &details.prediction_timestamp_policy,
+            "Prediction timestamp policy",
+        )?;
+        validate_required_text(
+            &details.decision_timestamp_policy,
+            "Decision timestamp policy",
+        )
     })?;
     validate_applicability("Multiple testing", &plan.multiple_testing, |details| {
         nonempty(&details.test_family, "Test family")?;
@@ -647,7 +701,10 @@ fn validate_integrity_plan(plan: &StatisticalIntegrityPlanDto) -> Result<()> {
         }
     })?;
     validate_applicability("Dataset separation", &plan.dataset_separation, |details| {
-        nonempty(&details.selection_rationale, "Dataset-role selection rationale")
+        nonempty(
+            &details.selection_rationale,
+            "Dataset-role selection rationale",
+        )
     })?;
     validate_applicability("Out-of-sample", &plan.out_of_sample, |details| {
         nonempty(&details.evaluation_period, "Evaluation period")?;
@@ -655,10 +712,15 @@ fn validate_integrity_plan(plan: &StatisticalIntegrityPlanDto) -> Result<()> {
     })?;
     validate_applicability("Walk-forward", &plan.walk_forward, |details| {
         if details.windows.is_empty() {
-            return Err(anyhow!("Walk-forward control requires at least one declared window."));
+            return Err(anyhow!(
+                "Walk-forward control requires at least one declared window."
+            ));
         }
         nonempty(&details.refit_cadence, "Walk-forward refit cadence")?;
-        nonempty(&details.aggregation_method, "Walk-forward aggregation method")?;
+        nonempty(
+            &details.aggregation_method,
+            "Walk-forward aggregation method",
+        )?;
         let mut previous_test_end = None;
         for window in &details.windows {
             nonempty(&window.label, "Walk-forward window label")?;
@@ -682,11 +744,17 @@ fn validate_integrity_plan(plan: &StatisticalIntegrityPlanDto) -> Result<()> {
         Ok(())
     })?;
     validate_applicability("Forward testing", &plan.forward_testing, |details| {
-        nonempty(&details.actual_execution_conditions, "Forward execution conditions")?;
+        nonempty(
+            &details.actual_execution_conditions,
+            "Forward execution conditions",
+        )?;
         nonempty(&details.costs_and_fees, "Forward-test costs and fees")
     })?;
     validate_applicability("Reproducibility", &plan.reproducibility, |details| {
-        nonempty(&details.protocol_version, "Reproducibility protocol version")
+        nonempty(
+            &details.protocol_version,
+            "Reproducibility protocol version",
+        )
     })?;
     Ok(())
 }
@@ -703,7 +771,14 @@ fn insert_definition_event(
         "INSERT INTO analysis_definition_events
             (id, definition_version_id, status, rationale, actor_id, occurred_at_us)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![id(), version_id, status.as_str(), rationale.trim(), actor_id, now],
+        params![
+            id(),
+            version_id,
+            status.as_str(),
+            rationale.trim(),
+            actor_id,
+            now
+        ],
     )?;
     Ok(())
 }
@@ -714,7 +789,10 @@ pub fn create_definition_version(
 ) -> Result<AnalysisDefinitionVersionDto> {
     nonempty(&req.title, "Analysis definition title")?;
     nonempty(&req.version_label, "Analysis definition version label")?;
-    nonempty(&req.specification.protocol_version, "Analysis protocol version")?;
+    nonempty(
+        &req.specification.protocol_version,
+        "Analysis protocol version",
+    )?;
     if req.specification.required_input_roles.is_empty() {
         return Err(anyhow!("At least one exact dataset role must be declared."));
     }
@@ -735,17 +813,28 @@ pub fn create_definition_version(
     }
     validate_integrity_plan(&req.specification.integrity)?;
     if req.metric_definition_version_ids.is_empty() {
-        return Err(anyhow!("An analysis definition must pin at least one metric version."));
+        return Err(anyhow!(
+            "An analysis definition must pin at least one metric version."
+        ));
     }
-    if req.metric_definition_version_ids.iter().collect::<HashSet<_>>().len()
+    if req
+        .metric_definition_version_ids
+        .iter()
+        .collect::<HashSet<_>>()
+        .len()
         != req.metric_definition_version_ids.len()
     {
         return Err(anyhow!("Metric version pins must be unique."));
     }
     if req.parent_version_id.is_some() {
-        nonempty(&req.change_rationale, "Analysis definition change rationale")?;
+        nonempty(
+            &req.change_rationale,
+            "Analysis definition change rationale",
+        )?;
     } else if !req.change_rationale.trim().is_empty() {
-        return Err(anyhow!("A change rationale is only valid for a derived definition version."));
+        return Err(anyhow!(
+            "A change rationale is only valid for a derived definition version."
+        ));
     }
 
     let now = now_us()?;
@@ -762,7 +851,9 @@ pub fn create_definition_version(
         |row| row.get(0),
     )?;
     if method_project != req.project_id {
-        return Err(anyhow!("The analysis method version belongs to a different project."));
+        return Err(anyhow!(
+            "The analysis method version belongs to a different project."
+        ));
     }
     for metric_version_id in &req.metric_definition_version_ids {
         let metric_project: String = tx.query_row(
@@ -787,7 +878,9 @@ pub fn create_definition_version(
             )
             .optional()?;
         if existing.as_deref() != Some(req.project_id.as_str()) {
-            return Err(anyhow!("Analysis definition was not found in this project."));
+            return Err(anyhow!(
+                "Analysis definition was not found in this project."
+            ));
         }
         version_no = tx.query_row(
             "SELECT COALESCE(MAX(version_no), 0) + 1
@@ -797,13 +890,21 @@ pub fn create_definition_version(
         )?;
     } else {
         if req.parent_version_id.is_some() {
-            return Err(anyhow!("A first analysis definition version cannot have a parent."));
+            return Err(anyhow!(
+                "A first analysis definition version cannot have a parent."
+            ));
         }
         tx.execute(
             "INSERT INTO analysis_definitions
                 (id, project_id, title, created_by, created_at_us)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![definition_id, req.project_id, req.title.trim(), req.created_by, now],
+            params![
+                definition_id,
+                req.project_id,
+                req.title.trim(),
+                req.created_by,
+                now
+            ],
         )?;
         version_no = 1;
     }
@@ -820,7 +921,9 @@ pub fn create_definition_version(
             |row| row.get(0),
         )?;
         if parent_definition != definition_id || latest_parent != parent_id {
-            return Err(anyhow!("Parent version must belong to this analysis definition."));
+            return Err(anyhow!(
+                "Parent version must belong to this analysis definition."
+            ));
         }
     }
     tx.execute(
@@ -916,7 +1019,9 @@ pub fn transition_definition(
             |row| row.get(0),
         )?;
         if metrics_count == 0 {
-            return Err(anyhow!("Locking requires at least one metric definition version."));
+            return Err(anyhow!(
+                "Locking requires at least one metric definition version."
+            ));
         }
         let raw_specification: String = tx.query_row(
             "SELECT specification_json FROM analysis_definition_versions WHERE id = ?1",
@@ -945,12 +1050,12 @@ fn insert_control<T: Serialize>(
     control: &Applicability<T>,
 ) -> Result<()> {
     let (state, rationale, details) = match control {
-        Applicability::Applicable { details } => {
-            ("applicable", String::new(), json(details)?)
-        }
-        Applicability::NotApplicable { reason } => {
-            ("not_applicable", reason.trim().to_string(), "{}".to_string())
-        }
+        Applicability::Applicable { details } => ("applicable", String::new(), json(details)?),
+        Applicability::NotApplicable { reason } => (
+            "not_applicable",
+            reason.trim().to_string(),
+            "{}".to_string(),
+        ),
         Applicability::NotAssessed { rationale } => (
             "not_assessed",
             rationale.as_deref().unwrap_or_default().trim().to_string(),
@@ -1137,7 +1242,11 @@ fn validate_split_and_get_key(
                 ));
             }
         }
-        Some(_) => return Err(anyhow!("The split group belongs to another dataset version.")),
+        Some(_) => {
+            return Err(anyhow!(
+                "The split group belongs to another dataset version."
+            ))
+        }
         None => return Err(anyhow!("The requested dataset split group does not exist.")),
     }
     let assignment: Option<String> = tx
@@ -1165,12 +1274,18 @@ fn validate_input(
     input: &AnalysisInputReq,
     look_ahead_applicable: bool,
     disjoint_required: bool,
-) -> Result<(String, serde_json::Value, Vec<(AnalysisInputSampleReq, Option<String>)>)> {
+) -> Result<(
+    String,
+    serde_json::Value,
+    Vec<(AnalysisInputSampleReq, Option<String>)>,
+)> {
     if input.samples.is_empty() {
-        return Err(anyhow!("Every analysis input must pin at least one sample."));
+        return Err(anyhow!(
+            "Every analysis input must pin at least one sample."
+        ));
     }
-    let (dataset_project_id, lifecycle_status, checksum): (String, String, Option<String>) =
-        tx.query_row(
+    let (dataset_project_id, lifecycle_status, checksum): (String, String, Option<String>) = tx
+        .query_row(
             "SELECT d.project_id, v.lifecycle_status, v.content_sha256
              FROM experiment_dataset_versions v
              JOIN experiment_datasets d ON d.id = v.dataset_id
@@ -1267,14 +1382,22 @@ fn insert_run_event(
 
 pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<AnalysisRunDto> {
     if !req.parameters.is_object() || !req.environment.is_object() {
-        return Err(anyhow!("Analysis parameters and environment must be JSON objects."));
+        return Err(anyhow!(
+            "Analysis parameters and environment must be JSON objects."
+        ));
     }
     let mut seeds_seen = HashSet::new();
-    if req.random_seeds.iter().any(|seed| seed.trim().is_empty() || !seeds_seen.insert(seed)) {
+    if req
+        .random_seeds
+        .iter()
+        .any(|seed| seed.trim().is_empty() || !seeds_seen.insert(seed))
+    {
         return Err(anyhow!("Random seeds must be non-empty and unique."));
     }
     if req.inputs.is_empty() {
-        return Err(anyhow!("An analysis run must pin at least one dataset input."));
+        return Err(anyhow!(
+            "An analysis run must pin at least one dataset input."
+        ));
     }
     let now = now_us()?;
     let run_id = id();
@@ -1283,21 +1406,28 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
     let definition: AnalysisDefinitionVersionDto =
         query_definition_version(&tx, &req.definition_version_id)?;
     if definition.lifecycle_status != AnalysisDefinitionStatus::Locked {
-        return Err(anyhow!("Analysis run requires a locked definition version."));
+        return Err(anyhow!(
+            "Analysis run requires a locked definition version."
+        ));
     }
-    validate_parameters(
-        &definition.specification.parameters_schema,
-        &req.parameters,
-    )?;
+    validate_parameters(&definition.specification.parameters_schema, &req.parameters)?;
     let method = query_method_version(&tx, &definition.method_version_id)?;
     if method.verification_status != AnalysisVerificationStatus::Passed {
         return Err(anyhow!("Analysis method test report has not passed."));
     }
-    if req.environment.as_object().is_some_and(serde_json::Map::is_empty) {
-        return Err(anyhow!("Run environment must contain the captured runtime identity."));
+    if req
+        .environment
+        .as_object()
+        .is_some_and(serde_json::Map::is_empty)
+    {
+        return Err(anyhow!(
+            "Run environment must contain the captured runtime identity."
+        ));
     }
     let project_id = definition.project_id.clone();
-    if let Applicability::Applicable { details } = &definition.specification.integrity.reproducibility {
+    if let Applicability::Applicable { details } =
+        &definition.specification.integrity.reproducibility
+    {
         if details.parameters_and_seeds_required && req.random_seeds.is_empty() {
             return Err(anyhow!(
                 "The reproducibility safeguard requires at least one declared random seed."
@@ -1360,7 +1490,8 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
             "Analysis inputs must match the locked required dataset roles exactly."
         ));
     }
-    if let Applicability::Applicable { details } = &definition.specification.integrity.out_of_sample {
+    if let Applicability::Applicable { details } = &definition.specification.integrity.out_of_sample
+    {
         if !actual_roles.contains("test") {
             return Err(anyhow!(
                 "Applicable out-of-sample evaluation requires a pinned test-role input."
@@ -1385,7 +1516,9 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
             "Applicable walk-forward analysis requires training, validation, and test roles."
         ));
     }
-    if let Applicability::Applicable { details } = &definition.specification.integrity.forward_testing {
+    if let Applicability::Applicable { details } =
+        &definition.specification.integrity.forward_testing
+    {
         let required_role = match &details.execution_kind {
             ForwardExecutionKind::Prospective => "prospective",
             ForwardExecutionKind::Paper | ForwardExecutionKind::Live => "forward",
@@ -1424,11 +1557,7 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
         req.created_by.as_deref(),
         now,
     )?;
-    insert_integrity_declarations(
-        &tx,
-        &run_id,
-        &definition.specification.integrity,
-    )?;
+    insert_integrity_declarations(&tx, &run_id, &definition.specification.integrity)?;
     for (category, code, message) in pending_findings {
         insert_integrity_finding(
             &tx,
@@ -1510,10 +1639,7 @@ pub fn start_run(
     query_run(conn, run_id)
 }
 
-pub fn add_run_log(
-    conn: &mut Connection,
-    req: &AddAnalysisRunLogReq,
-) -> Result<AnalysisRunLogDto> {
+pub fn add_run_log(conn: &mut Connection, req: &AddAnalysisRunLogReq) -> Result<AnalysisRunLogDto> {
     nonempty(&req.message, "Analysis log message")?;
     let log_id = id();
     let recorded_at_us = now_us()?;
@@ -1586,10 +1712,7 @@ fn validate_numeric(value: &str, field: &str) -> Result<f64> {
     Ok(number)
 }
 
-fn validate_metric_report(
-    report: &AnalysisMetricReportDto,
-    max_sample_size: i64,
-) -> Result<()> {
+fn validate_metric_report(report: &AnalysisMetricReportDto, max_sample_size: i64) -> Result<()> {
     nonempty(&report.output_key, "Metric output key")?;
     nonempty(&report.estimand, "Metric estimand")?;
     nonempty(&report.unit, "Metric unit")?;
@@ -1615,8 +1738,14 @@ fn validate_metric_report(
             return Err(anyhow!("P-values must be between zero and one."));
         }
     }
-    if report.assumptions.iter().any(|value| value.trim().is_empty())
-        || report.exclusions.iter().any(|value| value.trim().is_empty())
+    if report
+        .assumptions
+        .iter()
+        .any(|value| value.trim().is_empty())
+        || report
+            .exclusions
+            .iter()
+            .any(|value| value.trim().is_empty())
     {
         return Err(anyhow!(
             "Metric assumptions and exclusions must not contain empty entries."
@@ -1652,10 +1781,7 @@ fn parse_dataset_role(value: &str) -> Result<DatasetRole> {
     }
 }
 
-pub fn finalize_run(
-    conn: &mut Connection,
-    req: &FinalizeAnalysisRunReq,
-) -> Result<AnalysisRunDto> {
+pub fn finalize_run(conn: &mut Connection, req: &FinalizeAnalysisRunReq) -> Result<AnalysisRunDto> {
     if !matches!(
         req.next_status,
         AnalysisRunStatus::Completed
@@ -1663,9 +1789,7 @@ pub fn finalize_run(
             | AnalysisRunStatus::Cancelled
             | AnalysisRunStatus::Inconclusive
     ) {
-        return Err(anyhow!(
-            "Analysis finalization requires a terminal status."
-        ));
+        return Err(anyhow!("Analysis finalization requires a terminal status."));
     }
     nonempty(&req.summary, "Analysis completion summary")?;
     if req.next_status == AnalysisRunStatus::Failed && req.errors.is_empty() {
@@ -1680,8 +1804,8 @@ pub fn finalize_run(
     }
     let now = now_us()?;
     let tx = conn.transaction()?;
-    let (project_id, definition_version_id, current_status): (String, String, String) =
-        tx.query_row(
+    let (project_id, definition_version_id, current_status): (String, String, String) = tx
+        .query_row(
             "SELECT r.project_id, r.definition_version_id,
                     (SELECT lifecycle_status FROM analysis_run_events
                      WHERE run_id = r.id ORDER BY occurred_at_us DESC, id DESC LIMIT 1)
@@ -1745,7 +1869,8 @@ pub fn finalize_run(
                 json(&output.payload)?,
                 sha256(json(&output.payload)?.as_bytes()),
                 output.artifact_uri,
-                output.artifact_sha256
+                output
+                    .artifact_sha256
                     .as_deref()
                     .map(str::to_ascii_lowercase),
                 output.media_type,
@@ -1803,13 +1928,9 @@ pub fn finalize_run(
                 Some(interval.level.as_str()),
                 None,
             ),
-            UncertaintyReportDto::NotMeaningful { reason } => (
-                "not_meaningful",
-                None,
-                None,
-                None,
-                Some(reason.as_str()),
-            ),
+            UncertaintyReportDto::NotMeaningful { reason } => {
+                ("not_meaningful", None, None, None, Some(reason.as_str()))
+            }
         };
         tx.execute(
             "INSERT INTO analysis_metrics
@@ -1874,16 +1995,16 @@ fn query_run_inputs(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisInput
              ORDER BY role, dataset_version_id",
         )?;
         let rows = statement.query_map([run_id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, Option<String>>(4)?,
-                    row.get::<_, i64>(5)?,
-                    row.get::<_, String>(6)?,
-                ))
-            })?;
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, String>(6)?,
+            ))
+        })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
     rows.into_iter()
@@ -1905,15 +2026,15 @@ fn query_run_inputs(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisInput
                          ORDER BY sample_id",
                     )?;
                     let rows = statement.query_map([&input_id], |row| {
-                            Ok(AnalysisInputSampleDto {
-                                sample_id: row.get(0)?,
-                                split_key: row.get(1)?,
-                                feature_available_at_us: row.get(2)?,
-                                prediction_at_us: row.get(3)?,
-                                decision_at_us: row.get(4)?,
-                                outcome_available_at_us: row.get(5)?,
-                            })
-                        })?;
+                        Ok(AnalysisInputSampleDto {
+                            sample_id: row.get(0)?,
+                            split_key: row.get(1)?,
+                            feature_available_at_us: row.get(2)?,
+                            prediction_at_us: row.get(3)?,
+                            decision_at_us: row.get(4)?,
+                            outcome_available_at_us: row.get(5)?,
+                        })
+                    })?;
                     rows.collect::<rusqlite::Result<Vec<_>>>()?
                 };
                 Ok(AnalysisInputDto {
@@ -2057,9 +2178,8 @@ fn query_run_metrics(conn: &Connection, run_id: &str) -> Result<Vec<AnalysisMetr
                         },
                     },
                     "not_meaningful" => UncertaintyReportDto::NotMeaningful {
-                        reason: reason.ok_or_else(|| {
-                            anyhow!("Stored uncertainty reason is missing.")
-                        })?,
+                        reason: reason
+                            .ok_or_else(|| anyhow!("Stored uncertainty reason is missing."))?,
                     },
                     _ => return Err(anyhow!("Invalid stored uncertainty report kind.")),
                 };
@@ -2455,7 +2575,14 @@ fn insert_evidence_event(
         "INSERT INTO analysis_evidence_events
             (id, evidence_id, status, rationale, actor_id, occurred_at_us)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![id(), evidence_id, status.as_str(), rationale.trim(), actor_id, now],
+        params![
+            id(),
+            evidence_id,
+            status.as_str(),
+            rationale.trim(),
+            actor_id,
+            now
+        ],
     )?;
     Ok(())
 }
@@ -2481,24 +2608,14 @@ fn artifact_target_values(
     Option<&str>,
 ) {
     match artifact {
-        EvidenceArtifactRefDto::AnalysisOutput(id) => {
-            (Some(id), None, None, None, None, None)
-        }
-        EvidenceArtifactRefDto::ExperimentRun(id) => {
-            (None, Some(id), None, None, None, None)
-        }
-        EvidenceArtifactRefDto::DatasetVersion(id) => {
-            (None, None, Some(id), None, None, None)
-        }
-        EvidenceArtifactRefDto::ResearchObservation(id) => {
-            (None, None, None, Some(id), None, None)
-        }
+        EvidenceArtifactRefDto::AnalysisOutput(id) => (Some(id), None, None, None, None, None),
+        EvidenceArtifactRefDto::ExperimentRun(id) => (None, Some(id), None, None, None, None),
+        EvidenceArtifactRefDto::DatasetVersion(id) => (None, None, Some(id), None, None, None),
+        EvidenceArtifactRefDto::ResearchObservation(id) => (None, None, None, Some(id), None, None),
         EvidenceArtifactRefDto::SourceVersionSegment(id) => {
             (None, None, None, None, Some(id), None)
         }
-        EvidenceArtifactRefDto::SourceClaim(id) => {
-            (None, None, None, None, None, Some(id))
-        }
+        EvidenceArtifactRefDto::SourceClaim(id) => (None, None, None, None, None, Some(id)),
     }
 }
 
@@ -2507,11 +2624,7 @@ fn parse_proposition_refs(
     hypothesis_version_id: Option<String>,
     finding_version_id: Option<String>,
 ) -> Result<PropositionRefDto> {
-    match (
-        source_claim_id,
-        hypothesis_version_id,
-        finding_version_id,
-    ) {
+    match (source_claim_id, hypothesis_version_id, finding_version_id) {
         (Some(id), None, None) => Ok(PropositionRefDto::SourceClaim(id)),
         (None, Some(id), None) => Ok(PropositionRefDto::HypothesisVersion(id)),
         (None, None, Some(id)) => Ok(PropositionRefDto::FindingVersion(id)),
@@ -2830,7 +2943,10 @@ fn query_finding_events(conn: &Connection, version_id: &str) -> Result<Vec<Findi
         .collect()
 }
 
-fn query_finding_evidence(conn: &Connection, version_id: &str) -> Result<Vec<FindingEvidenceLinkDto>> {
+fn query_finding_evidence(
+    conn: &Connection,
+    version_id: &str,
+) -> Result<Vec<FindingEvidenceLinkDto>> {
     let mut statement = conn.prepare(
         "SELECT evidence_id, synthesis_polarity, rationale
          FROM analysis_finding_version_evidence WHERE finding_version_id = ?1
@@ -3015,7 +3131,12 @@ pub fn create_finding_version(
         ));
     }
     if req.analysis_run_ids.iter().collect::<HashSet<_>>().len() != req.analysis_run_ids.len()
-        || req.evidence.iter().map(|link| &link.evidence_id).collect::<HashSet<_>>().len()
+        || req
+            .evidence
+            .iter()
+            .map(|link| &link.evidence_id)
+            .collect::<HashSet<_>>()
+            .len()
             != req.evidence.len()
     {
         return Err(anyhow!(
@@ -3188,7 +3309,9 @@ pub fn create_finding_relation(
     let source = query_finding_version(conn, &req.source_version_id)?;
     let target = query_finding_version(conn, &req.target_version_id)?;
     if source.project_id != target.project_id {
-        return Err(anyhow!("Finding relations cannot cross project boundaries."));
+        return Err(anyhow!(
+            "Finding relations cannot cross project boundaries."
+        ));
     }
     if req.relation_kind == FindingRelationKind::Supersedes
         && source.finding_id != target.finding_id
@@ -3641,11 +3764,12 @@ mod tests {
                 .as_str()
                 .ok_or_else(|| anyhow!("split group ID missing"))?;
 
-            let run_req =
-                create_run_request(&definition.id, dataset_version_id, split_group_id);
+            let run_req = create_run_request(&definition.id, dataset_version_id, split_group_id);
             let mut duplicate_sample_req = run_req.clone();
             let duplicate_sample = duplicate_sample_req.inputs[0].samples[0].clone();
-            duplicate_sample_req.inputs[0].samples.push(duplicate_sample);
+            duplicate_sample_req.inputs[0]
+                .samples
+                .push(duplicate_sample);
             assert!(create_run(&mut conn, &duplicate_sample_req).is_err());
 
             let queued = create_run(&mut conn, &run_req)?;
@@ -3653,9 +3777,10 @@ mod tests {
             assert_eq!(queued.inputs[0].dataset_version_id, dataset_version_id);
             assert_eq!(queued.inputs[0].samples[0].sample_id, "sample-1");
             assert_eq!(queued.definition_version_id, definition.id);
-            assert!(queued.integrity_findings.iter().any(|finding| {
-                finding.code == "control_not_assessed:overfitting"
-            }));
+            assert!(queued
+                .integrity_findings
+                .iter()
+                .any(|finding| { finding.code == "control_not_assessed:overfitting" }));
             assert!(transition_definition(
                 &mut conn,
                 &TransitionAnalysisDefinitionReq {
@@ -3756,9 +3881,7 @@ mod tests {
             let evidence_request = |polarity| CreateEvidenceReq {
                 project_id: project_id.clone(),
                 proposition: PropositionRefDto::SourceClaim(source_claim_id.clone()),
-                artifact: EvidenceArtifactRefDto::AnalysisOutput(
-                    completed.outputs[0].id.clone(),
-                ),
+                artifact: EvidenceArtifactRefDto::AnalysisOutput(completed.outputs[0].id.clone()),
                 polarity,
                 scope: "The tested population and period.".to_string(),
                 quality_rationale: "Method report and input pins are inspectable.".to_string(),
@@ -3866,7 +3989,10 @@ mod tests {
             crate::mind::portable_db::initialize_workspace_schema(&reopened)
                 .map_err(|error| anyhow!(error.to_string()))?;
             let reopened_run = query_run(&reopened, &completed.id)?;
-            assert_eq!(reopened_run.outputs[0].payload, serde_json::json!({"source": "external"}));
+            assert_eq!(
+                reopened_run.outputs[0].payload,
+                serde_json::json!({"source": "external"})
+            );
             assert_eq!(reopened_run.inputs[0].samples[0].sample_id, "sample-1");
             assert_eq!(
                 query_finding_version(&reopened, &revised.id)?.parent_version_id,

@@ -63,9 +63,7 @@ fn ensure_project_writable(conn: &Connection, project_id: &str) -> Result<()> {
         return Err(anyhow!("Research project was not found."));
     };
     if status == "archived" {
-        return Err(anyhow!(
-            "Archived research projects cannot be modified."
-        ));
+        return Err(anyhow!("Archived research projects cannot be modified."));
     }
     Ok(())
 }
@@ -1062,10 +1060,7 @@ pub fn query_version(conn: &Connection, version_id: &str) -> Result<ModelVersion
     })
 }
 
-fn query_contributions(
-    conn: &Connection,
-    version_id: &str,
-) -> Result<Vec<ModelContributionDto>> {
+fn query_contributions(conn: &Connection, version_id: &str) -> Result<Vec<ModelContributionDto>> {
     let mut statement = conn.prepare(
         "SELECT id, relation_kind, hypothesis_version_id, finding_version_id,
                 design_version_id, experiment_run_id, dataset_version_id, dataset_role,
@@ -1216,7 +1211,9 @@ fn query_all_versions(conn: &Connection, project_id: &str) -> Result<Vec<ModelVe
     params.push(project_id);
     let mut statement = conn.prepare(&sql)?;
     let ids = statement
-        .query_map(rusqlite::params_from_iter(params.iter().copied()), |row| row.get::<_, String>(0))?
+        .query_map(rusqlite::params_from_iter(params.iter().copied()), |row| {
+            row.get::<_, String>(0)
+        })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     ids.iter()
         .map(|version_id| query_version(conn, version_id))
@@ -2268,7 +2265,9 @@ fn query_evidence_list(conn: &Connection, project_id: &str) -> Result<Vec<ModelE
     params.push(project_id);
     let mut statement = conn.prepare(&sql)?;
     let ids = statement
-        .query_map(rusqlite::params_from_iter(params.iter().copied()), |row| row.get::<_, String>(0))?
+        .query_map(rusqlite::params_from_iter(params.iter().copied()), |row| {
+            row.get::<_, String>(0)
+        })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     ids.iter()
         .map(|evidence_id| query_evidence(conn, evidence_id))
@@ -2623,7 +2622,10 @@ mod tests {
                 })
                 .expect("typed hypothesis contribution");
             assert!(!hypothesis_contribution.id.is_empty());
-            assert_eq!(hypothesis_contribution.created_by.as_deref(), Some("author"));
+            assert_eq!(
+                hypothesis_contribution.created_by.as_deref(),
+                Some("author")
+            );
             assert!(matches!(
                 &hypothesis_contribution.target,
                 ModelContributionTarget::HypothesisVersion { id } if id == &initial.hypotheses[0].target_id
@@ -2918,14 +2920,18 @@ mod tests {
         {
             let conn = Connection::open(&path).expect("reopen workspace");
             initialize(&conn);
-            let project_a_state = workspace(&conn, "project-a").expect("load project-a workspace after restart");
+            let project_a_state =
+                workspace(&conn, "project-a").expect("load project-a workspace after restart");
             assert_eq!(project_a_state.models.len(), 1);
             assert_eq!(project_a_state.versions.len(), 1);
             assert!(project_a_state
                 .versions
                 .iter()
                 .all(|version| version.created_in_project_id == "project-a"));
-            assert!(project_a_state.versions.iter().any(|version| version.id == initial_version_id));
+            assert!(project_a_state
+                .versions
+                .iter()
+                .any(|version| version.id == initial_version_id));
             assert!(project_a_state.evidence.is_empty());
             assert!(project_a_state.evaluations.is_empty());
             assert!(project_a_state.validations.is_empty());
@@ -2939,7 +2945,10 @@ mod tests {
                 .versions
                 .iter()
                 .all(|version| version.created_in_project_id == "project-b"));
-            assert!(!state.versions.iter().any(|version| version.id == initial_version_id));
+            assert!(!state
+                .versions
+                .iter()
+                .any(|version| version.id == initial_version_id));
             assert!(state.versions.iter().any(|version| {
                 version.id == successor_version_id
                     && version.parents[0].version_id == initial_version_id

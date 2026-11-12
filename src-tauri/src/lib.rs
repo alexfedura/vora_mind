@@ -1,12 +1,12 @@
 extern crate self as vora_lib;
 
-pub mod experiment;
 pub mod analysis;
-pub mod learning;
-pub mod model;
-pub mod knowledge_transfer;
+pub mod experiment;
 pub mod forge;
+pub mod knowledge_transfer;
+pub mod learning;
 pub mod mind;
+pub mod model;
 pub mod research;
 pub mod vora_trace;
 
