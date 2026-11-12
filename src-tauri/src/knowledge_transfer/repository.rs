@@ -1826,7 +1826,28 @@ pub fn provenance_preview(
                 "SELECT e.id, e.polarity, e.scope, e.limitations,
                         COALESCE(e.artifact_analysis_output_id, e.artifact_experiment_run_id,
                                  e.artifact_dataset_version_id, e.artifact_observation_id,
-                                 e.artifact_source_segment_id, e.artifact_source_claim_id)
+                                 e.artifact_source_segment_id, e.artifact_source_claim_id),
+                        COALESCE(
+                            (SELECT src.title || ' — ' || seg.label || ' (' || seg.location_kind
+                                    || CASE WHEN seg.page_start IS NOT NULL
+                                         THEN ', pages ' || seg.page_start || '-' || COALESCE(seg.page_end, seg.page_start)
+                                         ELSE '' END
+                                    || CASE WHEN seg.line_start IS NOT NULL
+                                         THEN ', lines ' || seg.line_start || '-' || COALESCE(seg.line_end, seg.line_start)
+                                         ELSE '' END
+                                    || ') · version ' || COALESCE(sv.edition_label, sv.capture_kind)
+                             FROM source_version_segments seg
+                             JOIN sources src ON src.id = seg.source_id
+                             JOIN source_versions sv ON sv.id = seg.source_version_id
+                             WHERE seg.id = e.artifact_source_segment_id),
+                            (SELECT src.title || ' — ' || claim.statement || ' · version '
+                                    || COALESCE(sv.edition_label, sv.capture_kind)
+                             FROM source_claims claim
+                             JOIN sources src ON src.id = claim.source_id
+                             JOIN source_versions sv ON sv.id = claim.source_version_id
+                             WHERE claim.id = e.artifact_source_claim_id),
+                            'Artifact context not available for this reference'
+                        )
                  FROM analysis_finding_version_evidence l
                  JOIN analysis_evidence e ON e.id = l.evidence_id
                  WHERE l.finding_version_id = ?1 ORDER BY e.created_at_us, e.id",
@@ -1840,17 +1861,25 @@ pub fn provenance_preview(
                             row.get::<_, String>(2)?,
                             row.get::<_, String>(3)?,
                             row.get::<_, String>(4)?,
+                            row.get::<_, String>(5)?,
                         ))
                     })?
                     .map(|row| {
-                        let (id, polarity, evidence_scope, evidence_limitations, artifact_id) = row?;
+                        let (
+                            id,
+                            polarity,
+                            evidence_scope,
+                            evidence_limitations,
+                            artifact_id,
+                            artifact_context,
+                        ) = row?;
                         Ok(TransferProvenanceRecordDto {
                             record_kind: "evidence".to_string(),
                             record_id: id,
                             label: format!("Evidence: {polarity}"),
                             relationship: "finding_evidence".to_string(),
                             details: format!(
-                                "Scope: {evidence_scope}; limitations: {evidence_limitations}; artifact: {artifact_id}"
+                                "Scope: {evidence_scope}; limitations: {evidence_limitations}; artifact: {artifact_id}; context: {artifact_context}"
                             ),
                         })
                     })
