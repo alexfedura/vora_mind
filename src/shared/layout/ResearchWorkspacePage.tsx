@@ -1023,7 +1023,7 @@ export const ResearchWorkspacePage: React.FC = () => {
               <div className="space-y-2 border-t border-[#292c34] pt-3">
                 {workspace.designVersions.filter((design) => design.projectId === projectId).map((design) => (
                   <div key={design.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3 text-xs text-gray-300">
-                    <p>Design v{design.versionNo} · {design.title} · {design.lifecycleStatus} · no execution data in this phase</p>
+                    <p>Design v{design.versionNo} · {design.title} · {design.lifecycleStatus}</p>
                     <div className="mt-2 flex gap-2">
                       {design.lifecycleStatus === "draft" && <button type="button" onClick={() => void act(() => researchService.transitionDesign(design.id, "review", null))} className="rounded border border-[#343741] px-2 py-1 text-xs">Review design</button>}
                       {design.lifecycleStatus === "review" && <p className="text-[11px] text-amber-300">Legacy design: create a typed version in the experimental workspace before preregistration or execution.</p>}

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { LoaderCircle, Sparkles, X } from "lucide-react";
+import { boardGenerationService } from "@/services/boardGenerationService";
 
 interface GenerateBoardModalProps {
   isOpen: boolean;
@@ -27,7 +27,7 @@ export const GenerateBoardModal: React.FC<GenerateBoardModalProps> = ({ isOpen, 
     let unlistenDone: (() => void) | null = null;
     try {
       if (apiKey.trim()) {
-        await invoke("save_deepseek_key", { apiKey: apiKey.trim() });
+        await boardGenerationService.saveApiKey(apiKey.trim());
         setApiKey("");
       }
       let resolveGenerated: ((value: string) => void) | null = null;
@@ -42,7 +42,7 @@ export const GenerateBoardModal: React.FC<GenerateBoardModalProps> = ({ isOpen, 
           resolveGenerated?.(event.payload);
         }),
       ]);
-      await invoke("generate_board_from_prompt", { prompt: prompt.trim() });
+      await boardGenerationService.generate(prompt.trim());
       const graphJson = await generated;
       onGenerated(graphJson);
       setPrompt("");

@@ -8,9 +8,9 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { check, type Update } from "@tauri-apps/plugin-updater";
+import { updaterService } from "@/services/updaterService";
 
 type UpdateStatus = "idle" | "checking" | "downloading" | "ready" | "installing" | "error";
 
@@ -33,11 +33,6 @@ interface UpdaterDownloadProgress {
 
 interface UpdateFailureRecord {
   lastFailedVersion: string;
-  failedAt: number;
-}
-
-interface BackendUpdateFailureMarker {
-  version: string;
   failedAt: number;
 }
 
@@ -195,9 +190,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
         await update.close();
         update = null;
         setStatus("downloading");
-        const installedVersion = await invoke<string | null>("install_update", {
-          requestedVersion,
-        });
+        const installedVersion = await updaterService.install(requestedVersion);
         if (installedVersion) {
           console.info(`Vora Mind updater: installing version ${installedVersion}.`);
           setStatus("installing");
@@ -307,7 +300,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
     const initialize = async (): Promise<void> => {
       if (isWindows) {
         try {
-          const marker = await invoke<BackendUpdateFailureMarker | null>("get_last_update_failure");
+          const marker = await updaterService.getLastFailureMarker();
           if (
             marker !== null &&
             (typeof marker.version !== "string" ||

@@ -1,5 +1,10 @@
 export type TaskFlowType = "task" | "ai";
 
+export interface UpdaterFailureMarkerDto {
+  version: string;
+  failedAt: number;
+}
+
 export interface TaskFlowItem {
   id: string;
   title: string;
