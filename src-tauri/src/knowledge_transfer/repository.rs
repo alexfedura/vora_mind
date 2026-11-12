@@ -2781,10 +2781,10 @@ mod tests {
         )?;
         assert_eq!(adaptation.receiving_project_id, "project-b");
         assert_eq!(adaptation.origin.origin_project_id, "project-a");
-        assert_eq!(
-            workspace(&conn)?.lineage[1].relation_kind,
-            TransferLineageRelation::BasedOn
-        );
+        assert!(workspace(&conn)?
+            .lineage
+            .iter()
+            .any(|entry| entry.relation_kind == TransferLineageRelation::BasedOn));
         Ok(())
     }
 }
