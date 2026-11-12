@@ -2914,6 +2914,55 @@ mod tests {
         }
     }
 
+    fn insert_workspace_source_claim(conn: &Connection) -> String {
+        conn.execute(
+            "INSERT INTO sources (id, kind, title, created_at, updated_at)
+             VALUES ('source-shared', 'document', 'Shared source', 1, 1)",
+            [],
+        )
+        .expect("insert shared source");
+        conn.execute(
+            "INSERT INTO source_versions
+                (id, source_id, capture_kind, captured_at_us, created_by, created_at_us)
+             VALUES ('source-version-shared', 'source-shared', 'retrieval', 1, 'test', 1)",
+            [],
+        )
+        .expect("insert shared source version");
+        conn.execute(
+            "INSERT INTO source_version_segments
+                (id, source_id, source_version_id, label, location_kind, created_at_us)
+             VALUES ('source-segment-shared', 'source-shared', 'source-version-shared',
+                     'Shared excerpt', 'unknown', 1)",
+            [],
+        )
+        .expect("insert shared source segment");
+        conn.execute(
+            "INSERT INTO knowledge_extractions
+                (id, source_id, source_version_id, source_segment_id, kind,
+                 content, created_by, created_at_us)
+             VALUES ('extraction-shared', 'source-shared', 'source-version-shared',
+                     'source-segment-shared', 'source_claim', 'Shared claim', 'test', 1)",
+            [],
+        )
+        .expect("insert shared source extraction");
+        conn.execute(
+            "INSERT INTO extraction_reviews
+                (id, extraction_id, review_status, reviewed_at_us)
+             VALUES ('extraction-review-shared', 'extraction-shared', 'accepted', 1)",
+            [],
+        )
+        .expect("accept shared source extraction");
+        conn.execute(
+            "INSERT INTO source_claims
+                (id, source_id, source_version_id, extraction_id, statement, created_at_us)
+             VALUES ('claim-shared', 'source-shared', 'source-version-shared',
+                     'extraction-shared', 'A workspace-shared claim.', 1)",
+            [],
+        )
+        .expect("insert workspace-shared claim");
+        "claim-shared".to_string()
+    }
+
     #[test]
     fn project_private_model_reads_and_writes_are_isolated_in_both_directions() {
         let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
@@ -3041,6 +3090,39 @@ mod tests {
             )
             .is_err());
         }
+        assert!(create_evidence(
+            &mut conn,
+            &CreateModelEvidenceReq {
+                project_id: "project-a".to_string(),
+                model_version_id: project_a.version_id.clone(),
+                artifact: ModelArtifactRef::DatasetVersion(
+                    project_b.dataset_version_id.clone()
+                ),
+                polarity: ModelEvidencePolarity::Supports,
+                scope: "Foreign dataset reference".to_string(),
+                quality_rationale: "Negative isolation test.".to_string(),
+                limitations: "None.".to_string(),
+                provenance: serde_json::json!({}),
+                created_by: None,
+            },
+        )
+        .is_err());
+        assert!(create_evaluation(
+            &mut conn,
+            &CreateModelEvaluationReq {
+                project_id: "project-a".to_string(),
+                model_version_id: project_a.version_id.clone(),
+                analysis_run_id: project_b.analysis_run_id.clone(),
+                analysis_run_input_id: project_b.analysis_input_id.clone(),
+                dataset_version_id: project_b.dataset_version_id.clone(),
+                analysis_metric_id: project_b.analysis_metric_id.clone(),
+                role: "test".to_string(),
+                split_group_id: None,
+                limitations: "Foreign run reference.".to_string(),
+                created_by: None,
+            },
+        )
+        .is_err());
 
         let counts_after: (i64, i64, i64, i64) = conn
             .query_row(
@@ -3053,6 +3135,358 @@ mod tests {
             )
             .expect("count model records after rejected writes");
         assert_eq!(counts_after, counts_before);
+    }
+
+    #[test]
+    fn archived_projects_reject_model_lifecycle_and_validation_writes() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        insert_project(&conn, "project-b");
+        let project_a = create_project_model_fixture(&mut conn, "project-a");
+        let model_id: String = conn
+            .query_row(
+                "SELECT model_id FROM model_versions WHERE id = ?1",
+                [&project_a.version_id],
+                |row| row.get(0),
+            )
+            .expect("get project A model");
+
+        transition_version(
+            &mut conn,
+            &TransitionModelVersionReq {
+                version_id: project_a.version_id.clone(),
+                next_status: ModelVersionLifecycleStatus::Review,
+                rationale: "Active-project transition.".to_string(),
+                actor_id: None,
+            },
+        )
+        .expect("active project version transition");
+        transition_model(
+            &mut conn,
+            &TransitionModelReq {
+                model_id: model_id.clone(),
+                next_status: ModelStatus::Active,
+                rationale: "Active-project model transition.".to_string(),
+                actor_id: None,
+            },
+        )
+        .expect("active project model transition");
+
+        let validation_request = CreateModelValidationReq {
+            project_id: "project-a".to_string(),
+            target: ModelValidationTarget::ModelVersion(project_a.version_id.clone()),
+            criteria: vec![serde_json::json!({"criterion": "threshold"})],
+            scope: "Fixture model".to_string(),
+            population_scope: "Project A population".to_string(),
+            evaluation_method: "Compare against threshold".to_string(),
+            evaluator_identity: "test reviewer".to_string(),
+            independence_state: "independent".to_string(),
+            independence_rationale: String::new(),
+            conflict_of_interest: "None.".to_string(),
+            created_by: None,
+        };
+        let completed_validation = create_validation(&mut conn, &validation_request)
+            .expect("create active-project validation");
+        finalize_validation(
+            &mut conn,
+            &FinalizeModelValidationReq {
+                validation_id: completed_validation.id,
+                outcome: ModelValidationOutcome::Pass,
+                rationale: "Active-project finalization.".to_string(),
+                deviations: vec![],
+                analysis_evidence_ids: vec![],
+                model_evidence_ids: vec![project_a.evidence_id.clone()],
+                actor_id: None,
+            },
+        )
+        .expect("active project validation finalization");
+
+        let archived_validation = create_validation(&mut conn, &validation_request)
+            .expect("create second active-project validation");
+        conn.execute(
+            "UPDATE research_projects SET lifecycle_status = 'archived' WHERE id = 'project-a'",
+            [],
+        )
+        .expect("archive project A");
+        let transition_events_before: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM model_version_events WHERE model_version_id = ?1",
+                [&project_a.version_id],
+                |row| row.get(0),
+            )
+            .expect("count version transition events");
+        assert!(transition_version(
+            &mut conn,
+            &TransitionModelVersionReq {
+                version_id: project_a.version_id.clone(),
+                next_status: ModelVersionLifecycleStatus::Released,
+                rationale: "Must be rejected for archived project.".to_string(),
+                actor_id: None,
+            },
+        )
+        .is_err());
+        let transition_events_after: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM model_version_events WHERE model_version_id = ?1",
+                [&project_a.version_id],
+                |row| row.get(0),
+            )
+            .expect("count version transition events after rejection");
+        assert_eq!(transition_events_after, transition_events_before);
+
+        let model_events_before: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM model_status_events WHERE model_id = ?1",
+                [&model_id],
+                |row| row.get(0),
+            )
+            .expect("count model lifecycle events");
+        assert!(transition_model(
+            &mut conn,
+            &TransitionModelReq {
+                model_id: model_id.clone(),
+                next_status: ModelStatus::Deprecated,
+                rationale: "Must be rejected for archived origin project.".to_string(),
+                actor_id: None,
+            },
+        )
+        .is_err());
+        let model_events_after: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM model_status_events WHERE model_id = ?1",
+                [&model_id],
+                |row| row.get(0),
+            )
+            .expect("count model lifecycle events after rejection");
+        assert_eq!(model_events_after, model_events_before);
+
+        let validation_events_before: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM model_validation_events WHERE validation_id = ?1",
+                [&archived_validation.id],
+                |row| row.get(0),
+            )
+            .expect("count validation result events");
+        assert!(finalize_validation(
+            &mut conn,
+            &FinalizeModelValidationReq {
+                validation_id: archived_validation.id.clone(),
+                outcome: ModelValidationOutcome::Pass,
+                rationale: "Must be rejected for archived project.".to_string(),
+                deviations: vec![],
+                analysis_evidence_ids: vec![],
+                model_evidence_ids: vec![project_a.evidence_id.clone()],
+                actor_id: None,
+            },
+        )
+        .is_err());
+        let validation_events_after: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM model_validation_events WHERE validation_id = ?1",
+                [&archived_validation.id],
+                |row| row.get(0),
+            )
+            .expect("count validation result events after rejection");
+        assert_eq!(validation_events_after, validation_events_before);
+
+        let criteria_json =
+            serde_json::json!([{"criterion": "Forged project context."}]).to_string();
+        let criteria_sha256 = sha256(criteria_json.as_bytes());
+        conn.execute(
+            "INSERT INTO model_validations
+                (id, project_id, target_model_version_id, target_finding_version_id,
+                 target_source_claim_id, criteria_json, criteria_sha256, scope,
+                 population_scope, evaluation_method, evaluator_identity,
+                 independence_state, independence_rationale, conflict_of_interest,
+                 created_by, created_at_us)
+             VALUES ('forged-validation', 'project-b', ?1, NULL, NULL, ?2, ?3,
+                     'scope', 'population', 'method', 'reviewer', 'independent',
+                     '', 'None.', NULL, 1)",
+            params![project_a.version_id, criteria_json, criteria_sha256],
+        )
+        .expect("insert mismatched stored validation context");
+        assert!(finalize_validation(
+            &mut conn,
+            &FinalizeModelValidationReq {
+                validation_id: "forged-validation".to_string(),
+                outcome: ModelValidationOutcome::Pass,
+                rationale: "Mismatched stored project must be rejected.".to_string(),
+                deviations: vec![],
+                analysis_evidence_ids: vec![],
+                model_evidence_ids: vec![project_a.evidence_id],
+                actor_id: None,
+            },
+        )
+        .is_err());
+        let forged_events: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM model_validation_events
+                 WHERE validation_id = 'forged-validation'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count forged validation events");
+        assert_eq!(forged_events, 0);
+    }
+
+    #[test]
+    fn validations_preserve_workspace_shared_source_claim_provenance() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        insert_project(&conn, "project-b");
+        let claim_id = insert_workspace_source_claim(&conn);
+        let base_request = |project_id: &str| CreateModelValidationReq {
+            project_id: project_id.to_string(),
+            target: ModelValidationTarget::SourceClaim(claim_id.clone()),
+            criteria: vec![serde_json::json!({"criterion": "Source attribution retained."})],
+            scope: "Shared source claim".to_string(),
+            population_scope: "Workspace source context".to_string(),
+            evaluation_method: "Compare against source".to_string(),
+            evaluator_identity: "test reviewer".to_string(),
+            independence_state: "independent".to_string(),
+            independence_rationale: String::new(),
+            conflict_of_interest: "None.".to_string(),
+            created_by: None,
+        };
+
+        assert!(create_validation(
+            &mut conn,
+            &CreateModelValidationReq {
+                target: ModelValidationTarget::SourceClaim("forged-claim-id".to_string()),
+                ..base_request("project-a")
+            },
+        )
+        .is_err());
+
+        for project_id in ["project-a", "project-b"] {
+            let validation = create_validation(&mut conn, &base_request(project_id))
+                .expect("create validation for workspace-shared claim");
+            let evidence_id = format!("source-claim-evidence-{project_id}");
+            conn.execute(
+                "INSERT INTO analysis_evidence
+                    (id, project_id, target_source_claim_id, artifact_source_claim_id,
+                     polarity, scope, quality_rationale, limitations, provenance_json,
+                     created_at_us)
+                 VALUES (?1, ?2, ?3, ?3, 'supports', 'source scope',
+                         'Source provenance retained.', 'Test fixture.', '{}', 1)",
+                params![evidence_id, project_id, claim_id],
+            )
+            .expect("insert source-claim analysis evidence");
+            let finalized = finalize_validation(
+                &mut conn,
+                &FinalizeModelValidationReq {
+                    validation_id: validation.id,
+                    outcome: ModelValidationOutcome::Pass,
+                    rationale: "Workspace-shared source claim validated.".to_string(),
+                    deviations: vec![],
+                    analysis_evidence_ids: vec![evidence_id],
+                    model_evidence_ids: vec![],
+                    actor_id: None,
+                },
+            )
+            .expect("finalize validation with shared source provenance");
+            assert_eq!(
+                finalized.target,
+                ModelValidationTarget::SourceClaim(claim_id.clone())
+            );
+        }
+    }
+
+    #[test]
+    fn replications_reject_foreign_project_runs_datasets_and_evidence_references() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        insert_project(&conn, "project-b");
+        let project_a = create_project_model_fixture(&mut conn, "project-a");
+        let project_b = create_project_model_fixture(&mut conn, "project-b");
+        let request = |original_experiment_run_id: String,
+                       dataset_version_id: String,
+                       analysis_evidence_ids: Vec<String>| {
+            let model_evidence_ids = if analysis_evidence_ids.is_empty() {
+                vec![project_a.evidence_id.clone()]
+            } else {
+                vec![]
+            };
+            CreateModelReplicationReq {
+                project_id: "project-a".to_string(),
+                model_version_id: project_a.version_id.clone(),
+                original_experiment_run_id,
+                replication_kind: "direct".to_string(),
+                independent_team_operator: "test team".to_string(),
+                protocol_context: "Reference ownership test.".to_string(),
+                dataset_context: serde_json::json!({}),
+                datasets: vec![ModelReplicationDatasetReq {
+                    dataset_version_id,
+                    role: "test".to_string(),
+                    split_group_id: None,
+                }],
+                outcome: "supports".to_string(),
+                result_summary: "Rejected reference.".to_string(),
+                deviations: vec![],
+                provenance: serde_json::json!({}),
+                analysis_evidence_ids,
+                model_evidence_ids,
+                created_by: None,
+            }
+        };
+        let hypothesis_a = insert_hypothesis(&conn, "project-a", "replication-a");
+        let foreign_dataset_evidence = "evidence-foreign-dataset";
+        conn.execute(
+            "INSERT INTO analysis_evidence
+                (id, project_id, target_hypothesis_version_id, artifact_dataset_version_id,
+                 polarity, scope, quality_rationale, limitations, provenance_json, created_at_us)
+             VALUES (?1, 'project-a', ?2, ?3, 'supports', 'test scope',
+                     'Test rationale.', 'Test limitation.', '{}', 1)",
+            params![
+                foreign_dataset_evidence,
+                hypothesis_a,
+                project_b.dataset_version_id
+            ],
+        )
+        .expect("insert legacy evidence with foreign dataset reference");
+        let replications_before: i64 = conn
+            .query_row("SELECT COUNT(*) FROM model_replications", [], |row| {
+                row.get(0)
+            })
+            .expect("count replications");
+
+        assert!(create_replication(
+            &mut conn,
+            &request(
+                project_b.experiment_run_id.clone(),
+                project_a.dataset_version_id.clone(),
+                vec![],
+            ),
+        )
+        .is_err());
+        assert!(create_replication(
+            &mut conn,
+            &request(
+                project_a.experiment_run_id.clone(),
+                project_b.dataset_version_id.clone(),
+                vec![],
+            ),
+        )
+        .is_err());
+        assert!(create_replication(
+            &mut conn,
+            &request(
+                project_a.experiment_run_id.clone(),
+                project_a.dataset_version_id.clone(),
+                vec![foreign_dataset_evidence.to_string()],
+            ),
+        )
+        .is_err());
+
+        let replications_after: i64 = conn
+            .query_row("SELECT COUNT(*) FROM model_replications", [], |row| {
+                row.get(0)
+            })
+            .expect("count replications after rejection");
+        assert_eq!(replications_after, replications_before);
     }
 
     #[test]
