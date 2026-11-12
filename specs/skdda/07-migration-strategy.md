@@ -151,3 +151,18 @@ Do not require a one-time clean database or drop/recreate scientific tables. Exi
 ## 9. Required migration acceptance
 
 No migration release is accepted unless fresh and supported legacy fixtures converge; all original protected rows/IDs are retained; unmappable records are reported; `foreign_key_check` is clean or explicitly dispositioned; repeat startup is idempotent; failure restores the original database; backup/restore round-trip preserves asset manifest and relation traversal; and the app can read/write the newly migrated workspace.
+
+## Phase 8 implementation status — 2026-11-12
+
+The runtime currently composes the domain initializers in
+`mind::portable_db::initialize_workspace_schema`; Source, Research,
+Experiment, Analysis, Model, Learning, and Knowledge Transfer retain separate
+domain-owned migration code. The required shared migration coordinator and
+supported-from-version matrix have not been implemented. Do not interpret
+successful fresh-schema initialization as proof of all migration guarantees.
+
+An isolated fresh database passed repeated full schema initialization and
+SQLite integrity/foreign-key checks. The full legacy matrix, interruption and
+rollback at every boundary, and external asset manifest recovery remain
+unverified. Exact Phase 8 results are maintained in the
+[integration status report](../../docs/audit/PHASE_8_INTEGRATION_STATUS.md).

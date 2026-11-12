@@ -119,3 +119,9 @@ The report must separate:
 
 No phase-wide completion claim is permitted unless all requested workflow
 edges and integrity conditions have executable evidence.
+
+## Execution record
+
+Current verified results and incomplete acceptance criteria are recorded in
+the [Phase 8 integration status report](../../docs/audit/PHASE_8_INTEGRATION_STATUS.md).
+The Phase 8 work remains partial until the report's follow-up list is resolved.

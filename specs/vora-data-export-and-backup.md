@@ -91,3 +91,14 @@ Make the three user-facing export/import formats distinct and predictable:
   clear destructive confirmation.
 - Run `pnpm tsc --noEmit`, `pnpm build`, and
   `cargo check --manifest-path src-tauri/Cargo.toml`, plus focused Rust tests.
+
+## Phase 8 verified boundaries
+
+The fresh combined workspace schema passed `PRAGMA integrity_check` and
+`PRAGMA foreign_key_check` in an isolated test database after two initializer
+passes. This is not a full backup/restore certification. A `.vora` file is a
+SQLite database backup; companion settings and file-backed media, Trace, and
+dataset assets have separate recovery behavior. Do not claim those external
+assets are included or available after restore without an asset-manifest
+round-trip test. See the [Phase 8 integration status](../docs/audit/PHASE_8_INTEGRATION_STATUS.md)
+for verification results and remaining limitations.

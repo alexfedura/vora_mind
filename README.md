@@ -29,3 +29,21 @@ Vora Trace is available as a workspace in the left sidebar. Its graph, decision 
 ## Recommended IDE Setup
 
 - [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+
+## Scientific workspace verification
+
+From the repository root, run the frontend type-check/build and Rust checks:
+
+```powershell
+pnpm tsc --noEmit
+pnpm build
+cargo check --manifest-path src-tauri/Cargo.toml -j 1
+cargo test --manifest-path src-tauri/Cargo.toml --lib -j 1
+```
+
+The Rust library suite currently has six reproducible Market/canvas test
+failures; see the [Phase 8 integration status](docs/audit/PHASE_8_INTEGRATION_STATUS.md)
+for exact results and the remaining unverified workflows. There is currently
+no frontend test-runner script in `package.json`. Run the migration and
+integrity tests only against isolated test databases; do not point them at a
+user workspace.

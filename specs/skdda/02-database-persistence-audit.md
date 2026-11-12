@@ -192,3 +192,20 @@ Do not treat board snapshots, Trace JSON, chart snapshots, or a duplicate scient
 Primary evidence: `src-tauri/src/lib.rs`, `mind/portable_db.rs`, `mind/canvas_db.rs`, `mind/questions.rs`, `mind/hypothesis.rs`, `source/db.rs`, `schema_source.sql`, `market/db.rs`, `schema_market.sql`, `forge/index.rs`, `bin/vora_worker.rs`, and [RECON.md](../../docs/audit/RECON.md).
 
 **UNVERIFIED:** exact real-world DB count/location for installed workspaces; file integrity; all connection entrypoints beyond inspected application and CLI paths; backup of external files; and every existing workspace schema shape. No live database was inspected or modified.
+
+## Phase 8 verified addendum — 2026-11-12
+
+The preceding inventory is the Phase 0 baseline, not a current table-by-table
+inventory of the later scientific modules. Current runtime initialization was
+rechecked at `mind::portable_db::initialize_workspace_schema`: it includes
+Source, Research, Experiment, Analysis, Model, Learning, and Knowledge
+Transfer in a fixed sequence alongside the pre-existing subsystems. Each
+scientific module retains its own migration code; this does not establish a
+single atomic all-domain migration.
+
+An isolated fresh-workspace test now verifies repeated initialization,
+`PRAGMA foreign_keys = 1`, `PRAGMA integrity_check = 'ok'`, and an empty
+`PRAGMA foreign_key_check`. It does not certify older deployed schemas,
+interrupted startup, user data, or external asset recovery. See the
+[Phase 8 integration status](../../docs/audit/PHASE_8_INTEGRATION_STATUS.md)
+for the commands, full test results, and remaining gaps.

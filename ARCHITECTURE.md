@@ -117,3 +117,24 @@ The **Forge Engine** provides structured, semantic code reasoning and byte-level
 | `Ctrl + Z` / `Ctrl + Y` | Multi-Level Canvas Undo / Redo | Canvas |
 
 ```
+
+## Scientific domains and verified integration status
+
+The canonical scientific records are persisted by the Rust domain modules and
+the main workspace SQLite database; the canvas and Trace systems remain
+separate visualization/navigation and decision-history surfaces. The current
+workspace schema coordinator initializes Source, Research, Experiment,
+Analysis, Model, Learning, Knowledge Transfer, and existing workspace
+subsystems on the same connection. Domain-specific schema and migration code
+remains owned by its module; there is not a single central scientific migration
+ledger.
+
+The Research workspace composes Research, Experiment, Analysis, Model,
+Learning, and Knowledge Transfer panels. Source acquisition remains available
+through its source workflow. These screens do not, by themselves, certify the
+complete cross-domain workflows or runtime integrity.
+
+See the evidence-based [Phase 8 integration status](docs/audit/PHASE_8_INTEGRATION_STATUS.md)
+for the verified request-path boundaries, test results, migration and asset
+limitations, and incomplete acceptance work. Do not treat the benchmark
+figures earlier in this file as Phase 8 performance measurements.
