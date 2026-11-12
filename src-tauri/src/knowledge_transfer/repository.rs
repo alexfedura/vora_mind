@@ -2286,17 +2286,12 @@ mod tests {
                 "a".repeat(64)
             ],
         )?;
-        for (index, status) in ["draft", "review", "accepted"].iter().enumerate() {
+        for (occurred_at_us, status) in [(1_i64, "draft"), (2, "review"), (3, "accepted")] {
             conn.execute(
                 "INSERT INTO analysis_finding_events
                     (id, finding_version_id, status, rationale, actor_id, occurred_at_us)
                  VALUES (?1, ?2, ?3, 'Lifecycle event recorded', NULL, ?4)",
-                params![
-                    format!("finding-event-{key}-{index}"),
-                    finding_version_id,
-                    status,
-                    index as i64 + 1
-                ],
+                params![format!("finding-event-{key}-{occurred_at_us}"), finding_version_id, status, occurred_at_us],
             )?;
         }
         Ok(finding_version_id)
