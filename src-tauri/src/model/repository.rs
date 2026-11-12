@@ -2198,17 +2198,21 @@ fn validate_replication_request(
             "Replication model version must belong to the requesting project."
         ));
     }
-    let original_status: Option<String> = conn
+    let original: Option<(String, String)> = conn
         .query_row(
-            "SELECT lifecycle_status FROM experiment_runs
-             WHERE id = ?1",
+            "SELECT project_id, lifecycle_status FROM experiment_runs WHERE id = ?1",
             [&request.original_experiment_run_id],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
-    let Some(status) = original_status else {
+    let Some((original_project, status)) = original else {
         return Err(anyhow!("Original experiment run was not found."));
     };
+    if original_project != request.project_id {
+        return Err(anyhow!(
+            "Original experiment run must belong to the requesting project."
+        ));
+    }
     if !matches!(status.as_str(), "completed" | "inconclusive") {
         return Err(anyhow!(
             "Replication requires a completed or inconclusive original experiment run."
@@ -2216,13 +2220,25 @@ fn validate_replication_request(
     }
     for dataset in &request.datasets {
         validate_dataset_role(&dataset.role)?;
-        let sealed: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM experiment_dataset_versions
-             WHERE id = ?1 AND lifecycle_status = 'sealed')",
+        let dataset_context: Option<(String, String)> = conn
+            .query_row(
+                "SELECT d.project_id, v.lifecycle_status
+                 FROM experiment_dataset_versions v
+                 JOIN experiment_datasets d ON d.id = v.dataset_id
+                 WHERE v.id = ?1",
             [&dataset.dataset_version_id],
-            |row| row.get(0),
-        )?;
-        if !sealed {
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let Some((dataset_project, lifecycle_status)) = dataset_context else {
+            return Err(anyhow!("Replication dataset version was not found."));
+        };
+        if dataset_project != request.project_id {
+            return Err(anyhow!(
+                "Replication datasets must belong to the requesting project."
+            ));
+        }
+        if lifecycle_status != "sealed" {
             return Err(anyhow!("Replication datasets must pin sealed versions."));
         }
         let split_group: Option<String> = conn
@@ -2246,10 +2262,15 @@ fn validate_replication_request(
             Option<String>,
             Option<String>,
             Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
         )> = conn
             .query_row(
-                "SELECT project_id, artifact_experiment_run_id, artifact_dataset_version_id,
-                        artifact_analysis_output_id, artifact_observation_id
+                "SELECT project_id, target_source_claim_id, target_hypothesis_version_id,
+                        target_finding_version_id, artifact_experiment_run_id,
+                        artifact_dataset_version_id, artifact_analysis_output_id,
+                        artifact_observation_id, artifact_source_claim_id
                  FROM analysis_evidence WHERE id = ?1",
                 [evidence_id],
                 |row| {
@@ -2259,15 +2280,119 @@ fn validate_replication_request(
                         row.get(2)?,
                         row.get(3)?,
                         row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                        row.get(7)?,
                     ))
                 },
             )
             .optional()?;
-        let Some((project, artifact_run, artifact_dataset, artifact_output, observation)) =
-            evidence
+        let Some((
+            project,
+            target_claim,
+            target_hypothesis,
+            target_finding,
+            artifact_run,
+            artifact_dataset,
+            artifact_output,
+            observation,
+        )) = evidence
         else {
             return Err(anyhow!("Replication Analysis evidence was not found."));
         };
+        if let Some(claim_id) = target_claim.as_deref() {
+            ensure_workspace_source_claim(conn, claim_id)?;
+        }
+        if let Some(hypothesis_version_id) = target_hypothesis.as_deref() {
+            let hypothesis_owner: Option<(Option<String>, String)> = conn
+                .query_row(
+                    "SELECT h.project_id, h.ownership_state
+                     FROM hypothesis_definition_versions v
+                     JOIN research_hypotheses h ON h.id = v.hypothesis_id
+                     WHERE v.id = ?1",
+                    [hypothesis_version_id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()?;
+            let Some((hypothesis_project, ownership_state)) = hypothesis_owner else {
+                return Err(anyhow!("Replication evidence hypothesis was not found."));
+            };
+            if ownership_state == "project"
+                && hypothesis_project.as_deref() != Some(request.project_id.as_str())
+            {
+                return Err(anyhow!(
+                    "Replication evidence hypothesis must belong to the requesting project."
+                ));
+            }
+        }
+        if let Some(finding_id) = target_finding.as_deref() {
+            ensure_project_owns(
+                conn,
+                "SELECT EXISTS(
+                    SELECT 1 FROM analysis_finding_versions v
+                    JOIN analysis_findings f ON f.id = v.finding_id
+                    WHERE v.id = ?1 AND f.project_id = ?2
+                 )",
+                finding_id,
+                &request.project_id,
+                "Replication evidence finding must belong to the requesting project.",
+            )?;
+        }
+        if let Some(run_id) = artifact_run.as_deref() {
+            ensure_project_owns(
+                conn,
+                "SELECT EXISTS(
+                    SELECT 1 FROM experiment_runs WHERE id = ?1 AND project_id = ?2
+                 )",
+                run_id,
+                &request.project_id,
+                "Replication evidence run must belong to the requesting project.",
+            )?;
+        }
+        if let Some(dataset_id) = artifact_dataset.as_deref() {
+            ensure_project_owns(
+                conn,
+                "SELECT EXISTS(
+                    SELECT 1 FROM experiment_dataset_versions v
+                    JOIN experiment_datasets d ON d.id = v.dataset_id
+                    WHERE v.id = ?1 AND d.project_id = ?2
+                 )",
+                dataset_id,
+                &request.project_id,
+                "Replication evidence dataset must belong to the requesting project.",
+            )?;
+        }
+        if let Some(output_id) = artifact_output.as_deref() {
+            ensure_project_owns(
+                conn,
+                "SELECT EXISTS(
+                    SELECT 1 FROM analysis_outputs o
+                    JOIN analysis_runs r ON r.id = o.run_id
+                    WHERE o.id = ?1 AND r.project_id = ?2
+                 )",
+                output_id,
+                &request.project_id,
+                "Replication evidence output must belong to the requesting project.",
+            )?;
+        }
+        if let Some(observation_id) = observation.as_deref() {
+            ensure_project_owns(
+                conn,
+                "SELECT EXISTS(
+                    SELECT 1 FROM research_observations
+                    WHERE id = ?1 AND project_id = ?2
+                 )",
+                observation_id,
+                &request.project_id,
+                "Replication evidence observation must belong to the requesting project.",
+            )?;
+        }
+        if let Some(claim_id) = target_claim.as_deref() {
+            ensure_workspace_source_claim(conn, claim_id)?;
+        }
+        if let Some(claim_id) = evidence_source_claim_id(&evidence) {
+            ensure_workspace_source_claim(conn, claim_id)?;
+        }
         let dataset_pinned = artifact_dataset.as_ref().is_some_and(|dataset_id| {
             request
                 .datasets
