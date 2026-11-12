@@ -101,6 +101,41 @@ fn ensure_project_writable(conn: &Connection, project_id: &str) -> Result<()> {
     Ok(())
 }
 
+fn ensure_model_identity_writable(
+    conn: &Connection,
+    model_id: &str,
+    project_id: &str,
+) -> Result<()> {
+    let origin_project: Option<String> = conn.query_row(
+        "SELECT origin_project_id FROM scientific_models WHERE id = ?1",
+        [model_id],
+        |row| row.get(0),
+    )?;
+    if origin_project
+        .as_deref()
+        .is_some_and(|origin_project| origin_project != project_id)
+    {
+        return Err(anyhow!(
+            "A model identity can only be versioned in its origin project; use a distinct receiving-project identity for a transferred adaptation."
+        ));
+    }
+
+    let has_foreign_versions: bool = conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM model_versions
+            WHERE model_id = ?1 AND created_in_project_id <> ?2
+         )",
+        params![model_id, project_id],
+        |row| row.get(0),
+    )?;
+    if has_foreign_versions {
+        return Err(anyhow!(
+            "A model identity cannot have versions created in multiple projects."
+        ));
+    }
+    Ok(())
+}
+
 pub fn initialize_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "PRAGMA foreign_keys = ON;
@@ -602,6 +637,17 @@ pub fn create_model_version(
     for use_record in &request.dataset_uses {
         validate_dataset_role(&use_record.role)?;
         required(&use_record.rationale, "Dataset-use rationale")?;
+        ensure_project_owns(
+            &tx,
+            "SELECT EXISTS(
+                SELECT 1 FROM experiment_dataset_versions v
+                JOIN experiment_datasets d ON d.id = v.dataset_id
+                WHERE v.id = ?1 AND d.project_id = ?2
+             )",
+            &use_record.dataset_version_id,
+            &request.project_id,
+            "Model dataset references must belong to the requesting project.",
+        )?;
         let sealed: bool = tx.query_row(
             "SELECT EXISTS(SELECT 1 FROM experiment_dataset_versions
              WHERE id = ?1 AND lifecycle_status = 'sealed')",
@@ -640,6 +686,17 @@ pub fn create_model_version(
         if !target_exists {
             return Err(anyhow!("Model evidence reference was not found."));
         }
+        ensure_project_owns(
+            &tx,
+            "SELECT EXISTS(
+                SELECT 1 FROM model_evidence e
+                JOIN model_versions v ON v.id = e.model_version_id
+                WHERE e.id = ?1 AND v.created_in_project_id = ?2
+             )",
+            evidence_id,
+            &request.project_id,
+            "Model evidence references must belong to the requesting project.",
+        )?;
         tx.execute(
             "INSERT INTO model_contributions
                 (id, model_version_id, relation_kind, evidence_id, rationale, created_by, created_at_us)
@@ -667,6 +724,7 @@ fn validate_version_request(conn: &Connection, request: &CreateModelVersionReq) 
         &request.model_id,
         "Model identity was not found.",
     )?;
+    ensure_model_identity_writable(conn, &request.model_id, &request.project_id)?;
     for (value, label) in [
         (&request.change_rationale, "Change rationale"),
         (&request.expected_implications, "Expected implications"),
@@ -714,16 +772,23 @@ fn validate_version_request(conn: &Connection, request: &CreateModelVersionReq) 
     }
     for parent in &request.parents {
         required(&parent.rationale, "Parent-version rationale")?;
-        let parent_model: Option<String> = conn
+        let parent: Option<(String, String)> = conn
             .query_row(
-                "SELECT model_id FROM model_versions WHERE id = ?1",
+                "SELECT model_id, created_in_project_id FROM model_versions WHERE id = ?1",
                 [&parent.version_id],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
-        if parent_model.as_deref() != Some(request.model_id.as_str()) {
+        let parent_model_id = parent.as_ref().map(|(model_id, _)| model_id.as_str());
+        if parent_model_id != Some(request.model_id.as_str()) {
             return Err(anyhow!(
                 "Parent versions must belong to the same model identity."
+            ));
+        }
+        let parent_project_id = parent.as_ref().map(|(_, project_id)| project_id.as_str());
+        if parent_project_id != Some(request.project_id.as_str()) {
+            return Err(anyhow!(
+                "Parent versions must belong to the requesting project."
             ));
         }
     }
@@ -783,17 +848,27 @@ fn validate_version_request(conn: &Connection, request: &CreateModelVersionReq) 
             }
             ModelImpactTarget::HypothesisVersion {
                 hypothesis_version_id,
-            } => exists(
+            } => ensure_project_owns(
                 conn,
-                "SELECT EXISTS(SELECT 1 FROM hypothesis_definition_versions WHERE id = ?1)",
+                "SELECT EXISTS(
+                    SELECT 1 FROM hypothesis_definition_versions v
+                    JOIN research_hypotheses h ON h.id = v.hypothesis_id
+                    WHERE v.id = ?1 AND h.project_id = ?2
+                 )",
                 hypothesis_version_id,
-                "Affected hypothesis version was not found.",
+                &request.project_id,
+                "Affected hypothesis version must belong to the requesting project.",
             )?,
-            ModelImpactTarget::FindingVersion { finding_version_id } => exists(
+            ModelImpactTarget::FindingVersion { finding_version_id } => ensure_project_owns(
                 conn,
-                "SELECT EXISTS(SELECT 1 FROM analysis_finding_versions WHERE id = ?1)",
+                "SELECT EXISTS(
+                    SELECT 1 FROM analysis_finding_versions v
+                    JOIN analysis_findings f ON f.id = v.finding_id
+                    WHERE v.id = ?1 AND f.project_id = ?2
+                 )",
                 finding_version_id,
-                "Affected finding version was not found.",
+                &request.project_id,
+                "Affected finding version must belong to the requesting project.",
             )?,
         }
     }
@@ -827,8 +902,56 @@ fn validate_version_request(conn: &Connection, request: &CreateModelVersionReq) 
     for relation in request.hypotheses.iter().chain(request.findings.iter()) {
         required(&relation.rationale, "Model relation rationale")?;
     }
+    for relation in &request.hypotheses {
+        ensure_project_owns(
+            conn,
+            "SELECT EXISTS(
+                SELECT 1 FROM hypothesis_definition_versions v
+                JOIN research_hypotheses h ON h.id = v.hypothesis_id
+                WHERE v.id = ?1 AND h.project_id = ?2
+             )",
+            &relation.target_id,
+            &request.project_id,
+            "Hypothesis relation must target a version in the requesting project.",
+        )?;
+    }
+    for relation in &request.findings {
+        ensure_project_owns(
+            conn,
+            "SELECT EXISTS(
+                SELECT 1 FROM analysis_finding_versions v
+                JOIN analysis_findings f ON f.id = v.finding_id
+                WHERE v.id = ?1 AND f.project_id = ?2
+             )",
+            &relation.target_id,
+            &request.project_id,
+            "Finding relation must target a version in the requesting project.",
+        )?;
+    }
     for relation in &request.experiments {
         required(&relation.rationale, "Experiment relation rationale")?;
+        ensure_project_owns(
+            conn,
+            "SELECT EXISTS(
+                SELECT 1 FROM research_experiment_design_versions v
+                JOIN research_experiment_designs d ON d.id = v.design_id
+                WHERE v.id = ?1 AND d.project_id = ?2
+             )",
+            &relation.design_version_id,
+            &request.project_id,
+            "Experiment design must belong to the requesting project.",
+        )?;
+        if let Some(run_id) = &relation.experiment_run_id {
+            ensure_project_owns(
+                conn,
+                "SELECT EXISTS(
+                    SELECT 1 FROM experiment_runs WHERE id = ?1 AND project_id = ?2
+                 )",
+                run_id,
+                &request.project_id,
+                "Experiment run must belong to the requesting project.",
+            )?;
+        }
     }
     Ok(())
 }
@@ -2612,6 +2735,40 @@ mod tests {
         version_id
     }
 
+    fn insert_finding_version(
+        conn: &Connection,
+        project_id: &str,
+        suffix: &str,
+        hypothesis_version_id: &str,
+    ) -> String {
+        let finding_id = format!("finding-{suffix}");
+        let version_id = format!("finding-version-{suffix}");
+        conn.execute(
+            "INSERT INTO analysis_findings (id, project_id, created_by, created_at_us)
+             VALUES (?1, ?2, 'test', 1)",
+            params![finding_id, project_id],
+        )
+        .expect("insert finding");
+        conn.execute(
+            "INSERT INTO analysis_finding_versions
+                (id, finding_id, version_no, parent_version_id, change_rationale,
+                 title, statement, target_source_claim_id, target_hypothesis_version_id,
+                 scope, applicability, uncertainty, limitations, conclusion_kind,
+                 content_sha256, created_by, created_at_us)
+             VALUES (?1, ?2, 1, NULL, NULL, 'Finding', 'Finding statement', NULL, ?3,
+                     'scope', 'applicability', 'uncertainty', 'limitations', 'result',
+                     ?4, 'test', 1)",
+            params![
+                version_id,
+                finding_id,
+                hypothesis_version_id,
+                "6".repeat(64)
+            ],
+        )
+        .expect("insert finding version");
+        version_id
+    }
+
     fn model_request(origin_project_id: &str) -> CreateModelReq {
         CreateModelReq {
             display_name: "Baseline model".to_string(),
@@ -2864,8 +3021,10 @@ mod tests {
     }
 
     struct ProjectModelFixture {
+        model_id: String,
         version_id: String,
         dataset_version_id: String,
+        experiment_design_version_id: String,
         experiment_run_id: String,
         analysis_run_id: String,
         analysis_input_id: String,
@@ -2881,7 +3040,7 @@ mod tests {
         let version = create_model_version(conn, &version_request(project_id, &model.id))
             .expect("create project model version");
         let dataset_version_id = insert_sealed_dataset(conn, project_id);
-        let (_, experiment_run_id) = insert_experiment(conn, project_id);
+        let (experiment_design_version_id, experiment_run_id) = insert_experiment(conn, project_id);
         let (analysis_run_id, analysis_input_id, analysis_metric_id) =
             insert_analysis_run(conn, project_id, &dataset_version_id);
         let evidence = create_evidence(
@@ -2900,8 +3059,10 @@ mod tests {
         )
         .expect("create project model evidence");
         ProjectModelFixture {
+            model_id: model.id,
             version_id: version.id,
             dataset_version_id,
+            experiment_design_version_id,
             experiment_run_id,
             analysis_run_id,
             analysis_input_id,
@@ -3010,6 +3171,13 @@ mod tests {
             ("project-a", &project_b, &project_a),
             ("project-b", &project_a, &project_b),
         ] {
+            let mut foreign_model_version = version_request(project_id, &target.model_id);
+            foreign_model_version.change_class = ModelChangeClass::Extension;
+            foreign_model_version.parents = vec![ModelParentReq {
+                version_id: target.version_id.clone(),
+                rationale: "Negative cross-project versioning test.".to_string(),
+            }];
+            assert!(create_model_version(&mut conn, &foreign_model_version).is_err());
             assert!(create_evidence(
                 &mut conn,
                 &CreateModelEvidenceReq {
@@ -3127,6 +3295,117 @@ mod tests {
             )
             .expect("count model records after rejected writes");
         assert_eq!(counts_after, counts_before);
+    }
+
+    #[test]
+    fn model_versions_reject_foreign_project_contribution_and_impact_targets() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        insert_project(&conn, "project-b");
+        let project_a = create_project_model_fixture(&mut conn, "project-a");
+        let project_b = create_project_model_fixture(&mut conn, "project-b");
+        let hypothesis_a = insert_hypothesis(&conn, "project-a", "ownership-a");
+        let hypothesis_b = insert_hypothesis(&conn, "project-b", "ownership-b");
+        let finding_a = insert_finding_version(&conn, "project-a", "ownership-a", &hypothesis_a);
+        let finding_b = insert_finding_version(&conn, "project-b", "ownership-b", &hypothesis_b);
+        let versions_before: i64 = conn
+            .query_row("SELECT COUNT(*) FROM model_versions", [], |row| row.get(0))
+            .expect("count model versions before rejected writes");
+
+        for (project_id, local, foreign, foreign_hypothesis, foreign_finding) in [
+            (
+                "project-a",
+                &project_a,
+                &project_b,
+                &hypothesis_b,
+                &finding_b,
+            ),
+            (
+                "project-b",
+                &project_b,
+                &project_a,
+                &hypothesis_a,
+                &finding_a,
+            ),
+        ] {
+            let new_version = || {
+                let mut request = version_request(project_id, &local.model_id);
+                request.change_class = ModelChangeClass::Extension;
+                request.parents = vec![ModelParentReq {
+                    version_id: local.version_id.clone(),
+                    rationale: "Same-project predecessor.".to_string(),
+                }];
+                request
+            };
+
+            let mut request = new_version();
+            request.hypotheses.push(ModelRelationReq {
+                target_id: foreign_hypothesis.clone(),
+                relation_kind: ModelRelationKind::ContributesTo,
+                rationale: "Foreign hypothesis must be rejected.".to_string(),
+            });
+            assert!(create_model_version(&mut conn, &request).is_err());
+
+            let mut request = new_version();
+            request.findings.push(ModelRelationReq {
+                target_id: foreign_finding.clone(),
+                relation_kind: ModelRelationKind::Qualifies,
+                rationale: "Foreign finding must be rejected.".to_string(),
+            });
+            assert!(create_model_version(&mut conn, &request).is_err());
+
+            let mut request = new_version();
+            request.impacts = vec![ModelImpactReq {
+                target: ModelImpactTarget::HypothesisVersion {
+                    hypothesis_version_id: foreign_hypothesis.clone(),
+                },
+                impact_kind: ModelImpactKind::Added,
+                previous_statement: None,
+                current_statement: Some("Foreign hypothesis impact.".to_string()),
+                rationale: "Foreign project impact must be rejected.".to_string(),
+            }];
+            assert!(create_model_version(&mut conn, &request).is_err());
+
+            let mut request = new_version();
+            request.impacts = vec![ModelImpactReq {
+                target: ModelImpactTarget::FindingVersion {
+                    finding_version_id: foreign_finding.clone(),
+                },
+                impact_kind: ModelImpactKind::Added,
+                previous_statement: None,
+                current_statement: Some("Foreign finding impact.".to_string()),
+                rationale: "Foreign project impact must be rejected.".to_string(),
+            }];
+            assert!(create_model_version(&mut conn, &request).is_err());
+
+            let mut request = new_version();
+            request.experiments.push(ModelExperimentRelationReq {
+                design_version_id: foreign.experiment_design_version_id.clone(),
+                experiment_run_id: Some(foreign.experiment_run_id.clone()),
+                relation_kind: "tested_in".to_string(),
+                rationale: "Foreign experiment must be rejected.".to_string(),
+            });
+            assert!(create_model_version(&mut conn, &request).is_err());
+
+            let mut request = new_version();
+            request.dataset_uses.push(ModelDatasetUseReq {
+                dataset_version_id: foreign.dataset_version_id.clone(),
+                role: "test".to_string(),
+                split_group_id: None,
+                rationale: "Foreign dataset must be rejected.".to_string(),
+            });
+            assert!(create_model_version(&mut conn, &request).is_err());
+
+            let mut request = new_version();
+            request.evidence_ids.push(foreign.evidence_id.clone());
+            assert!(create_model_version(&mut conn, &request).is_err());
+        }
+
+        let versions_after: i64 = conn
+            .query_row("SELECT COUNT(*) FROM model_versions", [], |row| row.get(0))
+            .expect("count model versions after rejected writes");
+        assert_eq!(versions_after, versions_before);
     }
 
     #[test]
@@ -3484,7 +3763,14 @@ mod tests {
     #[test]
     fn model_versions_evaluations_validation_and_replications_survive_reopen() {
         let path = new_database_path();
-        let (model_id, initial_version_id, successor_version_id, evidence_id) = {
+        let (
+            model_a_id,
+            model_b_id,
+            initial_version_id,
+            project_b_initial_version_id,
+            successor_version_id,
+            evidence_id,
+        ) = {
             let mut conn = Connection::open(&path).expect("open workspace");
             initialize(&conn);
             insert_project(&conn, "project-a");
@@ -3541,16 +3827,21 @@ mod tests {
             )
             .expect("release baseline");
 
+            let model_b = create_model(&mut conn, &model_request("project-b"))
+                .expect("create project B model");
+            let project_b_initial =
+                create_model_version(&mut conn, &version_request("project-b", &model_b.id))
+                    .expect("create project B baseline");
             let dataset_version_id = insert_sealed_dataset(&conn, "project-b");
             let (design_version_id, experiment_run_id) = insert_experiment(&conn, "project-b");
             let (analysis_run_id, analysis_input_id, analysis_metric_id) =
                 insert_analysis_run(&conn, "project-b", &dataset_version_id);
-            let mut successor_request = version_request("project-b", &model.id);
+            let mut successor_request = version_request("project-b", &model_b.id);
             successor_request.change_class = ModelChangeClass::Replacement;
             successor_request.change_rationale =
                 "Replace the baseline following new evidence.".to_string();
             successor_request.parents = vec![ModelParentReq {
-                version_id: initial.id.clone(),
+                version_id: project_b_initial.id.clone(),
                 rationale: "Predecessor retained for comparison.".to_string(),
             }];
             successor_request.impacts = vec![ModelImpactReq {
@@ -3582,7 +3873,7 @@ mod tests {
                 rationale: "Exact sealed evaluation dataset.".to_string(),
             }];
             let successor = create_model_version(&mut conn, &successor_request)
-                .expect("create replacement in another project");
+                .expect("create replacement in project B");
             assert_eq!(successor.version_no, 2);
             assert_eq!(successor.created_in_project_id, "project-b");
             assert_eq!(
@@ -3756,7 +4047,7 @@ mod tests {
                 2
             );
 
-            let mut later_request = version_request("project-b", &model.id);
+            let mut later_request = version_request("project-b", &model_b.id);
             later_request.change_class = ModelChangeClass::Extension;
             later_request.change_rationale =
                 "Add a capability after the recorded evaluation.".to_string();
@@ -3803,7 +4094,14 @@ mod tests {
             .expect_err("model parameter history must be immutable");
             conn.execute("DELETE FROM model_versions WHERE id = ?1", [&initial.id])
                 .expect_err("predecessor model version must not be deleted");
-            (model.id, initial.id, successor.id, evidence.id)
+            (
+                model.id,
+                model_b.id,
+                initial.id,
+                project_b_initial.id,
+                successor.id,
+                evidence.id,
+            )
         };
 
         {
@@ -3812,6 +4110,10 @@ mod tests {
             let project_a_state =
                 workspace(&conn, "project-a").expect("load project-a workspace after restart");
             assert_eq!(project_a_state.models.len(), 1);
+            assert!(project_a_state
+                .models
+                .iter()
+                .any(|model| model.id == model_a_id));
             assert_eq!(project_a_state.versions.len(), 1);
             assert!(project_a_state
                 .versions
@@ -3828,8 +4130,9 @@ mod tests {
 
             let state = workspace(&conn, "project-b").expect("load model workspace after restart");
             assert_eq!(state.models.len(), 1);
-            assert!(state.models.iter().any(|model| model.id == model_id));
-            assert_eq!(state.versions.len(), 2);
+            assert!(state.models.iter().any(|model| model.id == model_b_id));
+            assert!(state.models.iter().all(|model| model.id != model_a_id));
+            assert_eq!(state.versions.len(), 3);
             assert!(state
                 .versions
                 .iter()
@@ -3838,9 +4141,13 @@ mod tests {
                 .versions
                 .iter()
                 .any(|version| version.id == initial_version_id));
+            assert!(state
+                .versions
+                .iter()
+                .any(|version| version.id == project_b_initial_version_id));
             assert!(state.versions.iter().any(|version| {
                 version.id == successor_version_id
-                    && version.parents[0].version_id == initial_version_id
+                    && version.parents[0].version_id == project_b_initial_version_id
             }));
             assert!(state
                 .evidence

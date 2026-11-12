@@ -21,7 +21,9 @@ transfer acceptance tests pass. Do not start general consolidation.
   project-owned. Their origin project is a reviewed transfer-origin assertion,
   not a mutation to the framework.
 - A finding originates in its owning ResearchProject. A ModelVersion carries
-  its creation project and remains part of its stable Model identity. An
+  its creation project and remains part of its stable Model identity, but a
+  receiving project cannot append versions to the origin project's identity.
+  Model adaptations use a distinct receiving-project identity/version. An
   origin assertion must be consistent with those existing records.
 - ResearchProject is the transfer participant in this phase. LearningProject
   remains a distinct learning context and continues to pin its exact

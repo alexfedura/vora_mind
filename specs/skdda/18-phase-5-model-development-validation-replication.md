@@ -15,9 +15,12 @@ any claim that a model or finding is scientifically established.
 - Add a `model` Rust domain after Research, Experiment, and Analysis schema
   initialization. Its migrations are additive, checksummed, transactional, and
   idempotent.
-- `Model` is a stable workspace identity. Its optional origin project is
-  attribution, not an ownership restriction; one model may be tested in
-  multiple projects.
+- `Model` is a stable identity. Its optional origin project records attribution
+  and, when present, scopes who may create versions for that identity. An
+  identity without an origin project is versioned within the project that
+  creates its first version; later versions stay in that project. Cross-project
+  adaptations use an accepted Knowledge Transfer and a distinct receiving-
+  project model identity.
 - `ModelVersion` is an immutable snapshot, separate from hypothesis identity
   and hypothesis versioning. A new edit always creates another version.
 - The legacy `hypothesis_model_references` table is retained unchanged.
@@ -46,6 +49,10 @@ Each `ModelVersion` preserves:
 - Explicit affected-claim and affected-assumption records.
 - Typed links to exact hypothesis versions, finding versions, experiment
   design/run records, evidence, and dataset versions/splits.
+
+Project-owned hypothesis, finding, experiment, dataset, and model-evidence
+targets must belong to the version's creating project. Workspace-shared source
+claims remain a deliberate exception.
 
 `REFINEMENT`, `EXTENSION`, `REVISION`, and `REPLACEMENT` are the only change
 classes. A parentless first version is classified as `REVISION` representing
@@ -176,7 +183,8 @@ scientific truth.
 Rust repository and integration tests must prove:
 
 1. A model can be referenced by multiple hypotheses/projects without merging
-   model and hypothesis identities.
+   model and hypothesis identities, but a foreign project cannot append a
+   version to another project's model identity.
 2. Initial REVISION baselines and successor versions satisfy required
    classifications, rationale, impacts, and parent rules; invalid replacement
    and cross-model parent links fail.
@@ -190,7 +198,9 @@ Rust repository and integration tests must prove:
    are retained and scoped.
 6. Replications require an exact original run/design, support direct and
    conceptual kinds, and preserve contradictory reports independently.
-7. Invalid typed endpoints and project/version mismatches fail transactionally.
+7. Invalid typed endpoints, foreign-project contribution/impact targets, and
+   project/version mismatches fail transactionally; workspace-shared source
+   claims remain usable from each project.
 8. Reopening an initialized database preserves the full model/evaluation/
    validation/replication graph and leaves Phase 1–4 fixtures unchanged.
 
