@@ -2485,6 +2485,15 @@ mod tests {
         assert_eq!(restored_workspace.adaptations.len(), 1);
         assert_eq!(restored_workspace.downstream_usage.len(), 1);
         assert_eq!(restored_workspace.lineage.len(), 2);
+        let preserved_source_count: i64 =
+            restored.query_row("SELECT COUNT(*) FROM sources", [], |row| row.get(0))?;
+        let preserved_framework_adoption_count: i64 = restored.query_row(
+            "SELECT COUNT(*) FROM research_framework_adoptions",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(preserved_source_count, 1);
+        assert_eq!(preserved_framework_adoption_count, 0);
         assert_eq!(
             restored_workspace.transfers[0].origin.artifact.version_id(),
             source_version_id
