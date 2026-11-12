@@ -2488,7 +2488,7 @@ mod tests {
         let preserved_source_count: i64 =
             restored.query_row("SELECT COUNT(*) FROM sources", [], |row| row.get(0))?;
         let preserved_framework_adoption_count: i64 = restored.query_row(
-            "SELECT COUNT(*) FROM research_framework_adoptions",
+            "SELECT COUNT(*) FROM research_project_knowledge_adoptions",
             [],
             |row| row.get(0),
         )?;
