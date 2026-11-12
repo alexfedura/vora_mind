@@ -809,7 +809,9 @@ pub fn create_adaptation(
         bail!("An adaptation must reference a distinct exact artifact version.");
     }
     let info = artifact_info(&tx, &request.artifact)?;
-    if info.owner_project_id.as_deref() != Some(transfer.receiving_project_id.as_str()) {
+    if request.artifact.kind() != TransferArtifactKind::FrameworkVersion
+        && info.owner_project_id.as_deref() != Some(transfer.receiving_project_id.as_str())
+    {
         bail!("Adapted artifacts must be created in the receiving project.");
     }
     let adaptation_id = id();
