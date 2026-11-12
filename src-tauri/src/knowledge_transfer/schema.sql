@@ -10,6 +10,7 @@ CREATE TABLE knowledge_concept_versions (
     created_by TEXT,
     created_at_us INTEGER NOT NULL,
     UNIQUE (concept_id, version_no),
+    UNIQUE (id, concept_id),
     UNIQUE (id, concept_id, created_in_project_id),
     FOREIGN KEY (parent_version_id, concept_id)
         REFERENCES knowledge_concept_versions(id, concept_id) ON DELETE RESTRICT,
@@ -39,6 +40,7 @@ CREATE TABLE knowledge_principle_versions (
     created_by TEXT,
     created_at_us INTEGER NOT NULL,
     UNIQUE (principle_id, version_no),
+    UNIQUE (id, principle_id),
     UNIQUE (id, principle_id, created_in_project_id),
     FOREIGN KEY (parent_version_id, principle_id)
         REFERENCES knowledge_principle_versions(id, principle_id) ON DELETE RESTRICT,

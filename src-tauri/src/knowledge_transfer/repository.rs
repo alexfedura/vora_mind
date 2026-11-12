@@ -1945,7 +1945,9 @@ pub fn provenance_preview(
             for (validation_id, validation_scope_text, population, method, outcome) in
                 validation_rows
             {
-                validation_scope.push(format!("{validation_scope_text} / {population} ({outcome})"));
+                validation_scope.push(format!(
+                    "{validation_scope_text} / {population} ({outcome})"
+                ));
                 provenance.push(TransferProvenanceRecordDto {
                     record_kind: "validation".to_string(),
                     record_id: validation_id,
@@ -2293,7 +2295,12 @@ mod tests {
                 "INSERT INTO analysis_finding_events
                     (id, finding_version_id, status, rationale, actor_id, occurred_at_us)
                  VALUES (?1, ?2, ?3, 'Lifecycle event recorded', NULL, ?4)",
-                params![format!("finding-event-{key}-{occurred_at_us}"), finding_version_id, status, occurred_at_us],
+                params![
+                    format!("finding-event-{key}-{occurred_at_us}"),
+                    finding_version_id,
+                    status,
+                    occurred_at_us
+                ],
             )?;
         }
         Ok(finding_version_id)
