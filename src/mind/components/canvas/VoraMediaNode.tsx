@@ -1,15 +1,15 @@
 import { memo, useRef } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from "@xyflow/react";
 import { MessageCircle, Play } from "lucide-react";
 import { useMediaFileReference } from "@/hooks/useMediaFileReference";
 import type { VoraMediaData } from "@/mind/types";
+import { toAssetUrl } from "@/services/assetUrlService";
 
 type VoraMediaNodeModel = Node<VoraMediaData, "voraMedia">;
 
 export const VoraMediaNode = memo(({ id, data, selected }: NodeProps<VoraMediaNodeModel>) => {
   const file = useMediaFileReference(id, data.fileId, data.filePath);
-  const source = file.filePath ? convertFileSrc(file.filePath) : null;
+  const source = file.filePath ? toAssetUrl(file.filePath) : null;
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const openPlayer = (startSeconds: number | null = null): void => {
