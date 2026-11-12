@@ -1205,7 +1205,7 @@ fn query_all_versions(conn: &Connection, project_id: &str) -> Result<Vec<ModelVe
     }
     let placeholders = model_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
     let sql = format!(
-        "SELECT id FROM model_versions WHERE model_id IN ({placeholders}) AND created_in_project_id = ?1 ORDER BY model_id, version_no"
+        "SELECT id FROM model_versions WHERE model_id IN ({placeholders}) AND created_in_project_id = ? ORDER BY model_id, version_no"
     );
     let mut params: Vec<&str> = model_ids.iter().map(String::as_str).collect();
     params.push(project_id);
@@ -2258,7 +2258,7 @@ fn query_evidence_list(conn: &Connection, project_id: &str) -> Result<Vec<ModelE
          FROM model_evidence e
          JOIN model_versions v ON v.id = e.model_version_id
          WHERE v.model_id IN ({placeholders})
-           AND v.created_in_project_id = ?1
+           AND v.created_in_project_id = ?
          ORDER BY e.created_at_us, e.id"
     );
     let mut params: Vec<&str> = model_ids.iter().map(String::as_str).collect();
