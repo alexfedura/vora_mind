@@ -385,7 +385,7 @@ pub struct ResearchLineageDto {
     pub origin: TransferArtifactRef,
     pub origin_project_id: String,
     pub receiving_project_id: String,
-    pub relation_kind: String,
+    pub relation_kind: TransferLineageRelation,
     pub adaptation: Option<TransferArtifactRef>,
     pub rationale: String,
     pub occurred_at_us: i64,

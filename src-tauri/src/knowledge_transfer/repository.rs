@@ -797,6 +797,9 @@ pub fn create_adaptation(
     request: &CreateTransferAdaptationReq,
 ) -> Result<TransferAdaptationDto> {
     required(&request.rationale, "Adaptation rationale")?;
+    if request.relation_kind == TransferLineageRelation::Adopted {
+        bail!("An adaptation lineage must be based_on or derived_from.");
+    }
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let transfer = query_transfer(&tx, &request.transfer_id)?;
     if transfer.state != KnowledgeTransferState::Accepted {
@@ -1539,6 +1542,12 @@ fn query_lineage(conn: &Connection, lineage_id: &str) -> Result<ResearchLineageD
     let adaptation = adaptation_id
         .map(|id| query_adaptation(conn, &id).map(|adaptation| adaptation.artifact))
         .transpose()?;
+    let relation_kind = match relation_kind.as_str() {
+        "adopted" => TransferLineageRelation::Adopted,
+        "based_on" => TransferLineageRelation::BasedOn,
+        "derived_from" => TransferLineageRelation::DerivedFrom,
+        _ => bail!("Stored research-lineage relation is invalid."),
+    };
     Ok(ResearchLineageDto {
         id: lineage_id.to_string(),
         transfer_id,
