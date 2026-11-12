@@ -2349,6 +2349,40 @@ mod tests {
         Ok(())
     }
 
+    fn create_published_framework_version(
+        conn: &Connection,
+        framework_id: &str,
+        version_id: &str,
+        title: &str,
+    ) -> Result<()> {
+        conn.execute(
+            "INSERT INTO knowledge_frameworks
+                (id, title, description, lifecycle, current_version_id, created_by, created_at_us)
+             VALUES (?1, ?2, '', 'draft', NULL, 'tester', 1)",
+            params![framework_id, title],
+        )?;
+        conn.execute(
+            "INSERT INTO knowledge_framework_versions
+                (id, framework_id, version_no, parent_version_id, title, description, status,
+                 change_class, change_rationale, created_by, created_at_us, published_at_us)
+             VALUES (?1, ?2, 1, NULL, ?3, 'Framework description', 'review',
+                     NULL, NULL, 'tester', 1, NULL)",
+            params![version_id, framework_id, title],
+        )?;
+        conn.execute(
+            "INSERT INTO framework_version_reviews
+                (id, framework_version_id, review_status, reviewer_id, rationale, reviewed_at_us)
+             VALUES (?1, ?2, 'approved', 'framework-reviewer', 'Approved framework version.', 2)",
+            params![format!("framework-review-{framework_id}"), version_id],
+        )?;
+        conn.execute(
+            "UPDATE knowledge_framework_versions
+             SET status = 'published', published_at_us = 3 WHERE id = ?1",
+            [version_id],
+        )?;
+        Ok(())
+    }
+
     fn transfer_fixture() -> Result<(Connection, String, String)> {
         let conn = Connection::open_in_memory()?;
         crate::mind::portable_db::initialize_workspace_schema(&conn)
@@ -2686,6 +2720,71 @@ mod tests {
             },
         )?;
         assert!(create_origin(&mut conn, &origin_request).is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_scoped_framework_adaptation_records_recipient_lineage() -> Result<()> {
+        let (mut conn, _, _) = transfer_fixture()?;
+        create_published_framework_version(&conn, "framework-a", "framework-a-v1", "Framework A")?;
+        create_published_framework_version(&conn, "framework-b", "framework-b-v1", "Framework B")?;
+        let origin = create_origin(
+            &mut conn,
+            &CreateTransferOriginReq {
+                artifact: TransferArtifactRef::FrameworkVersion {
+                    framework_id: "framework-a".to_string(),
+                    version_id: "framework-a-v1".to_string(),
+                },
+                origin_project_id: "project-a".to_string(),
+                rationale: "Project A declares this framework version as its source.".to_string(),
+                recorded_by: Some("reviewer-a".to_string()),
+            },
+        )?;
+        let eligibility = create_eligibility(
+            &mut conn,
+            &CreateTransferEligibilityReq {
+                origin_id: origin.id,
+                license_identifier: "CC BY 4.0".to_string(),
+                license_uri: None,
+                access_scope: TransferAccessScope::Workspace,
+                permitted_purposes: vec![TransferPurpose::Research],
+                allowed_project_ids: Vec::new(),
+                attribution_text: "Project A framework attribution".to_string(),
+                permission_basis: "Rights reviewed.".to_string(),
+                permission_granted: true,
+                reviewed_by: "rights-reviewer".to_string(),
+            },
+        )?;
+        let transfer = adopt_knowledge(
+            &mut conn,
+            &AdoptKnowledgeReq {
+                eligibility_id: eligibility.id,
+                receiving_project_id: "project-b".to_string(),
+                intended_purpose: TransferPurpose::Research,
+                attribution_text: "Project A framework attribution".to_string(),
+                context: "Framework adapted for Project B.".to_string(),
+                requested_by: Some("researcher-b".to_string()),
+            },
+        )?;
+        let adaptation = create_adaptation(
+            &mut conn,
+            &CreateTransferAdaptationReq {
+                transfer_id: transfer.id,
+                artifact: TransferArtifactRef::FrameworkVersion {
+                    framework_id: "framework-b".to_string(),
+                    version_id: "framework-b-v1".to_string(),
+                },
+                relation_kind: TransferLineageRelation::BasedOn,
+                rationale: "Framework B restructures the upstream framework.".to_string(),
+                adapted_by: Some("researcher-b".to_string()),
+            },
+        )?;
+        assert_eq!(adaptation.receiving_project_id, "project-b");
+        assert_eq!(adaptation.origin.origin_project_id, "project-a");
+        assert_eq!(
+            workspace(&conn)?.lineage[1].relation_kind,
+            TransferLineageRelation::BasedOn
+        );
         Ok(())
     }
 }
