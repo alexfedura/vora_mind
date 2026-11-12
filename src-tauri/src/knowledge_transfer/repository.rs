@@ -705,7 +705,9 @@ pub fn adopt_knowledge(
         bail!("This transfer eligibility is no longer active.");
     }
     if request.attribution_text.trim() != eligibility.attribution_text.trim() {
-        bail!("Transfer attribution must match the reviewed rights and attribution record exactly.");
+        bail!(
+            "Transfer attribution must match the reviewed rights and attribution record exactly."
+        );
     }
     if eligibility
         .origin
