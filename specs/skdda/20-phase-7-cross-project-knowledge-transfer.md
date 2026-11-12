@@ -52,6 +52,11 @@ transfer acceptance tests pass. Do not start general consolidation.
   the receiving project. Its typed FK and project check prevent adaptation by
   mutating or reusing the upstream version. The rationale and upstream transfer
   are preserved.
+- FrameworkVersions are workspace-scoped in the pre-existing framework
+  contract, so they cannot carry a project-owner FK without changing their
+  canonical identity. A framework adaptation is therefore recorded as an
+  explicit receiving-project assertion on the immutable adaptation record,
+  and must target a distinct published FrameworkVersion.
 - `ResearchLineage` records adoption and adaptation edges. `DownstreamUsage`
   references an exact typed artifact, ModelEvaluation, AnalysisRun, or
   ExperimentRun in the receiving project. Forward and reverse queries include
@@ -80,8 +85,10 @@ transfer acceptance tests pass. Do not start general consolidation.
 
 - Adaptations use an exact artifact version created in the receiving project;
   the originating artifact remains untouched. Project-specific editors remain
-  responsible for creating a new finding/model/framework/concept/principle
-  version before the transfer panel can attach it as an adaptation.
+  responsible for creating a new finding/model/concept/principle version
+  before the transfer panel can attach it as an adaptation.
+- Because FrameworkVersions are globally scoped, their recipient project is
+  recorded as an explicit adaptation assertion rather than inferred ownership.
 - The lineage edge records `based_on` or `derived_from`, rationale, source
   transfer, source exact version, destination exact version, project endpoints,
   actor, and time.

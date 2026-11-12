@@ -184,8 +184,11 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
   const selectedTransfer = workspace?.transfers.find((item) => item.id === selectedTransferId);
   const adaptationCandidates = (workspace?.artifacts ?? []).filter((item) =>
     selectedTransfer
-    && item.ownerProjectId === selectedTransfer.receivingProjectId
     && item.artifact.kind === selectedTransfer.origin.artifact.kind
+    && (
+      item.ownerProjectId === selectedTransfer.receivingProjectId
+      || item.artifact.kind === "framework_version"
+    )
     && item.artifact.versionId !== selectedTransfer.origin.artifact.versionId
     && entityId(item.artifact) !== entityId(selectedTransfer.origin.artifact),
   );
@@ -625,7 +628,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
                   <Field label="Exact downstream artifact version">
                     <select className={fieldClass} name="artifact" required>
                       <option value="">Select artifact version</option>
-                      {(workspace?.artifacts ?? []).filter((item) => item.ownerProjectId === selectedTransfer?.receivingProjectId && item.artifact.kind === usageKind).map((item) => <option key={artifactKey(item.artifact)} value={artifactKey(item.artifact)}>{artifactLabel(item.artifact, item.title, item.versionNo)}</option>)}
+                      {(workspace?.artifacts ?? []).filter((item) => (item.ownerProjectId === selectedTransfer?.receivingProjectId || item.artifact.kind === "framework_version") && item.artifact.kind === usageKind).map((item) => <option key={artifactKey(item.artifact)} value={artifactKey(item.artifact)}>{artifactLabel(item.artifact, item.title, item.versionNo)}</option>)}
                     </select>
                   </Field>
                 ) : (
