@@ -51,6 +51,24 @@ fn exists(conn: &Connection, sql: &str, value: &str, message: &str) -> Result<()
     Ok(())
 }
 
+fn ensure_project_owns(
+    conn: &Connection,
+    sql: &str,
+    resource_id: &str,
+    project_id: &str,
+    message: &str,
+) -> Result<()> {
+    let owned: bool = conn.query_row(
+        sql,
+        params![resource_id, project_id],
+        |row| row.get(0),
+    )?;
+    if !owned {
+        return Err(anyhow!(message.to_string()));
+    }
+    Ok(())
+}
+
 fn ensure_project_writable(conn: &Connection, project_id: &str) -> Result<()> {
     let status: Option<String> = conn
         .query_row(
@@ -213,6 +231,19 @@ pub fn query_model(conn: &Connection, model_id: &str) -> Result<ModelDto> {
 pub fn transition_model(conn: &mut Connection, request: &TransitionModelReq) -> Result<ModelDto> {
     required(&request.rationale, "Model status rationale")?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let origin_project: Option<Option<String>> = tx
+        .query_row(
+            "SELECT origin_project_id FROM scientific_models WHERE id = ?1",
+            [&request.model_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(origin_project) = origin_project else {
+        return Err(anyhow!("Model identity was not found."));
+    };
+    if let Some(project_id) = origin_project.as_deref() {
+        ensure_project_writable(&tx, project_id)?;
+    }
     let current: Option<String> = tx
         .query_row(
             "SELECT status FROM model_status_events WHERE model_id = ?1
@@ -270,6 +301,17 @@ pub fn transition_version(
 ) -> Result<ModelVersionDto> {
     required(&request.rationale, "Model version lifecycle rationale")?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let project_id: Option<String> = tx
+        .query_row(
+            "SELECT created_in_project_id FROM model_versions WHERE id = ?1",
+            [&request.version_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(project_id) = project_id else {
+        return Err(anyhow!("Model version was not found."));
+    };
+    ensure_project_writable(&tx, &project_id)?;
     let current: Option<String> = tx
         .query_row(
             "SELECT lifecycle_status FROM model_version_events
