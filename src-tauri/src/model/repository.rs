@@ -2390,7 +2390,7 @@ fn validate_replication_request(
                 "Replication evidence observation must belong to the requesting project.",
             )?;
         }
-        if let Some(claim_id) = evidence_source_claim_id(&evidence) {
+        if let Some(claim_id) = artifact_source_claim.as_deref() {
             ensure_workspace_source_claim(conn, claim_id)?;
         }
         let dataset_pinned = artifact_dataset.as_ref().is_some_and(|dataset_id| {
