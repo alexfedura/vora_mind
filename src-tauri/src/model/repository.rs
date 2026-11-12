@@ -605,6 +605,7 @@ fn validate_version_request(conn: &Connection, request: &CreateModelVersionReq) 
         &request.project_id,
         "Research project was not found.",
     )?;
+    ensure_project_writable(conn, &request.project_id)?;
     exists(
         conn,
         "SELECT EXISTS(SELECT 1 FROM scientific_models WHERE id = ?1)",
@@ -2916,14 +2917,28 @@ mod tests {
         {
             let conn = Connection::open(&path).expect("reopen workspace");
             initialize(&conn);
+            let project_a_state = workspace(&conn, "project-a").expect("load project-a workspace after restart");
+            assert_eq!(project_a_state.models.len(), 1);
+            assert_eq!(project_a_state.versions.len(), 1);
+            assert!(project_a_state
+                .versions
+                .iter()
+                .all(|version| version.created_in_project_id == "project-a"));
+            assert!(project_a_state.versions.iter().any(|version| version.id == initial_version_id));
+            assert!(project_a_state.evidence.is_empty());
+            assert!(project_a_state.evaluations.is_empty());
+            assert!(project_a_state.validations.is_empty());
+            assert!(project_a_state.replications.is_empty());
+
             let state = workspace(&conn, "project-b").expect("load model workspace after restart");
             assert_eq!(state.models.len(), 1);
             assert!(state.models.iter().any(|model| model.id == model_id));
-            assert_eq!(state.versions.len(), 3);
+            assert_eq!(state.versions.len(), 2);
             assert!(state
                 .versions
                 .iter()
-                .any(|version| version.id == initial_version_id));
+                .all(|version| version.created_in_project_id == "project-b"));
+            assert!(!state.versions.iter().any(|version| version.id == initial_version_id));
             assert!(state.versions.iter().any(|version| {
                 version.id == successor_version_id
                     && version.parents[0].version_id == initial_version_id
