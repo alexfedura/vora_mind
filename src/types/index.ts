@@ -2255,6 +2255,7 @@ export interface ModelVersionDto {
 }
 
 export interface CreateModelEvidenceReq {
+  projectId: string;
   modelVersionId: string;
   artifact: ModelArtifactRef;
   polarity: ModelEvidencePolarity;

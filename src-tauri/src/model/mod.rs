@@ -478,6 +478,7 @@ pub struct ModelVersionDto {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateModelEvidenceReq {
+    pub project_id: String,
     pub model_version_id: String,
     pub artifact: ModelArtifactRef,
     pub polarity: ModelEvidencePolarity,
