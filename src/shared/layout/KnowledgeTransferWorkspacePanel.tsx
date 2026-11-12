@@ -375,13 +375,14 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
     kind: KnowledgeVersionKind,
     versionId: string,
   ): Promise<void> => {
+    const reviewer = window.prompt("Reviewer identity (optional)") ?? "";
     await perform(
       () => knowledgeTransferService.reviewKnowledgeVersion({
         versionId,
         kind,
         status: "reviewed",
         rationale: "Reviewed for extraction/content quality; this does not assert scientific truth.",
-        actorId: null,
+        actorId: reviewer.trim() || null,
       }),
       "Knowledge version reviewed. Review does not establish scientific truth.",
     );
@@ -669,7 +670,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
               <div className="space-y-2">
                 {(workspace?.knowledgeVersions ?? []).map((version) => (
                   <div key={version.versionId} className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300">
-                    <p className="font-medium text-white">{version.kind}: {version.title} · v{version.versionId.slice(0, 8)} · {version.status}</p>
+                    <p className="font-medium text-white">{version.kind}: {version.title} · v{version.versionNo} · {version.status}</p>
                     <p className="mt-1 text-gray-400">{version.content}</p>
                     {version.status === "draft" && (
                       <button type="button" className={`${buttonClass} mt-2`} disabled={busy} onClick={() => void reviewKnowledgeVersion(version.kind, version.versionId)}>

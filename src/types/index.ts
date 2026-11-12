@@ -2822,6 +2822,7 @@ export interface KnowledgeVersionDto {
   kind: KnowledgeVersionKind;
   entityId: string;
   versionId: string;
+  versionNo: number;
   projectId: string;
   title: string;
   content: string;
