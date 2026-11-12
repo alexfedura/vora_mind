@@ -2293,6 +2293,56 @@ mod tests {
         Ok(finding_version_id)
     }
 
+    fn add_source_segment_evidence(
+        conn: &Connection,
+        project_id: &str,
+        finding_version_id: &str,
+        hypothesis_version_id: &str,
+    ) -> Result<()> {
+        conn.execute(
+            "INSERT INTO sources (id, kind, path, title, author, language, duration_sec,
+                                  page_count, metadata_json, notes, status, created_at, updated_at)
+             VALUES ('source-study', 'book', NULL, 'Study Source', 'Author', 'en', NULL,
+                     30, '{}', '', 'active', 1, 1)",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO source_versions
+                (id, source_id, capture_kind, edition_label, canonical_uri, captured_at_us,
+                 content_sha256, external_asset_ref, metadata_json, created_by, created_at_us)
+             VALUES ('source-version-study', 'source-study', 'edition', '2nd edition', NULL, 1,
+                     NULL, NULL, '{}', 'tester', 1)",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO source_version_segments
+                (id, source_id, source_version_id, label, location_kind, page_start, page_end,
+                 notes, order_index, created_at_us)
+             VALUES ('source-segment-study', 'source-study', 'source-version-study',
+                     'Methods section', 'page', 4, 5, '', 0, 1)",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO analysis_evidence
+                (id, project_id, target_source_claim_id, target_hypothesis_version_id,
+                 target_finding_version_id, artifact_analysis_output_id, artifact_experiment_run_id,
+                 artifact_dataset_version_id, artifact_observation_id, artifact_source_segment_id,
+                 artifact_source_claim_id, polarity, scope, quality_rationale, limitations,
+                 provenance_json, created_by, created_at_us)
+             VALUES ('evidence-study', ?1, NULL, ?2, NULL, NULL, NULL, NULL, NULL,
+                     'source-segment-study', NULL, 'supports', 'study scope',
+                     'reproducible method', 'sampling limitations', '{}', 'tester', 1)",
+            params![project_id, hypothesis_version_id],
+        )?;
+        conn.execute(
+            "INSERT INTO analysis_finding_version_evidence
+                (finding_version_id, evidence_id, synthesis_polarity, rationale)
+             VALUES (?1, 'evidence-study', 'supports', 'Linked source evidence.')",
+            [finding_version_id],
+        )?;
+        Ok(())
+    }
+
     fn transfer_fixture() -> Result<(Connection, String, String)> {
         let conn = Connection::open_in_memory()?;
         crate::mind::portable_db::initialize_workspace_schema(&conn)
@@ -2361,6 +2411,12 @@ mod tests {
             transfer.attribution_text,
             "Project A, exact finding version (attributed)"
         );
+        add_source_segment_evidence(
+            &conn,
+            "project-a",
+            &source_version_id,
+            "hypothesis-version-source",
+        )?;
 
         let destination_version_id = create_accepted_finding(&conn, "project-b", "adapted")?;
         let adaptation = create_adaptation(
@@ -2395,7 +2451,9 @@ mod tests {
         )?;
         let preview = provenance_preview(&conn, &transfer.origin.id)?;
         assert_eq!(preview.scope, "declared scope");
-        assert!(!preview.provenance.is_empty() || preview.validation_scope.is_empty());
+        assert_eq!(preview.provenance.len(), 1);
+        assert!(preview.provenance[0].details.contains("Study Source"));
+        assert!(preview.provenance[0].details.contains("pages 4-5"));
 
         let eligibility = workspace(&conn)?.eligibilities[0].clone();
         change_eligibility(
