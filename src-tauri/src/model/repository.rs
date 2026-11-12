@@ -2867,6 +2867,194 @@ mod tests {
         (run_id, input_id, analysis_metric_id)
     }
 
+    struct ProjectModelFixture {
+        version_id: String,
+        dataset_version_id: String,
+        experiment_run_id: String,
+        analysis_run_id: String,
+        analysis_input_id: String,
+        analysis_metric_id: String,
+        evidence_id: String,
+    }
+
+    fn create_project_model_fixture(
+        conn: &mut Connection,
+        project_id: &str,
+    ) -> ProjectModelFixture {
+        let model = create_model(conn, &model_request(project_id)).expect("create project model");
+        let version = create_model_version(conn, &version_request(project_id, &model.id))
+            .expect("create project model version");
+        let dataset_version_id = insert_sealed_dataset(conn, project_id);
+        let (_, experiment_run_id) = insert_experiment(conn, project_id);
+        let (analysis_run_id, analysis_input_id, analysis_metric_id) =
+            insert_analysis_run(conn, project_id, &dataset_version_id);
+        let evidence = create_evidence(
+            conn,
+            &CreateModelEvidenceReq {
+                project_id: project_id.to_string(),
+                model_version_id: version.id.clone(),
+                artifact: ModelArtifactRef::DatasetVersion(dataset_version_id.clone()),
+                polarity: ModelEvidencePolarity::Supports,
+                scope: format!("{project_id} model fixture"),
+                quality_rationale: "Pinned to the project's sealed dataset.".to_string(),
+                limitations: "Test fixture.".to_string(),
+                provenance: serde_json::json!({"project": project_id}),
+                created_by: Some("test".to_string()),
+            },
+        )
+        .expect("create project model evidence");
+        ProjectModelFixture {
+            version_id: version.id,
+            dataset_version_id,
+            experiment_run_id,
+            analysis_run_id,
+            analysis_input_id,
+            analysis_metric_id,
+            evidence_id: evidence.id,
+        }
+    }
+
+    #[test]
+    fn project_private_model_reads_and_writes_are_isolated_in_both_directions() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        insert_project(&conn, "project-b");
+        let project_a = create_project_model_fixture(&mut conn, "project-a");
+        let project_b = create_project_model_fixture(&mut conn, "project-b");
+
+        let workspace_a = workspace(&conn, "project-a").expect("load project A");
+        let workspace_b = workspace(&conn, "project-b").expect("load project B");
+        assert!(workspace_a
+            .versions
+            .iter()
+            .all(|version| version.id != project_b.version_id));
+        assert!(workspace_b
+            .versions
+            .iter()
+            .all(|version| version.id != project_a.version_id));
+        assert!(workspace_a
+            .evidence
+            .iter()
+            .all(|evidence| evidence.id != project_b.evidence_id));
+        assert!(workspace_b
+            .evidence
+            .iter()
+            .all(|evidence| evidence.id != project_a.evidence_id));
+        assert!(workspace_a
+            .models
+            .iter()
+            .all(|model| model.origin_project_id.as_deref() == Some("project-a")));
+        assert!(workspace_b
+            .models
+            .iter()
+            .all(|model| model.origin_project_id.as_deref() == Some("project-b")));
+
+        let counts_before: (i64, i64, i64, i64) = conn
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM model_evidence),
+                        (SELECT COUNT(*) FROM model_evaluations),
+                        (SELECT COUNT(*) FROM model_validations),
+                        (SELECT COUNT(*) FROM model_replications)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("count model records");
+
+        for (project_id, target, local) in [
+            ("project-a", &project_b, &project_a),
+            ("project-b", &project_a, &project_b),
+        ] {
+            assert!(create_evidence(
+                &mut conn,
+                &CreateModelEvidenceReq {
+                    project_id: project_id.to_string(),
+                    model_version_id: target.version_id.clone(),
+                    artifact: ModelArtifactRef::DatasetVersion(
+                        local.dataset_version_id.clone()
+                    ),
+                    polarity: ModelEvidencePolarity::Supports,
+                    scope: "unauthorized cross-project evidence".to_string(),
+                    quality_rationale: "Negative isolation test.".to_string(),
+                    limitations: "None.".to_string(),
+                    provenance: serde_json::json!({}),
+                    created_by: None,
+                },
+            )
+            .is_err());
+            assert!(create_evaluation(
+                &mut conn,
+                &CreateModelEvaluationReq {
+                    project_id: project_id.to_string(),
+                    model_version_id: target.version_id.clone(),
+                    analysis_run_id: local.analysis_run_id.clone(),
+                    analysis_run_input_id: local.analysis_input_id.clone(),
+                    dataset_version_id: local.dataset_version_id.clone(),
+                    analysis_metric_id: local.analysis_metric_id.clone(),
+                    role: "test".to_string(),
+                    split_group_id: None,
+                    limitations: "Negative isolation test.".to_string(),
+                    created_by: None,
+                },
+            )
+            .is_err());
+            assert!(create_validation(
+                &mut conn,
+                &CreateModelValidationReq {
+                    project_id: project_id.to_string(),
+                    target: ModelValidationTarget::ModelVersion(target.version_id.clone()),
+                    criteria: vec![serde_json::json!({"criterion": "threshold"})],
+                    scope: "Cross-project test".to_string(),
+                    population_scope: "Fixture population".to_string(),
+                    evaluation_method: "Compare against threshold".to_string(),
+                    evaluator_identity: "test reviewer".to_string(),
+                    independence_state: "independent".to_string(),
+                    independence_rationale: String::new(),
+                    conflict_of_interest: "None.".to_string(),
+                    created_by: None,
+                },
+            )
+            .is_err());
+            assert!(create_replication(
+                &mut conn,
+                &CreateModelReplicationReq {
+                    project_id: project_id.to_string(),
+                    model_version_id: target.version_id.clone(),
+                    original_experiment_run_id: local.experiment_run_id.clone(),
+                    replication_kind: "direct".to_string(),
+                    independent_team_operator: "test team".to_string(),
+                    protocol_context: "Cross-project rejection fixture.".to_string(),
+                    dataset_context: serde_json::json!({}),
+                    datasets: vec![ModelReplicationDatasetReq {
+                        dataset_version_id: local.dataset_version_id.clone(),
+                        role: "test".to_string(),
+                        split_group_id: None,
+                    }],
+                    outcome: "supports".to_string(),
+                    result_summary: "Must not be recorded.".to_string(),
+                    deviations: vec![],
+                    provenance: serde_json::json!({}),
+                    analysis_evidence_ids: vec![],
+                    model_evidence_ids: vec![target.evidence_id.clone()],
+                    created_by: None,
+                },
+            )
+            .is_err());
+        }
+
+        let counts_after: (i64, i64, i64, i64) = conn
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM model_evidence),
+                        (SELECT COUNT(*) FROM model_evaluations),
+                        (SELECT COUNT(*) FROM model_validations),
+                        (SELECT COUNT(*) FROM model_replications)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("count model records after rejected writes");
+        assert_eq!(counts_after, counts_before);
+    }
+
     #[test]
     fn model_versions_evaluations_validation_and_replications_survive_reopen() {
         let path = new_database_path();
