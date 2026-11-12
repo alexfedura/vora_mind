@@ -2767,6 +2767,7 @@ mod tests {
             let evidence = create_evidence(
                 &mut conn,
                 &CreateModelEvidenceReq {
+                    project_id: "project-b".to_string(),
                     model_version_id: successor.id.clone(),
                     artifact: ModelArtifactRef::DatasetVersion(dataset_version_id.clone()),
                     polarity: ModelEvidencePolarity::Supports,
