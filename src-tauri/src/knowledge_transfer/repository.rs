@@ -1700,7 +1700,7 @@ pub fn workspace(conn: &Connection) -> Result<TransferWorkspaceDto> {
     let mut knowledge_versions = Vec::new();
     {
         let mut stmt = conn.prepare(
-            "SELECT v.concept_id, v.id, v.created_in_project_id, v.title, v.definition,
+            "SELECT v.concept_id, v.id, v.version_no, v.created_in_project_id, v.title, v.definition,
                     v.rationale, v.parent_version_id,
                     COALESCE((SELECT e.status FROM knowledge_concept_version_events e
                               WHERE e.version_id = v.id
@@ -1714,12 +1714,13 @@ pub fn workspace(conn: &Connection) -> Result<TransferWorkspaceDto> {
                     kind: KnowledgeVersionKind::Concept,
                     entity_id: row.get(0)?,
                     version_id: row.get(1)?,
-                    project_id: row.get(2)?,
-                    title: row.get(3)?,
-                    content: row.get(4)?,
-                    rationale: row.get(5)?,
-                    parent_version_id: row.get(6)?,
-                    status: row.get(7)?,
+                    version_no: row.get(2)?,
+                    project_id: row.get(3)?,
+                    title: row.get(4)?,
+                    content: row.get(5)?,
+                    rationale: row.get(6)?,
+                    parent_version_id: row.get(7)?,
+                    status: row.get(8)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?,
@@ -1727,7 +1728,7 @@ pub fn workspace(conn: &Connection) -> Result<TransferWorkspaceDto> {
     }
     {
         let mut stmt = conn.prepare(
-            "SELECT v.principle_id, v.id, v.created_in_project_id, v.title, v.statement,
+            "SELECT v.principle_id, v.id, v.version_no, v.created_in_project_id, v.title, v.statement,
                     v.rationale, v.parent_version_id,
                     COALESCE((SELECT e.status FROM knowledge_principle_version_events e
                               WHERE e.version_id = v.id
@@ -1741,12 +1742,13 @@ pub fn workspace(conn: &Connection) -> Result<TransferWorkspaceDto> {
                     kind: KnowledgeVersionKind::Principle,
                     entity_id: row.get(0)?,
                     version_id: row.get(1)?,
-                    project_id: row.get(2)?,
-                    title: row.get(3)?,
-                    content: row.get(4)?,
-                    rationale: row.get(5)?,
-                    parent_version_id: row.get(6)?,
-                    status: row.get(7)?,
+                    version_no: row.get(2)?,
+                    project_id: row.get(3)?,
+                    title: row.get(4)?,
+                    content: row.get(5)?,
+                    rationale: row.get(6)?,
+                    parent_version_id: row.get(7)?,
+                    status: row.get(8)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?,
