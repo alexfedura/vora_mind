@@ -1868,7 +1868,7 @@ pub fn finalize_validation(
         ));
     }
     for evidence_id in &request.analysis_evidence_ids {
-        let evidence: Option<(String, Option<String>, Option<String>, Option<String>)> = conn
+        let evidence: Option<(String, Option<String>, Option<String>, Option<String>)> = tx
             .query_row(
                 "SELECT project_id, target_source_claim_id, target_hypothesis_version_id,
                         target_finding_version_id
@@ -1890,7 +1890,7 @@ pub fn finalize_validation(
         }
     }
     for evidence_id in &request.model_evidence_ids {
-        let evidence_version: Option<String> = conn
+        let evidence_version: Option<String> = tx
             .query_row(
                 "SELECT model_version_id FROM model_evidence WHERE id = ?1",
                 [evidence_id],
