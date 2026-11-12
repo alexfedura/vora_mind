@@ -248,6 +248,7 @@ pub struct KnowledgeVersionDto {
     pub kind: KnowledgeVersionKind,
     pub entity_id: String,
     pub version_id: String,
+    pub version_no: i64,
     pub project_id: String,
     pub title: String,
     pub content: String,
