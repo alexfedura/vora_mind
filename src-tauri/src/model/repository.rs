@@ -1288,6 +1288,61 @@ pub fn create_evidence(
             "Evidence must target a model version created in the requesting project."
         ));
     }
+    match &request.artifact {
+        ModelArtifactRef::AnalysisOutput(output_id) => ensure_project_owns(
+            conn,
+            "SELECT EXISTS(
+                SELECT 1 FROM analysis_outputs o
+                JOIN analysis_runs r ON r.id = o.run_id
+                WHERE o.id = ?1 AND r.project_id = ?2
+             )",
+            output_id,
+            &request.project_id,
+            "Evidence output must belong to the requesting project.",
+        )?,
+        ModelArtifactRef::ExperimentRun(run_id) => ensure_project_owns(
+            conn,
+            "SELECT EXISTS(
+                SELECT 1 FROM experiment_runs WHERE id = ?1 AND project_id = ?2
+             )",
+            run_id,
+            &request.project_id,
+            "Evidence experiment run must belong to the requesting project.",
+        )?,
+        ModelArtifactRef::DatasetVersion(dataset_version_id) => ensure_project_owns(
+            conn,
+            "SELECT EXISTS(
+                SELECT 1 FROM experiment_dataset_versions v
+                JOIN experiment_datasets d ON d.id = v.dataset_id
+                WHERE v.id = ?1 AND d.project_id = ?2
+             )",
+            dataset_version_id,
+            &request.project_id,
+            "Evidence dataset must belong to the requesting project.",
+        )?,
+        ModelArtifactRef::ResearchObservation(observation_id) => ensure_project_owns(
+            conn,
+            "SELECT EXISTS(
+                SELECT 1 FROM research_observations
+                WHERE id = ?1 AND project_id = ?2
+             )",
+            observation_id,
+            &request.project_id,
+            "Evidence observation must belong to the requesting project.",
+        )?,
+        ModelArtifactRef::FindingVersion(finding_version_id) => ensure_project_owns(
+            conn,
+            "SELECT EXISTS(
+                SELECT 1 FROM analysis_finding_versions v
+                JOIN analysis_findings f ON f.id = v.finding_id
+                WHERE v.id = ?1 AND f.project_id = ?2
+             )",
+            finding_version_id,
+            &request.project_id,
+            "Evidence finding must belong to the requesting project.",
+        )?,
+        ModelArtifactRef::SourceVersionSegment(_) | ModelArtifactRef::SourceClaim(_) => {}
+    }
     let evidence_id = id();
     let created_at = now_us()?;
     let artifact_columns = match &request.artifact {
