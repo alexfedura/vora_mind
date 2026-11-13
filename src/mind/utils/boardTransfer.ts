@@ -5,7 +5,7 @@ import type {
   VoraBoardTransferNode,
   VoraCard,
 } from "@/mind/types";
-import { isVoraDiagramShape } from "@/mind/utils/shapeGeometry";
+import { isVoraDiagramShape, isVoraPathLikeShape } from "@/mind/utils/shapeGeometry";
 
 const SUPPORTED_NODE_TYPES = new Set(["voraCard", "voraText", "voraShape", "voraMedia", "forgeAst"]);
 
@@ -256,7 +256,7 @@ export function remapBoardTransfer(transfer: VoraBoardTransfer, boardId: string)
       data,
       selected: false,
       className: item.type === "voraShape"
-        ? data.shape === "path" ? "vora-path-node vora-shape-border-hit" : "vora-shape-border-hit"
+        ? isVoraPathLikeShape(data.shape) ? "vora-path-node vora-shape-border-hit" : "vora-shape-border-hit"
         : undefined,
       draggable: item.draggable,
       style: item.style,

@@ -12,6 +12,7 @@ import {
 import { useAppStore } from "@/shared/store/useAppStore";
 import { dbService, SnapshotSummary, type BoardVersionSnapshot } from "@/mind/services/dbService";
 import { VoraCard } from "@/mind/types";
+import { isVoraPathLikeShape } from "@/mind/utils/shapeGeometry";
 
 const DEFAULT_CARD_WIDTH = 352;
 
@@ -496,7 +497,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
             data: savedData ?? legacyCardData,
           };
           if (nodeType === "voraShape") {
-            restoredNode.className = savedData?.shape === "path"
+            restoredNode.className = isVoraPathLikeShape(savedData?.shape)
               ? "vora-path-node vora-shape-border-hit"
               : "vora-shape-border-hit";
           }
@@ -719,7 +720,7 @@ export function useVoraFlow(boardId: string, zoomXScale = 1, zoomYScale = 1, aut
       style: restoreNodeStyle(node.style),
       data: node.data,
       className: node.node_type === "voraShape"
-        ? node.data.shape === "path" ? "vora-path-node vora-shape-border-hit" : "vora-shape-border-hit"
+        ? isVoraPathLikeShape(node.data.shape) ? "vora-path-node vora-shape-border-hit" : "vora-shape-border-hit"
         : undefined,
     }));
     const restoredEdges: Edge[] = snapshot.edges.map((edge) => ({

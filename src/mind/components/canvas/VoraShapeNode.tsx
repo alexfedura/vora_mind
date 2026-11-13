@@ -13,7 +13,11 @@ import { DrawingColorPicker } from "@/shared/canvas/DrawingColorPicker";
 import { getSetting, setSetting } from "@/shared/store/useSettingsStore";
 import { VORA_DIAGRAM_SHAPE_LABELS, type VoraPathSegment, type VoraShapeData, type VoraShapeStyleSettings } from "@/mind/types";
 import { canJoinPathNodes, getPathSegments } from "@/mind/utils/pathSegments";
-import { getVoraShapePath } from "@/mind/utils/shapeGeometry";
+import {
+  getVoraFreehandPath,
+  getVoraShapePath,
+  isVoraPathLikeShape,
+} from "@/mind/utils/shapeGeometry";
 import { useCanvasZoomScales } from "./CanvasZoomContext";
 
 export type VoraShapeNodeModel = Node<VoraShapeData, "voraShape">;
@@ -146,12 +150,14 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
     canJoinPathNodes(selectedPathNodes);
   const isToolbarOwner = selected && topmostSelectedShape?.id === id;
   const allSelectedShapesLocked = selectedShapeNodes.length > 0 && selectedShapeNodes.every((node) => node.draggable === false);
-  const allSelectedShapesHaveFill = selectedShapeNodes.every((node) => node.data.shape !== "path");
+  const allSelectedShapesHaveFill = selectedShapeNodes.every((node) => !isVoraPathLikeShape(node.data.shape));
   const nodeLocked = getNode(id)?.draggable === false;
   const isPath = data.shape === "path";
+  const isFreehand = data.shape === "freehand";
+  const isStroke = isPath || isFreehand;
   const defaultLabel = VORA_DIAGRAM_SHAPE_LABELS[data.shape];
   const label = data.label || defaultLabel;
-  const shouldRenderLabel = label !== defaultLabel || (data.shape !== "rectangle" && !isPath);
+  const shouldRenderLabel = label !== defaultLabel || (data.shape !== "rectangle" && !isStroke);
   const color = data.color || "#e8ad55";
   const lineWidth = Number.isFinite(data.lineWidth) ? data.lineWidth : 2;
   const selectionHitStrokeWidth = lineWidth + 10 / Math.max(zoom, 0.01);
@@ -160,7 +166,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
   const textColor = data.textColor || "#dbdbdb";
   const textOpacity = Number.isFinite(data.textOpacity) ? data.textOpacity : 1;
   const fillColor = data.fillColor || color;
-  const fillOpacity = Number.isFinite(data.fillOpacity) ? data.fillOpacity : isPath ? 0 : 0.12;
+  const fillOpacity = Number.isFinite(data.fillOpacity) ? data.fillOpacity : isStroke ? 0 : 0.12;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [openControlMenu, setOpenControlMenu] = useState<"templates" | "line" | "fill" | "text" | "width" | "style" | null>(null);
   const [labelEditorOpen, setLabelEditorOpen] = useState(false);
@@ -521,7 +527,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
       onPointerUp={finishPointDrag}
       onPointerCancel={finishPointDrag}
     >
-      {!isPath && (
+      {!isStroke && (
         <>
           <NodeResizer
             isVisible={selected && !nodeLocked}
@@ -834,14 +840,14 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
               <option value="dotted">Dotted</option>
             </select>
           </label>
-          {!isPath ? <>
+          {!isStroke ? <>
             <label className="mb-2 flex items-center justify-between gap-2">Fill color
               <input aria-label="Rectangle fill color" type="color" value={fillColor} onChange={(event) => update({ fillColor: event.currentTarget.value })} className="h-7 w-10 rounded border border-[#383f4e] bg-transparent" />
             </label>
             <label className="flex items-center justify-between gap-2">Fill opacity
               <input aria-label="Rectangle fill opacity" type="range" min={0} max={100} value={Math.round(fillOpacity * 100)} onChange={(event) => update({ fillOpacity: Number(event.currentTarget.value) / 100 })} className="w-24 accent-violet-500" />
             </label>
-          </> : <>
+          </> : isPath ? <>
             <label className="mb-2 flex items-center justify-between gap-2">Start point
               <select aria-label="Path start marker" value={data.startArrow ? "arrow" : "none"} onChange={(event) => update({ startArrow: event.currentTarget.value === "arrow" })} className="rounded border border-[#383f4e] bg-[#0f1117] px-2 py-1">
                 <option value="none">None</option>
@@ -938,7 +944,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
                 </div>
               </>}
             </div>
-          </>}
+          </> : null}
         </div>
       )}
       <Handle type="target" position={Position.Top} id="target-top" className="!z-50 !w-3 !h-3 !-top-1.5 !opacity-0 !pointer-events-auto" />
@@ -959,7 +965,7 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
         pointerEvents="none"
         aria-label={label}
       >
-        {!isPath ? (
+        {!isStroke ? (
           <>
             <path
               className="vora-shape-visual"
@@ -978,6 +984,37 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
               fill="none"
               stroke="transparent"
               strokeWidth={selectionHitStrokeWidth}
+              pointerEvents="stroke"
+            />
+          </>
+        ) : isFreehand ? (
+          <>
+            <path
+              className="vora-shape-visual"
+              d={getVoraFreehandPath(draftPoints.map((point) => ({
+                x: point.x * shapeWidth,
+                y: point.y * shapeHeight,
+              })))}
+              fill="none"
+              stroke={color}
+              strokeOpacity={lineOpacity}
+              strokeWidth={lineWidth}
+              strokeDasharray={dashArray}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              pointerEvents="none"
+            />
+            <path
+              className="vora-shape-border-hit-target"
+              d={getVoraFreehandPath(draftPoints.map((point) => ({
+                x: point.x * shapeWidth,
+                y: point.y * shapeHeight,
+              })))}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={selectionHitStrokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
               pointerEvents="stroke"
             />
           </>
@@ -1083,10 +1120,10 @@ export const VoraShapeNode = memo(({ id, data, selected, width, height }: NodePr
         )}
         {shouldRenderLabel && (
           <text
-            x={isPath ? 8 : shapeWidth / 2}
-            y={isPath ? 19 : shapeHeight / 2}
-            textAnchor={isPath ? "start" : "middle"}
-            dominantBaseline={isPath ? "auto" : "middle"}
+            x={isStroke ? 8 : shapeWidth / 2}
+            y={isStroke ? 19 : shapeHeight / 2}
+            textAnchor={isStroke ? "start" : "middle"}
+            dominantBaseline={isStroke ? "auto" : "middle"}
             fill={textColor}
             fillOpacity={textOpacity}
             fontSize="12"

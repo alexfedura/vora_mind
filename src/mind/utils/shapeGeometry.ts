@@ -3,12 +3,42 @@ import type { VoraShapeData } from "@/mind/types";
 export function isVoraDiagramShape(value: unknown): value is VoraShapeData["shape"] {
   return value === "rectangle" ||
     value === "path" ||
+    value === "freehand" ||
     value === "process" ||
     value === "decision" ||
     value === "terminator" ||
     value === "inputOutput" ||
     value === "document" ||
     value === "database";
+}
+
+export function isVoraPathLikeShape(value: unknown): value is "path" | "freehand" {
+  return value === "path" || value === "freehand";
+}
+
+export function getVoraFreehandPath(points: readonly VoraShapeData["points"][number][]): string {
+  const [first, ...remaining] = points;
+  if (!first) return "";
+  if (remaining.length === 0) return `M ${first.x} ${first.y} l 0.01 0`;
+
+  let path = `M ${first.x} ${first.y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+    if (!start || !end) continue;
+    const previous = points[index - 1] ?? start;
+    const next = points[index + 2] ?? end;
+    const control1 = {
+      x: start.x + (end.x - previous.x) / 6,
+      y: start.y + (end.y - previous.y) / 6,
+    };
+    const control2 = {
+      x: end.x - (next.x - start.x) / 6,
+      y: end.y - (next.y - start.y) / 6,
+    };
+    path += ` C ${control1.x} ${control1.y} ${control2.x} ${control2.y} ${end.x} ${end.y}`;
+  }
+  return path;
 }
 
 export function getVoraShapePath(
@@ -50,6 +80,7 @@ export function getVoraShapePath(
       return `M ${left} ${ellipseCenterY} A ${(right - left) / 2} ${radius} 0 0 1 ${right} ${ellipseCenterY} V ${bottom - radius} A ${(right - left) / 2} ${radius} 0 0 1 ${left} ${bottom - radius} Z M ${left} ${centerY} A ${(right - left) / 2} ${radius} 0 0 0 ${right} ${centerY}`;
     }
     case "path":
+    case "freehand":
       return "";
   }
 }

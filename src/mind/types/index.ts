@@ -328,6 +328,7 @@ export interface VoraShapePoint {
 export const VORA_DIAGRAM_SHAPE_LABELS = {
   rectangle: "Rectangle",
   path: "Path",
+  freehand: "Freehand",
   process: "Process",
   decision: "Decision",
   terminator: "Start / End",

@@ -336,6 +336,10 @@ body.vora-player-active #root {
   cursor: grabbing !important;
 }
 
+.freehand-drawing-active {
+  touch-action: none;
+}
+
 .react-flow__node-voraShape.vora-path-node {
   overflow: visible;
 }

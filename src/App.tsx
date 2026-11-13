@@ -28,6 +28,7 @@ import {
   Database,
   FileText,
   Waypoints,
+  Pencil,
   Download,
   Upload,
   Minus,
@@ -80,7 +81,11 @@ import { VoraMediaNode } from "./mind/components/canvas/VoraMediaNode";
 import { VoraMatrixNode } from "./mind/components/canvas/VoraMatrixNode";
 import { VoraHypothesisNode } from "./mind/components/canvas/VoraHypothesisNode";
 import { CanvasZoomContext } from "./mind/components/canvas/CanvasZoomContext";
-import { isVoraDiagramShape } from "./mind/utils/shapeGeometry";
+import {
+  getVoraFreehandPath,
+  isVoraDiagramShape,
+  isVoraPathLikeShape,
+} from "./mind/utils/shapeGeometry";
 import type { VoraShapeData, VoraShapeDefaults, VoraShapePoint, VoraShapeStyleSettings } from "./mind/types";
 import {
   canJoinPathNodes,
@@ -384,6 +389,7 @@ function loadShapeDefaults(): VoraShapeDefaults {
   const defaults: VoraShapeDefaults = {
     rectangle: { ...DEFAULT_SHAPE_SETTINGS },
     path: { ...DEFAULT_SHAPE_SETTINGS, fillOpacity: 0 },
+    freehand: { ...DEFAULT_SHAPE_SETTINGS, fillOpacity: 0, endArrow: false },
     process: { ...DEFAULT_SHAPE_SETTINGS },
     decision: { ...DEFAULT_SHAPE_SETTINGS },
     terminator: { ...DEFAULT_SHAPE_SETTINGS },
@@ -399,6 +405,7 @@ function loadShapeDefaults(): VoraShapeDefaults {
     return {
       rectangle: readShapeSettings(parsed.rectangle, defaults.rectangle),
       path: readShapeSettings(parsed.path, defaults.path),
+      freehand: readShapeSettings(parsed.freehand, defaults.freehand),
       process: readShapeSettings(parsed.process, defaults.process),
       decision: readShapeSettings(parsed.decision, defaults.decision),
       terminator: readShapeSettings(parsed.terminator, defaults.terminator),
@@ -710,6 +717,9 @@ function AppContent() {
   const [shapeDefaults, setShapeDefaults] = useState<VoraShapeDefaults>(loadShapeDefaults);
   const rectangleStartRef = React.useRef<CanvasShapePoint | null>(null);
   const pathPointsRef = React.useRef<CanvasShapePoint[]>([]);
+  const freehandPointsRef = React.useRef<CanvasShapePoint[]>([]);
+  const freehandPointerIdRef = React.useRef<number | null>(null);
+  const freehandPreviewFrameRef = React.useRef<number | null>(null);
   const dragPositionsRef = React.useRef(new Map<string, {
     raw: Node["position"];
     normalized: Node["position"];
@@ -722,6 +732,19 @@ function AppContent() {
   } | null>(null);
   const resizeDimensionsRef = React.useRef(new Map<string, ShapeResizeDimensions>());
   const marqueeRef = React.useRef<CanvasMarquee | null>(null);
+  const resetFreehandStroke = (): void => {
+    if (freehandPreviewFrameRef.current !== null) {
+      window.cancelAnimationFrame(freehandPreviewFrameRef.current);
+      freehandPreviewFrameRef.current = null;
+    }
+    freehandPointsRef.current = [];
+    freehandPointerIdRef.current = null;
+  };
+  useEffect(() => {
+    if (activeShapeTool === "freehand") return;
+    resetFreehandStroke();
+    setShapePreview((preview) => preview?.shape === "freehand" ? null : preview);
+  }, [activeShapeTool]);
 
   const zoomScale = zoomLevelToScale(zoomLevel);
   const canvasZoomScales = useMemo(
@@ -1492,7 +1515,7 @@ function AppContent() {
         height: savedNode.height,
         style: restoreItemGroupNodeStyle(savedNode.style),
         className: savedNode.node_type === "voraShape"
-          ? shape === "path" ? "vora-path-node vora-shape-border-hit" : "vora-shape-border-hit"
+          ? isVoraPathLikeShape(shape) ? "vora-path-node vora-shape-border-hit" : "vora-shape-border-hit"
           : undefined,
         data,
         selected: false,
@@ -1595,17 +1618,46 @@ function AppContent() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target;
+      const isEditable = target instanceof HTMLElement && (
+        target.isContentEditable ||
+        target.closest("input, textarea, select, [contenteditable='true']") !== null
+      );
+      if (
+        e.code === "KeyP" &&
+        !e.repeat &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !e.shiftKey &&
+        !isEditable &&
+        canvasBoardId &&
+        !isWorkspacePageOpen
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDiagramPaletteOpen(false);
+        setIsAddCardToolActive(false);
+        setIsTextToolActive(false);
+        rectangleStartRef.current = null;
+        pathPointsRef.current = [];
+        resetFreehandStroke();
+        setShapePreview(null);
+        setActiveShapeTool((tool) => tool === "freehand" ? null : "freehand");
+        return;
+      }
       if (e.key === "Escape" && (isTextToolActive || activeShapeTool !== null)) {
         setIsTextToolActive(false);
         setActiveShapeTool(null);
         rectangleStartRef.current = null;
         pathPointsRef.current = [];
+        resetFreehandStroke();
         setShapePreview(null);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeShapeTool, isTextToolActive]);
+  }, [activeShapeTool, canvasBoardId, isTextToolActive, isWorkspacePageOpen]);
 
   useEffect(() => {
     const setSpacePanActive = (active: boolean): void => {
@@ -2238,7 +2290,8 @@ function AppContent() {
     if (
       activeShapeTool &&
       activeShapeTool !== "rectangle" &&
-      activeShapeTool !== "path"
+      activeShapeTool !== "path" &&
+      activeShapeTool !== "freehand"
     ) {
       const position = toCanvasFlowPosition({ x: event.clientX, y: event.clientY });
       addShapeNode(activeShapeTool, [position, position]);
@@ -2257,8 +2310,19 @@ function AppContent() {
   };
 
   const handleCanvasContextMenu = (event: React.MouseEvent<HTMLDivElement>): void => {
-    if (!(event.target instanceof Element) || !event.target.closest(".react-flow__pane")) return;
-    if (event.target.closest(".react-flow__node, .react-flow__edge, .react-flow__controls, .react-flow__minimap")) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (
+      activeShapeTool === "freehand" &&
+      isFreehandDrawingSurfaceTarget(target)
+    ) {
+      event.preventDefault();
+      resetFreehandStroke();
+      setShapePreview(null);
+      setActiveShapeTool(null);
+      return;
+    }
+    if (!target?.closest(".react-flow__pane")) return;
+    if (target.closest(".react-flow__node, .react-flow__edge, .react-flow__controls, .react-flow__minimap")) return;
 
     if (activeShapeTool !== null || shapePreview !== null || isTextToolActive || isAddCardToolActive) {
       event.preventDefault();
@@ -2267,6 +2331,7 @@ function AppContent() {
       setIsAddCardToolActive(false);
       rectangleStartRef.current = null;
       pathPointsRef.current = [];
+      resetFreehandStroke();
       setShapePreview(null);
     }
 
@@ -2535,6 +2600,26 @@ function AppContent() {
     };
   };
 
+  const appendFreehandPoint = (event: React.PointerEvent<HTMLDivElement>): void => {
+    const point = canvasShapePoint(event);
+    if (!point) return;
+    const previous = freehandPointsRef.current[freehandPointsRef.current.length - 1];
+    if (previous && Math.hypot(
+      point.screen.x - previous.screen.x,
+      point.screen.y - previous.screen.y,
+    ) < 0.75) return;
+    freehandPointsRef.current = [...freehandPointsRef.current, point];
+    if (freehandPreviewFrameRef.current !== null) return;
+    freehandPreviewFrameRef.current = window.requestAnimationFrame(() => {
+      freehandPreviewFrameRef.current = null;
+      if (freehandPointerIdRef.current === null) return;
+      setShapePreview({
+        shape: "freehand",
+        points: freehandPointsRef.current.map((item) => item.screen),
+      });
+    });
+  };
+
   const addTextNodeAtPosition = (position: Node["position"]): string => {
     if (!canvasBoardId) return "";
     flow.saveHistorySnapshot();
@@ -2691,23 +2776,23 @@ function AppContent() {
 
   const addShapeNode = (shape: VoraDiagramShape, points: VoraShapePoint[]): void => {
     if (!canvasBoardId) return;
-    if (points.length < 2) return;
+    if (points.length < (shape === "freehand" ? 1 : 2)) return;
     const xs = points.map((point) => point.x);
     const ys = points.map((point) => point.y);
     const minX = Math.min(...xs);
     const minY = Math.min(...ys);
     const spanX = Math.max(1, Math.max(...xs) - minX);
     const spanY = Math.max(1, Math.max(...ys) - minY);
-    const isPositionedSymbol = shape !== "rectangle" && shape !== "path";
-    const width = isPositionedSymbol ? 180 : Math.max(48, spanX);
-    const height = isPositionedSymbol ? 100 : Math.max(36, spanY);
+    const isPositionedSymbol = shape !== "rectangle" && shape !== "path" && shape !== "freehand";
+    const width = isPositionedSymbol ? 180 : shape === "freehand" ? spanX : Math.max(48, spanX);
+    const height = isPositionedSymbol ? 100 : shape === "freehand" ? spanY : Math.max(36, spanY);
     const position = isPositionedSymbol
       ? {
         x: (points[0]?.x ?? minX) - width / 2,
         y: (points[0]?.y ?? minY) - height / 2,
       }
       : { x: minX, y: minY };
-    const normalizedPoints = shape === "path"
+    const normalizedPoints = shape === "path" || shape === "freehand"
       ? points.map((point) => ({ x: spanX === 1 ? 0.5 : (point.x - minX) / spanX, y: spanY === 1 ? 0.5 : (point.y - minY) / spanY }))
       : [];
     const settings = shapeDefaults[shape];
@@ -2729,7 +2814,7 @@ function AppContent() {
     const node: Node = {
       id: `${shape}-${canvasBoardId}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       type: "voraShape",
-      className: shape === "path" ? "vora-path-node vora-shape-border-hit" : "vora-shape-border-hit",
+      className: isVoraPathLikeShape(shape) ? "vora-path-node vora-shape-border-hit" : "vora-shape-border-hit",
       position,
       width,
       height,
@@ -2790,6 +2875,17 @@ function AppContent() {
       && event.target.closest(".react-flow__node, .react-flow__edge, .react-flow__controls, .react-flow__minimap") === null;
   };
 
+  const isFreehandDrawingSurfaceTarget = (target: EventTarget | null): target is Element => {
+    if (!(target instanceof Element)) return false;
+    if (target.closest(
+      ".react-flow__controls, .react-flow__minimap, .react-flow__handle, .react-flow__resize-control, .drawing-toolbar, button, input, textarea, select, [contenteditable='true'], [role='toolbar']"
+    )) return false;
+    return target.closest(".react-flow__pane, .react-flow__node, .react-flow__edge") !== null;
+  };
+
+  const isFreehandDrawingSurface = (event: React.PointerEvent<HTMLDivElement>): boolean =>
+    isFreehandDrawingSurfaceTarget(event.target);
+
   const handleCanvasPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (!canvasBoardId) return;
     const target = event.target instanceof Element ? event.target : null;
@@ -2807,8 +2903,21 @@ function AppContent() {
         detail: { nodeIds: emptyTextNodeIds },
       }));
     }
-    if (event.button !== 0 || !isPanePointer(event)) return;
+    if (event.button !== 0) return;
     if (isSpacePanActiveRef.current) return;
+    if (activeShapeTool === "freehand") {
+      if (!isFreehandDrawingSurface(event)) return;
+      const point = canvasShapePoint(event);
+      if (!point) return;
+      event.preventDefault();
+      event.stopPropagation();
+      freehandPointerIdRef.current = event.pointerId;
+      freehandPointsRef.current = [point];
+      setShapePreview({ shape: "freehand", points: [point.screen] });
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
+    if (!isPanePointer(event)) return;
     if (!activeShapeTool && !isTextToolActive && !isAddCardToolActive) {
       const bounds = flow.reactFlowWrapper.current?.getBoundingClientRect();
       if (!bounds) return;
@@ -2856,6 +2965,10 @@ function AppContent() {
         width: Math.abs(event.clientX - marquee.start.x),
         height: Math.abs(event.clientY - marquee.start.y),
       });
+      return;
+    }
+    if (freehandPointerIdRef.current === event.pointerId) {
+      appendFreehandPoint(event);
       return;
     }
     if (!activeShapeTool || (activeShapeTool !== "rectangle" && activeShapeTool !== "path")) return;
@@ -2906,6 +3019,15 @@ function AppContent() {
       return;
     }
 
+    if (freehandPointerIdRef.current === event.pointerId) {
+      appendFreehandPoint(event);
+      const points = freehandPointsRef.current.map((item) => item.flow);
+      resetFreehandStroke();
+      setShapePreview(null);
+      addShapeNode("freehand", points);
+      return;
+    }
+
     const start = rectangleStartRef.current;
     if (!start || activeShapeTool !== "rectangle") return;
     const end = canvasShapePoint(event);
@@ -2914,6 +3036,12 @@ function AppContent() {
     if (!end || Math.hypot(end.screen.x - start.screen.x, end.screen.y - start.screen.y) < 4) return;
     addShapeNode("rectangle", [start.flow, end.flow]);
     setActiveShapeTool(null);
+  };
+
+  const handleCanvasPointerCancel = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (freehandPointerIdRef.current !== event.pointerId) return;
+    resetFreehandStroke();
+    setShapePreview(null);
   };
 
   const handleNodesChange = (changes: NodeChange<Node>[]): void => {
@@ -3297,9 +3425,27 @@ function AppContent() {
         </button>
         <button
           type="button"
+          aria-label="Freehand drawing tool"
+          aria-pressed={activeShapeTool === "freehand"}
+          onClick={() => {
+            setIsDiagramPaletteOpen(false);
+            setIsAddCardToolActive(false);
+            setIsTextToolActive(false);
+            rectangleStartRef.current = null;
+            pathPointsRef.current = [];
+            setShapePreview(null);
+            setActiveShapeTool((tool) => tool === "freehand" ? null : "freehand");
+          }}
+          className={`${CANVAS_TOOL_BUTTON_CLASS} ${activeShapeTool === "freehand" ? CANVAS_TOOL_BUTTON_ACTIVE_CLASS : CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
+          title="Freehand drawing (P)"
+        >
+          <Pencil size={16} />
+        </button>
+        <button
+          type="button"
           aria-label="Flowchart shapes"
           aria-expanded={isDiagramPaletteOpen}
-          aria-pressed={Boolean(activeShapeTool && activeShapeTool !== "rectangle" && activeShapeTool !== "path")}
+          aria-pressed={Boolean(activeShapeTool && activeShapeTool !== "rectangle" && activeShapeTool !== "path" && activeShapeTool !== "freehand")}
           onClick={() => setIsDiagramPaletteOpen((open) => !open)}
           className={`${CANVAS_TOOL_BUTTON_CLASS} ${isDiagramPaletteOpen ? CANVAS_TOOL_BUTTON_ACTIVE_CLASS : CANVAS_TOOL_BUTTON_IDLE_CLASS}`}
           title="Flowchart shapes"
@@ -3590,12 +3736,14 @@ function AppContent() {
         onPointerDownCapture={isWorkspacePageOpen ? undefined : handleCanvasPointerDown}
         onPointerMoveCapture={isWorkspacePageOpen ? undefined : handleCanvasPointerMove}
         onPointerUpCapture={isWorkspacePageOpen ? undefined : handleCanvasPointerUp}
+        onPointerCancelCapture={isWorkspacePageOpen ? undefined : handleCanvasPointerCancel}
         onDoubleClickCapture={isWorkspacePageOpen ? undefined : handleCanvasDoubleClick}
         onKeyDown={isWorkspacePageOpen ? undefined : handleCanvasKeyDown}
         className={`w-full h-full relative ${isPlayerOpen ? "bg-transparent" : "bg-background"} flex-1 transition-all duration-300 ease-in-out ${
           !isPlayerOpen && isWorkspacePageOpen && activeOpenPanel === "sidebar" ? "ml-56" : "ml-0"
         } ${isSpacePanActive ? "space-pan-active" : ""} ${
-          isTextToolActive ? "cursor-text" : activeShapeTool || isAddCardToolActive ? "cursor-crosshair" : ""
+          activeShapeTool === "freehand" ? "freehand-drawing-active" : ""
+        } ${isTextToolActive ? "cursor-text" : activeShapeTool || isAddCardToolActive ? "cursor-crosshair" : ""
         }`}
       >
         <PlayerWorkspace
@@ -3942,7 +4090,18 @@ function AppContent() {
               const first = shapePreview.points[0] ?? { x: 0, y: 0 };
               const second = shapePreview.points[1] ?? first;
               return <rect x={Math.min(first.x, second.x)} y={Math.min(first.y, second.y)} width={Math.abs(second.x - first.x)} height={Math.abs(second.y - first.y)} fill={previewSettings.fillColor} fillOpacity={previewSettings.fillOpacity} stroke={previewSettings.color} strokeOpacity={previewSettings.lineOpacity} strokeWidth={previewSettings.lineWidth} strokeDasharray={previewDashArray} />;
-            })() : shapePreview.shape === "path" && shapePreview.points.length > 0 ? (
+            })() : shapePreview.shape === "freehand" && shapePreview.points.length > 0 ? (
+              <path
+                d={getVoraFreehandPath(shapePreview.points)}
+                fill="none"
+                stroke={previewSettings.color}
+                strokeOpacity={previewSettings.lineOpacity}
+                strokeWidth={previewSettings.lineWidth}
+                strokeDasharray={previewDashArray}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ) : shapePreview.shape === "path" && shapePreview.points.length > 0 ? (
               <>
                 <defs>
                   <marker id="vora-mind-path-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">

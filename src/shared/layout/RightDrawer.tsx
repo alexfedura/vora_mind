@@ -40,7 +40,11 @@ import type {
   LibraryItemGroupVersion,
   VoraCard,
 } from "@/mind/types";
-import { getVoraShapePath, isVoraDiagramShape } from "@/mind/utils/shapeGeometry";
+import {
+  getVoraFreehandPath,
+  getVoraShapePath,
+  isVoraDiagramShape,
+} from "@/mind/utils/shapeGeometry";
 import { formatMediaTime } from "@/mind/utils/mediaLinks";
 
 const resolveTextDirection = (text: string, defaultMajorRtl: boolean): { isRtl: boolean; cleanText: string } => {
@@ -168,6 +172,22 @@ const GroupSchematicPreview: React.FC<{
                 typeof point.y === "number" && Number.isFinite(point.y)
               )
             : [];
+          if (shape === "freehand") {
+              return (
+                <path
+                  key={node.id}
+                  d={getVoraFreehandPath(points.map((point) => ({
+                    x: node.x + point.x * nodeWidth,
+                    y: node.y + point.y * nodeHeight,
+                  })))}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={Math.max(1.5, width / 160)}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              );
+          }
           if (shape !== "path") {
             return (
               <path
