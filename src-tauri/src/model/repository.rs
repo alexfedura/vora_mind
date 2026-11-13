@@ -710,6 +710,38 @@ pub fn create_model_version(
     query_version(conn, &model_version_id)
 }
 
+fn ensure_parent_version_ownership(
+    conn: &Connection,
+    parent_version_id: &str,
+    model_id: &str,
+    project_id: &str,
+) -> Result<()> {
+    let parent: Option<(String, String)> = conn
+        .query_row(
+            "SELECT model_id, created_in_project_id FROM model_versions WHERE id = ?1",
+            [parent_version_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    let parent_model_id = parent
+        .as_ref()
+        .map(|(parent_model_id, _)| parent_model_id.as_str());
+    if parent_model_id != Some(model_id) {
+        return Err(anyhow!(
+            "Parent versions must belong to the same model identity."
+        ));
+    }
+    let parent_project_id = parent
+        .as_ref()
+        .map(|(_, parent_project_id)| parent_project_id.as_str());
+    if parent_project_id != Some(project_id) {
+        return Err(anyhow!(
+            "Parent versions must belong to the requesting project."
+        ));
+    }
+    Ok(())
+}
+
 fn validate_version_request(conn: &Connection, request: &CreateModelVersionReq) -> Result<()> {
     exists(
         conn,
@@ -939,38 +971,6 @@ fn validate_version_request(conn: &Connection, request: &CreateModelVersionReq) 
                 "Experiment run must belong to the requesting project.",
             )?;
         }
-    }
-    Ok(())
-}
-
-fn ensure_parent_version_ownership(
-    conn: &Connection,
-    parent_version_id: &str,
-    model_id: &str,
-    project_id: &str,
-) -> Result<()> {
-    let parent: Option<(String, String)> = conn
-        .query_row(
-            "SELECT model_id, created_in_project_id FROM model_versions WHERE id = ?1",
-            [parent_version_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?;
-    let parent_model_id = parent
-        .as_ref()
-        .map(|(parent_model_id, _)| parent_model_id.as_str());
-    if parent_model_id != Some(model_id) {
-        return Err(anyhow!(
-            "Parent versions must belong to the same model identity."
-        ));
-    }
-    let parent_project_id = parent
-        .as_ref()
-        .map(|(_, parent_project_id)| parent_project_id.as_str());
-    if parent_project_id != Some(project_id) {
-        return Err(anyhow!(
-            "Parent versions must belong to the requesting project."
-        ));
     }
     Ok(())
 }
@@ -2788,55 +2788,6 @@ mod tests {
         version_id
     }
 
-    fn insert_research_observation(conn: &Connection, project_id: &str, suffix: &str) -> String {
-        let phenomenon_id = format!("phenomenon-{suffix}");
-        let plan_id = format!("observation-plan-{suffix}");
-        let plan_version_id = format!("observation-plan-version-{suffix}");
-        let observation_id = format!("observation-{suffix}");
-        conn.execute(
-            "INSERT INTO research_phenomena
-                (id, project_id, title, description, population_scope, context,
-                 temporal_boundary, lifecycle_status, created_at_us)
-             VALUES (?1, ?2, 'Phenomenon', '', 'population', 'context',
-                     'boundary', 'identified', 1)",
-            params![phenomenon_id, project_id],
-        )
-        .expect("insert research phenomenon");
-        conn.execute(
-            "INSERT INTO observation_plans
-                (id, project_id, phenomenon_id, title, created_at_us)
-             VALUES (?1, ?2, ?3, 'Observation plan', 1)",
-            params![plan_id, project_id, phenomenon_id],
-        )
-        .expect("insert observation plan");
-        conn.execute(
-            "INSERT INTO observation_plan_versions
-                (id, plan_id, version_no, measurement_method, sample_frame,
-                 conditions_template, inclusion_rules, lifecycle_status, created_at_us)
-             VALUES (?1, ?2, 1, 'method', 'sample frame', 'conditions', 'rules',
-                     'reviewed', 1)",
-            params![plan_version_id, plan_id],
-        )
-        .expect("insert reviewed observation plan version");
-        conn.execute(
-            "INSERT INTO research_observations
-                (id, project_id, phenomenon_id, plan_id, plan_version_id,
-                 measured_at_us, value_state, measurement_method, conditions,
-                 quality_status, created_at_us)
-             VALUES (?1, ?2, ?3, ?4, ?5, 1, 'unknown', 'method', 'conditions',
-                     'unreviewed', 1)",
-            params![
-                observation_id,
-                project_id,
-                phenomenon_id,
-                plan_id,
-                plan_version_id
-            ],
-        )
-        .expect("insert research observation");
-        observation_id
-    }
-
     fn model_request(origin_project_id: &str) -> CreateModelReq {
         CreateModelReq {
             display_name: "Baseline model".to_string(),
@@ -3139,6 +3090,83 @@ mod tests {
         }
     }
 
+    fn archived_project_model_fixture() -> (Connection, ProjectModelFixture) {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        let project = create_project_model_fixture(&mut conn, "project-a");
+        conn.execute(
+            "UPDATE research_projects SET lifecycle_status = 'archived' WHERE id = 'project-a'",
+            [],
+        )
+        .expect("archive project A");
+        (conn, project)
+    }
+
+    fn evaluation_request(
+        project_id: &str,
+        project: &ProjectModelFixture,
+    ) -> CreateModelEvaluationReq {
+        CreateModelEvaluationReq {
+            project_id: project_id.to_string(),
+            model_version_id: project.version_id.clone(),
+            analysis_run_id: project.analysis_run_id.clone(),
+            analysis_run_input_id: project.analysis_input_id.clone(),
+            dataset_version_id: project.dataset_version_id.clone(),
+            analysis_metric_id: project.analysis_metric_id.clone(),
+            role: "test".to_string(),
+            split_group_id: None,
+            limitations: "Test fixture.".to_string(),
+            created_by: None,
+        }
+    }
+
+    fn validation_request(
+        project_id: &str,
+        project: &ProjectModelFixture,
+    ) -> CreateModelValidationReq {
+        CreateModelValidationReq {
+            project_id: project_id.to_string(),
+            target: ModelValidationTarget::ModelVersion(project.version_id.clone()),
+            criteria: vec![serde_json::json!({"criterion": "threshold"})],
+            scope: "Fixture model".to_string(),
+            population_scope: format!("{project_id} population"),
+            evaluation_method: "Compare against threshold".to_string(),
+            evaluator_identity: "test reviewer".to_string(),
+            independence_state: "independent".to_string(),
+            independence_rationale: String::new(),
+            conflict_of_interest: "None.".to_string(),
+            created_by: None,
+        }
+    }
+
+    fn replication_request(
+        project_id: &str,
+        project: &ProjectModelFixture,
+    ) -> CreateModelReplicationReq {
+        CreateModelReplicationReq {
+            project_id: project_id.to_string(),
+            model_version_id: project.version_id.clone(),
+            original_experiment_run_id: project.experiment_run_id.clone(),
+            replication_kind: "direct".to_string(),
+            independent_team_operator: "test team".to_string(),
+            protocol_context: "Test fixture.".to_string(),
+            dataset_context: serde_json::json!({}),
+            datasets: vec![ModelReplicationDatasetReq {
+                dataset_version_id: project.dataset_version_id.clone(),
+                role: "test".to_string(),
+                split_group_id: None,
+            }],
+            outcome: "supports".to_string(),
+            result_summary: "Test fixture.".to_string(),
+            deviations: vec![],
+            provenance: serde_json::json!({}),
+            analysis_evidence_ids: vec![],
+            model_evidence_ids: vec![project.evidence_id.clone()],
+            created_by: None,
+        }
+    }
+
     fn insert_workspace_source_claim(conn: &Connection) -> String {
         conn.execute(
             "INSERT INTO sources (id, kind, title, created_at, updated_at)
@@ -3235,28 +3263,9 @@ mod tests {
             )
             .expect("count model records");
 
-        let hypothesis_a = insert_hypothesis(&conn, "project-a", "private-read-a");
-        let hypothesis_b = insert_hypothesis(&conn, "project-b", "private-read-b");
-        let finding_a = insert_finding_version(&conn, "project-a", "private-read-a", &hypothesis_a);
-        let finding_b = insert_finding_version(&conn, "project-b", "private-read-b", &hypothesis_b);
-        let observation_a = insert_research_observation(&conn, "project-a", "private-read-a");
-        let observation_b = insert_research_observation(&conn, "project-b", "private-read-b");
-
-        for (project_id, target, local, target_finding, target_observation) in [
-            (
-                "project-a",
-                &project_b,
-                &project_a,
-                &finding_b,
-                &observation_b,
-            ),
-            (
-                "project-b",
-                &project_a,
-                &project_b,
-                &finding_a,
-                &observation_a,
-            ),
+        for (project_id, target, local) in [
+            ("project-a", &project_b, &project_a),
+            ("project-b", &project_a, &project_b),
         ] {
             let mut foreign_model_version = version_request(project_id, &target.model_id);
             foreign_model_version.change_class = ModelChangeClass::Extension;
@@ -3280,36 +3289,6 @@ mod tests {
                 },
             )
             .is_err());
-            let target_analysis_output_id: String = conn
-                .query_row(
-                    "SELECT id FROM analysis_outputs WHERE run_id = ?1",
-                    [&target.analysis_run_id],
-                    |row| row.get(0),
-                )
-                .expect("find project analysis output");
-            for artifact in [
-                ModelArtifactRef::DatasetVersion(target.dataset_version_id.clone()),
-                ModelArtifactRef::ExperimentRun(target.experiment_run_id.clone()),
-                ModelArtifactRef::AnalysisOutput(target_analysis_output_id),
-                ModelArtifactRef::ResearchObservation(target_observation.clone()),
-                ModelArtifactRef::FindingVersion(target_finding.clone()),
-            ] {
-                assert!(create_evidence(
-                    &mut conn,
-                    &CreateModelEvidenceReq {
-                        project_id: project_id.to_string(),
-                        model_version_id: local.version_id.clone(),
-                        artifact,
-                        polarity: ModelEvidencePolarity::Supports,
-                        scope: "Foreign project artifact".to_string(),
-                        quality_rationale: "Negative isolation test.".to_string(),
-                        limitations: "None.".to_string(),
-                        provenance: serde_json::json!({}),
-                        created_by: None,
-                    },
-                )
-                .is_err());
-            }
             assert!(create_evaluation(
                 &mut conn,
                 &CreateModelEvaluationReq {
@@ -3322,22 +3301,6 @@ mod tests {
                     role: "test".to_string(),
                     split_group_id: None,
                     limitations: "Negative isolation test.".to_string(),
-                    created_by: None,
-                },
-            )
-            .is_err());
-            assert!(create_evaluation(
-                &mut conn,
-                &CreateModelEvaluationReq {
-                    project_id: project_id.to_string(),
-                    model_version_id: local.version_id.clone(),
-                    analysis_run_id: target.analysis_run_id.clone(),
-                    analysis_run_input_id: target.analysis_input_id.clone(),
-                    dataset_version_id: target.dataset_version_id.clone(),
-                    analysis_metric_id: target.analysis_metric_id.clone(),
-                    role: "test".to_string(),
-                    split_group_id: None,
-                    limitations: "Foreign project analysis run.".to_string(),
                     created_by: None,
                 },
             )
@@ -3384,24 +3347,39 @@ mod tests {
                 },
             )
             .is_err());
-            assert!(create_validation(
-                &mut conn,
-                &CreateModelValidationReq {
-                    project_id: project_id.to_string(),
-                    target: ModelValidationTarget::FindingVersion(target_finding.clone()),
-                    criteria: vec![serde_json::json!({"criterion": "threshold"})],
-                    scope: "Cross-project test".to_string(),
-                    population_scope: "Fixture population".to_string(),
-                    evaluation_method: "Compare against threshold".to_string(),
-                    evaluator_identity: "test reviewer".to_string(),
-                    independence_state: "independent".to_string(),
-                    independence_rationale: String::new(),
-                    conflict_of_interest: "None.".to_string(),
-                    created_by: None,
-                },
-            )
-            .is_err());
         }
+        assert!(create_evidence(
+            &mut conn,
+            &CreateModelEvidenceReq {
+                project_id: "project-a".to_string(),
+                model_version_id: project_a.version_id.clone(),
+                artifact: ModelArtifactRef::DatasetVersion(project_b.dataset_version_id.clone()),
+                polarity: ModelEvidencePolarity::Supports,
+                scope: "Foreign dataset reference".to_string(),
+                quality_rationale: "Negative isolation test.".to_string(),
+                limitations: "None.".to_string(),
+                provenance: serde_json::json!({}),
+                created_by: None,
+            },
+        )
+        .is_err());
+        assert!(create_evaluation(
+            &mut conn,
+            &CreateModelEvaluationReq {
+                project_id: "project-a".to_string(),
+                model_version_id: project_a.version_id.clone(),
+                analysis_run_id: project_b.analysis_run_id.clone(),
+                analysis_run_input_id: project_b.analysis_input_id.clone(),
+                dataset_version_id: project_b.dataset_version_id.clone(),
+                analysis_metric_id: project_b.analysis_metric_id.clone(),
+                role: "test".to_string(),
+                split_group_id: None,
+                limitations: "Foreign run reference.".to_string(),
+                created_by: None,
+            },
+        )
+        .is_err());
+
         let counts_after: (i64, i64, i64, i64) = conn
             .query_row(
                 "SELECT (SELECT COUNT(*) FROM model_evidence),
@@ -3413,6 +3391,266 @@ mod tests {
             )
             .expect("count model records after rejected writes");
         assert_eq!(counts_after, counts_before);
+    }
+
+    #[test]
+    fn project_scoped_model_reads_hide_other_projects_records() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        insert_project(&conn, "project-b");
+        let project_a = create_project_model_fixture(&mut conn, "project-a");
+        let project_b = create_project_model_fixture(&mut conn, "project-b");
+
+        for (project_id, local) in [("project-a", &project_a), ("project-b", &project_b)] {
+            create_evaluation(&mut conn, &evaluation_request(project_id, local))
+                .expect("create project evaluation");
+            let validation = create_validation(&mut conn, &validation_request(project_id, local))
+                .expect("create project validation");
+            finalize_validation(
+                &mut conn,
+                &FinalizeModelValidationReq {
+                    validation_id: validation.id,
+                    outcome: ModelValidationOutcome::Pass,
+                    rationale: "Project-scoped read fixture.".to_string(),
+                    deviations: vec![],
+                    analysis_evidence_ids: vec![],
+                    model_evidence_ids: vec![local.evidence_id.clone()],
+                    actor_id: None,
+                },
+            )
+            .expect("finalize project validation");
+            create_replication(&mut conn, &replication_request(project_id, local))
+                .expect("create project replication");
+        }
+
+        for (project_id, local, foreign) in [
+            ("project-a", &project_a, &project_b),
+            ("project-b", &project_b, &project_a),
+        ] {
+            let evidence = query_evidence_list(&conn, project_id).expect("query project evidence");
+            assert!(evidence.iter().any(|item| item.id == local.evidence_id));
+            assert!(evidence.iter().all(|item| item.id != foreign.evidence_id));
+
+            let evaluations = query_evaluations(&conn, project_id).expect("query evaluations");
+            assert_eq!(evaluations.len(), 1);
+            assert_eq!(evaluations[0].project_id, project_id);
+            assert_ne!(evaluations[0].model_version_id, foreign.version_id);
+
+            let validations = query_validations(&conn, project_id).expect("query validations");
+            assert_eq!(validations.len(), 1);
+            assert_eq!(validations[0].project_id, project_id);
+            assert_ne!(
+                validations[0].target,
+                ModelValidationTarget::ModelVersion(foreign.version_id.clone())
+            );
+
+            let replications = query_replications(&conn, project_id).expect("query replications");
+            assert_eq!(replications.len(), 1);
+            assert_eq!(replications[0].project_id, project_id);
+            assert_ne!(replications[0].model_version_id, foreign.version_id);
+        }
+    }
+
+    #[test]
+    fn evidence_requires_same_project_dataset_and_experiment_references() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        insert_project(&conn, "project-b");
+        let project_a = create_project_model_fixture(&mut conn, "project-a");
+        let project_b = create_project_model_fixture(&mut conn, "project-b");
+
+        for (project_id, local, foreign) in [
+            ("project-a", &project_a, &project_b),
+            ("project-b", &project_b, &project_a),
+        ] {
+            for artifact in [
+                ModelArtifactRef::DatasetVersion(foreign.dataset_version_id.clone()),
+                ModelArtifactRef::ExperimentRun(foreign.experiment_run_id.clone()),
+            ] {
+                let error = create_evidence(
+                    &mut conn,
+                    &CreateModelEvidenceReq {
+                        project_id: project_id.to_string(),
+                        model_version_id: local.version_id.clone(),
+                        artifact,
+                        polarity: ModelEvidencePolarity::Supports,
+                        scope: "Cross-project artifact test".to_string(),
+                        quality_rationale: "Must reference a local artifact.".to_string(),
+                        limitations: "Test fixture.".to_string(),
+                        provenance: serde_json::json!({}),
+                        created_by: None,
+                    },
+                )
+                .expect_err("evidence cannot reference another project's data");
+                assert!(error
+                    .to_string()
+                    .contains("must belong to the requesting project"));
+            }
+        }
+    }
+
+    #[test]
+    fn evaluations_reject_foreign_runs_inputs_datasets_and_metrics_in_both_directions() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        insert_project(&conn, "project-b");
+        let project_a = create_project_model_fixture(&mut conn, "project-a");
+        let project_b = create_project_model_fixture(&mut conn, "project-b");
+
+        for (project_id, local, foreign) in [
+            ("project-a", &project_a, &project_b),
+            ("project-b", &project_b, &project_a),
+        ] {
+            let mut request = evaluation_request(project_id, local);
+            request.analysis_run_id = foreign.analysis_run_id.clone();
+            request.analysis_run_input_id = foreign.analysis_input_id.clone();
+            request.dataset_version_id = foreign.dataset_version_id.clone();
+            request.analysis_metric_id = foreign.analysis_metric_id.clone();
+            assert!(create_evaluation(&mut conn, &request)
+                .expect_err("evaluation run must be project-local")
+                .to_string()
+                .contains("must match the AnalysisRun project"));
+
+            let mut request = evaluation_request(project_id, local);
+            request.dataset_version_id = foreign.dataset_version_id.clone();
+            assert!(create_evaluation(&mut conn, &request)
+                .expect_err("evaluation dataset must match its exact local input")
+                .to_string()
+                .contains("does not pin the requested dataset version"));
+
+            let mut request = evaluation_request(project_id, local);
+            request.analysis_run_input_id = foreign.analysis_input_id.clone();
+            assert!(create_evaluation(&mut conn, &request)
+                .expect_err("evaluation input must belong to its exact local run")
+                .to_string()
+                .contains("does not pin the requested dataset version"));
+
+            let mut request = evaluation_request(project_id, local);
+            request.analysis_metric_id = foreign.analysis_metric_id.clone();
+            assert!(create_evaluation(&mut conn, &request)
+                .expect_err("evaluation metric must belong to its exact local run")
+                .to_string()
+                .contains("metric must belong to the exact AnalysisRun"));
+        }
+    }
+
+    #[test]
+    fn validations_reject_foreign_targets_and_model_evidence_in_both_directions() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        insert_project(&conn, "project-b");
+        let project_a = create_project_model_fixture(&mut conn, "project-a");
+        let project_b = create_project_model_fixture(&mut conn, "project-b");
+        let hypothesis_a = insert_hypothesis(&conn, "project-a", "validation-a");
+        let hypothesis_b = insert_hypothesis(&conn, "project-b", "validation-b");
+        let finding_a = insert_finding_version(&conn, "project-a", "validation-a", &hypothesis_a);
+        let finding_b = insert_finding_version(&conn, "project-b", "validation-b", &hypothesis_b);
+
+        for (project_id, local, foreign, foreign_finding) in [
+            ("project-a", &project_a, &project_b, &finding_b),
+            ("project-b", &project_b, &project_a, &finding_a),
+        ] {
+            let mut request = validation_request(project_id, local);
+            request.target = ModelValidationTarget::ModelVersion(foreign.version_id.clone());
+            assert!(create_validation(&mut conn, &request)
+                .expect_err("validation target must be project-local")
+                .to_string()
+                .contains("must belong to the requesting project"));
+
+            let mut request = validation_request(project_id, local);
+            request.target = ModelValidationTarget::FindingVersion(foreign_finding.clone());
+            assert!(create_validation(&mut conn, &request)
+                .expect_err("validation finding must be project-local")
+                .to_string()
+                .contains("must belong to the selected project"));
+
+            let validation = create_validation(&mut conn, &validation_request(project_id, local))
+                .expect("create local validation");
+            assert!(finalize_validation(
+                &mut conn,
+                &FinalizeModelValidationReq {
+                    validation_id: validation.id,
+                    outcome: ModelValidationOutcome::Pass,
+                    rationale: "Foreign evidence must be rejected.".to_string(),
+                    deviations: vec![],
+                    analysis_evidence_ids: vec![],
+                    model_evidence_ids: vec![foreign.evidence_id.clone()],
+                    actor_id: None,
+                },
+            )
+            .expect_err("validation evidence must target the exact local version")
+            .to_string()
+            .contains("must target the exact validated ModelVersion"));
+        }
+    }
+
+    #[test]
+    fn replications_reject_foreign_runs_datasets_and_evidence_in_both_directions() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        insert_project(&conn, "project-b");
+        let project_a = create_project_model_fixture(&mut conn, "project-a");
+        let project_b = create_project_model_fixture(&mut conn, "project-b");
+
+        for (project_id, local, foreign) in [
+            ("project-a", &project_a, &project_b),
+            ("project-b", &project_b, &project_a),
+        ] {
+            let mut request = replication_request(project_id, local);
+            request.original_experiment_run_id = foreign.experiment_run_id.clone();
+            assert!(create_replication(&mut conn, &request)
+                .expect_err("replication run must be project-local")
+                .to_string()
+                .contains("must belong to the requesting project"));
+
+            let mut request = replication_request(project_id, local);
+            request.datasets[0].dataset_version_id = foreign.dataset_version_id.clone();
+            assert!(create_replication(&mut conn, &request)
+                .expect_err("replication dataset must be project-local")
+                .to_string()
+                .contains("must belong to the requesting project"));
+
+            let mut request = replication_request(project_id, local);
+            request.model_evidence_ids = vec![foreign.evidence_id.clone()];
+            assert!(create_replication(&mut conn, &request)
+                .expect_err("replication evidence must target the exact local version")
+                .to_string()
+                .contains("must target the exact replicated version"));
+        }
+    }
+
+    #[test]
+    fn model_evidence_accepts_workspace_shared_source_claims_for_both_projects() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        insert_project(&conn, "project-b");
+        let project_a = create_project_model_fixture(&mut conn, "project-a");
+        let project_b = create_project_model_fixture(&mut conn, "project-b");
+        let claim_id = insert_workspace_source_claim(&conn);
+
+        for (project_id, project) in [("project-a", &project_a), ("project-b", &project_b)] {
+            create_evidence(
+                &mut conn,
+                &CreateModelEvidenceReq {
+                    project_id: project_id.to_string(),
+                    model_version_id: project.version_id.clone(),
+                    artifact: ModelArtifactRef::SourceClaim(claim_id.clone()),
+                    polarity: ModelEvidencePolarity::Supports,
+                    scope: "Shared workspace source".to_string(),
+                    quality_rationale: "The source claim is workspace-shared.".to_string(),
+                    limitations: "Test fixture.".to_string(),
+                    provenance: serde_json::json!({}),
+                    created_by: None,
+                },
+            )
+            .expect("shared source claim can support evidence in either project");
+        }
     }
 
     #[test]
@@ -3754,31 +3992,42 @@ mod tests {
     }
 
     #[test]
-    fn archived_projects_reject_each_model_create_operation() {
-        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
-        initialize(&conn);
-        insert_project(&conn, "project-a");
-        let project_a = create_project_model_fixture(&mut conn, "project-a");
-        conn.execute(
-            "UPDATE research_projects SET lifecycle_status = 'archived' WHERE id = 'project-a'",
-            [],
-        )
-        .expect("archive project A");
+    fn archived_projects_reject_model_creation() {
+        let (mut conn, _) = archived_project_model_fixture();
+        let error = create_model(&mut conn, &model_request("project-a"))
+            .expect_err("archived projects cannot create model identities");
+        assert_eq!(
+            error.to_string(),
+            "Archived research projects cannot be modified."
+        );
+    }
 
-        let mut successor_request = version_request("project-a", &project_a.model_id);
-        successor_request.change_class = ModelChangeClass::Extension;
-        successor_request.parents = vec![ModelParentReq {
-            version_id: project_a.version_id.clone(),
+    #[test]
+    fn archived_projects_reject_model_version_creation() {
+        let (mut conn, project) = archived_project_model_fixture();
+        let mut request = version_request("project-a", &project.model_id);
+        request.change_class = ModelChangeClass::Extension;
+        request.parents = vec![ModelParentReq {
+            version_id: project.version_id,
             rationale: "Existing same-project parent.".to_string(),
         }];
-        assert!(create_model(&mut conn, &model_request("project-a")).is_err());
-        assert!(create_model_version(&mut conn, &successor_request).is_err());
-        assert!(create_evidence(
+        let error = create_model_version(&mut conn, &request)
+            .expect_err("archived projects cannot create model versions");
+        assert_eq!(
+            error.to_string(),
+            "Archived research projects cannot be modified."
+        );
+    }
+
+    #[test]
+    fn archived_projects_reject_evidence_creation() {
+        let (mut conn, project) = archived_project_model_fixture();
+        let error = create_evidence(
             &mut conn,
             &CreateModelEvidenceReq {
                 project_id: "project-a".to_string(),
-                model_version_id: project_a.version_id.clone(),
-                artifact: ModelArtifactRef::DatasetVersion(project_a.dataset_version_id.clone()),
+                model_version_id: project.version_id,
+                artifact: ModelArtifactRef::DatasetVersion(project.dataset_version_id),
                 polarity: ModelEvidencePolarity::Supports,
                 scope: "Archived-project evidence".to_string(),
                 quality_rationale: "Valid fixture request.".to_string(),
@@ -3787,65 +4036,44 @@ mod tests {
                 created_by: None,
             },
         )
-        .is_err());
-        assert!(create_evaluation(
-            &mut conn,
-            &CreateModelEvaluationReq {
-                project_id: "project-a".to_string(),
-                model_version_id: project_a.version_id.clone(),
-                analysis_run_id: project_a.analysis_run_id.clone(),
-                analysis_run_input_id: project_a.analysis_input_id.clone(),
-                dataset_version_id: project_a.dataset_version_id.clone(),
-                analysis_metric_id: project_a.analysis_metric_id.clone(),
-                role: "test".to_string(),
-                split_group_id: None,
-                limitations: "Valid fixture request.".to_string(),
-                created_by: None,
-            },
-        )
-        .is_err());
-        assert!(create_validation(
-            &mut conn,
-            &CreateModelValidationReq {
-                project_id: "project-a".to_string(),
-                target: ModelValidationTarget::ModelVersion(project_a.version_id.clone()),
-                criteria: vec![serde_json::json!({"criterion": "threshold"})],
-                scope: "Archived project".to_string(),
-                population_scope: "Project A population".to_string(),
-                evaluation_method: "Compare against threshold".to_string(),
-                evaluator_identity: "test reviewer".to_string(),
-                independence_state: "independent".to_string(),
-                independence_rationale: String::new(),
-                conflict_of_interest: "None.".to_string(),
-                created_by: None,
-            },
-        )
-        .is_err());
-        assert!(create_replication(
-            &mut conn,
-            &CreateModelReplicationReq {
-                project_id: "project-a".to_string(),
-                model_version_id: project_a.version_id.clone(),
-                original_experiment_run_id: project_a.experiment_run_id.clone(),
-                replication_kind: "direct".to_string(),
-                independent_team_operator: "test team".to_string(),
-                protocol_context: "Valid fixture request.".to_string(),
-                dataset_context: serde_json::json!({}),
-                datasets: vec![ModelReplicationDatasetReq {
-                    dataset_version_id: project_a.dataset_version_id.clone(),
-                    role: "test".to_string(),
-                    split_group_id: None,
-                }],
-                outcome: "supports".to_string(),
-                result_summary: "Valid fixture request.".to_string(),
-                deviations: vec![],
-                provenance: serde_json::json!({}),
-                analysis_evidence_ids: vec![],
-                model_evidence_ids: vec![project_a.evidence_id.clone()],
-                created_by: None,
-            },
-        )
-        .is_err());
+        .expect_err("archived projects cannot create evidence");
+        assert_eq!(
+            error.to_string(),
+            "Archived research projects cannot be modified."
+        );
+    }
+
+    #[test]
+    fn archived_projects_reject_evaluation_creation() {
+        let (mut conn, project) = archived_project_model_fixture();
+        let error = create_evaluation(&mut conn, &evaluation_request("project-a", &project))
+            .expect_err("archived projects cannot create evaluations");
+        assert_eq!(
+            error.to_string(),
+            "Archived research projects cannot be modified."
+        );
+    }
+
+    #[test]
+    fn archived_projects_reject_validation_creation() {
+        let (mut conn, project) = archived_project_model_fixture();
+        let error = create_validation(&mut conn, &validation_request("project-a", &project))
+            .expect_err("archived projects cannot create validations");
+        assert_eq!(
+            error.to_string(),
+            "Archived research projects cannot be modified."
+        );
+    }
+
+    #[test]
+    fn archived_projects_reject_replication_creation() {
+        let (mut conn, project) = archived_project_model_fixture();
+        let error = create_replication(&mut conn, &replication_request("project-a", &project))
+            .expect_err("archived projects cannot create replications");
+        assert_eq!(
+            error.to_string(),
+            "Archived research projects cannot be modified."
+        );
     }
 
     #[test]
@@ -3920,19 +4148,17 @@ mod tests {
         insert_project(&conn, "project-b");
         let project_a = create_project_model_fixture(&mut conn, "project-a");
         let project_b = create_project_model_fixture(&mut conn, "project-b");
-        let request = |project_id: &str,
-                       local: &ProjectModelFixture,
-                       original_experiment_run_id: String,
+        let request = |original_experiment_run_id: String,
                        dataset_version_id: String,
                        analysis_evidence_ids: Vec<String>| {
             let model_evidence_ids = if analysis_evidence_ids.is_empty() {
-                vec![local.evidence_id.clone()]
+                vec![project_a.evidence_id.clone()]
             } else {
                 vec![]
             };
             CreateModelReplicationReq {
-                project_id: project_id.to_string(),
-                model_version_id: local.version_id.clone(),
+                project_id: "project-a".to_string(),
+                model_version_id: project_a.version_id.clone(),
                 original_experiment_run_id,
                 replication_kind: "direct".to_string(),
                 independent_team_operator: "test team".to_string(),
@@ -3952,68 +4178,54 @@ mod tests {
                 created_by: None,
             }
         };
+        let hypothesis_a = insert_hypothesis(&conn, "project-a", "replication-a");
+        let foreign_dataset_evidence = "evidence-foreign-dataset";
+        conn.execute(
+            "INSERT INTO analysis_evidence
+                (id, project_id, target_hypothesis_version_id, artifact_dataset_version_id,
+                 polarity, scope, quality_rationale, limitations, provenance_json, created_at_us)
+             VALUES (?1, 'project-a', ?2, ?3, 'supports', 'test scope',
+                     'Test rationale.', 'Test limitation.', '{}', 1)",
+            params![
+                foreign_dataset_evidence,
+                hypothesis_a,
+                project_b.dataset_version_id
+            ],
+        )
+        .expect("insert legacy evidence with foreign dataset reference");
         let replications_before: i64 = conn
             .query_row("SELECT COUNT(*) FROM model_replications", [], |row| {
                 row.get(0)
             })
             .expect("count replications");
 
-        for (project_id, local, foreign, suffix) in [
-            ("project-a", &project_a, &project_b, "a"),
-            ("project-b", &project_b, &project_a, "b"),
-        ] {
-            let hypothesis_id =
-                insert_hypothesis(&conn, project_id, &format!("replication-{suffix}"));
-            let foreign_dataset_evidence = format!("evidence-foreign-dataset-{suffix}");
-            conn.execute(
-                "INSERT INTO analysis_evidence
-                    (id, project_id, target_hypothesis_version_id, artifact_dataset_version_id,
-                     polarity, scope, quality_rationale, limitations, provenance_json, created_at_us)
-                 VALUES (?1, ?2, ?3, ?4, 'supports', 'test scope',
-                         'Test rationale.', 'Test limitation.', '{}', 1)",
-                params![
-                    foreign_dataset_evidence,
-                    project_id,
-                    hypothesis_id,
-                    foreign.dataset_version_id
-                ],
-            )
-            .expect("insert evidence with a foreign-project dataset reference");
-
-            assert!(create_replication(
-                &mut conn,
-                &request(
-                    project_id,
-                    local,
-                    foreign.experiment_run_id.clone(),
-                    local.dataset_version_id.clone(),
-                    vec![],
-                ),
-            )
-            .is_err());
-            assert!(create_replication(
-                &mut conn,
-                &request(
-                    project_id,
-                    local,
-                    local.experiment_run_id.clone(),
-                    foreign.dataset_version_id.clone(),
-                    vec![],
-                ),
-            )
-            .is_err());
-            assert!(create_replication(
-                &mut conn,
-                &request(
-                    project_id,
-                    local,
-                    local.experiment_run_id.clone(),
-                    local.dataset_version_id.clone(),
-                    vec![foreign_dataset_evidence],
-                ),
-            )
-            .is_err());
-        }
+        assert!(create_replication(
+            &mut conn,
+            &request(
+                project_b.experiment_run_id.clone(),
+                project_a.dataset_version_id.clone(),
+                vec![],
+            ),
+        )
+        .is_err());
+        assert!(create_replication(
+            &mut conn,
+            &request(
+                project_a.experiment_run_id.clone(),
+                project_b.dataset_version_id.clone(),
+                vec![],
+            ),
+        )
+        .is_err());
+        assert!(create_replication(
+            &mut conn,
+            &request(
+                project_a.experiment_run_id.clone(),
+                project_a.dataset_version_id.clone(),
+                vec![foreign_dataset_evidence.to_string()],
+            ),
+        )
+        .is_err());
 
         let replications_after: i64 = conn
             .query_row("SELECT COUNT(*) FROM model_replications", [], |row| {
