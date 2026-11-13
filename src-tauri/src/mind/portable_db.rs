@@ -1288,3 +1288,7 @@ mod tests {
         fs::remove_file(path).expect("remove test database");
     }
 }
+
+#[cfg(test)]
+#[path = "stage2_0_inventory_tests.rs"]
+mod stage2_0_inventory_tests;
