@@ -118,7 +118,7 @@ function Invoke-AutoRelease {
         $newPackageText = [regex]::Replace(
             $packageText,
             $packageVersionPattern,
-            ('$1' + $newVersion + '$2'),
+            ('${1}' + $newVersion + '${2}'),
             1
         )
 
@@ -139,7 +139,7 @@ function Invoke-AutoRelease {
             $newTauriText = [regex]::Replace(
                 $tauriText,
                 $tauriVersionPattern,
-                ('$1' + $newVersion + '$2'),
+                ('${1}' + $newVersion + '${2}'),
                 1
             )
             $changes.Add([pscustomobject]@{ Path = $tauriPath; Content = $newTauriText })

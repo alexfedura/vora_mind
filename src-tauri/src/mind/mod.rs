@@ -3,6 +3,7 @@ pub mod hypothesis;
 pub mod journal;
 pub mod library_groups;
 pub mod media;
+pub mod migration;
 pub mod player;
 pub mod portable_db;
 pub mod questions;
