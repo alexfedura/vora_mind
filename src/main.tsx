@@ -1,3 +1,4 @@
+import "./lib/browserMock";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
