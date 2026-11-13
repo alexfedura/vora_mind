@@ -8,7 +8,7 @@ Run `pnpm dev` to start Vora's development build with the `.dev` Tauri identifie
 
 ### Signed Windows Releases and Automatic Updates
 
-The `Release` GitHub Actions workflow runs when a `v*` version tag is pushed and builds and publishes a signed Windows release. Installed production builds check the GitHub Releases updater manifest on launch and every minute, install a signed update quietly, and relaunch. Update checks are disabled for development builds and failures are logged without blocking startup.
+The `Release` GitHub Actions workflow runs when a `v*` version tag is pushed and builds and publishes a signed Windows release. Installed production builds automatically check the GitHub Releases updater manifest on launch and every minute by default; automatic checks and installation can be disabled in Settings. Manual update checks remain available, development builds do not check for updates, and failures are logged without blocking startup.
 
 On Windows, Rust/Tauri build artifacts, Rust Analyzer checks, Vite's dependency cache, and frontend build output are stored under `C:\vora-compile` to keep generated files off the workspace drive. Rust outputs (including packaged bundles) are in `C:\vora-compile\cargo-target`; Rust Analyzer uses its `rust-analyzer` subdirectory; Vite's dependency cache is in `C:\vora-compile\vite-cache`; frontend assets are in `C:\vora-compile\frontend`.
 

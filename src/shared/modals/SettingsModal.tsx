@@ -15,7 +15,12 @@ import {
   Globe,
 } from "lucide-react";
 import { useAppStore } from "@/shared/store/useAppStore";
-import { getSetting, setSetting } from "@/shared/store/useSettingsStore";
+import {
+  AUTOMATIC_UPDATES_SETTING_KEY,
+  getSetting,
+  setSetting,
+  useSettingsStore,
+} from "@/shared/store/useSettingsStore";
 import { DatabaseSettings } from "@/components/DatabaseSettings";
 import { FontSettingsPanel } from "@/shared/components/FontSettingsPanel";
 import {
@@ -32,6 +37,9 @@ interface SettingsModalProps {
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { textDirection, toggleTextDirection } = useAppStore();
+  const automaticUpdatesEnabled = useSettingsStore(
+    (state) => state.values[AUTOMATIC_UPDATES_SETTING_KEY] !== "false",
+  );
 
   // پیکربندی حالت ورکر (Local vs Remote)
   const [workerMode, setWorkerMode] = useState<"local" | "remote">(() => {
@@ -202,6 +210,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         {/* محتوای تنظیمات */}
         <div className="p-5 flex flex-col gap-4 overflow-y-auto">
           <FontSettingsPanel />
+
+          <section
+            className="flex flex-col gap-3 p-4 rounded-xl bg-[#1a1d25] border border-[#242835]"
+            aria-labelledby="automatic-updates-heading"
+          >
+            <h3
+              id="automatic-updates-heading"
+              className="text-[10px] font-bold uppercase tracking-wider text-gray-400"
+            >
+              Application Updates
+            </h3>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-gray-100">Automatic updates</span>
+                <span className="text-[11px] text-gray-400 leading-relaxed">
+                  Automatically check for and install updates. Manual update checks remain available when this is off.
+                </span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-label="Automatic updates"
+                aria-checked={automaticUpdatesEnabled}
+                onClick={() =>
+                  setSetting(AUTOMATIC_UPDATES_SETTING_KEY, String(!automaticUpdatesEnabled))
+                }
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 focus:outline-none ${
+                  automaticUpdatesEnabled ? "bg-purple-600" : "bg-[#2b303d]"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ${
+                    automaticUpdatesEnabled ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+          </section>
 
           <section className="flex flex-col gap-3" aria-labelledby="data-portability-heading">
             <h3 id="data-portability-heading" className="text-[10px] font-bold uppercase tracking-wider text-gray-400">

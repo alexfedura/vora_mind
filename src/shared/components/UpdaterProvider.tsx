@@ -11,6 +11,10 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { updaterService } from "@/services/updaterService";
+import {
+  AUTOMATIC_UPDATES_SETTING_KEY,
+  useSettingsStore,
+} from "@/shared/store/useSettingsStore";
 
 type UpdateStatus = "idle" | "checking" | "downloading" | "ready" | "installing" | "error";
 
@@ -92,6 +96,11 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
   const [notice, setNotice] = useState<string | null>(null);
   const updateRef = useRef<Update | null>(null);
   const busyRef = useRef(false);
+  const automaticUpdatesEnabled = useSettingsStore(
+    (state) => state.values[AUTOMATIC_UPDATES_SETTING_KEY] !== "false",
+  );
+  const automaticUpdatesEnabledRef = useRef(automaticUpdatesEnabled);
+  automaticUpdatesEnabledRef.current = automaticUpdatesEnabled;
 
   const reportError = useCallback((error: unknown, prefix: string): void => {
     const detail = getErrorMessage(error);
@@ -154,7 +163,8 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
     }
   }, [reportError]);
 
-  const checkForUpdates = useCallback(async (): Promise<void> => {
+  const checkForUpdates = useCallback(async (automatic = false): Promise<void> => {
+    if (automatic && !automaticUpdatesEnabledRef.current) return;
     if (import.meta.env.DEV) {
       if (!notice) setNotice("Update checks are available in installed desktop builds.");
       return;
@@ -169,6 +179,11 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
       let requestedVersion: string | null = null;
       try {
         update = await check();
+        if (automatic && !automaticUpdatesEnabledRef.current) {
+          await update?.close();
+          setStatus("idle");
+          return;
+        }
         if (!update) {
           console.info("Vora Mind updater: no update available.");
           setStatus("idle");
@@ -189,6 +204,10 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
         setNotice(null);
         await update.close();
         update = null;
+        if (automatic && !automaticUpdatesEnabledRef.current) {
+          setStatus("idle");
+          return;
+        }
         setStatus("downloading");
         const installedVersion = await updaterService.install(requestedVersion);
         if (installedVersion) {
@@ -225,6 +244,12 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
     try {
       setNotice(null);
       update = await check();
+      if (automatic && !automaticUpdatesEnabledRef.current) {
+        await update?.close();
+        update = null;
+        setStatus("idle");
+        return;
+      }
       if (!update) {
         console.info("Vora Mind updater: no update available.");
         setStatus("idle");
@@ -249,6 +274,13 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
         }
       });
 
+      if (automatic && !automaticUpdatesEnabledRef.current) {
+        await update.close();
+        update = null;
+        setStatus("idle");
+        setDownloadProgress(null);
+        return;
+      }
       updateRef.current = update;
       setStatus("ready");
       busyRef.current = false;
@@ -294,7 +326,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
   }, []);
 
   useEffect(() => {
-    if (import.meta.env.DEV) return;
+    if (import.meta.env.DEV || !automaticUpdatesEnabled) return;
     let active = true;
     let interval: number | undefined;
     const initialize = async (): Promise<void> => {
@@ -316,15 +348,16 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
             }
           }
         } catch (error: unknown) {
+          if (!active) return;
           reportError(error, "Could not load the Vora Mind updater failure record");
           setNotice(UPDATE_FAILURE_NOTICE);
           return;
         }
       }
       if (!active) return;
-      void checkForUpdates();
+      void checkForUpdates(true);
       interval = window.setInterval(() => {
-        void checkForUpdates();
+        void checkForUpdates(true);
       }, AUTO_CHECK_INTERVAL_MS);
     };
     void initialize();
@@ -332,7 +365,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
       active = false;
       if (interval !== undefined) window.clearInterval(interval);
     };
-  }, [checkForUpdates, reportError]);
+  }, [automaticUpdatesEnabled, checkForUpdates, reportError]);
 
   return (
     <UpdaterContext.Provider

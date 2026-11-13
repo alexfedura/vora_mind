@@ -3,6 +3,7 @@ import { voraDb } from "@/services/voraDb";
 
 const LEGACY_APP_STORE_KEY = "vora-app-store";
 const LEGACY_CHART_STATE_ID = "chart:local-storage";
+export const AUTOMATIC_UPDATES_SETTING_KEY = "vora.updater.auto_updates";
 
 interface SettingsState {
   values: Record<string, string>;
