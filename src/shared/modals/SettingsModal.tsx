@@ -225,7 +225,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-semibold text-gray-100">Automatic updates</span>
                 <span className="text-[11px] text-gray-400 leading-relaxed">
-                  Automatically check for and install updates. Manual update checks remain available when this is off.
+                  Check for updates automatically. Installing requires your confirmation;
+                  manual checks remain available when this is off.
                 </span>
               </div>
               <button
