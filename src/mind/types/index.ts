@@ -26,6 +26,17 @@ export interface VoraMatrixData extends Record<string, unknown> {
   rows: { id: string; name: string; scores: Record<string, number> }[];
 }
 
+export interface VoraTextData extends Record<string, unknown> {
+  text?: string;
+  fontSize?: number;
+  isBold?: boolean;
+  isItalic?: boolean;
+  isUnderline?: boolean;
+  alignment?: "left" | "center" | "right";
+  color?: string;
+  autoFocus?: boolean;
+}
+
 export interface VoraHypothesisData extends Record<string, unknown> {
   hypothesisId: string;
   statementH1: string;

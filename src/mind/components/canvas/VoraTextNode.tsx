@@ -1,5 +1,5 @@
 import React, { memo, useState, useRef, useLayoutEffect, useEffect } from "react";
-import { NodeProps, Handle, Position, useViewport } from "@xyflow/react";
+import { NodeProps, Handle, Position, useReactFlow, useViewport, type Node } from "@xyflow/react";
 import {
   Type,
   Bold,
@@ -17,9 +17,13 @@ import { useAppStore } from "@/shared/store/useAppStore";
 import { useSettingsStore } from "@/shared/store/useSettingsStore";
 import { fontSizeSettingKey } from "@/shared/settings/fontSettings";
 import { useCanvasZoomScales } from "./CanvasZoomContext";
+import type { VoraTextData } from "@/mind/types";
 
-export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
+type VoraTextNodeModel = Node<VoraTextData, "voraText">;
+
+export const VoraTextNode = memo(({ id, selected, data }: NodeProps<VoraTextNodeModel>) => {
   const { textDirection } = useAppStore();
+  const { updateNodeData } = useReactFlow<VoraTextNodeModel>();
   const { zoom } = useViewport();
   const canvasZoom = useCanvasZoomScales();
   const defaultRtl = textDirection === "rtl";
@@ -31,15 +35,21 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
     ? parsedConfiguredFontSize / 16
     : 1;
 
-  const [text, setText] = useState((data?.text as string) || "");
-  const [fontSize, setFontSize] = useState<number>((data?.fontSize as number) || 16);
-  const [isBold, setIsBold] = useState<boolean>((data?.isBold as boolean) || false);
-  const [isItalic, setIsItalic] = useState<boolean>((data?.isItalic as boolean) || false);
-  const [isUnderline, setIsUnderline] = useState<boolean>((data?.isUnderline as boolean) || false);
-  const [alignment, setAlignment] = useState<"left" | "center" | "right">(
-    (data?.alignment as "left" | "center" | "right") || (defaultRtl ? "right" : "left")
-  );
-  const [color, setColor] = useState<string>((data?.color as string) || "#d6dbe2");
+  const text = typeof data.text === "string" ? data.text : "";
+  const fontSize = typeof data.fontSize === "number" && Number.isFinite(data.fontSize)
+    ? data.fontSize
+    : 16;
+  const isBold = data.isBold === true;
+  const isItalic = data.isItalic === true;
+  const isUnderline = data.isUnderline === true;
+  const alignment = data.alignment === "center" || data.alignment === "right"
+    ? data.alignment
+    : defaultRtl ? "right" : "left";
+  const color = typeof data.color === "string" ? data.color : "#d6dbe2";
+
+  const updateData = (nextData: Partial<VoraTextData>): void => {
+    updateNodeData(id, nextData);
+  };
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -137,7 +147,7 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
           {/* اندازه فونت */}
           <div className="flex items-center">
             <button
-              onClick={() => setFontSize((s) => Math.max(12, s - 2))}
+              onClick={() => updateData({ fontSize: Math.max(12, fontSize - 2) })}
               className="w-5 h-6 flex items-center justify-center text-xs text-gray-400 hover:text-white hover:bg-[#252936] rounded transition"
             >
               -
@@ -146,7 +156,7 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
               {fontSize}
             </span>
             <button
-              onClick={() => setFontSize((s) => Math.min(64, s + 2))}
+              onClick={() => updateData({ fontSize: Math.min(64, fontSize + 2) })}
               className="w-5 h-6 flex items-center justify-center text-xs text-gray-400 hover:text-white hover:bg-[#252936] rounded transition"
             >
               +
@@ -156,7 +166,7 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
           <div className="h-4 w-[1px] bg-[#292e3c] mx-0.5" />
 
           <button
-            onClick={() => setIsBold(!isBold)}
+            onClick={() => updateData({ isBold: !isBold })}
             className={`p-1.5 rounded-lg transition ${
               isBold ? "bg-purple-600/30 text-purple-400" : "text-gray-400 hover:text-white hover:bg-[#252936]"
             }`}
@@ -166,7 +176,7 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
           </button>
 
           <button
-            onClick={() => setIsItalic(!isItalic)}
+            onClick={() => updateData({ isItalic: !isItalic })}
             className={`p-1.5 rounded-lg transition ${
               isItalic ? "bg-purple-600/30 text-purple-400" : "text-gray-400 hover:text-white hover:bg-[#252936]"
             }`}
@@ -176,7 +186,7 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
           </button>
 
           <button
-            onClick={() => setIsUnderline(!isUnderline)}
+            onClick={() => updateData({ isUnderline: !isUnderline })}
             className={`p-1.5 rounded-lg transition ${
               isUnderline ? "bg-purple-600/30 text-purple-400" : "text-gray-400 hover:text-white hover:bg-[#252936]"
             }`}
@@ -188,9 +198,9 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
           <div className="h-4 w-[1px] bg-[#292e3c] mx-0.5" />
 
           <button
-            onClick={() =>
-              setAlignment((a) => (a === "left" ? "center" : a === "center" ? "right" : "left"))
-            }
+            onClick={() => updateData({
+              alignment: alignment === "left" ? "center" : alignment === "center" ? "right" : "left",
+            })}
             className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-[#252936] transition"
             title="Alignment"
           >
@@ -222,7 +232,7 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
             {["#d6dbe2", "#e8ad55", "#7f8997", "#30b58a", "#e36b74"].map((c) => (
               <button
                 key={c}
-                onClick={() => setColor(c)}
+                onClick={() => updateData({ color: c })}
                 style={{ backgroundColor: c }}
                 className={`w-3.5 h-3.5 rounded-full transition-transform ${
                   color === c ? "scale-125 ring-2 ring-purple-400" : "hover:scale-110"
@@ -269,7 +279,7 @@ export const VoraTextNode = memo(({ id, selected, data }: NodeProps) => {
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => updateData({ text: e.target.value })}
           placeholder="Type something..."
           rows={1}
           style={{
