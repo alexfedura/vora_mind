@@ -18,7 +18,11 @@ editing, deletion, and owning-Board navigation from each card result.
 - Cards returned by Library search may belong to a Board whose card records
   are not currently in the Zustand cache. Load the card from its owning Board
   before invoking existing update or trash actions.
-- Non-card Library objects retain their existing open/locate behavior.
+- Non-card Library objects show their owning Board name and provide an overflow
+  menu to open the owning Board.
+- Non-card objects that are no longer placed on any Board can be moved to Trash
+  and restored from the Trash filter; placed objects cannot be trashed from the
+  Library.
 
 ## Validation
 

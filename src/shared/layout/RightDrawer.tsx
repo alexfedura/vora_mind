@@ -389,6 +389,8 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     librarySearchError,
     searchLibraryObjects,
     updateLibraryObjectReviewStatus,
+    moveLibraryObjectToTrash,
+    restoreLibraryObjectFromTrash,
     updateCardContent,
     updateCardVersion,
     moveToBin,
@@ -415,6 +417,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     content: string;
   } | null>(null);
   const [loadingLibraryCardId, setLoadingLibraryCardId] = useState<string | null>(null);
+  const [actingLibraryObjectId, setActingLibraryObjectId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [groupError, setGroupError] = useState<string | null>(null);
   const [groupVersions, setGroupVersions] = useState<LibraryItemGroupVersion[]>([]);
@@ -487,10 +490,14 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
   }, [activeGroup?.id, onGetItemGroupUsages]);
 
   useEffect(() => {
-    if (!isRightDrawerOpen || activeCard || activeGroup || currentFilter === "trash" || currentFilter === "media") return;
+    if (!isRightDrawerOpen || activeCard || activeGroup || currentFilter === "media") return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void searchLibraryObjects(searchQuery, reviewStatusFilter).catch((cause: unknown) => {
+      void searchLibraryObjects(
+        searchQuery,
+        currentFilter === "trash" ? "all" : reviewStatusFilter,
+        currentFilter === "trash",
+      ).catch((cause: unknown) => {
         if (!cancelled) console.error("Could not search Library objects:", cause);
       });
     }, 300);
@@ -690,10 +697,12 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
       return 0;
     });
 
-  const libraryObjectsForView = libraryObjects.filter((item) =>
-    (currentFilter === "all" || (currentFilter === "cards" && item.type === "card"))
-    && (reviewStatusFilter === "all" || item.review_status === reviewStatusFilter)
-  );
+  const libraryObjectsForView = libraryObjects.filter((item) => {
+    if (currentFilter === "trash") return item.type !== "card" && item.deleted_at !== null;
+    return (currentFilter === "all" || (currentFilter === "cards" && item.type === "card"))
+      && item.deleted_at === null
+      && (reviewStatusFilter === "all" || item.review_status === reviewStatusFilter);
+  });
   const filteredGroups = itemGroups
     .filter((group) => {
       const matchesSearch = `${group.name} ${group.version}`.toLowerCase().includes(searchQuery.toLowerCase());
@@ -813,6 +822,28 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
     } catch (cause) {
       console.error("Could not update Library review status:", cause);
       setLibraryActionError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const handleLibraryObjectTrashAction = async (
+    item: (typeof libraryObjectsForView)[number],
+    action: "trash" | "restore",
+  ): Promise<void> => {
+    if (item.type === "card" || (action === "trash" && item.is_placed)) return;
+    setLibraryActionError(null);
+    setActingLibraryObjectId(item.id);
+    setOpenCardOptionsId(null);
+    try {
+      if (action === "trash") {
+        await moveLibraryObjectToTrash(item.id, item.board_id);
+      } else {
+        await restoreLibraryObjectFromTrash(item.id, item.board_id);
+      }
+    } catch (cause) {
+      console.error(`Could not ${action} Library object:`, cause);
+      setLibraryActionError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setActingLibraryObjectId(null);
     }
   };
 
@@ -1711,6 +1742,7 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                     <button
                       type="button"
                       onClick={(event) => {
+                        if (currentFilter === "trash") return;
                         if (item.type === "card") {
                           if (!handleLibraryItemClick(event, "card", item.id)) {
                             void handleOpenLibraryCardEditor(item);
@@ -1747,16 +1779,18 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                         {itemTitleDir.cleanText || "Untitled"}
                       </span>
                       <p className="mt-1 flex-1 overflow-hidden whitespace-pre-wrap break-words text-xs leading-relaxed text-gray-400">
-                        {item.content || "No content"}
+                        {item.content || (item.type === "shape"
+                          ? "Drawing with no text content"
+                          : item.type === "text" ? "Empty text item" : "No description")}
                       </p>
                     </button>
-                    {item.type === "card" && (
-                      <div className="absolute right-2 top-2 z-20">
+                    <div className="absolute right-2 top-2 z-20">
                         <button
                           type="button"
-                          aria-label={`More options for ${item.title || "Library card"}`}
+                          aria-label={`More options for ${item.title || `Library ${item.type}`}`}
                           aria-haspopup="menu"
                           aria-expanded={openCardOptionsId === item.id}
+                          disabled={actingLibraryObjectId === item.id || loadingLibraryCardId === item.id}
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => {
                             event.stopPropagation();
@@ -1764,69 +1798,116 @@ export const RightDrawer: React.FC<RightDrawerProps> = ({
                           }}
                           className="rounded-md border border-[#303543] bg-[#111318]/90 p-1 text-zinc-400 transition hover:bg-[#282d3a] hover:text-white"
                         >
-                          <MoreHorizontal size={15} aria-hidden="true" />
+                          {currentFilter === "trash" ? <RotateCcw size={14} aria-hidden="true" /> : <MoreHorizontal size={15} aria-hidden="true" />}
                         </button>
                         {openCardOptionsId === item.id && (
                           <div
                             role="menu"
-                            aria-label={`Options for ${item.title || "Library card"}`}
+                            aria-label={`Options for ${item.title || `Library ${item.type}`}`}
                             className="absolute right-0 top-full mt-1 flex min-w-36 flex-col rounded-lg border border-[#303543] bg-[#171a22] p-1 text-zinc-200 shadow-xl"
                           >
-                            <button
-                              type="button"
-                              role="menuitem"
-                              disabled={loadingLibraryCardId === item.id}
-                              onPointerDown={(event) => event.stopPropagation()}
-                              onClick={() => void handleOpenLibraryCardEditor(item)}
-                              className="rounded px-2.5 py-1.5 text-left text-xs hover:bg-[#282d3a] disabled:opacity-50"
-                            >
-                              Edit details
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onPointerDown={(event) => event.stopPropagation()}
-                              onClick={() => void handleDeleteLibraryCard(item)}
-                              className="rounded px-2.5 py-1.5 text-left text-xs text-rose-300 hover:bg-rose-500/15"
-                            >
-                              Move to Trash
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onPointerDown={(event) => event.stopPropagation()}
-                              onClick={() => {
-                                setOpenCardOptionsId(null);
-                                void handleLibraryObjectClick(item.id);
-                              }}
-                              className="rounded px-2.5 py-1.5 text-left text-xs hover:bg-[#282d3a]"
-                            >
-                              Open Board
-                            </button>
+                            {item.type === "card" ? (
+                              <>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  disabled={loadingLibraryCardId === item.id}
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                  onClick={() => void handleOpenLibraryCardEditor(item)}
+                                  className="rounded px-2.5 py-1.5 text-left text-xs hover:bg-[#282d3a] disabled:opacity-50"
+                                >
+                                  Edit details
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                  onClick={() => void handleDeleteLibraryCard(item)}
+                                  className="rounded px-2.5 py-1.5 text-left text-xs text-rose-300 hover:bg-rose-500/15"
+                                >
+                                  Move to Trash
+                                </button>
+                              </>
+                            ) : currentFilter === "trash" ? (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={actingLibraryObjectId === item.id}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={() => void handleLibraryObjectTrashAction(item, "restore")}
+                                className="rounded px-2.5 py-1.5 text-left text-xs text-emerald-300 hover:bg-emerald-500/15 disabled:opacity-50"
+                              >
+                                Restore
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                  onClick={() => {
+                                    setOpenCardOptionsId(null);
+                                    void handleLibraryObjectClick(item.id);
+                                  }}
+                                  className="rounded px-2.5 py-1.5 text-left text-xs hover:bg-[#282d3a]"
+                                >
+                                  {item.is_placed ? "Open on Board" : "Open owning Board"}
+                                </button>
+                                {!item.is_placed && (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    disabled={actingLibraryObjectId === item.id}
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    onClick={() => void handleLibraryObjectTrashAction(item, "trash")}
+                                    className="rounded px-2.5 py-1.5 text-left text-xs text-rose-300 hover:bg-rose-500/15 disabled:opacity-50"
+                                  >
+                                    Move to Trash
+                                  </button>
+                                )}
+                              </>
+                            )}
+                            {item.type === "card" && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={() => {
+                                  setOpenCardOptionsId(null);
+                                  void handleLibraryObjectClick(item.id);
+                                }}
+                                className="rounded px-2.5 py-1.5 text-left text-xs hover:bg-[#282d3a]"
+                              >
+                                Open Board
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
-                    )}
                     <div className="mt-2 flex items-center justify-between border-t border-[#232836]/60 pt-2">
-                      <span className="truncate text-[9px] text-zinc-500">
-                        {item.review_status === "not_needed" ? "Not needed" : item.review_status}
+                      <span className="max-w-24 truncate text-[9px] text-zinc-500" title={`Board: ${item.board_title || "Unknown"}`}>
+                        {item.board_title || "Board"}
                       </span>
-                      <select
-                        aria-label={`Review status for ${item.title || item.type}`}
-                        onPointerDown={(event) => event.stopPropagation()}
-                        value={item.review_status}
-                        onChange={(event) => {
-                          const status = event.currentTarget.value;
-                          if (status === "active" || status === "completed" || status === "not_needed") {
-                            void handleLibraryReviewStatusChange(item.id, status);
-                          }
-                        }}
-                        className="max-w-28 rounded border border-[#303543] bg-[#111318] px-1.5 py-1 text-[9px] text-zinc-300 outline-none focus:border-purple-500/60"
-                      >
-                        <option value="active">Active</option>
-                        <option value="completed">Completed</option>
-                        <option value="not_needed">Not needed</option>
-                      </select>
+                      {currentFilter === "trash" ? (
+                        <span className="text-[9px] text-rose-300">In Trash</span>
+                      ) : (
+                        <select
+                          aria-label={`Review status for ${item.title || item.type}`}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          value={item.review_status}
+                          onChange={(event) => {
+                            const status = event.currentTarget.value;
+                            if (status === "active" || status === "completed" || status === "not_needed") {
+                              void handleLibraryReviewStatusChange(item.id, status);
+                            }
+                          }}
+                          className="max-w-28 rounded border border-[#303543] bg-[#111318] px-1.5 py-1 text-[9px] text-zinc-300 outline-none focus:border-purple-500/60"
+                        >
+                          <option value="active">Active</option>
+                          <option value="completed">Completed</option>
+                          <option value="not_needed">Not needed</option>
+                        </select>
+                      )}
                     </div>
                   </article>
                 );

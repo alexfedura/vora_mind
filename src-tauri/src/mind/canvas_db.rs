@@ -47,7 +47,9 @@ pub struct LibraryObjectResult {
     pub title: String,
     pub content: String,
     pub board_id: String,
+    pub board_title: String,
     pub is_placed: bool,
+    pub deleted_at: Option<i64>,
     pub review_status: String,
     pub document_id: Option<String>,
     pub highlight_id: Option<String>,
@@ -855,6 +857,7 @@ pub fn search_library_objects(
     conn: &Connection,
     query: &str,
     status_filter: Option<&str>,
+    include_deleted: bool,
 ) -> Result<Vec<LibraryObjectResult>> {
     let status_filter = status_filter.unwrap_or("active");
     if !matches!(status_filter, "all" | "active" | "completed" | "not_needed") {
@@ -887,6 +890,7 @@ pub fn search_library_objects(
         ),
         object_text AS (
             SELECT o.id, o.type, o.board_id, o.deleted_at, o.review_status,
+                   COALESCE(board.title, 'Unknown Board') AS board_title,
                    json_extract(o.metadata, '$.documentId') AS document_id,
                    json_extract(o.metadata, '$.highlightId') AS highlight_id,
                    COALESCE(
@@ -905,6 +909,7 @@ pub fn search_library_objects(
                        ''
                    ) AS content
             FROM objects o
+            LEFT JOIN mind_boards board ON board.id = o.board_id
             LEFT JOIN object_versions v ON v.id = (
                 SELECT id FROM object_versions
                 WHERE object_id = o.id
@@ -913,13 +918,13 @@ pub fn search_library_objects(
             )
         )
         SELECT object_text.id, object_text.type, object_text.title,
-               object_text.content, object_text.board_id,
+               object_text.content, object_text.board_id, object_text.board_title,
                CASE
                    WHEN placement_changes.operation IS NOT NULL
                        THEN placement_changes.operation <> 'REMOVE'
                    ELSE checkpoint_placement.object_id IS NOT NULL
                END AS is_placed,
-               object_text.review_status, object_text.document_id,
+               object_text.deleted_at, object_text.review_status, object_text.document_id,
                object_text.highlight_id
         FROM object_text
         LEFT JOIN latest_checkpoint latest
@@ -933,26 +938,31 @@ pub fn search_library_objects(
          AND placement_changes.object_id = object_text.id
          AND placement_changes.change_rank = 1
         WHERE object_text.type IN ('card', 'shape', 'text', 'media')
-          AND object_text.deleted_at IS NULL
+          AND (?3 = 1 OR object_text.deleted_at IS NULL)
           AND (?1 = '' OR
                lower(object_text.title) LIKE '%' || lower(?1) || '%' OR
                lower(object_text.content) LIKE '%' || lower(?1) || '%')
           AND (?2 = 'all' OR object_text.review_status = ?2)
         ORDER BY object_text.title COLLATE NOCASE, object_text.id",
     )?;
-    let rows = statement.query_map(params![query.trim(), status_filter], |row| {
-        Ok(LibraryObjectResult {
-            id: row.get(0)?,
-            object_type: row.get(1)?,
-            title: row.get(2)?,
-            content: row.get(3)?,
-            board_id: row.get(4)?,
-            is_placed: row.get(5)?,
-            review_status: row.get(6)?,
-            document_id: row.get(7)?,
-            highlight_id: row.get(8)?,
-        })
-    })?;
+    let rows = statement.query_map(
+        params![query.trim(), status_filter, include_deleted],
+        |row| {
+            Ok(LibraryObjectResult {
+                id: row.get(0)?,
+                object_type: row.get(1)?,
+                title: row.get(2)?,
+                content: row.get(3)?,
+                board_id: row.get(4)?,
+                board_title: row.get(5)?,
+                is_placed: row.get(6)?,
+                deleted_at: row.get(7)?,
+                review_status: row.get(8)?,
+                document_id: row.get(9)?,
+                highlight_id: row.get(10)?,
+            })
+        },
+    )?;
     rows.collect()
 }
 
@@ -964,6 +974,60 @@ pub fn update_object_review_status(conn: &Connection, object_id: &str, status: &
         "UPDATE objects SET review_status = ?1, updated_at = ?2
          WHERE id = ?3 AND deleted_at IS NULL",
         params![status, now_millis()?, object_id],
+    )?;
+    if changed == 0 {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+    Ok(())
+}
+
+pub fn move_unplaced_library_object_to_trash(
+    conn: &Connection,
+    board_id: &str,
+    object_id: &str,
+) -> Result<()> {
+    let object = search_library_objects(conn, "", Some("all"), false)?
+        .into_iter()
+        .find(|item| item.id == object_id && item.board_id == board_id);
+    let Some(object) = object else {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    };
+    if object.object_type == "card" || object.is_placed {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    let changed = conn.execute(
+        "UPDATE objects SET deleted_at = ?1
+         WHERE id = ?2 AND board_id = ?3 AND type IN ('shape', 'text', 'media')
+           AND deleted_at IS NULL",
+        params![now_millis()?, object_id, board_id],
+    )?;
+    if changed == 0 {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+    Ok(())
+}
+
+pub fn restore_library_object_from_trash(
+    conn: &Connection,
+    board_id: &str,
+    object_id: &str,
+) -> Result<()> {
+    let object = search_library_objects(conn, "", Some("all"), true)?
+        .into_iter()
+        .find(|item| item.id == object_id && item.board_id == board_id);
+    let Some(object) = object else {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    };
+    if object.object_type == "card" || object.deleted_at.is_none() {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    let changed = conn.execute(
+        "UPDATE objects SET deleted_at = NULL
+         WHERE id = ?1 AND board_id = ?2 AND type IN ('shape', 'text', 'media')
+           AND deleted_at IS NOT NULL",
+        params![object_id, board_id],
     )?;
     if changed == 0 {
         return Err(rusqlite::Error::QueryReturnedNoRows);
@@ -1877,9 +1941,10 @@ pub fn save_semantic_snapshot(
 mod board_version_tests {
     use super::{
         checkout_board_version, create_board, create_board_version, get_all_boards,
-        get_board_version_snapshot, get_board_versions, init_db, search_library_objects,
-        update_object_review_status, BoardVersionCard, BoardVersionSnapshot, CardMediaMetadata,
-        EdgeInput, NodeInput,
+        get_board_version_snapshot, get_board_versions, init_db,
+        move_unplaced_library_object_to_trash, restore_library_object_from_trash,
+        search_library_objects, update_object_review_status, BoardVersionCard,
+        BoardVersionSnapshot, CardMediaMetadata, EdgeInput, NodeInput,
     };
     use rusqlite::Connection;
     use serde_json::json;
@@ -2462,6 +2527,8 @@ mod board_version_tests {
                 ('card-result', 'card', 'board-library-index', 1, 1,
                  '{\"title\":\"Working card title\",\"content\":\"searchable needle\"}'),
                 ('shape-result', 'shape', 'board-library-index', 1, 1, NULL),
+                ('orphan-shape', 'shape', 'board-library-index', 1, 1,
+                 '{\"title\":\"Path\",\"content\":\"\"}'),
                 ('text-result', 'text', 'board-library-index', 1, 1, NULL),
                 ('media-result', 'media', 'board-library-index', 1, 1, NULL);
              INSERT INTO object_versions
@@ -2486,7 +2553,7 @@ mod board_version_tests {
         )
         .unwrap();
 
-        let matching_objects = search_library_objects(&conn, "needle", None).unwrap();
+        let matching_objects = search_library_objects(&conn, "needle", None, false).unwrap();
         assert_eq!(matching_objects.len(), 3);
         let card = matching_objects
             .iter()
@@ -2499,17 +2566,18 @@ mod board_version_tests {
             .find(|item| item.id == "shape-result")
             .unwrap();
         assert_eq!(shape.title, "Shape from latest version");
+        assert_eq!(shape.board_title, "Library index");
         assert!(shape.is_placed);
         assert_eq!(shape.object_type, "shape");
 
-        let shape_search = search_library_objects(&conn, "Shape from latest", None).unwrap();
+        let shape_search = search_library_objects(&conn, "Shape from latest", None, false).unwrap();
         assert_eq!(shape_search.len(), 1);
         assert_eq!(shape_search[0].object_type, "shape");
         assert_eq!(
-            search_library_objects(&conn, "Text node", None).unwrap()[0].object_type,
+            search_library_objects(&conn, "Text node", None, false).unwrap()[0].object_type,
             "text"
         );
-        let all_types = search_library_objects(&conn, "", Some("all"))
+        let all_types = search_library_objects(&conn, "", Some("all"), false)
             .unwrap()
             .into_iter()
             .map(|item| item.object_type)
@@ -2529,14 +2597,38 @@ mod board_version_tests {
                 .is_placed
         );
 
-        update_object_review_status(&conn, "shape-result", "completed").unwrap();
-        assert!(search_library_objects(&conn, "shape", None)
+        assert!(move_unplaced_library_object_to_trash(
+            &conn,
+            "board-library-index",
+            "shape-result"
+        )
+        .is_err());
+        assert!(
+            move_unplaced_library_object_to_trash(&conn, "board-library-index", "card-result")
+                .is_err()
+        );
+        move_unplaced_library_object_to_trash(&conn, "board-library-index", "orphan-shape")
+            .unwrap();
+        assert!(search_library_objects(&conn, "Path", Some("all"), false)
             .unwrap()
             .is_empty());
-        let archived = search_library_objects(&conn, "shape", Some("all")).unwrap();
+        let trashed = search_library_objects(&conn, "Path", Some("all"), true).unwrap();
+        assert_eq!(trashed.len(), 1);
+        assert!(trashed[0].deleted_at.is_some());
+        restore_library_object_from_trash(&conn, "board-library-index", "orphan-shape").unwrap();
+        assert!(search_library_objects(&conn, "Path", Some("all"), false)
+            .unwrap()
+            .iter()
+            .any(|item| item.id == "orphan-shape"));
+
+        update_object_review_status(&conn, "shape-result", "completed").unwrap();
+        assert!(search_library_objects(&conn, "shape", None, false)
+            .unwrap()
+            .is_empty());
+        let archived = search_library_objects(&conn, "shape", Some("all"), false).unwrap();
         assert_eq!(archived.len(), 1);
         assert_eq!(archived[0].review_status, "completed");
-        assert!(search_library_objects(&conn, "", Some("unknown")).is_err());
+        assert!(search_library_objects(&conn, "", Some("unknown"), false).is_err());
         assert!(update_object_review_status(&conn, "shape-result", "unknown").is_err());
     }
 }

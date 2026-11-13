@@ -953,6 +953,7 @@ fn search_library_objects(
     state: State<AppState>,
     query: String,
     status_filter: Option<String>,
+    include_deleted: Option<bool>,
 ) -> Result<Vec<mind::canvas_db::LibraryObjectResult>, String> {
     if let Some(status) = status_filter.as_deref() {
         if !matches!(status, "all" | "active" | "completed" | "not_needed") {
@@ -960,8 +961,35 @@ fn search_library_objects(
         }
     }
     let conn = state.db.lock().map_err(|error| error.to_string())?;
-    mind::canvas_db::search_library_objects(&conn, &query, status_filter.as_deref())
-        .map_err(|error| error.to_string())
+    mind::canvas_db::search_library_objects(
+        &conn,
+        &query,
+        status_filter.as_deref(),
+        include_deleted.unwrap_or(false),
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn move_library_object_to_trash(
+    state: State<AppState>,
+    board_id: String,
+    object_id: String,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::canvas_db::move_unplaced_library_object_to_trash(&conn, &board_id, &object_id)
+        .map_err(|error| format!("Could not move Library object to Trash: {error}"))
+}
+
+#[tauri::command]
+fn restore_library_object_from_trash(
+    state: State<AppState>,
+    board_id: String,
+    object_id: String,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|error| error.to_string())?;
+    mind::canvas_db::restore_library_object_from_trash(&conn, &board_id, &object_id)
+        .map_err(|error| format!("Could not restore Library object from Trash: {error}"))
 }
 
 #[tauri::command]
@@ -2614,6 +2642,8 @@ pub fn run() {
             get_all_snapshots,
             get_all_cards,
             search_library_objects,
+            move_library_object_to_trash,
+            restore_library_object_from_trash,
             update_object_review_status,
             import_document,
             get_documents,

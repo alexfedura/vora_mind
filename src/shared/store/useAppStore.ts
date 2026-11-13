@@ -75,7 +75,10 @@ interface AppState {
   searchLibraryObjects: (
     query: string,
     statusFilter: LibraryObjectReviewStatus | "all",
+    includeDeleted?: boolean,
   ) => Promise<LibraryObjectResult[]>;
+  moveLibraryObjectToTrash: (objectId: string, boardId: string) => Promise<void>;
+  restoreLibraryObjectFromTrash: (objectId: string, boardId: string) => Promise<void>;
   updateLibraryObjectReviewStatus: (
     objectId: string,
     status: LibraryObjectReviewStatus,
@@ -227,11 +230,11 @@ export const useAppStore = create<AppState>()(
       libraryObjects: [],
       isLibrarySearchLoading: false,
       librarySearchError: null,
-      searchLibraryObjects: async (query, statusFilter) => {
+      searchLibraryObjects: async (query, statusFilter, includeDeleted = false) => {
         const requestId = ++librarySearchRequestId;
         set({ isLibrarySearchLoading: true, librarySearchError: null });
         try {
-          const libraryObjects = await dbService.searchLibraryObjects(query, statusFilter);
+          const libraryObjects = await dbService.searchLibraryObjects(query, statusFilter, includeDeleted);
           if (requestId === librarySearchRequestId) {
             set({ libraryObjects, isLibrarySearchLoading: false });
           }
@@ -251,6 +254,22 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           libraryObjects: state.libraryObjects.map((item) =>
             item.id === objectId ? { ...item, review_status: status } : item
+          ),
+        }));
+      },
+      moveLibraryObjectToTrash: async (objectId, boardId) => {
+        await dbService.moveLibraryObjectToTrash(boardId, objectId);
+        set((state) => ({
+          libraryObjects: state.libraryObjects.map((item) =>
+            item.id === objectId ? { ...item, deleted_at: Date.now() } : item
+          ),
+        }));
+      },
+      restoreLibraryObjectFromTrash: async (objectId, boardId) => {
+        await dbService.restoreLibraryObjectFromTrash(boardId, objectId);
+        set((state) => ({
+          libraryObjects: state.libraryObjects.map((item) =>
+            item.id === objectId ? { ...item, deleted_at: null } : item
           ),
         }));
       },
@@ -274,7 +293,9 @@ export const useAppStore = create<AppState>()(
           title: card.title,
           content,
           board_id: boardId,
+          board_title: "",
           is_placed: false,
+          deleted_at: null,
           review_status: "active",
           document_id: documentId,
           highlight_id: highlightId,

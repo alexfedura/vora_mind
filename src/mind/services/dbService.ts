@@ -82,7 +82,9 @@ export interface LibraryObjectResult {
   title: string;
   content: string;
   board_id: string;
+  board_title: string;
   is_placed: boolean;
+  deleted_at: number | null;
   review_status: LibraryObjectReviewStatus;
   document_id: string | null;
   highlight_id: string | null;
@@ -584,11 +586,21 @@ export const dbService = {
   async searchLibraryObjects(
     query: string,
     statusFilter: LibraryObjectReviewStatus | "all" = "active",
+    includeDeleted = false,
   ): Promise<LibraryObjectResult[]> {
     return await invoke<LibraryObjectResult[]>("search_library_objects", {
       query,
       statusFilter,
+      includeDeleted,
     });
+  },
+
+  async moveLibraryObjectToTrash(boardId: string, objectId: string): Promise<void> {
+    await invoke("move_library_object_to_trash", { boardId, objectId });
+  },
+
+  async restoreLibraryObjectFromTrash(boardId: string, objectId: string): Promise<void> {
+    await invoke("restore_library_object_from_trash", { boardId, objectId });
   },
 
   async updateObjectReviewStatus(
