@@ -67,6 +67,6 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
-          args: '--bundles msi -- --profile ci'
+          args: '--bundles nsis -- --profile ci'
       - name: sccache stats
         run: sccache --show-stats
