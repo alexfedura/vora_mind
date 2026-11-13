@@ -5,6 +5,7 @@ import {
   Search,
   Layout,
   FolderKanban,
+  Boxes,
   BookOpen,
   ListTodo,
   Sparkles,
@@ -105,6 +106,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <button className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#1b1e27] hover:text-gray-200 transition">
             <FolderKanban size={16} />
             <span>Projects</span>
+          </button>
+          <button className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#1b1e27] hover:text-gray-200 transition">
+            <Boxes size={16} />
+            <span>Models</span>
           </button>
           <button
             type="button"
