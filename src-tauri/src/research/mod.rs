@@ -740,6 +740,8 @@ pub struct ResearchHypothesisDto {
     pub project_id: Option<String>,
     pub research_question_id: Option<String>,
     pub legacy_hypothesis_id: Option<String>,
+    pub legacy_statement_h0: Option<String>,
+    pub legacy_statement_h1: Option<String>,
     pub parent_hypothesis_id: Option<String>,
     pub ownership_state: String,
     pub lifecycle_status: ResearchHypothesisStatus,
@@ -1285,6 +1287,25 @@ pub fn create_question(
         .map_err(|error| error.to_string())
 }
 
+pub fn assign_unassigned_question(
+    conn: &mut Connection,
+    question_id: &str,
+    project_id: &str,
+    rationale: &str,
+    actor_id: Option<&str>,
+) -> Result<ResearchQuestionDto, String> {
+    validate_required(rationale, "assignment rationale")?;
+    repository::assign_unassigned_question(
+        conn,
+        question_id,
+        project_id,
+        rationale,
+        actor_id,
+        now_ts_us()?,
+    )
+    .map_err(|error| error.to_string())
+}
+
 pub fn transition_question(
     conn: &Connection,
     question_id: &str,
@@ -1494,6 +1515,25 @@ pub fn create_typed_hypothesis(
         &new_id("hypothesis"),
         &new_id("legacy_hypothesis"),
         &new_id("hypothesis_definition"),
+        now_ts_us()?,
+    )
+    .map_err(|error| error.to_string())
+}
+
+pub fn assign_unassigned_hypothesis(
+    conn: &mut Connection,
+    hypothesis_id: &str,
+    project_id: &str,
+    rationale: &str,
+    actor_id: Option<&str>,
+) -> Result<ResearchHypothesisDto, String> {
+    validate_required(rationale, "assignment rationale")?;
+    repository::assign_unassigned_hypothesis(
+        conn,
+        hypothesis_id,
+        project_id,
+        rationale,
+        actor_id,
         now_ts_us()?,
     )
     .map_err(|error| error.to_string())

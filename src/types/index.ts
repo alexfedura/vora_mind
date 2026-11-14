@@ -880,6 +880,8 @@ export interface ResearchHypothesisDto {
   projectId: string | null;
   researchQuestionId: string | null;
   legacyHypothesisId: string | null;
+  legacyStatementH0: string | null;
+  legacyStatementH1: string | null;
   parentHypothesisId: string | null;
   ownershipState: "project" | "unassigned" | "unknown";
   lifecycleStatus: ResearchHypothesisStatus;

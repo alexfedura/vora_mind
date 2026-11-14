@@ -1,5 +1,5 @@
 use super::*;
-use rusqlite::{params, Connection, OptionalExtension, Result, Transaction};
+use rusqlite::{params, Connection, OptionalExtension, Result, Transaction, TransactionBehavior};
 use sha2::{Digest, Sha256};
 
 const RESEARCH_SCHEMA_VERSION: i64 = 1;
@@ -135,6 +135,207 @@ pub fn synchronize_legacy_hypotheses(conn: &Connection, now: i64) -> Result<()> 
         [now],
     )?;
     Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum AssignableResearchRecord {
+    Question,
+    Hypothesis,
+}
+
+impl AssignableResearchRecord {
+    fn table(self) -> &'static str {
+        match self {
+            Self::Question => "research_questions",
+            Self::Hypothesis => "research_hypotheses",
+        }
+    }
+
+    fn target_kind(self) -> &'static str {
+        match self {
+            Self::Question => "question",
+            Self::Hypothesis => "hypothesis",
+        }
+    }
+}
+
+fn assign_unassigned_record<T, F>(
+    conn: &mut Connection,
+    record: AssignableResearchRecord,
+    record_id: &str,
+    project_id: &str,
+    rationale: &str,
+    actor_id: Option<&str>,
+    now: i64,
+    load_assigned_record: F,
+) -> Result<T>
+where
+    F: FnOnce(&Connection, &str) -> Result<T>,
+{
+    if rationale.trim().is_empty() {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let project_status = tx
+        .query_row(
+            "SELECT lifecycle_status FROM research_projects WHERE id = ?1",
+            [project_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    match project_status.as_deref() {
+        None => return Err(rusqlite::Error::QueryReturnedNoRows),
+        Some("active") => {}
+        Some(_) => return Err(rusqlite::Error::InvalidQuery),
+    }
+
+    let query = format!(
+        "SELECT project_id, ownership_state FROM {} WHERE id = ?1",
+        record.table()
+    );
+    let ownership = tx
+        .query_row(&query, [record_id], |row| {
+            Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?))
+        })
+        .optional()?;
+    let Some((current_project_id, ownership_state)) = ownership else {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    };
+    if current_project_id.is_some() || ownership_state != "unassigned" {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    match record {
+        AssignableResearchRecord::Question => {
+            let (gap_id, domain_id): (Option<String>, Option<String>) = tx.query_row(
+                "SELECT research_gap_id, domain_id FROM research_questions WHERE id = ?1",
+                [record_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            if let Some(gap_id) = gap_id {
+                let gap_project_id: String = tx.query_row(
+                    "SELECT project_id FROM research_gaps WHERE id = ?1",
+                    [gap_id],
+                    |row| row.get(0),
+                )?;
+                if gap_project_id != project_id {
+                    return Err(rusqlite::Error::InvalidQuery);
+                }
+            }
+            validate_project_domain(&tx, project_id, domain_id.as_deref())?;
+            let has_conflicting_relationship = tx.query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM research_question_lineage l
+                    JOIN research_questions other ON other.id =
+                        CASE WHEN l.parent_question_id = ?1
+                             THEN l.derived_question_id ELSE l.parent_question_id END
+                    WHERE (l.parent_question_id = ?1 OR l.derived_question_id = ?1)
+                      AND other.project_id IS NOT NULL AND other.project_id <> ?2
+                    UNION ALL
+                    SELECT 1 FROM research_ideas
+                    WHERE question_id = ?1 AND project_id <> ?2
+                 )",
+                params![record_id, project_id],
+                |row| row.get::<_, bool>(0),
+            )?;
+            if has_conflicting_relationship {
+                return Err(rusqlite::Error::InvalidQuery);
+            }
+        }
+        AssignableResearchRecord::Hypothesis => {
+            let has_conflicting_relationship = tx.query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM research_hypotheses h
+                    JOIN research_questions q ON q.id = h.research_question_id
+                    WHERE h.id = ?1 AND q.project_id IS NOT NULL AND q.project_id <> ?2
+                    UNION ALL
+                    SELECT 1 FROM research_hypotheses h
+                    JOIN research_hypotheses other ON other.id = h.parent_hypothesis_id
+                    WHERE h.id = ?1 AND other.project_id IS NOT NULL AND other.project_id <> ?2
+                    UNION ALL
+                    SELECT 1 FROM research_hypothesis_lineage l
+                    JOIN research_hypotheses other ON other.id =
+                        CASE WHEN l.parent_hypothesis_id = ?1
+                             THEN l.derived_hypothesis_id ELSE l.parent_hypothesis_id END
+                    WHERE (l.parent_hypothesis_id = ?1 OR l.derived_hypothesis_id = ?1)
+                      AND other.project_id IS NOT NULL AND other.project_id <> ?2
+                    UNION ALL
+                    SELECT 1 FROM hypothesis_competitions c
+                    JOIN research_hypotheses other ON other.id =
+                        CASE WHEN c.hypothesis_id = ?1
+                             THEN c.competing_hypothesis_id ELSE c.hypothesis_id END
+                    WHERE (c.hypothesis_id = ?1 OR c.competing_hypothesis_id = ?1)
+                      AND other.project_id IS NOT NULL AND other.project_id <> ?2
+                 )",
+                params![record_id, project_id],
+                |row| row.get::<_, bool>(0),
+            )?;
+            if has_conflicting_relationship {
+                return Err(rusqlite::Error::InvalidQuery);
+            }
+        }
+    }
+
+    let update = format!(
+        "UPDATE {} SET project_id = ?1, ownership_state = 'project'
+         WHERE id = ?2 AND project_id IS NULL AND ownership_state = 'unassigned'",
+        record.table()
+    );
+    if tx.execute(&update, params![project_id, record_id])? != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    insert_event(
+        &tx,
+        record.target_kind(),
+        record_id,
+        "assigned_to_project",
+        actor_id,
+        &format!("{}; destination project: {project_id}", rationale.trim()),
+        now,
+    )?;
+    let assigned_record = load_assigned_record(&tx, record_id)?;
+    tx.commit()?;
+    Ok(assigned_record)
+}
+
+pub fn assign_unassigned_question(
+    conn: &mut Connection,
+    question_id: &str,
+    project_id: &str,
+    rationale: &str,
+    actor_id: Option<&str>,
+    now: i64,
+) -> Result<ResearchQuestionDto> {
+    assign_unassigned_record(
+        conn,
+        AssignableResearchRecord::Question,
+        question_id,
+        project_id,
+        rationale,
+        actor_id,
+        now,
+        query_question,
+    )
+}
+
+pub fn assign_unassigned_hypothesis(
+    conn: &mut Connection,
+    hypothesis_id: &str,
+    project_id: &str,
+    rationale: &str,
+    actor_id: Option<&str>,
+    now: i64,
+) -> Result<ResearchHypothesisDto> {
+    assign_unassigned_record(
+        conn,
+        AssignableResearchRecord::Hypothesis,
+        hypothesis_id,
+        project_id,
+        rationale,
+        actor_id,
+        now,
+        query_hypothesis,
+    )
 }
 
 fn insert_event(
@@ -2503,19 +2704,24 @@ fn query_design_version(
 
 fn query_hypothesis(conn: &Connection, hypothesis_id: &str) -> Result<ResearchHypothesisDto> {
     let mut hypothesis = conn.query_row(
-        "SELECT id, project_id, research_question_id, legacy_hypothesis_id,
-                parent_hypothesis_id, ownership_state, lifecycle_status, created_by, created_at_us
-         FROM research_hypotheses WHERE id = ?1",
+        "SELECT h.id, h.project_id, h.research_question_id, h.legacy_hypothesis_id,
+                legacy.statement_h0, legacy.statement_h1, h.parent_hypothesis_id,
+                h.ownership_state, h.lifecycle_status, h.created_by, h.created_at_us
+         FROM research_hypotheses h
+         LEFT JOIN hypotheses legacy ON legacy.id = h.legacy_hypothesis_id
+         WHERE h.id = ?1",
         [hypothesis_id],
         |row| {
-            let status = row.get::<_, String>(6)?;
+            let status = row.get::<_, String>(8)?;
             Ok(ResearchHypothesisDto {
                 id: row.get(0)?,
                 project_id: row.get(1)?,
                 research_question_id: row.get(2)?,
                 legacy_hypothesis_id: row.get(3)?,
-                parent_hypothesis_id: row.get(4)?,
-                ownership_state: row.get(5)?,
+                legacy_statement_h0: row.get(4)?,
+                legacy_statement_h1: row.get(5)?,
+                parent_hypothesis_id: row.get(6)?,
+                ownership_state: row.get(7)?,
                 lifecycle_status: match status.as_str() {
                     "draft" => ResearchHypothesisStatus::Draft,
                     "review" => ResearchHypothesisStatus::Review,
@@ -2527,8 +2733,8 @@ fn query_hypothesis(conn: &Connection, hypothesis_id: &str) -> Result<ResearchHy
                 competing_hypothesis_ids: Vec::new(),
                 model_references: Vec::new(),
                 evidence: Vec::new(),
-                created_by: row.get(7)?,
-                created_at_us: row.get(8)?,
+                created_by: row.get(9)?,
+                created_at_us: row.get(10)?,
             })
         },
     )?;
@@ -3099,6 +3305,48 @@ mod tests {
         .expect("create project")
     }
 
+    fn active_project(conn: &mut Connection, title: &str) -> ResearchProjectDto {
+        let project = project(conn, title);
+        transition_project(
+            conn,
+            &project.id,
+            ResearchProjectStatus::Active,
+            None,
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("activate project")
+    }
+
+    fn add_legacy_question(conn: &Connection, id: &str, title: &str, description: &str) {
+        conn.execute(
+            "INSERT INTO questions (id, title, description, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'parked', 10, 20)",
+            params![id, title, description],
+        )
+        .expect("insert legacy question");
+        synchronize_legacy_questions(conn).expect("synchronize legacy question");
+    }
+
+    fn add_legacy_hypothesis(
+        conn: &Connection,
+        id: &str,
+        inquiry_id: &str,
+        parent_hypothesis_id: Option<&str>,
+    ) {
+        conn.execute(
+            "INSERT INTO hypotheses
+                (id, inquiry_id, statement_h1, statement_h0, independent_var,
+                 dependent_var, metric, success_threshold, status, created_at, updated_at,
+                 parent_hypothesis_id, refined_from_id)
+             VALUES (?1, ?2, 'Legacy H1', 'Legacy H0', 'legacy variable',
+                     'legacy outcome', 'legacy metric', 'legacy threshold', 'testing',
+                     30, 40, ?3, NULL)",
+            params![id, inquiry_id, parent_hypothesis_id],
+        )
+        .expect("insert legacy hypothesis");
+        synchronize_legacy_hypotheses(conn, 50).expect("synchronize legacy hypothesis");
+    }
+
     fn accepted_question(conn: &mut Connection, project_id: &str) -> ResearchQuestionDto {
         let question = create_question(
             conn,
@@ -3236,6 +3484,606 @@ mod tests {
         assert_eq!(
             hypothesis.research_question_id.as_deref(),
             Some("legacy-question")
+        );
+    }
+
+    #[test]
+    fn assignment_preserves_unassigned_question_identity_content_and_history() {
+        let mut conn = initialized_connection();
+        let project = active_project(&mut conn, "Explicit question assignment");
+        add_legacy_question(
+            &conn,
+            "unassigned-question",
+            "Original question title",
+            "Original question description",
+        );
+        add_legacy_question(&conn, "related-question", "Related", "Related question");
+        conn.execute(
+            "INSERT INTO research_question_lineage
+                (id, parent_question_id, derived_question_id, relation_kind,
+                 rationale, created_by, created_at_us)
+             VALUES ('question-lineage', 'unassigned-question', 'related-question',
+                     'derived_from', 'Existing lineage', 'legacy-actor', 60)",
+            [],
+        )
+        .expect("insert existing question lineage");
+        conn.execute(
+            "INSERT INTO research_provenance_events
+                (id, target_kind, target_id, event_kind, actor_id, rationale, occurred_at_us)
+             VALUES ('question-history', 'question', 'unassigned-question',
+                     'legacy_imported', 'legacy-actor', 'Existing provenance', 70)",
+            [],
+        )
+        .expect("insert existing question history");
+
+        let assigned = assign_unassigned_question(
+            &mut conn,
+            "unassigned-question",
+            &project.id,
+            "Reviewed legacy question assignment",
+            Some("human-actor"),
+            80,
+        )
+        .expect("assign unassigned question");
+
+        assert_eq!(assigned.id, "unassigned-question");
+        assert_eq!(assigned.title, "Original question title");
+        assert_eq!(assigned.description, "Original question description");
+        assert_eq!(assigned.project_id.as_deref(), Some(project.id.as_str()));
+        assert_eq!(assigned.ownership_state, "project");
+        assert_eq!(
+            assigned.lifecycle_status,
+            ResearchQuestionStatus::LegacyUnassessed
+        );
+        assert_eq!(assigned.legacy_status, "parked");
+        assert_eq!((assigned.created_at, assigned.updated_at), (10, 20));
+        let lineage: (String, String, String, String, i64) = conn
+            .query_row(
+                "SELECT id, parent_question_id, derived_question_id, rationale, created_at_us
+                 FROM research_question_lineage WHERE id = 'question-lineage'",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .expect("read preserved question lineage");
+        assert_eq!(
+            lineage,
+            (
+                "question-lineage".into(),
+                "unassigned-question".into(),
+                "related-question".into(),
+                "Existing lineage".into(),
+                60,
+            )
+        );
+        let events: Vec<(String, String, Option<String>, String, i64)> = {
+            let mut statement = conn
+                .prepare(
+                    "SELECT id, event_kind, actor_id, rationale, occurred_at_us
+                     FROM research_provenance_events
+                     WHERE target_kind = 'question' AND target_id = 'unassigned-question'
+                     ORDER BY occurred_at_us, id",
+                )
+                .expect("prepare question event query");
+            statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                })
+                .expect("query question events")
+                .collect::<Result<Vec<_>>>()
+                .expect("collect question events")
+        };
+        assert_eq!(events.len(), 2);
+        assert_eq!(
+            events[0],
+            (
+                "question-history".into(),
+                "legacy_imported".into(),
+                Some("legacy-actor".into()),
+                "Existing provenance".into(),
+                70,
+            )
+        );
+        assert_eq!(events[1].1, "assigned_to_project");
+        assert_eq!(events[1].2.as_deref(), Some("human-actor"));
+        assert_eq!(
+            events[1].3,
+            format!(
+                "Reviewed legacy question assignment; destination project: {}",
+                project.id
+            )
+        );
+        assert_eq!(events[1].4, 80);
+
+        let other_project = active_project(&mut conn, "Different destination");
+        assert!(assign_unassigned_question(
+            &mut conn,
+            "unassigned-question",
+            &other_project.id,
+            "Attempted reassignment",
+            None,
+            90,
+        )
+        .is_err());
+        let (project_id, ownership_state): (Option<String>, String) = conn
+            .query_row(
+                "SELECT project_id, ownership_state FROM research_questions
+                 WHERE id = 'unassigned-question'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read assigned question ownership");
+        assert_eq!(project_id.as_deref(), Some(project.id.as_str()));
+        assert_eq!(ownership_state, "project");
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM research_provenance_events
+                 WHERE target_kind = 'question' AND target_id = 'unassigned-question'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count question assignment events"),
+            2
+        );
+    }
+
+    #[test]
+    fn explicitly_created_unassigned_question_can_be_assigned_without_rewriting_content() {
+        let mut conn = initialized_connection();
+        let project = active_project(&mut conn, "Unassigned draft assignment");
+        let question = create_question(
+            &mut conn,
+            &CreateResearchQuestionReq {
+                project_id: None,
+                research_gap_id: None,
+                domain_id: None,
+                title: "Unassigned draft title".into(),
+                description: "Unassigned draft description".into(),
+                rationale: "Created without a destination".into(),
+                created_by: Some("creator".into()),
+            },
+            "unassigned-draft",
+            100,
+        )
+        .expect("create unassigned draft question");
+        assert_eq!(question.ownership_state, "unassigned");
+        assert_eq!(question.project_id, None);
+
+        let assigned = assign_unassigned_question(
+            &mut conn,
+            &question.id,
+            &project.id,
+            "Explicitly selected project for this draft",
+            Some("human-actor"),
+            110,
+        )
+        .expect("assign unassigned draft question");
+
+        assert_eq!(assigned.id, "unassigned-draft");
+        assert_eq!(assigned.title, "Unassigned draft title");
+        assert_eq!(assigned.description, "Unassigned draft description");
+        assert_eq!(assigned.lifecycle_status, ResearchQuestionStatus::Draft);
+        assert_eq!(assigned.project_id.as_deref(), Some(project.id.as_str()));
+        assert_eq!(assigned.ownership_state, "project");
+    }
+
+    #[test]
+    fn assignment_preserves_unassigned_hypothesis_identity_content_and_history() {
+        let mut conn = initialized_connection();
+        let project = active_project(&mut conn, "Explicit hypothesis assignment");
+        add_legacy_question(&conn, "hypothesis-question", "Question", "Question content");
+        add_legacy_hypothesis(&conn, "legacy-parent", "hypothesis-question", None);
+        add_legacy_hypothesis(
+            &conn,
+            "legacy-child",
+            "hypothesis-question",
+            Some("legacy-parent"),
+        );
+        conn.execute(
+            "INSERT INTO research_provenance_events
+                (id, target_kind, target_id, event_kind, actor_id, rationale, occurred_at_us)
+             VALUES ('hypothesis-history', 'hypothesis', 'legacy-child',
+                     'legacy_imported', 'legacy-actor', 'Existing provenance', 70)",
+            [],
+        )
+        .expect("insert existing hypothesis history");
+
+        let assigned = assign_unassigned_hypothesis(
+            &mut conn,
+            "legacy-child",
+            &project.id,
+            "Reviewed legacy hypothesis assignment",
+            Some("human-actor"),
+            80,
+        )
+        .expect("assign unassigned hypothesis");
+
+        assert_eq!(assigned.id, "legacy-child");
+        assert_eq!(
+            assigned.legacy_hypothesis_id.as_deref(),
+            Some("legacy-child")
+        );
+        assert_eq!(assigned.legacy_statement_h0.as_deref(), Some("Legacy H0"));
+        assert_eq!(assigned.legacy_statement_h1.as_deref(), Some("Legacy H1"));
+        assert_eq!(assigned.project_id.as_deref(), Some(project.id.as_str()));
+        assert_eq!(
+            assigned.research_question_id.as_deref(),
+            Some("hypothesis-question")
+        );
+        assert_eq!(
+            assigned.parent_hypothesis_id.as_deref(),
+            Some("legacy-parent")
+        );
+        assert_eq!(assigned.ownership_state, "project");
+        assert_eq!(
+            assigned.lifecycle_status,
+            ResearchHypothesisStatus::LegacyUntyped
+        );
+        assert!(assigned.definitions.is_empty());
+        let legacy_content: (String, String, String, String, i64, i64) = conn
+            .query_row(
+                "SELECT id, statement_h1, statement_h0, status, created_at, updated_at
+                 FROM hypotheses WHERE id = 'legacy-child'",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
+            )
+            .expect("read preserved legacy hypothesis");
+        assert_eq!(
+            legacy_content,
+            (
+                "legacy-child".into(),
+                "Legacy H1".into(),
+                "Legacy H0".into(),
+                "testing".into(),
+                30,
+                40,
+            )
+        );
+        let lineage: (String, String, String, String, i64) = conn
+            .query_row(
+                "SELECT id, parent_hypothesis_id, derived_hypothesis_id, rationale, created_at_us
+                 FROM research_hypothesis_lineage WHERE derived_hypothesis_id = 'legacy-child'",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .expect("read preserved hypothesis lineage");
+        assert_eq!(lineage.1, "legacy-parent");
+        assert_eq!(lineage.2, "legacy-child");
+        assert!(lineage.3.contains("Preserved legacy parent_hypothesis_id"));
+        assert_eq!(lineage.4, 50);
+        let events: Vec<(String, String, Option<String>, String, i64)> = {
+            let mut statement = conn
+                .prepare(
+                    "SELECT id, event_kind, actor_id, rationale, occurred_at_us
+                     FROM research_provenance_events
+                     WHERE target_kind = 'hypothesis' AND target_id = 'legacy-child'
+                     ORDER BY occurred_at_us, id",
+                )
+                .expect("prepare hypothesis event query");
+            statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                })
+                .expect("query hypothesis events")
+                .collect::<Result<Vec<_>>>()
+                .expect("collect hypothesis events")
+        };
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].0, "hypothesis-history");
+        assert_eq!(events[0].1, "legacy_imported");
+        assert_eq!(events[0].2.as_deref(), Some("legacy-actor"));
+        assert_eq!(events[0].3, "Existing provenance");
+        assert_eq!(events[0].4, 70);
+        assert_eq!(events[1].1, "assigned_to_project");
+        assert_eq!(events[1].2.as_deref(), Some("human-actor"));
+        assert_eq!(
+            events[1].3,
+            format!(
+                "Reviewed legacy hypothesis assignment; destination project: {}",
+                project.id
+            )
+        );
+        assert_eq!(events[1].4, 80);
+
+        let other_project = active_project(&mut conn, "Different hypothesis destination");
+        assert!(assign_unassigned_hypothesis(
+            &mut conn,
+            "legacy-child",
+            &other_project.id,
+            "Attempted reassignment",
+            None,
+            90,
+        )
+        .is_err());
+        let (project_id, ownership_state): (Option<String>, String) = conn
+            .query_row(
+                "SELECT project_id, ownership_state FROM research_hypotheses
+                 WHERE id = 'legacy-child'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read assigned hypothesis ownership");
+        assert_eq!(project_id.as_deref(), Some(project.id.as_str()));
+        assert_eq!(ownership_state, "project");
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM research_provenance_events
+                 WHERE target_kind = 'hypothesis' AND target_id = 'legacy-child'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count hypothesis assignment events"),
+            2
+        );
+    }
+
+    #[test]
+    fn assignment_rejects_missing_non_active_and_archived_projects_for_both_record_types() {
+        let mut conn = initialized_connection();
+        add_legacy_question(&conn, "unassigned-question", "Question", "Content");
+        add_legacy_hypothesis(&conn, "unassigned-hypothesis", "missing-question", None);
+        add_legacy_question(&conn, "unknown-question", "Unknown", "Unknown ownership");
+        add_legacy_hypothesis(&conn, "unknown-hypothesis", "missing-question", None);
+        conn.execute(
+            "UPDATE research_questions SET ownership_state = 'unknown'
+             WHERE id = 'unknown-question'",
+            [],
+        )
+        .expect("mark question ownership unknown");
+        conn.execute(
+            "UPDATE research_hypotheses SET ownership_state = 'unknown'
+             WHERE id = 'unknown-hypothesis'",
+            [],
+        )
+        .expect("mark hypothesis ownership unknown");
+        let proposed_project = project(&mut conn, "Proposed project");
+        let archived_project = project(&mut conn, "Archived project");
+        transition_project(
+            &conn,
+            &archived_project.id,
+            ResearchProjectStatus::Archived,
+            None,
+            60,
+        )
+        .expect("archive project");
+        let active_project = active_project(&mut conn, "Active project");
+
+        for project_id in [
+            "missing-project",
+            proposed_project.id.as_str(),
+            archived_project.id.as_str(),
+        ] {
+            assert!(assign_unassigned_question(
+                &mut conn,
+                "unassigned-question",
+                project_id,
+                "Rejected destination test",
+                None,
+                70,
+            )
+            .is_err());
+            assert!(assign_unassigned_hypothesis(
+                &mut conn,
+                "unassigned-hypothesis",
+                project_id,
+                "Rejected destination test",
+                None,
+                70,
+            )
+            .is_err());
+        }
+        assert!(assign_unassigned_question(
+            &mut conn,
+            "missing-question",
+            &active_project.id,
+            "Missing record test",
+            None,
+            70,
+        )
+        .is_err());
+        assert!(assign_unassigned_hypothesis(
+            &mut conn,
+            "missing-hypothesis",
+            &active_project.id,
+            "Missing record test",
+            None,
+            70,
+        )
+        .is_err());
+        assert!(assign_unassigned_question(
+            &mut conn,
+            "unknown-question",
+            &active_project.id,
+            "Unknown ownership test",
+            None,
+            70,
+        )
+        .is_err());
+        assert!(assign_unassigned_hypothesis(
+            &mut conn,
+            "unknown-hypothesis",
+            &active_project.id,
+            "Unknown ownership test",
+            None,
+            70,
+        )
+        .is_err());
+        assert!(assign_unassigned_question(
+            &mut conn,
+            "unassigned-question",
+            &active_project.id,
+            "  ",
+            None,
+            70,
+        )
+        .is_err());
+        assert!(assign_unassigned_hypothesis(
+            &mut conn,
+            "unassigned-hypothesis",
+            &active_project.id,
+            "",
+            None,
+            70,
+        )
+        .is_err());
+
+        for (table, id, expected_ownership) in [
+            ("research_questions", "unassigned-question", "unassigned"),
+            ("research_hypotheses", "unassigned-hypothesis", "unassigned"),
+            ("research_questions", "unknown-question", "unknown"),
+            ("research_hypotheses", "unknown-hypothesis", "unknown"),
+        ] {
+            let (project_id, ownership_state): (Option<String>, String) = conn
+                .query_row(
+                    &format!("SELECT project_id, ownership_state FROM {table} WHERE id = ?1"),
+                    [id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .expect("read unchanged record ownership");
+            assert_eq!(project_id, None);
+            assert_eq!(ownership_state, expected_ownership);
+        }
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM research_provenance_events
+                 WHERE event_kind = 'assigned_to_project'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count assignment events"),
+            0
+        );
+    }
+
+    #[test]
+    fn failed_assignment_audit_insert_rolls_back_both_record_types() {
+        let mut conn = initialized_connection();
+        let project = active_project(&mut conn, "Atomic assignment project");
+        add_legacy_question(&conn, "unassigned-question", "Question", "Content");
+        add_legacy_hypothesis(&conn, "unassigned-hypothesis", "missing-question", None);
+        conn.execute_batch(
+            "CREATE TRIGGER reject_assignment_audit
+             BEFORE INSERT ON research_provenance_events
+             WHEN NEW.event_kind = 'assigned_to_project'
+             BEGIN
+                 SELECT RAISE(ABORT, 'synthetic assignment audit failure');
+             END;",
+        )
+        .expect("create synthetic audit failure trigger");
+
+        assert!(assign_unassigned_question(
+            &mut conn,
+            "unassigned-question",
+            &project.id,
+            "Synthetic rollback test",
+            None,
+            70,
+        )
+        .is_err());
+        assert!(assign_unassigned_hypothesis(
+            &mut conn,
+            "unassigned-hypothesis",
+            &project.id,
+            "Synthetic rollback test",
+            None,
+            70,
+        )
+        .is_err());
+
+        for (table, id) in [
+            ("research_questions", "unassigned-question"),
+            ("research_hypotheses", "unassigned-hypothesis"),
+        ] {
+            let (project_id, ownership_state): (Option<String>, String) = conn
+                .query_row(
+                    &format!("SELECT project_id, ownership_state FROM {table} WHERE id = ?1"),
+                    [id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .expect("read ownership after rollback");
+            assert_eq!(project_id, None);
+            assert_eq!(ownership_state, "unassigned");
+        }
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM research_provenance_events
+                 WHERE event_kind = 'assigned_to_project'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count assignment events after rollback"),
+            0
+        );
+    }
+
+    #[test]
+    fn legacy_synchronization_and_workspace_reads_do_not_assign_records() {
+        let mut conn = initialized_connection();
+        active_project(&mut conn, "Available but unselected project");
+        add_legacy_question(&conn, "unassigned-question", "Question", "Content");
+        add_legacy_hypothesis(&conn, "unassigned-hypothesis", "missing-question", None);
+
+        super::super::synchronize_legacy_records(&conn).expect("synchronize legacy records");
+        let workspace = super::super::workspace(&conn).expect("read Research workspace");
+        let question = workspace
+            .questions
+            .iter()
+            .find(|question| question.id == "unassigned-question")
+            .expect("read synchronized question");
+        let hypothesis = workspace
+            .hypotheses
+            .iter()
+            .find(|hypothesis| hypothesis.id == "unassigned-hypothesis")
+            .expect("read synchronized hypothesis");
+        assert_eq!(question.project_id, None);
+        assert_eq!(question.ownership_state, "unassigned");
+        assert_eq!(hypothesis.project_id, None);
+        assert_eq!(hypothesis.ownership_state, "unassigned");
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM research_provenance_events
+                 WHERE event_kind = 'assigned_to_project'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count automatic assignment events"),
+            0
         );
     }
 

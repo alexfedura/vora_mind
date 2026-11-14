@@ -172,6 +172,24 @@ pub fn research_create_question(
 }
 
 #[tauri::command]
+pub fn research_assign_unassigned_question(
+    state: State<AppState>,
+    question_id: String,
+    project_id: String,
+    rationale: String,
+    actor_id: Option<String>,
+) -> Result<ResearchQuestionDto, String> {
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    assign_unassigned_question(
+        &mut conn,
+        &question_id,
+        &project_id,
+        &rationale,
+        actor_id.as_deref(),
+    )
+}
+
+#[tauri::command]
 pub fn research_transition_question(
     state: State<AppState>,
     question_id: String,
@@ -301,6 +319,24 @@ pub fn research_create_typed_hypothesis(
 ) -> Result<ResearchHypothesisDto, String> {
     let mut conn = state.db.lock().map_err(|error| error.to_string())?;
     create_typed_hypothesis(&mut conn, request)
+}
+
+#[tauri::command]
+pub fn research_assign_unassigned_hypothesis(
+    state: State<AppState>,
+    hypothesis_id: String,
+    project_id: String,
+    rationale: String,
+    actor_id: Option<String>,
+) -> Result<ResearchHypothesisDto, String> {
+    let mut conn = state.db.lock().map_err(|error| error.to_string())?;
+    assign_unassigned_hypothesis(
+        &mut conn,
+        &hypothesis_id,
+        &project_id,
+        &rationale,
+        actor_id.as_deref(),
+    )
 }
 
 #[tauri::command]

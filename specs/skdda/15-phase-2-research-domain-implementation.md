@@ -25,6 +25,13 @@ observations/evidence/findings.
   `unassigned`, and marks unmapped scientific state `legacy_unassessed` or
   `legacy_untyped`. No project, gap, operational definition, unit, method,
   dataset, or evidence is inferred.
+- Explicit assignment applies only to question and hypothesis records whose
+  ownership is `unassigned` and whose project is null. It requires the exact
+  record ID, a selected active project, and a non-empty human rationale; the
+  transaction changes only the ownership projection and appends an audit
+  event naming the destination. `unknown` ownership is not assignable, and
+  synchronization or reads never choose a project. Optional actor IDs remain
+  audit metadata, not authenticated identity.
 - New Research questions also create their legacy Questions row in the same
   transaction, preserving the existing board, triage, and promotion workflow.
 - New hypotheses retain a legacy Lab row for existing protocol, H0/H1,

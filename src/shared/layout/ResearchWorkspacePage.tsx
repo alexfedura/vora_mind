@@ -112,6 +112,9 @@ export const ResearchWorkspacePage: React.FC = () => {
   const [selectedHypothesisId, setSelectedHypothesisId] = useState("");
 
   const sourceVersions = workspace?.sourceVersions ?? [];
+  const activeProjects = (workspace?.projects ?? []).filter(
+    (project) => project.lifecycleStatus === "active",
+  );
   const selectedSource = useMemo(
     () => sourceVersions.find((source) => sourceKey(source) === selectedSourceKey),
     [sourceVersions, selectedSourceKey],
@@ -560,6 +563,28 @@ export const ResearchWorkspacePage: React.FC = () => {
   const updateQuestionStatus = (question: ResearchQuestionDto, status: "review" | "accepted" | "deferred" | "rejected") =>
     act(() => researchService.transitionQuestion(question.id, status, null, "Updated in Research workspace."));
 
+  const assignQuestion = (event: React.FormEvent<HTMLFormElement>, questionId: string): void => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    void act(() => researchService.assignUnassignedQuestion(
+      questionId,
+      String(form.get("projectId") ?? ""),
+      String(form.get("rationale") ?? ""),
+      null,
+    ));
+  };
+
+  const assignHypothesis = (event: React.FormEvent<HTMLFormElement>, hypothesisId: string): void => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    void act(() => researchService.assignUnassignedHypothesis(
+      hypothesisId,
+      String(form.get("projectId") ?? ""),
+      String(form.get("rationale") ?? ""),
+      null,
+    ));
+  };
+
   if (isLoading && !workspace) {
     return <p className="mx-auto max-w-5xl py-16 text-center text-sm text-gray-400">Loading Research workspace...</p>;
   }
@@ -808,12 +833,26 @@ export const ResearchWorkspacePage: React.FC = () => {
                 <button className={buttonClass}><Plus size={14} /> Create draft question</button>
               </form>
               <div className="space-y-2 border-t border-[#292c34] pt-3">
-                {workspace.questions.filter((question) => question.projectId === questionProjectId || (!question.projectId && question.lifecycleStatus === "legacy_unassessed")).map((question) => (
+                {workspace.questions.filter((question) => question.projectId === questionProjectId || (!question.projectId && (question.ownershipState === "unassigned" || question.lifecycleStatus === "legacy_unassessed"))).map((question) => (
                   <article key={question.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3">
                     <div className="flex items-center justify-between gap-2"><h4 className="text-sm text-white">{question.title}</h4><span className="text-[11px] text-gray-400">{question.lifecycleStatus} · {question.ownershipState}</span></div>
                     <p className="mt-1 text-xs text-gray-400">{question.description}</p>
                     {question.migrationNote && <p className="mt-1 text-[11px] text-amber-300">{question.migrationNote}</p>}
                     <p className="mt-1 text-[11px] text-gray-500">Question ID {question.id}{question.researchGapId ? ` · gap ${question.researchGapId}` : " · no gap link"}</p>
+                    {!question.projectId && question.ownershipState === "unassigned" && (
+                      <form onSubmit={(event) => assignQuestion(event, question.id)} className="mt-3 flex flex-wrap items-end gap-2 border-t border-[#292c34] pt-3">
+                        <Field label="Explicitly assign to active project">
+                          <select className={inputClass} name="projectId" required disabled={activeProjects.length === 0}>
+                            <option value="">Select destination project</option>
+                            {activeProjects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
+                          </select>
+                        </Field>
+                        <Field label="Why does this question belong to the project?">
+                          <input className={inputClass} name="rationale" required disabled={activeProjects.length === 0} />
+                        </Field>
+                        <button className={buttonClass} disabled={activeProjects.length === 0}>Assign question</button>
+                      </form>
+                    )}
                     {question.projectId && ["draft", "review", "deferred"].includes(question.lifecycleStatus) && (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {question.lifecycleStatus === "draft" && <button type="button" onClick={() => void updateQuestionStatus(question, "review")} className="rounded border border-[#343741] px-2 py-1 text-xs text-gray-300">Submit for review</button>}
@@ -953,6 +992,35 @@ export const ResearchWorkspacePage: React.FC = () => {
                 <button className={buttonClass}><Plus size={14} /> Create typed hypothesis</button>
               </form>
               <div className="space-y-2 border-t border-[#292c34] pt-3">
+                {(workspace.hypotheses.filter((hypothesis) => !hypothesis.projectId && hypothesis.ownershipState === "unassigned")).map((hypothesis) => {
+                  const linkedQuestion = workspace.questions.find((question) => question.id === hypothesis.researchQuestionId);
+                  return (
+                    <article key={hypothesis.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h4 className="text-sm text-white">Legacy hypothesis · {hypothesis.legacyHypothesisId ?? hypothesis.id}</h4>
+                        <span className="text-[11px] text-gray-400">{hypothesis.lifecycleStatus} · {hypothesis.ownershipState}</span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-gray-500">Research record {hypothesis.id} · {linkedQuestion ? `question ${linkedQuestion.title} (${linkedQuestion.id})` : "no linked research question"}</p>
+                      {hypothesis.legacyStatementH1 && <p className="mt-2 text-xs text-gray-300">H1: {hypothesis.legacyStatementH1}</p>}
+                      {hypothesis.legacyStatementH0 && <p className="mt-1 text-xs text-gray-400">H0: {hypothesis.legacyStatementH0}</p>}
+                      <form onSubmit={(event) => assignHypothesis(event, hypothesis.id)} className="mt-3 flex flex-wrap items-end gap-2 border-t border-[#292c34] pt-3">
+                        <Field label="Explicitly assign to active project">
+                          <select className={inputClass} name="projectId" required disabled={activeProjects.length === 0}>
+                            <option value="">Select destination project</option>
+                            {activeProjects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
+                          </select>
+                        </Field>
+                        <Field label="Why does this hypothesis belong to the project?">
+                          <input className={inputClass} name="rationale" required disabled={activeProjects.length === 0} />
+                        </Field>
+                        <button className={buttonClass} disabled={activeProjects.length === 0}>Assign hypothesis</button>
+                      </form>
+                    </article>
+                  );
+                })}
+                {activeProjects.length === 0 && (workspace.questions.some((question) => !question.projectId && question.ownershipState === "unassigned") || workspace.hypotheses.some((hypothesis) => !hypothesis.projectId && hypothesis.ownershipState === "unassigned")) && (
+                  <p className="text-xs text-gray-500">An active project is required before unassigned records can be assigned.</p>
+                )}
                 {projectHypotheses.map((hypothesis) => {
                   const definition = latest(hypothesis.definitions);
                   return (

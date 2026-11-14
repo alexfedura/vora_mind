@@ -95,6 +95,14 @@ export const researchService = {
     invoke<ResearchGapDto>("research_transition_gap", { gapId, nextStatus, actorId }),
   createQuestion: (request: CreateResearchQuestionReq) =>
     invoke<ResearchQuestionDto>("research_create_question", { request }),
+  assignUnassignedQuestion: (
+    questionId: string,
+    projectId: string,
+    rationale: string,
+    actorId: string | null,
+  ) => invoke<ResearchQuestionDto>("research_assign_unassigned_question", {
+    questionId, projectId, rationale, actorId,
+  }),
   transitionQuestion: (
     questionId: string,
     nextStatus: ResearchQuestionStatus,
@@ -139,6 +147,14 @@ export const researchService = {
     invoke<IdeaDto>("research_create_idea", { request }),
   createTypedHypothesis: (request: CreateTypedHypothesisReq) =>
     invoke<ResearchHypothesisDto>("research_create_typed_hypothesis", { request }),
+  assignUnassignedHypothesis: (
+    hypothesisId: string,
+    projectId: string,
+    rationale: string,
+    actorId: string | null,
+  ) => invoke<ResearchHypothesisDto>("research_assign_unassigned_hypothesis", {
+    hypothesisId, projectId, rationale, actorId,
+  }),
   transitionHypothesis: (
     hypothesisId: string,
     nextStatus: ResearchHypothesisStatus,
