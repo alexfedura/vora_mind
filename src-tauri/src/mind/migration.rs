@@ -92,6 +92,8 @@ enum FailurePoint {
     BeforeStaging,
     AfterMigrations,
     AfterValidation,
+    DuringBackupCopy,
+    AfterBackupCopyBeforeJournal,
     BeforePublication,
     DuringPublication,
     AfterPublicationBeforeJournal,
@@ -149,9 +151,10 @@ pub fn schema_fingerprint_for_path(source_path: &Path) -> Result<String> {
 
 /// Stage and publish an explicitly approved migration plan.
 ///
-/// The application must quiesce database activity and close every connection
-/// to the source before calling. The coordinator lock serializes coordinator
-/// callers only; it cannot prevent unrelated SQLite clients from writing.
+/// The trusted caller must quiesce database activity and close every connection
+/// to the source before calling. Sidecar checks and the coordinator lock cannot
+/// establish that external SQLite clients are absent; this API is not available
+/// for production use until a trusted caller can guarantee quiescence.
 /// Publication replaces the canonical file with one same-volume rename. If the
 /// platform or filesystem cannot atomically replace an existing file, the call
 /// fails without using a two-rename fallback.
@@ -165,9 +168,11 @@ pub fn execute_staged_migrations(
 /// Recover operations left in a source's adjacent staging directories.
 ///
 /// A validated stage is completed only when the canonical file still matches
-/// the original backup or the validated output. The caller must quiesce
-/// database activity and close every source connection; the lock does not
-/// prevent unrelated SQLite clients from accessing the source.
+/// the original backup or the validated output. The trusted caller must
+/// quiesce database activity and close every source connection. Sidecar checks
+/// and the lock cannot establish that external SQLite clients are absent; this
+/// API is not available for production use until a trusted caller can guarantee
+/// quiescence.
 pub fn recover_incomplete_operations(source_path: &Path) -> Result<Vec<RecoveryOutcome>> {
     let _lock = CoordinatorLock::acquire(source_path)?;
     ensure_no_sqlite_sidecars(source_path)?;
@@ -240,6 +245,7 @@ pub fn recover_incomplete_operations(source_path: &Path) -> Result<Vec<RecoveryO
         let Some(expected_fingerprint) = expected_fingerprint else {
             if !source.exists() && backup.exists() && legacy_backup_event {
                 let backup_hash = sha256_file(&backup)?;
+                validate_original_backup(&backup, &backup_hash)?;
                 restore_from_backup_atomically(
                     &backup,
                     &source,
@@ -290,6 +296,7 @@ pub fn recover_incomplete_operations(source_path: &Path) -> Result<Vec<RecoveryO
             if sha256_file(&backup)? != expected_original_hash {
                 bail!("Migration backup checksum mismatch: {}", backup.display());
             }
+            validate_original_backup(&backup, expected_original_hash)?;
             restore_from_backup_atomically(
                 &backup,
                 &source,
@@ -304,13 +311,19 @@ pub fn recover_incomplete_operations(source_path: &Path) -> Result<Vec<RecoveryO
                     if sha256_file(&source)? != hash {
                         bail!("Migration backup is missing and source is not the original");
                     }
+                    validate_original_backup(&source, &hash)?;
                     copy_file_durably(&source, &backup)?;
+                    validate_original_backup(&backup, &hash)?;
                 } else if sha256_file(&backup)? != hash {
                     if sha256_file(&source)? != hash {
                         bail!("Migration backup checksum mismatch: {}", backup.display());
                     }
-                    fs::remove_file(&backup).context("Remove incomplete migration backup")?;
+                    validate_original_backup(&source, &hash)?;
+                    preserve_unverified_backup(&backup, &operation_directory)?;
                     copy_file_durably(&source, &backup)?;
+                    validate_original_backup(&backup, &hash)?;
+                } else {
+                    validate_original_backup(&backup, &hash)?;
                 }
                 hash
             }
@@ -320,9 +333,14 @@ pub fn recover_incomplete_operations(source_path: &Path) -> Result<Vec<RecoveryO
                     if sha256_file(&backup)? != source_hash {
                         bail!("Unrecorded migration backup does not match canonical database");
                     }
+                    validate_original_backup(&backup, &source_hash)?;
                     source_hash
                 } else {
-                    copy_file_durably(&source, &backup)?
+                    let source_hash = sha256_file(&source)?;
+                    validate_original_backup(&source, &source_hash)?;
+                    copy_file_durably(&source, &backup)?;
+                    validate_original_backup(&backup, &source_hash)?;
+                    source_hash
                 };
                 append_journal(
                     &journal_path,
@@ -513,10 +531,17 @@ fn execute_with_failure(
     if sha256_file(source_path)? != original_sha256 {
         bail!("Source database changed during staging; refusing publication");
     }
+    if failure == FailurePoint::DuringBackupCopy {
+        create_partial_copy_for_failure(source_path, &backup_path)?;
+        bail!("Injected interruption during backup copy");
+    }
     let backup_hash = copy_file_durably(source_path, &backup_path)?;
     if backup_hash != original_sha256 {
-        fs::remove_file(&backup_path).context("Remove inconsistent migration backup")?;
         bail!("Source database changed while its recoverable backup was being created");
+    }
+    validate_original_backup(&backup_path, &original_sha256)?;
+    if failure == FailurePoint::AfterBackupCopyBeforeJournal {
+        bail!("Injected interruption after backup copy and before journal completion");
     }
     append_journal(
         &journal_path,
@@ -747,7 +772,45 @@ fn validate_output(path: &Path, expected_fingerprint: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_original_backup(path: &Path, expected_sha256: &str) -> Result<()> {
+    ensure_no_sqlite_sidecars(path)?;
+    let observed_sha256 = sha256_file(path)?;
+    if observed_sha256 != expected_sha256 {
+        bail!(
+            "Migration backup checksum mismatch: expected {expected_sha256}, observed {observed_sha256}"
+        );
+    }
+    let connection = open_read_only(path)
+        .with_context(|| format!("Open migration backup as SQLite: {}", path.display()))?;
+    validate_sqlite_integrity(&connection)
+        .with_context(|| format!("Validate migration backup: {}", path.display()))?;
+    match recognize_profile_on_connection(&connection)? {
+        SchemaProfile::CurrentSupported { .. } => ensure_empty_or_missing_ledger(&connection),
+        profile => bail!("Migration backup profile is not supported: {profile:?}"),
+    }
+}
+
 fn validate_database(connection: &Connection, expected_fingerprint: &str) -> Result<()> {
+    validate_sqlite_integrity(connection)?;
+    let tables = table_names(connection)?;
+    let missing = REQUIRED_CURRENT_TABLES
+        .iter()
+        .filter(|required| !tables.iter().any(|table| table == **required))
+        .copied()
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        bail!("Required application tables are missing: {missing:?}");
+    }
+    let observed_fingerprint = schema_fingerprint(connection)?;
+    if observed_fingerprint != expected_fingerprint {
+        bail!(
+            "Post-migration schema fingerprint mismatch: expected {expected_fingerprint}, observed {observed_fingerprint}"
+        );
+    }
+    Ok(())
+}
+
+fn validate_sqlite_integrity(connection: &Connection) -> Result<()> {
     enable_foreign_keys(connection)?;
     let mut statement = connection.prepare("PRAGMA integrity_check")?;
     let integrity = statement
@@ -770,21 +833,6 @@ fn validate_database(connection: &Connection, expected_fingerprint: &str) -> Res
         .collect::<rusqlite::Result<Vec<_>>>()?;
     if !foreign_key_violations.is_empty() {
         bail!("SQLite foreign_key_check found violations: {foreign_key_violations:?}");
-    }
-    let tables = table_names(connection)?;
-    let missing = REQUIRED_CURRENT_TABLES
-        .iter()
-        .filter(|required| !tables.iter().any(|table| table == **required))
-        .copied()
-        .collect::<Vec<_>>();
-    if !missing.is_empty() {
-        bail!("Required application tables are missing: {missing:?}");
-    }
-    let observed_fingerprint = schema_fingerprint(connection)?;
-    if observed_fingerprint != expected_fingerprint {
-        bail!(
-            "Post-migration schema fingerprint mismatch: expected {expected_fingerprint}, observed {observed_fingerprint}"
-        );
     }
     Ok(())
 }
@@ -933,7 +981,6 @@ fn copy_file_durably(source: &Path, destination: &Path) -> Result<String> {
     sync_file(destination)?;
     let destination_hash = sha256_file(destination)?;
     if destination_hash != source_hash {
-        fs::remove_file(destination).context("Remove incomplete migration copy")?;
         bail!(
             "Copied database checksum mismatch for {}",
             destination.display()
@@ -942,28 +989,49 @@ fn copy_file_durably(source: &Path, destination: &Path) -> Result<String> {
     Ok(destination_hash)
 }
 
+fn create_partial_copy_for_failure(source: &Path, destination: &Path) -> Result<()> {
+    let source_file = File::open(source)?;
+    let source_length = source_file.metadata()?.len();
+    let mut source_prefix = source_file.take((source_length / 2).max(1));
+    let mut destination_file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(destination)?;
+    std::io::copy(&mut source_prefix, &mut destination_file)?;
+    destination_file.sync_all()?;
+    Ok(())
+}
+
+fn preserve_unverified_backup(backup: &Path, operation_directory: &Path) -> Result<PathBuf> {
+    let preserved_path =
+        operation_directory.join(format!("backup-unverified-{}.sqlite", uuid::Uuid::now_v7()));
+    fs::rename(backup, &preserved_path).with_context(|| {
+        format!(
+            "Preserve unverified migration backup {} at {}",
+            backup.display(),
+            preserved_path.display()
+        )
+    })?;
+    Ok(preserved_path)
+}
+
 fn restore_from_backup_atomically(
     backup: &Path,
     source: &Path,
     operation_directory: &Path,
     expected_sha256: &str,
 ) -> Result<()> {
-    if sha256_file(backup)? != expected_sha256 {
-        bail!("Migration backup checksum mismatch: {}", backup.display());
-    }
+    validate_original_backup(backup, expected_sha256)?;
     let restore_path = operation_directory.join(format!("restore-{}.sqlite", uuid::Uuid::now_v7()));
     let backup_hash = copy_file_durably(backup, &restore_path)?;
     if backup_hash != expected_sha256 {
         bail!("Migration backup changed while being restored");
     }
+    validate_original_backup(&restore_path, expected_sha256)?;
     atomic_replace(&restore_path, source).context("Atomically restore original database")?;
     sync_file(source)?;
-    if sha256_file(source)? != backup_hash {
-        bail!(
-            "Restored database checksum mismatch at {}",
-            source.display()
-        );
-    }
+    validate_original_backup(source, &backup_hash)
+        .with_context(|| format!("Validate restored database at {}", source.display()))?;
     Ok(())
 }
 
@@ -990,8 +1058,9 @@ fn atomic_replace(_staged: &Path, _canonical: &Path) -> Result<()> {
 mod tests {
     use super::{
         current_schema_fingerprint, execute_with_failure, recognize_profile,
-        recover_incomplete_operations, schema_fingerprint, ApprovedMigration, FailurePoint,
-        MigrationOutcome, MigrationPlan, RecoveryOutcome, SchemaProfile,
+        recover_incomplete_operations, schema_fingerprint, validate_original_backup,
+        ApprovedMigration, FailurePoint, JournalEvent, MigrationOutcome, MigrationPlan,
+        RecoveryOutcome, SchemaProfile,
     };
     use rusqlite::Connection;
     use std::fs;
@@ -1151,6 +1220,8 @@ mod tests {
             MigrationOutcome::AlreadyApplied => panic!("first execution must publish"),
         };
         assert_eq!(database_hash(&backup_path), source_hash);
+        validate_original_backup(&backup_path, &source_hash)
+            .expect("published backup is a valid current SQLite database");
         let migrated = Connection::open(&source).expect("open published fixture");
         let probe_exists: bool = migrated
             .query_row(
@@ -1304,6 +1375,138 @@ mod tests {
                 .is_empty());
             assert_eq!(database_hash(&backup), original_hash);
         }
+    }
+
+    #[test]
+    fn backup_copy_interruptions_preserve_artifacts_and_recover_repeatably() {
+        for failure in [
+            FailurePoint::DuringBackupCopy,
+            FailurePoint::AfterBackupCopyBeforeJournal,
+        ] {
+            let directory = FixtureDirectory::new();
+            let source = current_fixture(&directory);
+            let expected = directory.0.join("expected.sqlite");
+            fs::copy(&source, &expected).expect("clone expected fixture");
+            let plan = plan_for(&expected, SYNTHETIC_SQL);
+            let original_hash = database_hash(&source);
+
+            assert!(execute_with_failure(&source, &plan, failure).is_err());
+            assert_eq!(database_hash(&source), original_hash);
+
+            let operation_directory = directory
+                .0
+                .read_dir()
+                .expect("read fixture directory")
+                .filter_map(std::result::Result::ok)
+                .map(|entry| entry.path())
+                .find(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with(".workspace.sqlite.migration-"))
+                })
+                .expect("interrupted operation directory exists");
+            let backup = operation_directory.join("backup.sqlite");
+            assert!(
+                backup.is_file(),
+                "copy interruption leaves a backup artifact"
+            );
+
+            let recovered = recover_incomplete_operations(&source)
+                .expect("recover interrupted backup preparation");
+            assert!(matches!(
+                recovered.as_slice(),
+                [RecoveryOutcome::Published { .. }]
+            ));
+
+            let retained_backup = operation_directory.join("backup.sqlite");
+            validate_original_backup(&retained_backup, &original_hash)
+                .expect("recovery retains a valid original SQLite backup");
+            assert_eq!(database_hash(&retained_backup), original_hash);
+            if failure == FailurePoint::DuringBackupCopy {
+                let preserved = operation_directory
+                    .read_dir()
+                    .expect("read interrupted operation artifacts")
+                    .filter_map(std::result::Result::ok)
+                    .map(|entry| entry.path())
+                    .find(|path| {
+                        path.file_name()
+                            .and_then(|name| name.to_str())
+                            .is_some_and(|name| name.starts_with("backup-unverified-"))
+                    })
+                    .expect("partial copy is preserved instead of deleted");
+                assert!(preserved.is_file());
+            }
+            assert!(recover_incomplete_operations(&source)
+                .expect("repeat recovery after backup interruption")
+                .is_empty());
+            validate_original_backup(&retained_backup, &original_hash)
+                .expect("repeated recovery preserves the validated backup");
+        }
+    }
+
+    #[test]
+    fn hash_matching_invalid_sqlite_backup_fails_closed_and_is_preserved() {
+        let directory = FixtureDirectory::new();
+        let source = current_fixture(&directory);
+        let source_hash = database_hash(&source);
+        let operation_directory = directory.0.join(".workspace.sqlite.migration-invalid");
+        fs::create_dir(&operation_directory).expect("create isolated recovery directory");
+        let backup = operation_directory.join("backup.sqlite");
+        fs::copy(&source, &backup).expect("clone isolated current fixture");
+        let invalid = Connection::open(&backup).expect("open isolated backup fixture");
+        invalid
+            .execute_batch(
+                "CREATE TABLE backup_integrity_probe (value INTEGER CHECK(value > 0));
+                 PRAGMA ignore_check_constraints = ON;
+                 INSERT INTO backup_integrity_probe VALUES (-1);",
+            )
+            .expect("create synthetic SQLite integrity failure");
+        drop(invalid);
+        let backup_hash = database_hash(&backup);
+        assert_ne!(backup_hash, source_hash);
+
+        let journal = operation_directory.join("journal.log");
+        super::append_journal(&journal, &JournalEvent::Started).expect("journal start");
+        super::append_journal(
+            &journal,
+            &JournalEvent::SourceObserved {
+                original_sha256: backup_hash.clone(),
+            },
+        )
+        .expect("journal observed source hash");
+        super::append_journal(
+            &journal,
+            &JournalEvent::Validated {
+                expected_fingerprint: current_schema_fingerprint()
+                    .expect("current synthetic schema fingerprint"),
+            },
+        )
+        .expect("journal synthetic validation");
+        super::append_journal(
+            &journal,
+            &JournalEvent::BackupPrepared {
+                original_sha256: backup_hash.clone(),
+            },
+        )
+        .expect("journal synthetic backup hash");
+
+        let source_before = database_hash(&source);
+        assert!(recover_incomplete_operations(&source).is_err());
+        assert_eq!(database_hash(&source), source_before);
+        assert_eq!(database_hash(&backup), backup_hash);
+        assert!(super::restore_from_backup_atomically(
+            &backup,
+            &source,
+            &operation_directory,
+            &backup_hash,
+        )
+        .is_err());
+        assert_eq!(database_hash(&source), source_before);
+        assert_eq!(database_hash(&backup), backup_hash);
+        assert!(journal.is_file());
+        assert!(recover_incomplete_operations(&source).is_err());
+        assert_eq!(database_hash(&source), source_before);
+        assert_eq!(database_hash(&backup), backup_hash);
     }
 
     #[test]
