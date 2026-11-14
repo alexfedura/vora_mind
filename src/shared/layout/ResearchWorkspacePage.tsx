@@ -1,9 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { AlertCircle, BookOpenCheck, Plus, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useResearchWorkspace } from "@/hooks/useResearchWorkspace";
 import { researchService } from "@/mind/services/researchService";
 import { srcListSources } from "@/source/services/sourceService";
+import {
+  projectSourcesReducer,
+  selectProjectSourcesState,
+} from "@/shared/layout/projectSourcesState";
 import { ExperimentWorkspacePanel } from "@/shared/layout/ExperimentWorkspacePanel";
 import { AnalysisWorkspacePanel } from "@/shared/layout/AnalysisWorkspacePanel";
 import { ModelWorkspacePanel } from "@/shared/layout/ModelWorkspacePanel";
@@ -15,7 +19,6 @@ import type {
   ObservationValueState,
   ResearchPathwayKey,
   ResearchProjectDto,
-  ResearchProjectSourceDto,
   ResearchProjectSourceError,
   ResearchQuestionDto,
   SourceSummary,
@@ -157,17 +160,25 @@ export const ResearchWorkspacePage: React.FC = () => {
   const [selectedHypothesisId, setSelectedHypothesisId] = useState("");
   const [workspaceSources, setWorkspaceSources] = useState<SourceSummary[]>([]);
   const [sourceCatalogError, setSourceCatalogError] = useState<string | null>(null);
-  const [projectSources, setProjectSources] = useState<ResearchProjectSourceDto[]>([]);
-  const [projectSourcesLoading, setProjectSourcesLoading] = useState(false);
+  const [projectSourcesState, dispatchProjectSources] = useReducer(projectSourcesReducer, null);
+  const projectSourcesRequestId = useRef(0);
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
   const [projectSourcesRevision, setProjectSourcesRevision] = useState(0);
   const [sourceSearch, setSourceSearch] = useState("");
-  const [projectSourceError, setProjectSourceError] = useState<string | null>(null);
   const [editingProjectSourceId, setEditingProjectSourceId] = useState<string | null>(null);
   const [editingUseContext, setEditingUseContext] = useState("");
   const [editingNotes, setEditingNotes] = useState("");
 
   const sourceVersions = workspace?.sourceVersions ?? [];
   const selectedProject = workspace?.projects.find((project) => project.id === projectId);
+  const currentProjectSourcesState = selectProjectSourcesState(projectSourcesState, projectId);
+  const projectSources = currentProjectSourcesState?.sources ?? [];
+  const projectSourcesLoading = Boolean(projectId) && (
+    currentProjectSourcesState === null || currentProjectSourcesState.status === "loading"
+  );
+  const projectSourcesReady = currentProjectSourcesState?.status === "loaded";
+  const projectSourceError = currentProjectSourcesState?.error ?? null;
   const activeProjects = (workspace?.projects ?? []).filter(
     (project) => project.lifecycleStatus === "active",
   );
@@ -222,26 +233,34 @@ export const ResearchWorkspacePage: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    setProjectSourceError(null);
     setEditingProjectSourceId(null);
-    if (!projectId) {
-      setProjectSources([]);
-      setProjectSourcesLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
+    if (!projectId) return () => {
+      cancelled = true;
+    };
 
-    setProjectSourcesLoading(true);
+    const requestId = projectSourcesRequestId.current + 1;
+    projectSourcesRequestId.current = requestId;
+    dispatchProjectSources({ type: "loadStarted", projectId, requestId });
     void researchService.listProjectSources(projectId)
       .then((sources) => {
-        if (!cancelled) setProjectSources(sources);
+        if (!cancelled) {
+          dispatchProjectSources({
+            type: "loadSucceeded",
+            projectId,
+            requestId,
+            sources,
+          });
+        }
       })
       .catch((cause: unknown) => {
-        if (!cancelled) setProjectSourceError(projectSourceErrorMessage(cause));
-      })
-      .finally(() => {
-        if (!cancelled) setProjectSourcesLoading(false);
+        if (!cancelled) {
+          dispatchProjectSources({
+            type: "loadFailed",
+            projectId,
+            requestId,
+            error: projectSourceErrorMessage(cause),
+          });
+        }
       });
     return () => {
       cancelled = true;
@@ -315,7 +334,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     if (!selectedProject || selectedProject.lifecycleStatus !== "active") return;
     const target = event.currentTarget;
     const form = new FormData(target);
-    setProjectSourceError(null);
+    dispatchProjectSources({ type: "clearError", projectId: selectedProject.id });
     try {
       const association = await researchService.associateProjectSource({
         projectId: selectedProject.id,
@@ -323,15 +342,22 @@ export const ResearchWorkspacePage: React.FC = () => {
         useContext: String(form.get("useContext") ?? ""),
         notes: String(form.get("notes") ?? ""),
       });
-      setProjectSources((current) =>
-        [...current, association].sort((left, right) =>
-          left.sourceTitle.localeCompare(right.sourceTitle)
-        )
-      );
+      if (projectIdRef.current !== selectedProject.id) return;
+      dispatchProjectSources({
+        type: "associationAdded",
+        projectId: selectedProject.id,
+        association,
+      });
       target.reset();
       setSourceSearch("");
     } catch (cause) {
-      setProjectSourceError(projectSourceErrorMessage(cause));
+      if (projectIdRef.current === selectedProject.id) {
+        dispatchProjectSources({
+          type: "operationFailed",
+          projectId: selectedProject.id,
+          error: projectSourceErrorMessage(cause),
+        });
+      }
     }
   };
 
@@ -343,7 +369,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     if (!selectedProject || selectedProject.lifecycleStatus !== "active") return;
     const target = event.currentTarget;
     const form = new FormData(target);
-    setProjectSourceError(null);
+    dispatchProjectSources({ type: "clearError", projectId: selectedProject.id });
     try {
       const association = await researchService.updateProjectSourceContext({
         projectId: selectedProject.id,
@@ -351,12 +377,21 @@ export const ResearchWorkspacePage: React.FC = () => {
         useContext: String(form.get("useContext") ?? ""),
         notes: String(form.get("notes") ?? ""),
       });
-      setProjectSources((current) =>
-        current.map((item) => item.sourceId === sourceId ? association : item)
-      );
+      if (projectIdRef.current !== selectedProject.id) return;
+      dispatchProjectSources({
+        type: "associationUpdated",
+        projectId: selectedProject.id,
+        association,
+      });
       setEditingProjectSourceId(null);
     } catch (cause) {
-      setProjectSourceError(projectSourceErrorMessage(cause));
+      if (projectIdRef.current === selectedProject.id) {
+        dispatchProjectSources({
+          type: "operationFailed",
+          projectId: selectedProject.id,
+          error: projectSourceErrorMessage(cause),
+        });
+      }
     }
   };
 
@@ -893,7 +928,7 @@ export const ResearchWorkspacePage: React.FC = () => {
                     value={sourceSearch}
                     onChange={(event) => setSourceSearch(event.target.value)}
                     placeholder="Search title, author, kind, or ID"
-                    disabled={selectedProject.lifecycleStatus !== "active"}
+                    disabled={selectedProject.lifecycleStatus !== "active" || !projectSourcesReady}
                   />
                 </Field>
                 <Field label="Existing Source">
@@ -901,7 +936,7 @@ export const ResearchWorkspacePage: React.FC = () => {
                     className={inputClass}
                     name="sourceId"
                     required
-                    disabled={selectedProject.lifecycleStatus !== "active" || projectSourcesLoading || workspaceSources.length === 0}
+                    disabled={selectedProject.lifecycleStatus !== "active" || !projectSourcesReady || workspaceSources.length === 0}
                   >
                     <option value="">
                       {workspaceSources.length === 0 ? "No workspace Sources available" : "Select a Source"}
@@ -914,20 +949,22 @@ export const ResearchWorkspacePage: React.FC = () => {
                   </select>
                 </Field>
                 <Field label="Project-specific use context">
-                  <textarea className={inputClass} name="useContext" rows={2} maxLength={4000} />
+                  <textarea className={inputClass} name="useContext" rows={2} maxLength={4000} disabled={!projectSourcesReady} />
                 </Field>
                 <Field label="Project-specific notes">
-                  <textarea className={inputClass} name="notes" rows={2} maxLength={4000} />
+                  <textarea className={inputClass} name="notes" rows={2} maxLength={4000} disabled={!projectSourcesReady} />
                 </Field>
                 <button
                   className={buttonClass}
-                  disabled={selectedProject.lifecycleStatus !== "active" || projectSourcesLoading || availableWorkspaceSources.length === 0}
+                  disabled={selectedProject.lifecycleStatus !== "active" || !projectSourcesReady || availableWorkspaceSources.length === 0}
                 >
                   <Plus size={14} /> Associate Source
                 </button>
               </form>
               {projectSourcesLoading ? (
                 <p className="text-xs text-gray-500">Loading project Sources...</p>
+              ) : currentProjectSourcesState?.status === "error" ? (
+                <p className="text-xs text-gray-500">Project Sources could not be loaded. Refresh to try again.</p>
               ) : projectSources.length === 0 ? (
                 <p className="text-xs text-gray-500">No Sources are associated with this project yet.</p>
               ) : (
