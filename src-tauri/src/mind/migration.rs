@@ -3,7 +3,7 @@ use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -92,7 +92,9 @@ enum FailurePoint {
     BeforeStaging,
     AfterMigrations,
     AfterValidation,
-    AfterSourceBackup,
+    BeforePublication,
+    DuringPublication,
+    AfterPublicationBeforeJournal,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -101,8 +103,11 @@ enum JournalEvent {
     Started,
     Staged,
     MigrationsApplied,
+    SourceObserved { original_sha256: String },
     Validated { expected_fingerprint: String },
+    BackupPrepared { original_sha256: String },
     Publishing,
+    // Kept to recognize journal entries written by the earlier coordinator.
     SourceBackedUp,
     Published { expected_fingerprint: String },
     Abandoned,
@@ -144,8 +149,12 @@ pub fn schema_fingerprint_for_path(source_path: &Path) -> Result<String> {
 
 /// Stage and publish an explicitly approved migration plan.
 ///
-/// The application must close every connection to the source before calling.
-/// The coordinator lock serializes coordinator callers, not unrelated SQLite users.
+/// The application must quiesce database activity and close every connection
+/// to the source before calling. The coordinator lock serializes coordinator
+/// callers only; it cannot prevent unrelated SQLite clients from writing.
+/// Publication replaces the canonical file with one same-volume rename. If the
+/// platform or filesystem cannot atomically replace an existing file, the call
+/// fails without using a two-rename fallback.
 pub fn execute_staged_migrations(
     source_path: &Path,
     plan: &MigrationPlan,
@@ -155,10 +164,22 @@ pub fn execute_staged_migrations(
 
 /// Recover operations left in a source's adjacent staging directories.
 ///
-/// A validated stage is completed; an unvalidated stage is abandoned. The
-/// operation lock prevents recovery from racing an active coordinator call.
+/// A validated stage is completed only when the canonical file still matches
+/// the original backup or the validated output. The caller must quiesce
+/// database activity and close every source connection; the lock does not
+/// prevent unrelated SQLite clients from accessing the source.
 pub fn recover_incomplete_operations(source_path: &Path) -> Result<Vec<RecoveryOutcome>> {
     let _lock = CoordinatorLock::acquire(source_path)?;
+    ensure_no_sqlite_sidecars(source_path)?;
+    match fs::symlink_metadata(source_path) {
+        Ok(metadata) if metadata.file_type().is_file() => {}
+        Ok(_) => bail!("Canonical database must be a regular, non-symlink file"),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("Inspect canonical database {}", source_path.display()))
+        }
+    }
     let (parent, source_name) = source_location(source_path)?;
     let prefix = format!(".{source_name}.migration-");
     let mut directories = fs::read_dir(parent)
@@ -201,17 +222,146 @@ pub fn recover_incomplete_operations(source_path: &Path) -> Result<Vec<RecoveryO
             } => Some(expected_fingerprint.clone()),
             _ => None,
         });
+        let recorded_backup_hash = events.iter().rev().find_map(|event| match event {
+            JournalEvent::BackupPrepared { original_sha256 } => Some(original_sha256.clone()),
+            _ => None,
+        });
+        let observed_source_hash = events.iter().rev().find_map(|event| match event {
+            JournalEvent::SourceObserved { original_sha256 } => Some(original_sha256.clone()),
+            _ => None,
+        });
+        let legacy_backup_event = events
+            .iter()
+            .any(|event| matches!(event, JournalEvent::SourceBackedUp));
+        let legacy_publish_attempt = events
+            .iter()
+            .any(|event| matches!(event, JournalEvent::Publishing));
 
-        if let Some(expected_fingerprint) = expected_fingerprint {
-            if source.exists() && backup.exists() && !staged.exists() {
+        let Some(expected_fingerprint) = expected_fingerprint else {
+            if !source.exists() && backup.exists() && legacy_backup_event {
+                let backup_hash = sha256_file(&backup)?;
+                restore_from_backup_atomically(
+                    &backup,
+                    &source,
+                    &operation_directory,
+                    &backup_hash,
+                )?;
+            }
+            if !source.exists() {
+                bail!(
+                    "Cannot recover source database for {}",
+                    operation_directory.display()
+                );
+            }
+            append_journal(&journal_path, &JournalEvent::Abandoned)?;
+            outcomes.push(RecoveryOutcome::Abandoned {
+                operation_directory,
+            });
+            continue;
+        };
+
+        let mut original_sha256 = recorded_backup_hash.or(observed_source_hash);
+        if original_sha256.is_none() && legacy_backup_event && backup.exists() {
+            original_sha256 = Some(sha256_file(&backup)?);
+        } else if original_sha256.is_none()
+            && !source.exists()
+            && backup.exists()
+            && staged.exists()
+            && legacy_publish_attempt
+        {
+            if !matches!(
+                recognize_profile(&backup)?,
+                SchemaProfile::CurrentSupported { .. }
+            ) {
+                bail!("Legacy interrupted publication has an unsupported original backup");
+            }
+            original_sha256 = Some(sha256_file(&backup)?);
+        }
+        if !source.exists() {
+            if !backup.exists() || original_sha256.is_none() {
+                bail!(
+                    "Canonical database is missing and its original backup is unverified for {}",
+                    operation_directory.display()
+                );
+            }
+            let expected_original_hash = original_sha256
+                .as_deref()
+                .context("Original backup checksum is unavailable")?;
+            if sha256_file(&backup)? != expected_original_hash {
+                bail!("Migration backup checksum mismatch: {}", backup.display());
+            }
+            restore_from_backup_atomically(
+                &backup,
+                &source,
+                &operation_directory,
+                expected_original_hash,
+            )?;
+        }
+
+        let original_sha256 = match original_sha256 {
+            Some(hash) => {
+                if !backup.exists() {
+                    if sha256_file(&source)? != hash {
+                        bail!("Migration backup is missing and source is not the original");
+                    }
+                    copy_file_durably(&source, &backup)?;
+                } else if sha256_file(&backup)? != hash {
+                    if sha256_file(&source)? != hash {
+                        bail!("Migration backup checksum mismatch: {}", backup.display());
+                    }
+                    fs::remove_file(&backup).context("Remove incomplete migration backup")?;
+                    copy_file_durably(&source, &backup)?;
+                }
+                hash
+            }
+            None => {
+                let hash = if backup.exists() {
+                    let source_hash = sha256_file(&source)?;
+                    if sha256_file(&backup)? != source_hash {
+                        bail!("Unrecorded migration backup does not match canonical database");
+                    }
+                    source_hash
+                } else {
+                    copy_file_durably(&source, &backup)?
+                };
+                append_journal(
+                    &journal_path,
+                    &JournalEvent::BackupPrepared {
+                        original_sha256: hash.clone(),
+                    },
+                )?;
+                hash
+            }
+        };
+        if !events
+            .iter()
+            .any(|event| matches!(event, JournalEvent::BackupPrepared { .. }))
+        {
+            append_journal(
+                &journal_path,
+                &JournalEvent::BackupPrepared {
+                    original_sha256: original_sha256.clone(),
+                },
+            )?;
+        }
+
+        if sha256_file(&source)? == original_sha256 {
+            if staged.exists() {
+                validate_output(&staged, &expected_fingerprint)
+                    .context("Validate staged database during recovery")?;
+                append_journal(&journal_path, &JournalEvent::Publishing)?;
+                atomic_replace(&staged, &source)
+                    .context("Atomically publish validated staged database during recovery")?;
+                sync_file(&source)?;
                 if let Err(error) = validate_output(&source, &expected_fingerprint) {
-                    rollback_invalid_publication(
-                        &source,
+                    restore_from_backup_atomically(
                         &backup,
+                        &source,
                         &operation_directory,
-                        &journal_path,
+                        &original_sha256,
                     )?;
-                    return Err(error).context("Invalid published database was rolled back");
+                    append_journal(&journal_path, &JournalEvent::Abandoned)?;
+                    return Err(error).context("Recovered publication was rolled back");
                 }
                 append_journal(
                     &journal_path,
@@ -222,80 +372,31 @@ pub fn recover_incomplete_operations(source_path: &Path) -> Result<Vec<RecoveryO
                 outcomes.push(RecoveryOutcome::Published {
                     operation_directory,
                 });
-                continue;
+            } else {
+                append_journal(&journal_path, &JournalEvent::Abandoned)?;
+                outcomes.push(RecoveryOutcome::Abandoned {
+                    operation_directory,
+                });
             }
+            continue;
+        }
 
-            if staged.exists() {
-                if let Err(error) = validate_output(&staged, &expected_fingerprint) {
-                    if !source.exists() && backup.exists() {
-                        fs::rename(&backup, &source)
-                            .context("Restore original after invalid staged migration")?;
-                        sync_file(&source)?;
-                    }
-                    append_journal(&journal_path, &JournalEvent::Abandoned)?;
-                    return Err(error).context("Invalid staged database was abandoned");
-                }
-                if source.exists() && !backup.exists() {
-                    append_journal(&journal_path, &JournalEvent::Publishing)?;
-                    fs::rename(&source, &backup)
-                        .context("Move original database to recoverable backup")?;
-                    sync_file(&backup)?;
-                    append_journal(&journal_path, &JournalEvent::SourceBackedUp)?;
-                } else if source.exists() && backup.exists() {
-                    bail!(
-                        "Ambiguous interrupted migration has both source and backup: {}",
-                        operation_directory.display()
-                    );
-                }
-                if !source.exists() && backup.exists() {
-                    fs::rename(&staged, &source)
-                        .context("Publish validated staged database during recovery")?;
-                    sync_file(&source)?;
-                    if let Err(error) = validate_output(&source, &expected_fingerprint) {
-                        rollback_invalid_publication(
-                            &source,
-                            &backup,
-                            &operation_directory,
-                            &journal_path,
-                        )?;
-                        return Err(error).context("Recovered publication was rolled back");
-                    }
-                    append_journal(
-                        &journal_path,
-                        &JournalEvent::Published {
-                            expected_fingerprint,
-                        },
-                    )?;
-                    outcomes.push(RecoveryOutcome::Published {
-                        operation_directory,
-                    });
-                    continue;
-                }
-            }
-
-            if !source.exists() && backup.exists() {
-                fs::rename(&backup, &source)
-                    .context("Restore original database after interrupted publication")?;
-                sync_file(&source)?;
-            } else if !source.exists() {
-                bail!(
-                    "Cannot recover source or backup for {}",
-                    operation_directory.display()
-                );
-            }
-        } else if !source.exists() && backup.exists() {
-            fs::rename(&backup, &source)
-                .context("Restore original database after unvalidated operation")?;
-            sync_file(&source)?;
-        } else if !source.exists() {
+        validate_output(&source, &expected_fingerprint)
+            .context("Canonical database matches neither original backup nor validated output")?;
+        if staged.exists() {
             bail!(
-                "Cannot recover source or backup for {}",
+                "Both canonical output and staging database exist for {}",
                 operation_directory.display()
             );
         }
-
-        append_journal(&journal_path, &JournalEvent::Abandoned)?;
-        outcomes.push(RecoveryOutcome::Abandoned {
+        sync_file(&source)?;
+        append_journal(
+            &journal_path,
+            &JournalEvent::Published {
+                expected_fingerprint,
+            },
+        )?;
+        outcomes.push(RecoveryOutcome::Published {
             operation_directory,
         });
     }
@@ -343,6 +444,13 @@ fn execute_with_failure(
     })?;
     let journal_path = operation_directory.join("journal.log");
     append_journal(&journal_path, &JournalEvent::Started)?;
+    let original_sha256 = sha256_file(source_path)?;
+    append_journal(
+        &journal_path,
+        &JournalEvent::SourceObserved {
+            original_sha256: original_sha256.clone(),
+        },
+    )?;
     let staged_path = operation_directory.join("staging.sqlite");
     let backup_path = operation_directory.join("backup.sqlite");
 
@@ -402,28 +510,46 @@ fn execute_with_failure(
         bail!("Injected failure after validation");
     }
 
-    append_journal(&journal_path, &JournalEvent::Publishing)?;
-    fs::rename(source_path, &backup_path).with_context(|| {
-        format!(
-            "Move original database to recoverable backup {}",
-            backup_path.display()
-        )
-    })?;
-    sync_file(&backup_path)?;
-    if failure == FailurePoint::AfterSourceBackup {
-        bail!("Injected failure after moving source to backup");
+    if sha256_file(source_path)? != original_sha256 {
+        bail!("Source database changed during staging; refusing publication");
     }
-    append_journal(&journal_path, &JournalEvent::SourceBackedUp)?;
-    fs::rename(&staged_path, source_path).context("Publish validated staged database")?;
+    let backup_hash = copy_file_durably(source_path, &backup_path)?;
+    if backup_hash != original_sha256 {
+        fs::remove_file(&backup_path).context("Remove inconsistent migration backup")?;
+        bail!("Source database changed while its recoverable backup was being created");
+    }
+    append_journal(
+        &journal_path,
+        &JournalEvent::BackupPrepared { original_sha256 },
+    )?;
+    if failure == FailurePoint::BeforePublication {
+        bail!("Injected failure before atomic publication");
+    }
+
+    append_journal(&journal_path, &JournalEvent::Publishing)?;
+    if failure == FailurePoint::DuringPublication {
+        let absent_staging = operation_directory.join("absent-staging.sqlite");
+        atomic_replace(&absent_staging, source_path)
+            .expect_err("injected replacement must fail without a source file");
+        bail!("Injected atomic publication failure");
+    }
+    if sha256_file(source_path)? != backup_hash {
+        bail!("Source database changed after backup preparation; refusing publication");
+    }
+    atomic_replace(&staged_path, source_path).context("Atomically publish validated stage")?;
     sync_file(source_path)?;
     if let Err(error) = validate_output(source_path, &plan.expected_schema_fingerprint) {
-        rollback_invalid_publication(
-            source_path,
+        restore_from_backup_atomically(
             &backup_path,
+            source_path,
             &operation_directory,
-            &journal_path,
+            &backup_hash,
         )?;
+        append_journal(&journal_path, &JournalEvent::Abandoned)?;
         return Err(error).context("Published database failed confirmation and was rolled back");
+    }
+    if failure == FailurePoint::AfterPublicationBeforeJournal {
+        bail!("Injected interruption after atomic publication");
     }
     append_journal(
         &journal_path,
@@ -703,7 +829,7 @@ fn validate_ledger_fingerprint(connection: &Connection, expected_fingerprint: &s
 }
 
 fn ensure_no_sqlite_sidecars(path: &Path) -> Result<()> {
-    for suffix in ["-wal", "-shm"] {
+    for suffix in ["-wal", "-shm", "-journal"] {
         let sidecar = PathBuf::from(format!("{}{suffix}", path.to_string_lossy()));
         if sidecar.exists() {
             bail!(
@@ -780,18 +906,84 @@ fn sync_file(path: &Path) -> Result<()> {
         .with_context(|| format!("Sync file {}", path.display()))
 }
 
-fn rollback_invalid_publication(
-    source: &Path,
+fn sha256_file(path: &Path) -> Result<String> {
+    let mut file = File::open(path).with_context(|| format!("Open database {}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn copy_file_durably(source: &Path, destination: &Path) -> Result<String> {
+    if destination.exists() {
+        bail!(
+            "Refusing to overwrite migration copy {}",
+            destination.display()
+        );
+    }
+    let source_hash = sha256_file(source)?;
+    fs::copy(source, destination)
+        .with_context(|| format!("Copy {} to {}", source.display(), destination.display()))?;
+    sync_file(destination)?;
+    let destination_hash = sha256_file(destination)?;
+    if destination_hash != source_hash {
+        fs::remove_file(destination).context("Remove incomplete migration copy")?;
+        bail!(
+            "Copied database checksum mismatch for {}",
+            destination.display()
+        );
+    }
+    Ok(destination_hash)
+}
+
+fn restore_from_backup_atomically(
     backup: &Path,
+    source: &Path,
     operation_directory: &Path,
-    journal_path: &Path,
+    expected_sha256: &str,
 ) -> Result<()> {
-    let rejected = operation_directory.join(format!("rejected-{}.sqlite", uuid::Uuid::now_v7()));
-    fs::rename(source, &rejected).context("Retain rejected published database")?;
-    fs::rename(backup, source).context("Restore original database from backup")?;
+    if sha256_file(backup)? != expected_sha256 {
+        bail!("Migration backup checksum mismatch: {}", backup.display());
+    }
+    let restore_path = operation_directory.join(format!("restore-{}.sqlite", uuid::Uuid::now_v7()));
+    let backup_hash = copy_file_durably(backup, &restore_path)?;
+    if backup_hash != expected_sha256 {
+        bail!("Migration backup changed while being restored");
+    }
+    atomic_replace(&restore_path, source).context("Atomically restore original database")?;
     sync_file(source)?;
-    append_journal(journal_path, &JournalEvent::Abandoned)?;
+    if sha256_file(source)? != backup_hash {
+        bail!(
+            "Restored database checksum mismatch at {}",
+            source.display()
+        );
+    }
     Ok(())
+}
+
+#[cfg(any(unix, windows))]
+fn atomic_replace(staged: &Path, canonical: &Path) -> Result<()> {
+    // Same-volume rename replaces the target atomically on Unix and on Windows
+    // filesystems that support replace-existing rename semantics. Errors are
+    // returned as-is; this function never emulates replacement with two renames.
+    fs::rename(staged, canonical).with_context(|| {
+        format!(
+            "Atomic same-volume replacement from {} to {} failed",
+            staged.display(),
+            canonical.display()
+        )
+    })
+}
+
+#[cfg(not(any(unix, windows)))]
+fn atomic_replace(_staged: &Path, _canonical: &Path) -> Result<()> {
+    bail!("Atomic database replacement is unsupported on this operating system");
 }
 
 #[cfg(test)]
@@ -872,6 +1064,16 @@ mod tests {
             "{:x}",
             sha2::Sha256::digest(fs::read(path).expect("read database fixture"))
         )
+    }
+
+    fn table_exists(connection: &Connection, table: &str) -> bool {
+        connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
+                [table],
+                |row| row.get(0),
+            )
+            .expect("check synthetic fixture table")
     }
 
     use sha2::Digest;
@@ -1052,27 +1254,56 @@ mod tests {
     }
 
     #[test]
-    fn recovery_finishes_interrupted_publication_without_losing_backup() {
-        let directory = FixtureDirectory::new();
-        let source = current_fixture(&directory);
-        let expected = directory.0.join("expected.sqlite");
-        fs::copy(&source, &expected).expect("clone expected fixture");
-        let plan = plan_for(&expected, SYNTHETIC_SQL);
-        assert!(execute_with_failure(&source, &plan, FailurePoint::AfterSourceBackup).is_err());
-        assert!(!source.exists());
-        let recovery =
-            recover_incomplete_operations(&source).expect("finish interrupted publication");
-        assert!(matches!(
-            recovery.as_slice(),
-            [RecoveryOutcome::Published { .. }]
-        ));
-        assert!(source.is_file());
-        assert!(directory
-            .0
-            .read_dir()
-            .expect("read fixture directory")
-            .filter_map(std::result::Result::ok)
-            .any(|entry| entry.path().join("backup.sqlite").is_file()));
+    fn atomic_publication_recovery_covers_each_interruption_and_is_repeatable() {
+        for failure in [
+            FailurePoint::BeforePublication,
+            FailurePoint::DuringPublication,
+            FailurePoint::AfterPublicationBeforeJournal,
+        ] {
+            let directory = FixtureDirectory::new();
+            let source = current_fixture(&directory);
+            let expected = directory.0.join("expected.sqlite");
+            fs::copy(&source, &expected).expect("clone expected fixture");
+            let plan = plan_for(&expected, SYNTHETIC_SQL);
+            let original_hash = database_hash(&source);
+
+            assert!(execute_with_failure(&source, &plan, failure).is_err());
+            assert!(
+                source.is_file(),
+                "canonical path disappeared at {failure:?}"
+            );
+            if failure == FailurePoint::AfterPublicationBeforeJournal {
+                let published = Connection::open(&source).expect("open atomically published DB");
+                assert!(table_exists(&published, "stage2_1_probe"));
+            } else {
+                assert_eq!(database_hash(&source), original_hash);
+                let unchanged = Connection::open(&source).expect("open original canonical DB");
+                assert!(!table_exists(&unchanged, "stage2_1_probe"));
+            }
+
+            let recovered =
+                recover_incomplete_operations(&source).expect("recover interrupted publication");
+            assert!(matches!(
+                recovered.as_slice(),
+                [RecoveryOutcome::Published { .. }]
+            ));
+            assert!(source.is_file());
+            let published = Connection::open(&source).expect("open recovered canonical DB");
+            assert!(table_exists(&published, "stage2_1_probe"));
+
+            let [RecoveryOutcome::Published {
+                operation_directory,
+            }] = recovered.as_slice()
+            else {
+                panic!("recovery should report one published operation");
+            };
+            let backup = operation_directory.join("backup.sqlite");
+            assert_eq!(database_hash(&backup), original_hash);
+            assert!(recover_incomplete_operations(&source)
+                .expect("repeat recovery")
+                .is_empty());
+            assert_eq!(database_hash(&backup), original_hash);
+        }
     }
 
     #[test]
