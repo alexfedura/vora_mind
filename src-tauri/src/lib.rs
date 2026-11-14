@@ -7,8 +7,8 @@ pub mod knowledge_transfer;
 pub mod learning;
 pub mod mind;
 pub mod model;
-pub mod research;
 pub(crate) mod project_policy;
+pub mod research;
 pub mod vora_trace;
 
 use crate::mind::canvas_db::{AppState, BoardSummary, EdgeInput, NodeInput, SnapshotSummary};

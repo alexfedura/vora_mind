@@ -54,6 +54,28 @@ fn invalid(message: impl Into<String>) -> ExperimentError {
     ExperimentError(message.into())
 }
 
+fn ensure_project_writable(conn: &Connection, project_id: &str) -> Result<()> {
+    crate::project_policy::ensure_project_writable(conn, project_id)
+        .map_err(|error| invalid(error.to_string()))
+}
+
+fn ensure_record_project_writable(conn: &Connection, query: &str, id: &str) -> Result<()> {
+    let project_id: String = conn.query_row(query, [id], |row| row.get(0))?;
+    ensure_project_writable(conn, &project_id)
+}
+
+pub(super) fn ensure_dataset_version_writable(
+    conn: &Connection,
+    dataset_version_id: &str,
+) -> Result<()> {
+    ensure_record_project_writable(
+        conn,
+        "SELECT d.project_id FROM experiment_dataset_versions v
+         JOIN experiment_datasets d ON d.id = v.dataset_id WHERE v.id = ?1",
+        dataset_version_id,
+    )
+}
+
 pub fn initialize_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "PRAGMA foreign_keys = ON;
@@ -325,6 +347,7 @@ pub fn create_design_version(
     let specification_json = json_string(&req.specification)?;
     let specification_sha256 = sha256_text(&specification_json);
     let now = now_ts_us().map_err(invalid)?;
+    ensure_project_writable(conn, &req.project_id)?;
     let tx = conn.transaction()?;
 
     let (design_id, version_no, parent_version_id) =
@@ -478,6 +501,7 @@ pub fn preregister_design(
         return Err(invalid("Preregistration requires a review rationale."));
     }
     let version = query_design_version(conn, &req.design_version_id)?;
+    ensure_project_writable(conn, &version.project_id)?;
     if version.lifecycle_status != crate::research::ResearchDesignStatus::Review {
         return Err(invalid(
             "Only a reviewed draft design can be preregistered.",
@@ -563,6 +587,7 @@ pub fn create_dataset(
             "Dataset title must contain between 1 and 200 characters.",
         ));
     }
+    ensure_project_writable(conn, &req.project_id)?;
     let now = now_ts_us().map_err(invalid)?;
     let id = new_id();
     conn.execute(
@@ -591,6 +616,11 @@ pub fn create_dataset_version(
     }
     let schema_json = json_string(&req.schema)?;
     let now = now_ts_us().map_err(invalid)?;
+    ensure_record_project_writable(
+        conn,
+        "SELECT d.project_id FROM experiment_datasets d WHERE d.id = ?1",
+        &req.dataset_id,
+    )?;
     let tx = conn.transaction()?;
     let version_no: i64 = tx.query_row(
         "SELECT COALESCE(MAX(version_no), 0) + 1
@@ -739,6 +769,12 @@ fn query_dataset(conn: &Connection, dataset_id: &str) -> Result<ExperimentDatase
 
 pub fn add_dataset_samples(conn: &mut Connection, req: &AddDatasetSamplesReq) -> Result<i64> {
     let tx = conn.transaction()?;
+    ensure_record_project_writable(
+        &tx,
+        "SELECT d.project_id FROM experiment_dataset_versions v
+         JOIN experiment_datasets d ON d.id = v.dataset_id WHERE v.id = ?1",
+        &req.dataset_version_id,
+    )?;
     let (schema_json, expected_count, status): (String, i64, String) = tx.query_row(
         "SELECT sample_schema_json, expected_sample_count, lifecycle_status
          FROM experiment_dataset_versions WHERE id = ?1",
@@ -817,6 +853,12 @@ pub fn add_dataset_split_group(
         ));
     }
     let tx = conn.transaction()?;
+    ensure_record_project_writable(
+        &tx,
+        "SELECT d.project_id FROM experiment_dataset_versions v
+         JOIN experiment_datasets d ON d.id = v.dataset_id WHERE v.id = ?1",
+        &req.dataset_version_id,
+    )?;
     let status: String = tx.query_row(
         "SELECT lifecycle_status FROM experiment_dataset_versions WHERE id = ?1",
         [&req.dataset_version_id],
@@ -1023,6 +1065,7 @@ pub fn attach_prepared_dataset_asset(
     conn: &Connection,
     prepared: &PreparedDatasetAsset,
 ) -> Result<ExperimentDatasetAssetDto> {
+    ensure_dataset_version_writable(conn, &prepared.dataset_version_id)?;
     let tx = conn.unchecked_transaction()?;
     tx.execute(
         "INSERT INTO experiment_dataset_assets
@@ -1190,6 +1233,12 @@ pub fn seal_dataset_version(
         return Err(invalid("Invalid dataset version checksum."));
     }
     let tx = conn.transaction()?;
+    ensure_record_project_writable(
+        &tx,
+        "SELECT d.project_id FROM experiment_dataset_versions v
+         JOIN experiment_datasets d ON d.id = v.dataset_id WHERE v.id = ?1",
+        version_id,
+    )?;
     let (status, revision, expected_count): (String, i64, i64) = tx.query_row(
         "SELECT lifecycle_status, staged_revision, expected_sample_count
          FROM experiment_dataset_versions WHERE id = ?1",
@@ -1241,6 +1290,12 @@ pub fn create_dataset_transformation(
                 "A transformation input version can only be declared once.",
             ));
         }
+        ensure_record_project_writable(
+            conn,
+            "SELECT d.project_id FROM experiment_dataset_versions v
+             JOIN experiment_datasets d ON d.id = v.dataset_id WHERE v.id = ?1",
+            &input.dataset_version_id,
+        )?;
         let status: String = conn.query_row(
             "SELECT lifecycle_status FROM experiment_dataset_versions WHERE id = ?1",
             [&input.dataset_version_id],
@@ -1258,6 +1313,12 @@ pub fn create_dataset_transformation(
         }
     }
     let tx = conn.transaction()?;
+    ensure_record_project_writable(
+        &tx,
+        "SELECT d.project_id FROM experiment_dataset_versions v
+         JOIN experiment_datasets d ON d.id = v.dataset_id WHERE v.id = ?1",
+        &req.output_dataset_version_id,
+    )?;
     let output_status: String = tx.query_row(
         "SELECT lifecycle_status FROM experiment_dataset_versions WHERE id = ?1",
         [&req.output_dataset_version_id],
@@ -1345,6 +1406,7 @@ pub fn create_run(conn: &mut Connection, req: &CreateExperimentRunReq) -> Result
     specification
         .validate_for_preregistration()
         .map_err(invalid)?;
+    ensure_project_writable(conn, &design.project_id)?;
     let expected_pins: std::collections::BTreeSet<_> = specification
         .datasets
         .iter()
@@ -1424,6 +1486,7 @@ pub fn transition_run(
         [&req.run_id],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
+    ensure_project_writable(&tx, &project_id)?;
     let next = req.next_status.as_str();
     let allowed = matches!(
         (current.as_str(), next),
@@ -1540,11 +1603,12 @@ pub fn add_run_deviation(
     }
     let now = now_ts_us().map_err(invalid)?;
     let tx = conn.transaction()?;
-    let status: String = tx.query_row(
-        "SELECT lifecycle_status FROM experiment_runs WHERE id = ?1",
+    let (status, project_id): (String, String) = tx.query_row(
+        "SELECT lifecycle_status, project_id FROM experiment_runs WHERE id = ?1",
         [&req.run_id],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
+    ensure_project_writable(&tx, &project_id)?;
     if status != "running" {
         return Err(invalid(
             "Deviations must be recorded while the run is executing.",
@@ -1585,11 +1649,12 @@ pub fn add_run_log(
     }
     let now = now_ts_us().map_err(invalid)?;
     let tx = conn.transaction()?;
-    let status: String = tx.query_row(
-        "SELECT lifecycle_status FROM experiment_runs WHERE id = ?1",
+    let (status, project_id): (String, String) = tx.query_row(
+        "SELECT lifecycle_status, project_id FROM experiment_runs WHERE id = ?1",
         [&req.run_id],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
+    ensure_project_writable(&tx, &project_id)?;
     if ExperimentRunStatus::parse(&status)
         .map_err(invalid)?
         .is_terminal()
@@ -2706,5 +2771,466 @@ mod tests {
         };
         invalid_trade.execution_at_us = Some(8);
         assert!(validate_sample(&schema(), &DatasetSampleDto::TradeSample(invalid_trade)).is_err());
+    }
+
+    #[test]
+    fn archived_projects_reject_experiment_create_and_run_writes() {
+        let mut conn = Connection::open_in_memory().expect("open database");
+        initialize(&conn);
+        project(&conn, "archived-project");
+
+        let design = create_typed_design(
+            &mut conn,
+            "archived-project",
+            "Archived project design",
+            valid_specification(vec![]),
+        );
+        review_design(&conn, &design.id);
+        preregister_design(
+            &mut conn,
+            &PreregisterExperimentDesignReq {
+                design_version_id: design.id.clone(),
+                reviewer_id: Some("reviewer".into()),
+                rationale: "Reviewed before archiving.".into(),
+            },
+        )
+        .expect("preregister design");
+        let run = create_run(
+            &mut conn,
+            &CreateExperimentRunReq {
+                design_version_id: design.id.clone(),
+                dataset_pins: vec![],
+                created_by: Some("researcher".into()),
+            },
+        )
+        .expect("create run before archiving");
+        let running_run = create_run(
+            &mut conn,
+            &CreateExperimentRunReq {
+                design_version_id: design.id.clone(),
+                dataset_pins: vec![],
+                created_by: Some("researcher".into()),
+            },
+        )
+        .expect("create second run before archiving");
+        transition_run(
+            &mut conn,
+            &TransitionExperimentRunReq {
+                run_id: running_run.id.clone(),
+                next_status: ExperimentRunStatus::Ready,
+                actor_id: Some("researcher".into()),
+                details: "Ready before archive".into(),
+                completion_summary: None,
+                failure_details: None,
+                output_dataset_pins: vec![],
+            },
+        )
+        .expect("mark second run ready");
+        transition_run(
+            &mut conn,
+            &TransitionExperimentRunReq {
+                run_id: running_run.id.clone(),
+                next_status: ExperimentRunStatus::Running,
+                actor_id: Some("researcher".into()),
+                details: "Start before archive".into(),
+                completion_summary: None,
+                failure_details: None,
+                output_dataset_pins: vec![],
+            },
+        )
+        .expect("start second run");
+        let reviewable_design = create_typed_design(
+            &mut conn,
+            "archived-project",
+            "Reviewable design",
+            valid_specification(vec![]),
+        );
+        review_design(&conn, &reviewable_design.id);
+
+        conn.execute(
+            "UPDATE research_projects SET lifecycle_status = 'archived' WHERE id = ?1",
+            ["archived-project"],
+        )
+        .expect("archive synthetic project");
+        let design_counts_before: (i64, i64) = conn
+            .query_row(
+                "SELECT
+                    (SELECT COUNT(*) FROM research_experiment_designs
+                     WHERE project_id = 'archived-project'),
+                    (SELECT COUNT(*) FROM research_experiment_design_versions v
+                     JOIN research_experiment_designs d ON d.id = v.design_id
+                     WHERE d.project_id = 'archived-project')",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("count existing designs and versions");
+
+        assert!(create_dataset(
+            &mut conn,
+            &CreateDatasetReq {
+                project_id: "archived-project".into(),
+                title: "Blocked dataset".into(),
+                description: String::new(),
+                created_by: None,
+            },
+        )
+        .is_err());
+        assert!(create_run(
+            &mut conn,
+            &CreateExperimentRunReq {
+                design_version_id: design.id,
+                dataset_pins: vec![],
+                created_by: Some("researcher".into()),
+            },
+        )
+        .is_err());
+        assert!(create_design_version(
+            &mut conn,
+            &CreateExperimentDesignVersionReq {
+                project_id: "archived-project".into(),
+                design_id: None,
+                parent_version_id: None,
+                title: "Blocked design".into(),
+                description: "Must not persist".into(),
+                protocol: "Must not persist".into(),
+                change_rationale: String::new(),
+                specification: valid_specification(vec![]),
+                created_by: None,
+            },
+        )
+        .is_err());
+        assert!(preregister_design(
+            &mut conn,
+            &PreregisterExperimentDesignReq {
+                design_version_id: reviewable_design.id.clone(),
+                reviewer_id: Some("reviewer".into()),
+                rationale: "Must not persist".into(),
+            },
+        )
+        .is_err());
+        assert!(transition_run(
+            &mut conn,
+            &TransitionExperimentRunReq {
+                run_id: run.id.clone(),
+                next_status: ExperimentRunStatus::Ready,
+                actor_id: Some("researcher".into()),
+                details: "Must not transition".into(),
+                completion_summary: None,
+                failure_details: None,
+                output_dataset_pins: vec![],
+            },
+        )
+        .is_err());
+        assert!(add_run_log(
+            &mut conn,
+            &AddExperimentRunLogReq {
+                run_id: running_run.id.clone(),
+                severity: RunLogSeverity::Info,
+                message: "Must not persist".into(),
+                details: serde_json::json!({}),
+            },
+        )
+        .is_err());
+        assert!(add_run_deviation(
+            &mut conn,
+            &AddExperimentRunDeviationReq {
+                run_id: running_run.id.clone(),
+                description: "Must not persist".into(),
+                rationale: "Archived project".into(),
+                impact_assessment: String::new(),
+                recorded_by: None,
+            },
+        )
+        .is_err());
+
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM experiment_datasets WHERE project_id = 'archived-project'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count archived datasets"),
+            0
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT lifecycle_status FROM experiment_runs WHERE id = ?1",
+                [&run.id],
+                |row| row.get::<_, String>(0),
+            )
+            .expect("read unchanged run"),
+            "created"
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM experiment_run_logs WHERE run_id = ?1",
+                [&running_run.id],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count unchanged run logs"),
+            0
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM experiment_run_deviations WHERE run_id = ?1",
+                [&running_run.id],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count unchanged run deviations"),
+            0
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT
+                    (SELECT COUNT(*) FROM research_experiment_designs
+                     WHERE project_id = 'archived-project'),
+                    (SELECT COUNT(*) FROM research_experiment_design_versions v
+                     JOIN research_experiment_designs d ON d.id = v.design_id
+                     WHERE d.project_id = 'archived-project')",
+                [],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+            )
+            .expect("count designs after rejected writes"),
+            design_counts_before
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT lifecycle_status FROM research_experiment_design_versions
+                 WHERE id = ?1",
+                [&reviewable_design.id],
+                |row| row.get::<_, String>(0),
+            )
+            .expect("read unchanged reviewed design"),
+            "review"
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM experiment_run_events WHERE run_id = ?1",
+                [&run.id],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count run events"),
+            1
+        );
+        let archived_workspace = workspace(&conn, "archived-project").expect("read archived data");
+        assert_eq!(archived_workspace.runs.len(), 2);
+
+        project(&conn, "active-project");
+        assert!(create_dataset(
+            &mut conn,
+            &CreateDatasetReq {
+                project_id: "active-project".into(),
+                title: "Allowed dataset".into(),
+                description: String::new(),
+                created_by: None,
+            },
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn archived_project_rejects_dataset_writes_and_relationships() {
+        let mut conn = Connection::open_in_memory().expect("open database");
+        initialize(&conn);
+        project(&conn, "archived-dataset-project");
+        let dataset = create_dataset(
+            &mut conn,
+            &CreateDatasetReq {
+                project_id: "archived-dataset-project".into(),
+                title: "Fixture dataset".into(),
+                description: String::new(),
+                created_by: None,
+            },
+        )
+        .expect("create dataset before archiving");
+        let input_version = create_dataset_version(
+            &mut conn,
+            &CreateDatasetVersionReq {
+                dataset_id: dataset.id.clone(),
+                schema: schema(),
+                expected_sample_count: 1,
+                created_by: None,
+            },
+        )
+        .expect("create input version");
+        let output_version = create_dataset_version(
+            &mut conn,
+            &CreateDatasetVersionReq {
+                dataset_id: dataset.id.clone(),
+                schema: schema(),
+                expected_sample_count: 0,
+                created_by: None,
+            },
+        )
+        .expect("create output version");
+        add_dataset_samples(
+            &mut conn,
+            &AddDatasetSamplesReq {
+                dataset_version_id: input_version.id.clone(),
+                samples: vec![data_sample(&input_version.id, "existing-sample", "1.0")],
+            },
+        )
+        .expect("create sample before archiving");
+
+        let fixture_root =
+            std::env::temp_dir().join(format!("vora-archived-assets-{}", Uuid::now_v7()));
+        fs::create_dir_all(&fixture_root).expect("create isolated asset fixture directory");
+        let source_file = fixture_root.join("source.csv");
+        fs::write(&source_file, b"synthetic fixture").expect("write synthetic asset fixture");
+        let assets_root = fixture_root.join("managed");
+        let asset_request = RegisterDatasetAssetReq {
+            dataset_version_id: input_version.id.clone(),
+            source_path: source_file.to_string_lossy().into_owned(),
+            original_name: "source.csv".into(),
+            media_type: "text/csv".into(),
+            expected_sha256: None,
+        };
+        let prepared = prepare_dataset_asset(&asset_request, &assets_root)
+            .expect("prepare asset while project is active");
+
+        conn.execute(
+            "UPDATE research_projects SET lifecycle_status = 'archived'
+             WHERE id = 'archived-dataset-project'",
+            [],
+        )
+        .expect("archive synthetic project");
+        let db = Mutex::new(conn);
+        {
+            let mut conn = db.lock().expect("lock database");
+            assert!(create_dataset_version(
+                &mut conn,
+                &CreateDatasetVersionReq {
+                    dataset_id: dataset.id.clone(),
+                    schema: schema(),
+                    expected_sample_count: 0,
+                    created_by: None,
+                },
+            )
+            .is_err());
+            assert!(add_dataset_samples(
+                &mut conn,
+                &AddDatasetSamplesReq {
+                    dataset_version_id: input_version.id.clone(),
+                    samples: vec![data_sample(&input_version.id, "blocked-sample", "2.0")],
+                },
+            )
+            .is_err());
+            assert!(add_dataset_split_group(
+                &mut conn,
+                &AddDatasetSplitGroupReq {
+                    dataset_version_id: input_version.id.clone(),
+                    split_group_key: "blocked-split".into(),
+                    require_disjoint: true,
+                    assignments: vec![DatasetSplitAssignmentReq {
+                        sample_id: "existing-sample".into(),
+                        role: DatasetRole::Training,
+                        split_key: "train".into(),
+                    }],
+                },
+            )
+            .is_err());
+            assert!(attach_prepared_dataset_asset(&conn, &prepared).is_err());
+            assert!(
+                seal_dataset_version(&mut conn, &input_version.id, 0, &"a".repeat(64),).is_err()
+            );
+            assert!(create_dataset_transformation(
+                &mut conn,
+                &CreateDatasetTransformationReq {
+                    output_dataset_version_id: output_version.id.clone(),
+                    method: "blocked transformation".into(),
+                    parameters: serde_json::json!({}),
+                    provenance: serde_json::json!({}),
+                    inputs: vec![DatasetTransformationInputReq {
+                        dataset_version_id: input_version.id.clone(),
+                        role: DatasetRole::Exploratory,
+                    }],
+                    created_by: None,
+                },
+            )
+            .is_err());
+
+            assert_eq!(
+                conn.query_row(
+                    "SELECT COUNT(*) FROM experiment_dataset_versions",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("count unchanged dataset versions"),
+                2
+            );
+            assert_eq!(
+                conn.query_row(
+                    "SELECT COUNT(*) FROM experiment_dataset_samples",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("count unchanged samples"),
+                1
+            );
+            assert_eq!(
+                conn.query_row(
+                    "SELECT COUNT(*) FROM experiment_dataset_split_groups",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("count unchanged split groups"),
+                0
+            );
+            assert_eq!(
+                conn.query_row(
+                    "SELECT COUNT(*) FROM experiment_dataset_assets",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("count unchanged assets"),
+                0
+            );
+            assert_eq!(
+                conn.query_row(
+                    "SELECT COUNT(*) FROM experiment_dataset_transformations",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("count unchanged transformations"),
+                0
+            );
+            assert_eq!(
+                conn.query_row(
+                    "SELECT lifecycle_status FROM experiment_dataset_versions WHERE id = ?1",
+                    [&input_version.id],
+                    |row| row.get::<_, String>(0),
+                )
+                .expect("read unchanged dataset version"),
+                "staged"
+            );
+            assert_eq!(
+                get_dataset_samples(&conn, &input_version.id, None, 0, 10)
+                    .expect("read archived dataset samples")
+                    .total_count,
+                1
+            );
+        }
+        let assets_before_registration = fs::read_dir(assets_root.join("dataset-assets"))
+            .expect("list existing prepared asset")
+            .count();
+        assert!(service::register_dataset_asset(&db, &asset_request, &assets_root).is_err());
+        assert_eq!(
+            fs::read_dir(assets_root.join("dataset-assets"))
+                .expect("list assets after rejected registration")
+                .count(),
+            assets_before_registration
+        );
+        assert_eq!(
+            workspace(
+                &db.lock().expect("lock database"),
+                "archived-dataset-project"
+            )
+            .expect("read archived dataset workspace")
+            .datasets
+            .len(),
+            1
+        );
+        prepared.discard();
+        fs::remove_dir_all(fixture_root).expect("remove isolated asset fixture directory");
     }
 }

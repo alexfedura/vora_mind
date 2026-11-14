@@ -56,6 +56,12 @@ pub fn register_dataset_asset(
     request: &RegisterDatasetAssetReq,
     assets_root: &Path,
 ) -> Result<ExperimentDatasetAssetDto> {
+    {
+        let conn = db.lock().map_err(|error| {
+            ExperimentError::message(format!("Workspace database lock failed: {error}"))
+        })?;
+        repository::ensure_dataset_version_writable(&conn, &request.dataset_version_id)?;
+    }
     let prepared = repository::prepare_dataset_asset(request, assets_root)?;
     let attach_result = db
         .lock()

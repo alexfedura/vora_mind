@@ -14,9 +14,7 @@ pub(crate) fn ensure_project_writable(connection: &Connection, project_id: &str)
     };
 
     if status == "archived" {
-        return Err(anyhow!(
-            "Archived research projects cannot be modified."
-        ));
+        return Err(anyhow!("Archived research projects cannot be modified."));
     }
 
     Ok(())

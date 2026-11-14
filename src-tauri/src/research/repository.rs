@@ -5,6 +5,23 @@ use sha2::{Digest, Sha256};
 const RESEARCH_SCHEMA_VERSION: i64 = 1;
 const RESEARCH_SCHEMA_SQL: &str = include_str!("schema.sql");
 
+fn ensure_project_writable(conn: &Connection, project_id: &str) -> Result<()> {
+    crate::project_policy::ensure_project_writable(conn, project_id)
+        .map_err(|_| rusqlite::Error::InvalidQuery)
+}
+
+fn ensure_optional_project_writable(conn: &Connection, project_id: Option<&str>) -> Result<()> {
+    if let Some(project_id) = project_id {
+        ensure_project_writable(conn, project_id)?;
+    }
+    Ok(())
+}
+
+fn ensure_record_project_writable(conn: &Connection, query: &str, id: &str) -> Result<()> {
+    let project_id: Option<String> = conn.query_row(query, [id], |row| row.get(0))?;
+    ensure_optional_project_writable(conn, project_id.as_deref())
+}
+
 pub fn initialize_schema(conn: &Connection) -> Result<()> {
     let checksum = format!("{:x}", Sha256::digest(RESEARCH_SCHEMA_SQL.as_bytes()));
     conn.execute_batch(
@@ -339,6 +356,7 @@ pub fn assign_domain(
     rationale: &str,
     now: i64,
 ) -> Result<()> {
+    ensure_project_writable(conn, project_id)?;
     conn.execute(
         "INSERT INTO research_project_domains (project_id, domain_id, rationale, assigned_at_us)
          VALUES (?1, ?2, ?3, ?4)
@@ -379,6 +397,7 @@ pub fn adopt_framework_version(
     actor_id: Option<&str>,
     now: i64,
 ) -> Result<ProjectKnowledgeAdoptionDto> {
+    ensure_project_writable(conn, project_id)?;
     let version = conn.query_row(
         "SELECT v.title, v.version_no FROM knowledge_framework_versions v
          WHERE v.id = ?1 AND v.framework_id = ?2 AND v.status = 'published'",
@@ -429,6 +448,7 @@ pub fn create_literature_review(
     id: &str,
     now: i64,
 ) -> Result<LiteratureReviewDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     conn.execute(
         "INSERT INTO literature_reviews
             (id, project_id, title, search_scope, lifecycle_status, created_by, created_at_us)
@@ -452,6 +472,7 @@ pub fn create_reviewed_literature_review(
     source_link_id: &str,
     now: i64,
 ) -> Result<LiteratureReviewDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     let tx = conn.unchecked_transaction()?;
     if let Some(claim_id) = req.source_claim_id.as_deref() {
         let matches_version: bool = tx.query_row(
@@ -512,6 +533,11 @@ pub fn add_literature_source(
     req: &AddLiteratureSourceReq,
     id: &str,
 ) -> Result<LiteratureReviewSourceDto> {
+    ensure_record_project_writable(
+        conn,
+        "SELECT project_id FROM literature_reviews WHERE id = ?1",
+        &req.literature_review_id,
+    )?;
     let status: String = conn.query_row(
         "SELECT lifecycle_status FROM literature_reviews WHERE id = ?1",
         [&req.literature_review_id],
@@ -562,6 +588,11 @@ pub fn review_literature_review(
     reviewer_id: Option<&str>,
     now: i64,
 ) -> Result<LiteratureReviewDto> {
+    ensure_record_project_writable(
+        conn,
+        "SELECT project_id FROM literature_reviews WHERE id = ?1",
+        review_id,
+    )?;
     let tx = conn.unchecked_transaction()?;
     let changed = tx.execute(
         "UPDATE literature_reviews SET lifecycle_status = 'reviewed',
@@ -634,6 +665,7 @@ pub fn create_prior_assessment(
     id: &str,
     now: i64,
 ) -> Result<PriorKnowledgeAssessmentDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     conn.execute(
         "INSERT INTO prior_knowledge_assessments
             (id, project_id, title, assessment, framework_version_id, lifecycle_status,
@@ -658,6 +690,11 @@ pub fn review_prior_assessment(
     reviewer_id: Option<&str>,
     now: i64,
 ) -> Result<PriorKnowledgeAssessmentDto> {
+    ensure_record_project_writable(
+        conn,
+        "SELECT project_id FROM prior_knowledge_assessments WHERE id = ?1",
+        id,
+    )?;
     let tx = conn.unchecked_transaction()?;
     let changed = tx.execute(
         "UPDATE prior_knowledge_assessments SET lifecycle_status = 'reviewed',
@@ -711,6 +748,7 @@ pub fn create_gap(
     id: &str,
     now: i64,
 ) -> Result<ResearchGapDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     if let Some(domain_id) = req.domain_id.as_deref() {
         validate_project_domain(conn, &req.project_id, Some(domain_id))?;
     }
@@ -733,6 +771,11 @@ pub fn create_gap(
 }
 
 pub fn add_gap_evidence(conn: &Connection, req: &AddGapEvidenceReq) -> Result<()> {
+    ensure_record_project_writable(
+        conn,
+        "SELECT project_id FROM research_gaps WHERE id = ?1",
+        &req.gap_id,
+    )?;
     let gap_project: String = conn.query_row(
         "SELECT project_id FROM research_gaps WHERE id = ?1",
         [&req.gap_id],
@@ -777,6 +820,11 @@ pub fn review_gap_exception(
     id: &str,
     now: i64,
 ) -> Result<()> {
+    ensure_record_project_writable(
+        conn,
+        "SELECT g.project_id FROM research_gaps g WHERE g.id = ?1",
+        &req.gap_id,
+    )?;
     let tx = conn.unchecked_transaction()?;
     tx.execute(
         "INSERT INTO research_gap_review_exceptions
@@ -814,6 +862,11 @@ pub fn transition_gap(
     actor_id: Option<&str>,
     now: i64,
 ) -> Result<ResearchGapDto> {
+    ensure_record_project_writable(
+        conn,
+        "SELECT project_id FROM research_gaps WHERE id = ?1",
+        gap_id,
+    )?;
     let tx = conn.unchecked_transaction()?;
     let current: String = tx.query_row(
         "SELECT lifecycle_status FROM research_gaps WHERE id = ?1",
@@ -930,6 +983,7 @@ pub fn create_question(
         }
     }
     if let Some(project_id) = project_id.as_deref() {
+        ensure_project_writable(&tx, project_id)?;
         if let Some(domain_id) = domain_id.as_deref() {
             validate_project_domain(&tx, project_id, Some(domain_id))?;
         }
@@ -984,6 +1038,11 @@ pub fn transition_question(
     rationale: &str,
     now: i64,
 ) -> Result<ResearchQuestionDto> {
+    ensure_record_project_writable(
+        conn,
+        "SELECT project_id FROM research_questions WHERE id = ?1",
+        question_id,
+    )?;
     let tx = conn.unchecked_transaction()?;
     let current: String = tx.query_row(
         "SELECT lifecycle_status FROM research_questions WHERE id = ?1",
@@ -1045,6 +1104,7 @@ pub fn refine_question(
             ))
         },
     )?;
+    ensure_optional_project_writable(&tx, parent.0.as_deref())?;
     let legacy_ms = now / 1_000;
     tx.execute(
         "INSERT INTO questions (id, title, description, status, created_at, updated_at)
@@ -1103,6 +1163,16 @@ pub fn link_question_lineage(
     now: i64,
 ) -> Result<ResearchQuestionLineageDto> {
     let tx = conn.unchecked_transaction()?;
+    ensure_record_project_writable(
+        &tx,
+        "SELECT project_id FROM research_questions WHERE id = ?1",
+        parent_question_id,
+    )?;
+    ensure_record_project_writable(
+        &tx,
+        "SELECT project_id FROM research_questions WHERE id = ?1",
+        derived_question_id,
+    )?;
     let same_project = tx.query_row(
         "SELECT (parent.project_id IS derived.project_id)
          FROM research_questions parent, research_questions derived
@@ -1205,6 +1275,7 @@ pub fn create_phenomenon(
     id: &str,
     now: i64,
 ) -> Result<PhenomenonDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     if let Some(domain_id) = req.domain_id.as_deref() {
         validate_project_domain(conn, &req.project_id, Some(domain_id))?;
     }
@@ -1260,6 +1331,7 @@ pub fn create_observation_plan(
     version_id: &str,
     now: i64,
 ) -> Result<ObservationPlanDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     let tx = conn.transaction()?;
     let phenomenon_matches: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM research_phenomena
@@ -1325,6 +1397,12 @@ pub fn review_observation_plan(
         "reviewed"
     };
     let tx = conn.unchecked_transaction()?;
+    ensure_record_project_writable(
+        &tx,
+        "SELECT p.project_id FROM observation_plan_versions v
+         JOIN observation_plans p ON p.id = v.plan_id WHERE v.id = ?1",
+        version_id,
+    )?;
     let changed = tx.execute(
         "UPDATE observation_plan_versions SET lifecycle_status = ?1,
             preregistered_at_us = ?2
@@ -1420,6 +1498,7 @@ pub fn create_dataset_version_reference(
     id: &str,
     now: i64,
 ) -> Result<DatasetVersionReferenceDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     conn.execute(
         "INSERT INTO research_dataset_version_references
             (id, project_id, title, version_label, external_uri, content_sha256,
@@ -1468,6 +1547,7 @@ pub fn create_observation(
     id: &str,
     now: i64,
 ) -> Result<ObservationDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     let plan_matches: bool = conn.query_row(
         "SELECT EXISTS(
             SELECT 1 FROM observation_plans p
@@ -1564,6 +1644,7 @@ pub fn create_pattern(
     id: &str,
     now: i64,
 ) -> Result<PatternDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     let tx = conn.transaction()?;
     tx.execute(
         "INSERT INTO research_patterns
@@ -1666,6 +1747,7 @@ fn query_pattern(conn: &Connection, id: &str) -> Result<PatternDto> {
 }
 
 pub fn create_idea(conn: &Connection, req: &CreateIdeaReq, id: &str, now: i64) -> Result<IdeaDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     let origin = [
         req.phenomenon_id.as_deref(),
         req.observation_id.as_deref(),
@@ -1745,6 +1827,7 @@ pub fn create_typed_hypothesis(
     version_id: &str,
     now: i64,
 ) -> Result<ResearchHypothesisDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     let tx = conn.transaction()?;
     let question_matches: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM research_questions
@@ -1901,6 +1984,11 @@ pub fn transition_hypothesis(
     actor_id: Option<&str>,
     now: i64,
 ) -> Result<ResearchHypothesisDto> {
+    ensure_record_project_writable(
+        conn,
+        "SELECT project_id FROM research_hypotheses WHERE id = ?1",
+        hypothesis_id,
+    )?;
     let tx = conn.unchecked_transaction()?;
     let current: String = tx.query_row(
         "SELECT lifecycle_status FROM research_hypotheses WHERE id = ?1",
@@ -1961,6 +2049,16 @@ pub fn link_competing_hypotheses(
     now: i64,
 ) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
+    ensure_record_project_writable(
+        &tx,
+        "SELECT project_id FROM research_hypotheses WHERE id = ?1",
+        &req.hypothesis_id,
+    )?;
+    ensure_record_project_writable(
+        &tx,
+        "SELECT project_id FROM research_hypotheses WHERE id = ?1",
+        &req.competing_hypothesis_id,
+    )?;
     let same_project = tx.query_row(
         "SELECT (a.project_id IS b.project_id)
          FROM research_hypotheses a, research_hypotheses b
@@ -2005,6 +2103,11 @@ pub fn add_hypothesis_model_reference(
     now: i64,
 ) -> Result<HypothesisModelReferenceDto> {
     let tx = conn.unchecked_transaction()?;
+    ensure_record_project_writable(
+        &tx,
+        "SELECT project_id FROM research_hypotheses WHERE id = ?1",
+        &req.hypothesis_id,
+    )?;
     tx.execute(
         "INSERT INTO hypothesis_model_references
             (id, hypothesis_id, model_id, model_version_id, label, rationale,
@@ -2048,6 +2151,12 @@ pub fn add_hypothesis_evidence(
     id: &str,
     now: i64,
 ) -> Result<()> {
+    ensure_record_project_writable(
+        conn,
+        "SELECT h.project_id FROM hypothesis_definition_versions v
+         JOIN research_hypotheses h ON h.id = v.hypothesis_id WHERE v.id = ?1",
+        &req.hypothesis_version_id,
+    )?;
     let (hypothesis_project, evidence_project): (Option<String>, Option<String>) = conn.query_row(
         "SELECT h.project_id,
                 CASE
@@ -2144,6 +2253,7 @@ pub fn create_research_design(
     version_id: &str,
     now: i64,
 ) -> Result<ResearchExperimentDesignVersionDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     let tx = conn.transaction()?;
     tx.execute(
         "INSERT INTO research_experiment_designs
@@ -2190,6 +2300,7 @@ pub fn create_linked_research_design(
     version_id: &str,
     now: i64,
 ) -> Result<ResearchExperimentDesignVersionDto> {
+    ensure_project_writable(conn, &req.project_id)?;
     let tx = conn.transaction()?;
     let hypothesis_project: String = tx.query_row(
         "SELECT h.project_id
@@ -2202,6 +2313,7 @@ pub fn create_linked_research_design(
     if hypothesis_project != req.project_id {
         return Err(rusqlite::Error::InvalidQuery);
     }
+    ensure_project_writable(&tx, &hypothesis_project)?;
     tx.execute(
         "INSERT INTO research_experiment_designs
             (id, project_id, title, created_by, created_at_us)
@@ -2265,6 +2377,12 @@ pub fn transition_research_design(
         return Err(rusqlite::Error::InvalidQuery);
     }
     let tx = conn.unchecked_transaction()?;
+    ensure_record_project_writable(
+        &tx,
+        "SELECT d.project_id FROM research_experiment_design_versions v
+         JOIN research_experiment_designs d ON d.id = v.design_id WHERE v.id = ?1",
+        version_id,
+    )?;
     let current: String = tx.query_row(
         "SELECT lifecycle_status FROM research_experiment_design_versions WHERE id = ?1",
         [version_id],
@@ -2312,6 +2430,18 @@ pub fn link_hypothesis_design(
     req: &LinkHypothesisDesignReq,
     now: i64,
 ) -> Result<()> {
+    ensure_record_project_writable(
+        conn,
+        "SELECT h.project_id FROM hypothesis_definition_versions v
+         JOIN research_hypotheses h ON h.id = v.hypothesis_id WHERE v.id = ?1",
+        &req.hypothesis_version_id,
+    )?;
+    ensure_record_project_writable(
+        conn,
+        "SELECT d.project_id FROM research_experiment_design_versions v
+         JOIN research_experiment_designs d ON d.id = v.design_id WHERE v.id = ?1",
+        &req.design_version_id,
+    )?;
     let same_project = conn.query_row(
         "SELECT (h.project_id IS d.project_id)
          FROM hypothesis_definition_versions v
@@ -3500,5 +3630,135 @@ mod tests {
                 .any(|item| item.title == "Persistent project"));
         }
         std::fs::remove_file(path).expect("remove temporary database");
+    }
+
+    #[test]
+    fn archived_projects_reject_research_create_update_and_relationship_writes() {
+        let mut conn = initialized_connection();
+        let archived = project(&mut conn, "Archived project");
+        let parent = create_question(
+            &mut conn,
+            &CreateResearchQuestionReq {
+                project_id: Some(archived.id.clone()),
+                research_gap_id: None,
+                domain_id: None,
+                title: "Parent question".into(),
+                description: "Question description".into(),
+                rationale: "Initial rationale".into(),
+                created_by: None,
+            },
+            "archived-parent",
+            1,
+        )
+        .expect("create parent question");
+        let derived = create_question(
+            &mut conn,
+            &CreateResearchQuestionReq {
+                project_id: Some(archived.id.clone()),
+                research_gap_id: None,
+                domain_id: None,
+                title: "Derived question".into(),
+                description: "Question description".into(),
+                rationale: "Initial rationale".into(),
+                created_by: None,
+            },
+            "archived-derived",
+            2,
+        )
+        .expect("create derived question");
+        transition_project(
+            &conn,
+            &archived.id,
+            ResearchProjectStatus::Archived,
+            None,
+            3,
+        )
+        .expect("archive project");
+
+        assert!(create_question(
+            &mut conn,
+            &CreateResearchQuestionReq {
+                project_id: Some(archived.id.clone()),
+                research_gap_id: None,
+                domain_id: None,
+                title: "Blocked question".into(),
+                description: "Must not be inserted".into(),
+                rationale: "Archived project".into(),
+                created_by: None,
+            },
+            "blocked-question",
+            4,
+        )
+        .is_err());
+        assert!(transition_question(
+            &conn,
+            &parent.id,
+            ResearchQuestionStatus::Review,
+            None,
+            "Must not change",
+            5,
+        )
+        .is_err());
+        assert!(link_question_lineage(
+            &conn,
+            &parent.id,
+            &derived.id,
+            ResearchQuestionRelation::DerivedFrom,
+            "Must not link",
+            None,
+            "blocked-lineage",
+            6,
+        )
+        .is_err());
+
+        assert_eq!(
+            query_question(&conn, &parent.id)
+                .expect("read archived question")
+                .lifecycle_status,
+            ResearchQuestionStatus::Draft
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM research_questions WHERE project_id = ?1",
+                [&archived.id],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count questions"),
+            2
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM research_question_lineage",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count lineage"),
+            0
+        );
+        assert_eq!(
+            query_project(&conn, &archived.id)
+                .expect("read archived project")
+                .lifecycle_status,
+            ResearchProjectStatus::Archived
+        );
+
+        let active = project(&mut conn, "Active project");
+        transition_project(&conn, &active.id, ResearchProjectStatus::Active, None, 7)
+            .expect("activate control project");
+        assert!(create_question(
+            &mut conn,
+            &CreateResearchQuestionReq {
+                project_id: Some(active.id),
+                research_gap_id: None,
+                domain_id: None,
+                title: "Allowed question".into(),
+                description: "Active project control".into(),
+                rationale: "Active projects remain writable".into(),
+                created_by: None,
+            },
+            "active-question",
+            8,
+        )
+        .is_ok());
     }
 }

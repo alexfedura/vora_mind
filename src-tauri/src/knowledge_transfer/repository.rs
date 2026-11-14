@@ -831,14 +831,12 @@ pub fn create_adaptation(
     if request.artifact.version_id() == transfer.origin.artifact.version_id() {
         bail!("An adaptation must reference a distinct exact artifact version.");
     }
+    crate::project_policy::ensure_project_writable(&tx, &transfer.receiving_project_id)?;
     let info = artifact_info(&tx, &request.artifact)?;
     if request.artifact.kind() != TransferArtifactKind::FrameworkVersion
         && info.owner_project_id.as_deref() != Some(transfer.receiving_project_id.as_str())
     {
         bail!("Adapted artifacts must be created in the receiving project.");
-    }
-    if request.artifact.kind() != TransferArtifactKind::FrameworkVersion {
-        crate::project_policy::ensure_project_writable(&tx, &transfer.receiving_project_id)?;
     }
     let adaptation_id = id();
     let now = now_us()?;
@@ -2825,10 +2823,21 @@ mod tests {
             }
         )
         .is_err());
-        let workspace_adaptation = create_adaptation(
+        let adaptations_before: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM transfer_adaptations WHERE transfer_id = ?1",
+            [&framework_transfer.id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        let adaptation_lineage_before: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM research_lineage
+             WHERE transfer_id = ?1 AND adaptation_id IS NOT NULL",
+            [&framework_transfer.id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        assert!(create_adaptation(
             &mut conn,
             &CreateTransferAdaptationReq {
-                transfer_id: framework_transfer.id,
+                transfer_id: framework_transfer.id.clone(),
                 artifact: TransferArtifactRef::FrameworkVersion {
                     framework_id: "framework-recipient".to_string(),
                     version_id: "framework-recipient-v1".to_string(),
@@ -2837,11 +2846,28 @@ mod tests {
                 rationale: "Workspace-scoped framework adaptation.".to_string(),
                 adapted_by: Some("researcher-b".to_string()),
             },
-        )?;
+        )
+        .is_err());
 
-        assert_eq!(workspace_adaptation.receiving_project_id, "project-b");
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM transfer_adaptations WHERE transfer_id = ?1",
+                [&framework_transfer.id],
+                |row| row.get::<_, i64>(0),
+            )?,
+            adaptations_before
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM research_lineage
+                 WHERE transfer_id = ?1 AND adaptation_id IS NOT NULL",
+                [&framework_transfer.id],
+                |row| row.get::<_, i64>(0),
+            )?,
+            adaptation_lineage_before
+        );
         assert_eq!(workspace(&conn)?.transfers.len(), 2);
-        assert_eq!(workspace(&conn)?.adaptations.len(), 1);
+        assert!(workspace(&conn)?.adaptations.is_empty());
         assert!(workspace(&conn)?.downstream_usage.is_empty());
         assert_eq!(
             conn.query_row(
