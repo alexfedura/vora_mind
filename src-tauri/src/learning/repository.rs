@@ -2361,7 +2361,9 @@ mod tests {
     }
 
     fn assert_archived_write<T>(result: Result<T>) {
-        let error = result.expect_err("archived project write must fail");
+        let error = result
+            .err()
+            .expect("archived project write must fail");
         assert!(
             error.to_string().to_ascii_lowercase().contains("archived"),
             "expected archived-project error, got: {error}"
