@@ -204,6 +204,7 @@ pub fn create_method_version(
     let content = json(req)?;
     let content_sha256 = sha256(content.as_bytes());
     let tx = conn.transaction()?;
+    crate::project_policy::ensure_project_writable(&tx, &req.project_id)?;
 
     if let Some(existing_id) = req.method_id.as_deref() {
         let existing: Option<(String, String)> = tx
@@ -333,6 +334,7 @@ pub fn create_metric_definition_version(
     let version_id = id();
     let content_sha256 = sha256(json(req)?.as_bytes());
     let tx = conn.transaction()?;
+    crate::project_policy::ensure_project_writable(&tx, &req.project_id)?;
     if let Some(existing_id) = req.metric_definition_id.as_deref() {
         let existing: Option<(String, String, String)> = tx
             .query_row(
@@ -843,6 +845,7 @@ pub fn create_definition_version(
     let specification_json = json(&req.specification)?;
     let specification_sha256 = sha256(specification_json.as_bytes());
     let tx = conn.transaction()?;
+    crate::project_policy::ensure_project_writable(&tx, &req.project_id)?;
 
     let method_project: String = tx.query_row(
         "SELECT m.project_id FROM analysis_method_versions v
@@ -975,6 +978,13 @@ pub fn transition_definition(
     nonempty(&req.rationale, "Lifecycle rationale")?;
     let now = now_us()?;
     let tx = conn.transaction()?;
+    let project_id: String = tx.query_row(
+        "SELECT d.project_id FROM analysis_definition_versions v
+         JOIN analysis_definitions d ON d.id = v.definition_id WHERE v.id = ?1",
+        [&req.version_id],
+        |row| row.get(0),
+    )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
     let current: String = tx.query_row(
         "SELECT status FROM analysis_definition_events
          WHERE definition_version_id = ?1
@@ -1405,6 +1415,8 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
 
     let definition: AnalysisDefinitionVersionDto =
         query_definition_version(&tx, &req.definition_version_id)?;
+    let project_id = definition.project_id.clone();
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
     if definition.lifecycle_status != AnalysisDefinitionStatus::Locked {
         return Err(anyhow!(
             "Analysis run requires a locked definition version."
@@ -1424,7 +1436,6 @@ pub fn create_run(conn: &mut Connection, req: &CreateAnalysisRunReq) -> Result<A
             "Run environment must contain the captured runtime identity."
         ));
     }
-    let project_id = definition.project_id.clone();
     if let Applicability::Applicable { details } =
         &definition.specification.integrity.reproducibility
     {
@@ -1626,6 +1637,12 @@ pub fn start_run(
 ) -> Result<AnalysisRunDto> {
     let now = now_us()?;
     let tx = conn.transaction()?;
+    let project_id: String = tx.query_row(
+        "SELECT project_id FROM analysis_runs WHERE id = ?1",
+        [run_id],
+        |row| row.get(0),
+    )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
     insert_run_event(
         &tx,
         run_id,
@@ -1643,7 +1660,14 @@ pub fn add_run_log(conn: &mut Connection, req: &AddAnalysisRunLogReq) -> Result<
     nonempty(&req.message, "Analysis log message")?;
     let log_id = id();
     let recorded_at_us = now_us()?;
-    conn.execute(
+    let tx = conn.transaction()?;
+    let project_id: String = tx.query_row(
+        "SELECT project_id FROM analysis_runs WHERE id = ?1",
+        [&req.run_id],
+        |row| row.get(0),
+    )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
+    tx.execute(
         "INSERT INTO analysis_run_logs
             (id, run_id, severity, message, details_json, recorded_by, recorded_at_us)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -1657,6 +1681,7 @@ pub fn add_run_log(conn: &mut Connection, req: &AddAnalysisRunLogReq) -> Result<
             recorded_at_us
         ],
     )?;
+    tx.commit()?;
     Ok(AnalysisRunLogDto {
         id: log_id,
         severity: req.severity.clone(),
@@ -1677,7 +1702,14 @@ pub fn add_run_deviation(
     nonempty(&req.impact_assessment, "Deviation impact assessment")?;
     let deviation_id = id();
     let recorded_at_us = now_us()?;
-    conn.execute(
+    let tx = conn.transaction()?;
+    let project_id: String = tx.query_row(
+        "SELECT project_id FROM analysis_runs WHERE id = ?1",
+        [run_id],
+        |row| row.get(0),
+    )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
+    tx.execute(
         "INSERT INTO analysis_run_deviations
             (id, run_id, description, rationale, impact_assessment, recorded_by, recorded_at_us)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -1691,6 +1723,7 @@ pub fn add_run_deviation(
             recorded_at_us
         ],
     )?;
+    tx.commit()?;
     Ok(AnalysisDeviationDto {
         id: deviation_id,
         description: req.description.trim().to_string(),
@@ -1813,6 +1846,7 @@ pub fn finalize_run(conn: &mut Connection, req: &FinalizeAnalysisRunReq) -> Resu
             [&req.run_id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
     if AnalysisRunStatus::parse(&current_status).map_err(anyhow::Error::msg)?
         != AnalysisRunStatus::Running
     {
@@ -2750,6 +2784,7 @@ pub fn create_evidence(conn: &mut Connection, req: &CreateEvidenceReq) -> Result
     nonempty(&req.quality_rationale, "Evidence quality rationale")?;
     nonempty(&req.limitations, "Evidence limitations")?;
     project_exists(conn, &req.project_id)?;
+    crate::project_policy::ensure_project_writable(conn, &req.project_id)?;
     validate_proposition_project(conn, &req.project_id, &req.proposition)?;
     validate_artifact_project(conn, &req.project_id, &req.artifact)?;
     if !req.provenance.is_object() {
@@ -2816,7 +2851,10 @@ pub fn transition_evidence(
     req: &TransitionEvidenceReq,
 ) -> Result<EvidenceDto> {
     nonempty(&req.rationale, "Evidence lifecycle rationale")?;
-    let current = query_evidence(conn, &req.evidence_id)?.status;
+    let tx = conn.transaction()?;
+    let current_evidence = query_evidence(&tx, &req.evidence_id)?;
+    crate::project_policy::ensure_project_writable(&tx, &current_evidence.project_id)?;
+    let current = current_evidence.status;
     let allowed = matches!(
         (&current, &req.next_status),
         (EvidenceStatus::Recorded, EvidenceStatus::Assessed)
@@ -2838,7 +2876,6 @@ pub fn transition_evidence(
     if !allowed {
         return Err(anyhow!("Invalid evidence lifecycle transition."));
     }
-    let tx = conn.transaction()?;
     insert_evidence_event(
         &tx,
         &req.evidence_id,
@@ -3156,6 +3193,7 @@ pub fn create_finding_version(
         ));
     }
     project_exists(conn, &req.project_id)?;
+    crate::project_policy::ensure_project_writable(conn, &req.project_id)?;
     validate_proposition_project(conn, &req.project_id, &req.proposition)?;
 
     let now = now_us()?;
@@ -3281,11 +3319,13 @@ pub fn transition_finding(
     req: &TransitionFindingReq,
 ) -> Result<FindingVersionDto> {
     nonempty(&req.rationale, "Finding lifecycle rationale")?;
-    let current = query_finding_version(conn, &req.version_id)?.status;
+    let tx = conn.transaction()?;
+    let current_version = query_finding_version(&tx, &req.version_id)?;
+    crate::project_policy::ensure_project_writable(&tx, &current_version.project_id)?;
+    let current = current_version.status;
     if !finding_status_transition_is_valid(&current, &req.next_status) {
         return Err(anyhow!("Invalid finding lifecycle transition."));
     }
-    let tx = conn.transaction()?;
     insert_finding_event(
         &tx,
         &req.version_id,
@@ -3306,13 +3346,15 @@ pub fn create_finding_relation(
     if req.source_version_id == req.target_version_id {
         return Err(anyhow!("A finding version cannot relate to itself."));
     }
-    let source = query_finding_version(conn, &req.source_version_id)?;
-    let target = query_finding_version(conn, &req.target_version_id)?;
+    let tx = conn.transaction()?;
+    let source = query_finding_version(&tx, &req.source_version_id)?;
+    let target = query_finding_version(&tx, &req.target_version_id)?;
     if source.project_id != target.project_id {
         return Err(anyhow!(
             "Finding relations cannot cross project boundaries."
         ));
     }
+    crate::project_policy::ensure_project_writable(&tx, &source.project_id)?;
     if req.relation_kind == FindingRelationKind::Supersedes
         && source.finding_id != target.finding_id
     {
@@ -3322,7 +3364,7 @@ pub fn create_finding_relation(
     }
     let relation_id = id();
     let created_at_us = now_us()?;
-    conn.execute(
+    tx.execute(
         "INSERT INTO analysis_finding_relations
             (id, source_version_id, target_version_id, relation_kind,
              rationale, created_by, created_at_us)
@@ -3337,6 +3379,7 @@ pub fn create_finding_relation(
             created_at_us
         ],
     )?;
+    tx.commit()?;
     Ok(FindingRelationDto {
         id: relation_id,
         target_version_id: req.target_version_id.clone(),
