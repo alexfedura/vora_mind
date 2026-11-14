@@ -79,6 +79,15 @@ other non-current schemas or unrecognized ledger contents are rejected.
 
 ## Limitations
 
+### Historical scope deviation
+
+The Stage 2.1.5 work was recorded in commit `f5081b3` (`chore(release):
+v0.23.8 [auto]`), which also advanced `package.json`,
+`src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` from 0.23.7 to
+0.23.8. This was a process/scope deviation from the Stage 2.1.5 instruction
+not to change versions. The release commit is preserved; the version bump is
+documented, not undone by the corrective stage.
+
 No production migration steps and no supported legacy schema profiles are
 registered. The coordinator is unavailable for production use until a trusted
 caller can guarantee that all application and external SQLite writers are
@@ -92,3 +101,13 @@ quiescence gate, add approved release-specific profile fingerprints, and
 register only migrations validated against sanitized historical samples.
 Passing process-interruption tests is not a power-loss durability guarantee;
 that would require platform/filesystem-specific flush guarantees and evidence.
+
+Synthetic recovery tests cover an orphan operation directory without a
+journal, an interrupted partial `BackupPrepared` journal append, interruption
+after an unverified backup is preserved during recovery, and repeat recovery
+after those states. An unterminated journal tail is not treated as a committed
+event; before appending, recovery preserves the tail in a separate artifact
+and truncates the journal to its last newline-terminated event. These tests do
+not simulate torn storage writes, a crash after a complete journal line is
+written but before its sync completes, or sudden power loss. Such durability
+properties remain outside the guarantee.

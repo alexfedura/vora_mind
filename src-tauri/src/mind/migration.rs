@@ -94,6 +94,8 @@ enum FailurePoint {
     AfterValidation,
     DuringBackupCopy,
     AfterBackupCopyBeforeJournal,
+    DuringBackupPreparedJournal,
+    AfterPreservingInvalidBackup,
     BeforePublication,
     DuringPublication,
     AfterPublicationBeforeJournal,
@@ -174,6 +176,13 @@ pub fn execute_staged_migrations(
 /// API is not available for production use until a trusted caller can guarantee
 /// quiescence.
 pub fn recover_incomplete_operations(source_path: &Path) -> Result<Vec<RecoveryOutcome>> {
+    recover_incomplete_operations_inner(source_path, FailurePoint::None)
+}
+
+fn recover_incomplete_operations_inner(
+    source_path: &Path,
+    failure: FailurePoint,
+) -> Result<Vec<RecoveryOutcome>> {
     let _lock = CoordinatorLock::acquire(source_path)?;
     ensure_no_sqlite_sidecars(source_path)?;
     match fs::symlink_metadata(source_path) {
@@ -320,6 +329,10 @@ pub fn recover_incomplete_operations(source_path: &Path) -> Result<Vec<RecoveryO
                     }
                     validate_original_backup(&source, &hash)?;
                     preserve_unverified_backup(&backup, &operation_directory)?;
+                    #[cfg(test)]
+                    if failure == FailurePoint::AfterPreservingInvalidBackup {
+                        bail!("Injected interruption after preserving unverified backup");
+                    }
                     copy_file_durably(&source, &backup)?;
                     validate_original_backup(&backup, &hash)?;
                 } else {
@@ -542,6 +555,16 @@ fn execute_with_failure(
     validate_original_backup(&backup_path, &original_sha256)?;
     if failure == FailurePoint::AfterBackupCopyBeforeJournal {
         bail!("Injected interruption after backup copy and before journal completion");
+    }
+    #[cfg(test)]
+    if failure == FailurePoint::DuringBackupPreparedJournal {
+        append_journal_partial_for_test(
+            &journal_path,
+            &JournalEvent::BackupPrepared {
+                original_sha256: original_sha256.clone(),
+            },
+        )?;
+        bail!("Injected interruption during BackupPrepared journal append");
     }
     append_journal(
         &journal_path,
@@ -907,6 +930,7 @@ fn sidecar_path(source_path: &Path, suffix: &str) -> Result<PathBuf> {
 }
 
 fn append_journal(path: &Path, event: &JournalEvent) -> Result<()> {
+    preserve_incomplete_journal_tail(path)?;
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -918,17 +942,59 @@ fn append_journal(path: &Path, event: &JournalEvent) -> Result<()> {
     Ok(())
 }
 
+fn preserve_incomplete_journal_tail(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let contents = fs::read(path)?;
+    let committed_length = contents
+        .iter()
+        .rposition(|byte| *byte == b'\n')
+        .map_or(0, |index| index + 1);
+    if committed_length == contents.len() {
+        return Ok(());
+    }
+
+    let partial = path.with_file_name(format!("journal-uncommitted-{}.log", uuid::Uuid::now_v7()));
+    let mut preserved = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&partial)
+        .with_context(|| format!("Preserve incomplete journal tail at {}", partial.display()))?;
+    preserved.write_all(&contents[committed_length..])?;
+    preserved.sync_all()?;
+    drop(preserved);
+
+    let journal = OpenOptions::new().write(true).open(path).with_context(|| {
+        format!(
+            "Open journal for incomplete-tail repair: {}",
+            path.display()
+        )
+    })?;
+    journal.set_len(committed_length as u64)?;
+    journal.sync_all()?;
+    Ok(())
+}
+
+#[cfg(test)]
+fn append_journal_partial_for_test(path: &Path, event: &JournalEvent) -> Result<()> {
+    preserve_incomplete_journal_tail(path)?;
+    let bytes = serde_json::to_vec(event)?;
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    file.write_all(&bytes[..bytes.len() / 2])?;
+    Ok(())
+}
+
 fn read_journal(path: &Path) -> Result<Vec<JournalEvent>> {
     let contents = fs::read_to_string(path)?;
     let mut events = Vec::new();
-    let mut lines = contents.split_terminator('\n').peekable();
-    while let Some(line) = lines.next() {
+    let committed_length = contents.rfind('\n').map_or(0, |index| index + 1);
+    for line in contents[..committed_length].split_terminator('\n') {
         if line.trim().is_empty() {
             continue;
         }
         match serde_json::from_str(&line) {
             Ok(event) => events.push(event),
-            Err(_error) if lines.peek().is_none() && !contents.ends_with('\n') => break,
             Err(error) => {
                 return Err(error)
                     .with_context(|| format!("Parse migration journal {}", path.display()))
@@ -1057,10 +1123,10 @@ fn atomic_replace(_staged: &Path, _canonical: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        current_schema_fingerprint, execute_with_failure, recognize_profile,
-        recover_incomplete_operations, schema_fingerprint, validate_original_backup,
-        ApprovedMigration, FailurePoint, JournalEvent, MigrationOutcome, MigrationPlan,
-        RecoveryOutcome, SchemaProfile,
+        current_schema_fingerprint, execute_with_failure, read_journal, recognize_profile,
+        recover_incomplete_operations, recover_incomplete_operations_inner, schema_fingerprint,
+        validate_original_backup, ApprovedMigration, FailurePoint, JournalEvent, MigrationOutcome,
+        MigrationPlan, RecoveryOutcome, SchemaProfile,
     };
     use rusqlite::Connection;
     use std::fs;
@@ -1507,6 +1573,152 @@ mod tests {
         assert!(recover_incomplete_operations(&source).is_err());
         assert_eq!(database_hash(&source), source_before);
         assert_eq!(database_hash(&backup), backup_hash);
+    }
+
+    #[test]
+    fn orphan_operation_directory_without_journal_fails_closed_and_preserves_artifacts() {
+        let directory = FixtureDirectory::new();
+        let source = current_fixture(&directory);
+        let source_hash = database_hash(&source);
+        let operation_directory = directory.0.join(".workspace.sqlite.migration-orphan");
+        fs::create_dir(&operation_directory).expect("create isolated orphan directory");
+        let backup = operation_directory.join("backup.sqlite");
+        let staged = operation_directory.join("staging.sqlite");
+        fs::write(&backup, b"orphan backup artifact").expect("write isolated orphan backup");
+        fs::write(&staged, b"orphan staging artifact").expect("write isolated staging artifact");
+        let backup_hash = database_hash(&backup);
+        let staged_hash = database_hash(&staged);
+
+        assert!(recover_incomplete_operations(&source).is_err());
+        assert_eq!(database_hash(&source), source_hash);
+        assert_eq!(database_hash(&backup), backup_hash);
+        assert_eq!(database_hash(&staged), staged_hash);
+        assert!(!operation_directory.join("journal.log").exists());
+    }
+
+    #[test]
+    fn partial_backup_prepared_journal_event_is_not_committed_and_is_preserved() {
+        let directory = FixtureDirectory::new();
+        let source = current_fixture(&directory);
+        let expected = directory.0.join("expected.sqlite");
+        fs::copy(&source, &expected).expect("clone expected fixture");
+        let plan = plan_for(&expected, SYNTHETIC_SQL);
+        let original_hash = database_hash(&source);
+
+        assert!(
+            execute_with_failure(&source, &plan, FailurePoint::DuringBackupPreparedJournal)
+                .is_err()
+        );
+        assert_eq!(database_hash(&source), original_hash);
+
+        let operation_directory = directory
+            .0
+            .read_dir()
+            .expect("read fixture directory")
+            .filter_map(std::result::Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with(".workspace.sqlite.migration-"))
+            })
+            .expect("interrupted operation directory exists");
+        let journal_path = operation_directory.join("journal.log");
+        let events = read_journal(&journal_path).expect("read committed journal events");
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, JournalEvent::BackupPrepared { .. })));
+        let backup = operation_directory.join("backup.sqlite");
+        validate_original_backup(&backup, &original_hash)
+            .expect("backup is valid even though its journal transition was interrupted");
+
+        assert!(matches!(
+            recover_incomplete_operations(&source)
+                .expect("recover incomplete backup-prepared journal event")
+                .as_slice(),
+            [RecoveryOutcome::Published { .. }]
+        ));
+        assert_eq!(database_hash(&backup), original_hash);
+        assert!(operation_directory
+            .read_dir()
+            .expect("read operation artifacts")
+            .filter_map(std::result::Result::ok)
+            .any(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("journal-uncommitted-")
+            }));
+        assert!(recover_incomplete_operations(&source)
+            .expect("repeat recovery after partial journal append")
+            .is_empty());
+        assert_eq!(database_hash(&backup), original_hash);
+    }
+
+    #[test]
+    fn recovery_interruption_after_quarantining_backup_can_resume_safely() {
+        let directory = FixtureDirectory::new();
+        let source = current_fixture(&directory);
+        let expected = directory.0.join("expected.sqlite");
+        fs::copy(&source, &expected).expect("clone expected fixture");
+        let plan = plan_for(&expected, SYNTHETIC_SQL);
+        let original_hash = database_hash(&source);
+        assert!(
+            execute_with_failure(&source, &plan, FailurePoint::AfterBackupCopyBeforeJournal)
+                .is_err()
+        );
+
+        let operation_directory = directory
+            .0
+            .read_dir()
+            .expect("read fixture directory")
+            .filter_map(std::result::Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with(".workspace.sqlite.migration-"))
+            })
+            .expect("interrupted operation directory exists");
+        let backup = operation_directory.join("backup.sqlite");
+        fs::write(&backup, b"partial unverified backup").expect("corrupt isolated backup");
+        let corrupt_hash = database_hash(&backup);
+        let staged = operation_directory.join("staging.sqlite");
+        let staged_hash = database_hash(&staged);
+
+        assert!(recover_incomplete_operations_inner(
+            &source,
+            FailurePoint::AfterPreservingInvalidBackup
+        )
+        .is_err());
+        assert_eq!(database_hash(&source), original_hash);
+        assert!(!backup.exists());
+        assert_eq!(database_hash(&staged), staged_hash);
+        let preserved = operation_directory
+            .read_dir()
+            .expect("read preserved recovery artifacts")
+            .filter_map(std::result::Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("backup-unverified-"))
+            })
+            .expect("corrupt backup was preserved before injected interruption");
+        assert_eq!(database_hash(&preserved), corrupt_hash);
+
+        assert!(matches!(
+            recover_incomplete_operations(&source)
+                .expect("resume recovery after preserving invalid backup")
+                .as_slice(),
+            [RecoveryOutcome::Published { .. }]
+        ));
+        validate_original_backup(&backup, &original_hash)
+            .expect("recovery recreated a validated original backup");
+        assert_eq!(database_hash(&preserved), corrupt_hash);
+        assert!(recover_incomplete_operations(&source)
+            .expect("repeat completed recovery")
+            .is_empty());
     }
 
     #[test]
