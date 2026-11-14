@@ -11,7 +11,7 @@
 | migration tests | planned | use disposable DB fixtures |
 | IPC tests | planned | backend-side validation remains a must |
 | workflow tests | planned | A/B/C integration verification required |
-| archived project policy tests | planned | write and experiment execution must be rejected |
+| archived project policy tests | in progress | repository-level synthetic rejection tests are being added; full workflow and IPC verification remain |
 | project isolation tests | in progress | includes mismatched project/entity IDs |
 
 ## Minimum acceptance checks

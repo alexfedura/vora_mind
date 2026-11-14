@@ -293,6 +293,20 @@ pub fn transition_model(conn: &mut Connection, request: &TransitionModelReq) -> 
     };
     if let Some(project_id) = origin_project.as_deref() {
         ensure_project_writable(&tx, project_id)?;
+    } else {
+        let project_ids = {
+            let mut statement = tx.prepare(
+                "SELECT DISTINCT created_in_project_id FROM model_versions
+                 WHERE model_id = ?1 ORDER BY created_in_project_id",
+            )?;
+            let project_ids = statement
+                .query_map([&request.model_id], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            project_ids
+        };
+        for project_id in project_ids {
+            ensure_project_writable(&tx, &project_id)?;
+        }
     }
     let current: Option<String> = tx
         .query_row(
@@ -2847,6 +2861,23 @@ mod tests {
         }
     }
 
+    fn create_projectless_model_with_version(conn: &mut Connection, project_id: &str) -> String {
+        let model = create_model(
+            conn,
+            &CreateModelReq {
+                display_name: "Projectless model".to_string(),
+                description: "Test model with project-owned versions".to_string(),
+                origin_project_id: None,
+                domain_id: None,
+                created_by: Some("author".to_string()),
+            },
+        )
+        .expect("create projectless model");
+        create_model_version(conn, &version_request(project_id, &model.id))
+            .expect("create project-owned version");
+        model.id
+    }
+
     fn insert_sealed_dataset(conn: &Connection, project_id: &str) -> String {
         let dataset_id = format!("dataset-{project_id}");
         let dataset_version_id = format!("dataset-version-{project_id}");
@@ -3989,6 +4020,81 @@ mod tests {
             )
             .expect("count forged validation events");
         assert_eq!(forged_events, 0);
+    }
+
+    #[test]
+    fn archived_version_owner_rejects_projectless_model_transition() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        let model_id = create_projectless_model_with_version(&mut conn, "project-a");
+        conn.execute(
+            "UPDATE research_projects SET lifecycle_status = 'archived' WHERE id = 'project-a'",
+            [],
+        )
+        .expect("archive project A");
+
+        let status_before: String = conn
+            .query_row(
+                "SELECT status FROM model_status_events WHERE model_id = ?1
+                 ORDER BY occurred_at_us DESC, id DESC LIMIT 1",
+                [&model_id],
+                |row| row.get(0),
+            )
+            .expect("read model lifecycle before rejected transition");
+        let error = transition_model(
+            &mut conn,
+            &TransitionModelReq {
+                model_id: model_id.clone(),
+                next_status: ModelStatus::Active,
+                rationale: "Must be rejected for archived version owner.".to_string(),
+                actor_id: None,
+            },
+        )
+        .expect_err("archived version owners cannot transition projectless models");
+        assert_eq!(
+            error.to_string(),
+            "Archived research projects cannot be modified."
+        );
+
+        let status_after: String = conn
+            .query_row(
+                "SELECT status FROM model_status_events WHERE model_id = ?1
+                 ORDER BY occurred_at_us DESC, id DESC LIMIT 1",
+                [&model_id],
+                |row| row.get(0),
+            )
+            .expect("read model lifecycle after rejected transition");
+        assert_eq!(status_after, status_before);
+        assert_eq!(status_after, "proposed");
+    }
+
+    #[test]
+    fn active_version_owner_allows_projectless_model_transition() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory workspace");
+        initialize(&conn);
+        insert_project(&conn, "project-a");
+        let model_id = create_projectless_model_with_version(&mut conn, "project-a");
+
+        transition_model(
+            &mut conn,
+            &TransitionModelReq {
+                model_id: model_id.clone(),
+                next_status: ModelStatus::Active,
+                rationale: "Active version owner permits transition.".to_string(),
+                actor_id: None,
+            },
+        )
+        .expect("active version owner permits model transition");
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM model_status_events WHERE model_id = ?1
+                 ORDER BY occurred_at_us DESC, id DESC LIMIT 1",
+                [&model_id],
+                |row| row.get(0),
+            )
+            .expect("read transitioned model lifecycle");
+        assert_eq!(status, "active");
     }
 
     #[test]

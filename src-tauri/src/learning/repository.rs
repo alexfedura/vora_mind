@@ -176,6 +176,7 @@ pub fn create_objective_version(
     let _ = learner_id;
     let created_at_us = now_us()?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    crate::project_policy::ensure_project_writable(&tx, &request.learning_project_id)?;
     let objective_id = if let Some(objective_id) = &request.objective_id {
         let objective_project: String = tx.query_row(
             "SELECT learning_project_id FROM learning_objectives WHERE id = ?1",
@@ -293,6 +294,7 @@ pub fn create_assessment_version(
         project_context(conn, &request.learning_project_id)?;
     let now = now_us()?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    crate::project_policy::ensure_project_writable(&tx, &request.learning_project_id)?;
     let (assessment_id, version_no, rubric_id, rubric_version_no) =
         if let Some(assessment_id) = &request.assessment_id {
             let existing: (String, String) = tx.query_row(
@@ -492,11 +494,12 @@ pub fn review_assessment(
     required(&request.rationale, "Assessment review rationale")?;
     let now = now_us()?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let status: String = tx.query_row(
-        "SELECT status FROM assessment_versions WHERE id = ?1",
+    let (status, project_id): (String, String) = tx.query_row(
+        "SELECT status, learning_project_id FROM assessment_versions WHERE id = ?1",
         [&request.assessment_version_id],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
     if !matches!(status.as_str(), "draft" | "review") {
         return Err(anyhow!(
             "Only draft or review assessments may receive review."
@@ -531,11 +534,12 @@ pub fn transition_assessment_version(
 ) -> Result<AssessmentVersionDto> {
     let now = now_us()?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let current: String = tx.query_row(
-        "SELECT status FROM assessment_versions WHERE id = ?1",
+    let (current, project_id): (String, String) = tx.query_row(
+        "SELECT status, learning_project_id FROM assessment_versions WHERE id = ?1",
         [&request.assessment_version_id],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
     let next = request.next_status.as_str();
     let allowed = matches!(
         (current.as_str(), next),
@@ -593,6 +597,7 @@ pub fn create_attempt(
             "Only a published exact assessment version can be attempted."
         ));
     }
+    crate::project_policy::ensure_project_writable(conn, &request.learning_project_id)?;
     let (project_learner, project_framework, project_framework_version) =
         project_context(conn, &request.learning_project_id)?;
     if request.learner_id != project_learner
@@ -603,8 +608,10 @@ pub fn create_attempt(
             "Attempt learner or framework context does not match the project."
         ));
     }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    crate::project_policy::ensure_project_writable(&tx, &request.learning_project_id)?;
     let attempt_id = id();
-    conn.execute(
+    tx.execute(
         "INSERT INTO assessment_attempts
             (id, learning_project_id, learner_id, assessment_version_id, framework_id,
              framework_version_id, status, started_at_us, submitted_at_us)
@@ -619,6 +626,7 @@ pub fn create_attempt(
             now_us()?
         ],
     )?;
+    tx.commit()?;
     query_attempt(conn, &attempt_id)
 }
 
@@ -626,6 +634,12 @@ pub fn save_attempt_response(
     conn: &Connection,
     request: &SaveAttemptResponseReq,
 ) -> Result<AttemptResponseDto> {
+    let project_id: String = conn.query_row(
+        "SELECT learning_project_id FROM assessment_attempts WHERE id = ?1",
+        [&request.attempt_id],
+        |row| row.get(0),
+    )?;
+    crate::project_policy::ensure_project_writable(conn, &project_id)?;
     let now = now_us()?;
     let response_json = json(&request.response)?;
     conn.execute(
@@ -660,11 +674,12 @@ pub fn save_attempt_response(
 
 pub fn submit_attempt(conn: &mut Connection, attempt_id: &str) -> Result<AssessmentAttemptDto> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let status: String = tx.query_row(
-        "SELECT status FROM assessment_attempts WHERE id = ?1",
+    let (status, project_id): (String, String) = tx.query_row(
+        "SELECT status, learning_project_id FROM assessment_attempts WHERE id = ?1",
         [attempt_id],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
     if status != "in_progress" {
         return Err(anyhow!(
             "Only an in-progress assessment attempt can be submitted."
@@ -715,15 +730,17 @@ pub fn evaluate_attempt(
     }
     let now = now_us()?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let (rubric_version_id, pass_threshold, learner_id): (String, f64, String) = tx.query_row(
-        "SELECT av.rubric_version_id, rv.pass_threshold, a.learner_id
+    let (rubric_version_id, pass_threshold, learner_id, project_id): (String, f64, String, String) =
+        tx.query_row(
+            "SELECT av.rubric_version_id, rv.pass_threshold, a.learner_id, a.learning_project_id
          FROM assessment_attempts a
          JOIN assessment_versions av ON av.id = a.assessment_version_id
          JOIN assessment_rubric_versions rv ON rv.id = av.rubric_version_id
          WHERE a.id = ?1 AND a.status = 'submitted'",
-        [&request.attempt_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-    )?;
+            [&request.attempt_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
     if request.evaluator_id.trim() == learner_id {
         return Err(anyhow!(
             "An assessment learner cannot evaluate their own attempt."
@@ -851,6 +868,7 @@ pub fn create_competency(
         project_context(conn, &request.learning_project_id)?;
     let competency_id = id();
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    crate::project_policy::ensure_project_writable(&tx, &request.learning_project_id)?;
     tx.execute(
         "INSERT INTO competencies
             (id, learning_project_id, framework_id, framework_version_id,
@@ -913,6 +931,12 @@ pub fn create_mastery_rule_version(
         ));
     }
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let project_id: String = tx.query_row(
+        "SELECT learning_project_id FROM competencies WHERE id = ?1",
+        [&request.competency_id],
+        |row| row.get(0),
+    )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
     let (rule_id, version_no) = if let Some(rule_id) = &request.mastery_rule_id {
         let competency_id: String = tx.query_row(
             "SELECT competency_id FROM mastery_rules WHERE id = ?1",
@@ -984,6 +1008,7 @@ pub fn evaluate_competency(
             [&request.competency_id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
+    crate::project_policy::ensure_project_writable(&tx, &learning_project_id)?;
     if learner_id != request.learner_id {
         return Err(anyhow!(
             "Competency evaluation learner does not own this learning project."
@@ -1247,9 +1272,11 @@ pub fn create_reproduction_task(
     }
     let (_, framework_id, framework_version_id) =
         project_context(conn, &request.learning_project_id)?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    crate::project_policy::ensure_project_writable(&tx, &request.learning_project_id)?;
     let task_id = id();
     let expected_result = json(&request.expected_result)?;
-    conn.execute(
+    tx.execute(
         "INSERT INTO reproduction_tasks
             (id, learning_project_id, framework_id, framework_version_id,
              objective_version_id, rubric_version_id, title, task_description,
@@ -1270,6 +1297,7 @@ pub fn create_reproduction_task(
             now_us()?
         ],
     )?;
+    tx.commit()?;
     query_reproduction_task(conn, &task_id)
 }
 
@@ -1310,8 +1338,15 @@ pub fn submit_reproduction(
             "A reproduction submission requires an artifact or a non-empty result."
         ));
     }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let project_id: String = tx.query_row(
+        "SELECT learning_project_id FROM reproduction_tasks WHERE id = ?1",
+        [&request.task_id],
+        |row| row.get(0),
+    )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
     let submission_id = id();
-    conn.execute(
+    tx.execute(
         "INSERT INTO reproduction_submissions
             (id, task_id, learner_id, artifact_uri, artifact_sha256,
              result_json, deviations, submitted_at_us)
@@ -1327,6 +1362,7 @@ pub fn submit_reproduction(
             now_us()?
         ],
     )?;
+    tx.commit()?;
     query_reproduction_submission(conn, &submission_id)
 }
 
@@ -1341,15 +1377,17 @@ pub fn evaluate_reproduction(
         "Reproduction evidence description",
     )?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let (learner_id, rubric_version_id, pass_threshold): (String, String, f64) = tx.query_row(
-        "SELECT s.learner_id, t.rubric_version_id, rv.pass_threshold
+    let (learner_id, rubric_version_id, pass_threshold, project_id): (String, String, f64, String) =
+        tx.query_row(
+            "SELECT s.learner_id, t.rubric_version_id, rv.pass_threshold, t.learning_project_id
          FROM reproduction_submissions s
          JOIN reproduction_tasks t ON t.id = s.task_id
          JOIN assessment_rubric_versions rv ON rv.id = t.rubric_version_id
          WHERE s.id = ?1",
-        [&request.submission_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-    )?;
+            [&request.submission_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
     if request.evaluator_id.trim() == learner_id {
         return Err(anyhow!(
             "Independent reproduction requires an evaluator distinct from the learner."
@@ -2307,6 +2345,58 @@ mod tests {
         .expect("create framework-pinned project")
     }
 
+    fn create_policy_project_fixture(conn: &Connection, project_id: &str) {
+        conn.execute_batch(
+            "CREATE TABLE research_projects (
+                 id TEXT PRIMARY KEY,
+                 lifecycle_status TEXT NOT NULL
+             );",
+        )
+        .expect("create synthetic project-policy fixture");
+        conn.execute(
+            "INSERT INTO research_projects (id, lifecycle_status) VALUES (?1, 'active')",
+            [project_id],
+        )
+        .expect("create active synthetic policy project");
+    }
+
+    fn assert_archived_write<T>(result: Result<T>) {
+        let error = result.expect_err("archived project write must fail");
+        assert!(
+            error.to_string().to_ascii_lowercase().contains("archived"),
+            "expected archived-project error, got: {error}"
+        );
+    }
+
+    fn archived_write_record_counts(
+        conn: &Connection,
+    ) -> rusqlite::Result<(i64, i64, i64, i64, i64, i64, i64, i64)> {
+        conn.query_row(
+            "SELECT
+                (SELECT COUNT(*) FROM learning_objectives),
+                (SELECT COUNT(*) FROM learning_objective_versions),
+                (SELECT COUNT(*) FROM learning_objective_prerequisites),
+                (SELECT COUNT(*) FROM assessments),
+                (SELECT COUNT(*) FROM assessment_versions),
+                (SELECT COUNT(*) FROM assessment_reviews),
+                (SELECT COUNT(*) FROM assessment_attempts),
+                (SELECT COUNT(*) FROM attempt_responses)",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                ))
+            },
+        )
+    }
+
     #[test]
     fn learning_projects_pin_coexisting_framework_versions() {
         let path = std::env::temp_dir().join(format!("vora-learning-{}.sqlite", id()));
@@ -2678,5 +2768,201 @@ mod tests {
         assert_eq!(stored.evaluations[0].id, first.id);
         assert_eq!(stored.evaluations[1].id, corrected.id);
         assert_eq!(stored.evaluations[2].id, inconclusive.id);
+    }
+
+    #[test]
+    fn archived_project_rejects_learning_writes_without_partial_changes() {
+        let mut conn = connection();
+        let learner = create_learner(
+            &mut conn,
+            &CreateLearnerReq {
+                display_name: "Archived-policy learner".to_string(),
+                created_by: None,
+            },
+        )
+        .expect("create learner");
+        let project = create_learning_project(&mut conn, &learner.id, "framework-a-v1");
+        create_policy_project_fixture(&conn, &project.id);
+
+        let objective = create_objective_version(
+            &mut conn,
+            &CreateLearningObjectiveReq {
+                objective_id: None,
+                learning_project_id: project.id.clone(),
+                title: "Archived-policy objective".to_string(),
+                observable_outcome: "Explain the concept".to_string(),
+                criteria_text: "Explanation is accurate".to_string(),
+                level: "introductory".to_string(),
+                parent_version_id: None,
+                prerequisite_version_ids: Vec::new(),
+                created_by: None,
+            },
+        )
+        .expect("active project accepts objective creation");
+        let revised_objective = create_objective_version(
+            &mut conn,
+            &CreateLearningObjectiveReq {
+                objective_id: Some(objective.objective_id.clone()),
+                learning_project_id: project.id.clone(),
+                title: "Archived-policy objective".to_string(),
+                observable_outcome: "Explain the concept with an example".to_string(),
+                criteria_text: "Explanation and example are accurate".to_string(),
+                level: "introductory".to_string(),
+                parent_version_id: Some(objective.id.clone()),
+                prerequisite_version_ids: vec![objective.id.clone()],
+                created_by: None,
+            },
+        )
+        .expect("active project accepts objective relationship writes");
+        assert_eq!(revised_objective.version_no, 2);
+
+        let assessment_request = CreateAssessmentVersionReq {
+            assessment_id: None,
+            learning_project_id: project.id.clone(),
+            title: "Archived-policy assessment".to_string(),
+            change_rationale: "Initial assessment version".to_string(),
+            rubric_title: "Archived-policy rubric".to_string(),
+            rubric_pass_threshold: 0.7,
+            questions: vec![CreateAssessmentQuestionReq {
+                objective_version_id: objective.id.clone(),
+                question_order: 0,
+                prompt: "Explain the concept".to_string(),
+                response_kind: "text".to_string(),
+                max_points: 1.0,
+                required: true,
+            }],
+            rubric_criteria: vec![CreateRubricCriterionReq {
+                objective_version_id: objective.id.clone(),
+                criterion_key: "accuracy".to_string(),
+                description: "Accurate explanation".to_string(),
+                max_points: 1.0,
+            }],
+            created_by: None,
+        };
+        let assessment = create_assessment_version(&mut conn, &assessment_request)
+            .expect("active project accepts assessment creation");
+        review_assessment(
+            &mut conn,
+            &ReviewAssessmentReq {
+                assessment_version_id: assessment.id.clone(),
+                review_status: AssessmentReviewStatus::Approved,
+                reviewer_id: Some("reviewer".to_string()),
+                rationale: "Approved for use".to_string(),
+            },
+        )
+        .expect("active project accepts assessment review");
+        transition_assessment_version(
+            &mut conn,
+            &TransitionAssessmentVersionReq {
+                assessment_version_id: assessment.id.clone(),
+                next_status: LearningVersionStatus::Published,
+                actor_id: Some("reviewer".to_string()),
+            },
+        )
+        .expect("active project accepts assessment publication");
+        let attempt = create_attempt(
+            &mut conn,
+            &CreateAssessmentAttemptReq {
+                learning_project_id: project.id.clone(),
+                learner_id: learner.id.clone(),
+                assessment_version_id: assessment.id.clone(),
+            },
+        )
+        .expect("active project accepts attempt creation");
+        save_attempt_response(
+            &conn,
+            &SaveAttemptResponseReq {
+                attempt_id: attempt.id.clone(),
+                assessment_question_id: assessment.questions[0].id.clone(),
+                response: serde_json::json!("Original response"),
+            },
+        )
+        .expect("active project accepts attempt response");
+
+        conn.execute(
+            "UPDATE research_projects SET lifecycle_status = 'archived' WHERE id = ?1",
+            [&project.id],
+        )
+        .expect("archive synthetic policy project");
+        let before = archived_write_record_counts(&conn).expect("count active-project records");
+        assert_archived_write(create_objective_version(
+            &mut conn,
+            &CreateLearningObjectiveReq {
+                objective_id: None,
+                learning_project_id: project.id.clone(),
+                title: "Must not be created".to_string(),
+                observable_outcome: "This write must be rejected".to_string(),
+                criteria_text: "No partial objective or prerequisite".to_string(),
+                level: "introductory".to_string(),
+                parent_version_id: None,
+                prerequisite_version_ids: vec![objective.id.clone()],
+                created_by: None,
+            },
+        ));
+        assert_archived_write(create_assessment_version(&mut conn, &assessment_request));
+        assert_archived_write(review_assessment(
+            &mut conn,
+            &ReviewAssessmentReq {
+                assessment_version_id: assessment.id.clone(),
+                review_status: AssessmentReviewStatus::Approved,
+                reviewer_id: Some("reviewer".to_string()),
+                rationale: "Must not be recorded".to_string(),
+            },
+        ));
+        assert_archived_write(transition_assessment_version(
+            &mut conn,
+            &TransitionAssessmentVersionReq {
+                assessment_version_id: assessment.id.clone(),
+                next_status: LearningVersionStatus::Deprecated,
+                actor_id: Some("reviewer".to_string()),
+            },
+        ));
+        assert_archived_write(create_attempt(
+            &mut conn,
+            &CreateAssessmentAttemptReq {
+                learning_project_id: project.id.clone(),
+                learner_id: learner.id.clone(),
+                assessment_version_id: assessment.id.clone(),
+            },
+        ));
+        assert_archived_write(save_attempt_response(
+            &conn,
+            &SaveAttemptResponseReq {
+                attempt_id: attempt.id.clone(),
+                assessment_question_id: assessment.questions[0].id.clone(),
+                response: serde_json::json!("Must not replace the original"),
+            },
+        ));
+        assert_archived_write(submit_attempt(&mut conn, &attempt.id));
+
+        assert_eq!(
+            archived_write_record_counts(&conn).expect("count records after rejected writes"),
+            before
+        );
+        assert_eq!(
+            query_assessment_version(&conn, &assessment.id)
+                .expect("archived records remain readable")
+                .status,
+            LearningVersionStatus::Published
+        );
+        assert_eq!(
+            query_attempt(&conn, &attempt.id)
+                .expect("archived attempts remain readable")
+                .status,
+            "in_progress"
+        );
+        let response_json: String = conn
+            .query_row(
+                "SELECT response_json FROM attempt_responses WHERE attempt_id = ?1",
+                [&attempt.id],
+                |row| row.get(0),
+            )
+            .expect("read unchanged attempt response");
+        assert_eq!(response_json, "\"Original response\"");
+        let archived_workspace = workspace(&conn).expect("archived project remains readable");
+        assert!(archived_workspace
+            .projects
+            .iter()
+            .any(|item| item.id == project.id));
     }
 }

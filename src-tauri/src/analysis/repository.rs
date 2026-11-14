@@ -3898,6 +3898,14 @@ mod tests {
                 ))
             },
         )?;
+        let append_only_counts_before: (i64, i64, i64) = conn.query_row(
+            "SELECT
+                (SELECT COUNT(*) FROM analysis_run_logs),
+                (SELECT COUNT(*) FROM analysis_run_deviations),
+                (SELECT COUNT(*) FROM analysis_finding_relations)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
 
         assert!(create_method_version(
             &mut conn,
@@ -4066,10 +4074,28 @@ mod tests {
                 ))
             },
         )?;
+        let append_only_counts_after: (i64, i64, i64) = conn.query_row(
+            "SELECT
+                (SELECT COUNT(*) FROM analysis_run_logs),
+                (SELECT COUNT(*) FROM analysis_run_deviations),
+                (SELECT COUNT(*) FROM analysis_finding_relations)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
         assert_eq!(counts_after, counts_before);
-        assert_eq!(query_run(&conn, &queued_run.id)?.lifecycle_status, AnalysisRunStatus::Queued);
-        assert_eq!(query_evidence(&conn, &evidence.id)?.status, EvidenceStatus::Recorded);
-        assert_eq!(query_finding_version(&conn, &finding_a.id)?.status, FindingStatus::Draft);
+        assert_eq!(append_only_counts_after, append_only_counts_before);
+        assert_eq!(
+            query_run(&conn, &queued_run.id)?.lifecycle_status,
+            AnalysisRunStatus::Queued
+        );
+        assert_eq!(
+            query_evidence(&conn, &evidence.id)?.status,
+            EvidenceStatus::Recorded
+        );
+        assert_eq!(
+            query_finding_version(&conn, &finding_a.id)?.status,
+            FindingStatus::Draft
+        );
         assert_eq!(workspace(&conn, &project_id)?.runs.len(), 3);
         Ok(())
     }

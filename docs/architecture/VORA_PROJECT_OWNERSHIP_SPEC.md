@@ -20,6 +20,10 @@ The scientific project boundary is enforced in backend repositories, not only in
 - archived projects must reject ordinary writes, experiment execution, and model change operations
 - mismatched project/entity IDs must return a backend error, not a filtered UI result
 
+This is an operational policy for a trusted single-user local application, not
+authenticated authorization or multi-user membership enforcement. Actor IDs are
+audit metadata and do not establish an authenticated principal.
+
 ## Ownership examples
 
 Project-owned records include:
@@ -45,7 +49,7 @@ Cross-project access is allowed only through an explicit association or transfer
 - source entity
 - source version
 - transfer reason
-- authorization
+- recorded domain approval/rationale (not authenticated principal authorization)
 - timestamp
 - adaptation status
 
