@@ -877,30 +877,19 @@ pub fn list_project_sources(
 pub fn list_source_projects(
     conn: &Connection,
     source_id: &str,
-) -> std::result::Result<Vec<ResearchProjectSourceDto>, ResearchProjectSourceError> {
+) -> std::result::Result<Vec<ResearchSourceProjectSummaryDto>, ResearchProjectSourceError> {
     ensure_source_exists(conn, source_id)?;
     let mut statement = conn.prepare(
-        "SELECT ps.project_id, p.title, p.lifecycle_status,
-                ps.source_id, s.title, s.kind, ps.use_context, ps.notes,
-                ps.created_at_us, ps.updated_at_us
+        "SELECT p.id, p.title
          FROM research_project_sources ps
          JOIN research_projects p ON p.id = ps.project_id
-         JOIN sources s ON s.id = ps.source_id
          WHERE ps.source_id = ?1
          ORDER BY p.title COLLATE NOCASE, p.id",
     )?;
     let rows = statement.query_map([source_id], |row| {
-        Ok(ResearchProjectSourceDto {
+        Ok(ResearchSourceProjectSummaryDto {
             project_id: row.get(0)?,
             project_title: row.get(1)?,
-            project_lifecycle_status: row.get(2)?,
-            source_id: row.get(3)?,
-            source_title: row.get(4)?,
-            source_kind: row.get(5)?,
-            use_context: row.get(6)?,
-            notes: row.get(7)?,
-            created_at_us: row.get(8)?,
-            updated_at_us: row.get(9)?,
         })
     })?;
     rows.collect::<Result<Vec<_>>>()
@@ -4217,6 +4206,82 @@ mod tests {
     }
 
     #[test]
+    fn explicit_question_and_hypothesis_assignment_does_not_create_source_associations() {
+        let mut conn = initialized_connection();
+        let project = active_project(&mut conn, "Explicit assignment destination");
+        add_legacy_question(
+            &conn,
+            "assignment-question",
+            "Unassigned question",
+            "Question content",
+        );
+        add_legacy_hypothesis(&conn, "assignment-hypothesis", "assignment-question", None);
+
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM research_project_sources", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("count Source associations before assignment"),
+            0
+        );
+
+        let question = assign_unassigned_question(
+            &mut conn,
+            "assignment-question",
+            &project.id,
+            "Assign question to the selected project",
+            Some("assignment-actor"),
+            100,
+        )
+        .expect("assign unassigned question");
+        let hypothesis = assign_unassigned_hypothesis(
+            &mut conn,
+            "assignment-hypothesis",
+            &project.id,
+            "Assign hypothesis to the selected project",
+            Some("assignment-actor"),
+            101,
+        )
+        .expect("assign unassigned hypothesis");
+
+        assert_eq!(question.project_id.as_deref(), Some(project.id.as_str()));
+        assert_eq!(question.ownership_state, "project");
+        assert_eq!(hypothesis.project_id.as_deref(), Some(project.id.as_str()));
+        assert_eq!(hypothesis.ownership_state, "project");
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM research_provenance_events
+                 WHERE event_kind = 'assigned_to_project'
+                   AND actor_id = 'assignment-actor'
+                   AND ((target_kind = 'question' AND target_id = 'assignment-question'
+                         AND rationale = ?1)
+                     OR (target_kind = 'hypothesis' AND target_id = 'assignment-hypothesis'
+                         AND rationale = ?2))",
+                params![
+                    format!(
+                        "Assign question to the selected project; destination project: {}",
+                        project.id
+                    ),
+                    format!(
+                        "Assign hypothesis to the selected project; destination project: {}",
+                        project.id
+                    ),
+                ],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count explicit assignment provenance"),
+            2
+        );
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM research_project_sources", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("count Source associations after assignment"),
+            0
+        );
+    }
+
+    #[test]
     fn assignment_preserves_unassigned_question_identity_content_and_history() {
         let mut conn = initialized_connection();
         let project = active_project(&mut conn, "Explicit question assignment");
@@ -5432,11 +5497,24 @@ mod tests {
         let reverse_projects =
             list_source_projects(&conn, "migration-source").expect("reverse lookup projects");
         assert_eq!(
-            reverse_projects
-                .iter()
-                .map(|association| association.project_id.as_str())
-                .collect::<Vec<_>>(),
-            vec![first_project.id.as_str(), second_project.id.as_str()]
+            reverse_projects,
+            vec![
+                ResearchSourceProjectSummaryDto {
+                    project_id: first_project.id.clone(),
+                    project_title: first_project.title.clone(),
+                },
+                ResearchSourceProjectSummaryDto {
+                    project_id: second_project.id.clone(),
+                    project_title: second_project.title.clone(),
+                },
+            ]
+        );
+        assert_eq!(
+            serde_json::to_value(&reverse_projects[0]).expect("serialize reverse lookup DTO"),
+            serde_json::json!({
+                "projectId": first_project.id,
+                "projectTitle": first_project.title,
+            })
         );
         assert_eq!(
             get_project_source(&conn, &first_project.id, "migration-source")
@@ -5739,8 +5817,8 @@ mod tests {
             associated_projects
                 .iter()
                 .find(|association| association.project_id == archived_project.id)
-                .map(|association| association.project_lifecycle_status.as_str()),
-            Some("archived")
+                .map(|association| association.project_title.as_str()),
+            Some("Project to archive")
         );
         assert_eq!(
             get_project_source(&conn, &active_project.id, "migration-source")

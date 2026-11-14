@@ -56,7 +56,7 @@ pub fn research_list_project_sources(
 pub fn research_list_source_projects(
     state: State<AppState>,
     source_id: String,
-) -> Result<Vec<ResearchProjectSourceDto>, ResearchProjectSourceError> {
+) -> Result<Vec<ResearchSourceProjectSummaryDto>, ResearchProjectSourceError> {
     let conn = state
         .db
         .lock()

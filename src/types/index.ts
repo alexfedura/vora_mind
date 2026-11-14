@@ -631,6 +631,11 @@ export interface ResearchProjectSourceDto {
   updatedAtUs: number;
 }
 
+export interface ResearchSourceProjectSummaryDto {
+  projectId: string;
+  projectTitle: string;
+}
+
 export interface AssociateResearchProjectSourceReq {
   projectId: string;
   sourceId: string;

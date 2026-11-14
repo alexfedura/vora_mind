@@ -47,6 +47,7 @@ import type {
   ResearchQuestionDto,
   ResearchQuestionRelation,
   ResearchQuestionStatus,
+  ResearchSourceProjectSummaryDto,
   ResearchWorkspaceDto,
   ReviewGapExceptionReq,
   UpdateResearchProjectSourceContextReq,
@@ -68,7 +69,7 @@ export const researchService = {
   listProjectSources: (projectId: string) =>
     invoke<ResearchProjectSourceDto[]>("research_list_project_sources", { projectId }),
   listSourceProjects: (sourceId: string) =>
-    invoke<ResearchProjectSourceDto[]>("research_list_source_projects", { sourceId }),
+    invoke<ResearchSourceProjectSummaryDto[]>("research_list_source_projects", { sourceId }),
   getProjectSource: (projectId: string, sourceId: string) =>
     invoke<ResearchProjectSourceDto>("research_get_project_source", { projectId, sourceId }),
   updateProjectSourceContext: (request: UpdateResearchProjectSourceContextReq) =>

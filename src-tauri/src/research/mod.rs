@@ -479,6 +479,13 @@ pub struct ResearchProjectSourceDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct ResearchSourceProjectSummaryDto {
+    pub project_id: String,
+    pub project_title: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ResearchDomainDto {
     pub id: String,
     pub name: String,
@@ -1227,7 +1234,7 @@ pub fn list_project_sources(
 pub fn list_source_projects(
     conn: &Connection,
     source_id: &str,
-) -> Result<Vec<ResearchProjectSourceDto>, ResearchProjectSourceError> {
+) -> Result<Vec<ResearchSourceProjectSummaryDto>, ResearchProjectSourceError> {
     repository::list_source_projects(conn, source_id)
 }
 
