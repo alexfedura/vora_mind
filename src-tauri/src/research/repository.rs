@@ -698,6 +698,256 @@ pub fn transition_project(
     query_project(conn, project_id)
 }
 
+const MAX_PROJECT_SOURCE_CONTEXT_CHARS: usize = 4000;
+
+fn validate_project_source_context(
+    use_context: &str,
+    notes: &str,
+) -> std::result::Result<(), ResearchProjectSourceError> {
+    let is_valid = |value: &str| {
+        value.chars().count() <= MAX_PROJECT_SOURCE_CONTEXT_CHARS
+            && value
+                .chars()
+                .all(|character| !character.is_control() || matches!(character, '\n' | '\r' | '\t'))
+    };
+    if is_valid(use_context) && is_valid(notes) {
+        Ok(())
+    } else {
+        Err(ResearchProjectSourceError::InvalidContext)
+    }
+}
+
+fn ensure_source_exists(
+    conn: &Connection,
+    source_id: &str,
+) -> std::result::Result<(), ResearchProjectSourceError> {
+    let exists: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sources WHERE id = ?1)",
+        [source_id],
+        |row| row.get(0),
+    )?;
+    if exists {
+        Ok(())
+    } else {
+        Err(ResearchProjectSourceError::SourceNotFound)
+    }
+}
+
+fn ensure_project_exists(
+    conn: &Connection,
+    project_id: &str,
+) -> std::result::Result<(), ResearchProjectSourceError> {
+    let exists: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM research_projects WHERE id = ?1)",
+        [project_id],
+        |row| row.get(0),
+    )?;
+    if exists {
+        Ok(())
+    } else {
+        Err(ResearchProjectSourceError::ProjectNotFound)
+    }
+}
+
+fn ensure_project_active(
+    conn: &Connection,
+    project_id: &str,
+) -> std::result::Result<(), ResearchProjectSourceError> {
+    let status: Option<String> = conn
+        .query_row(
+            "SELECT lifecycle_status FROM research_projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    match status.as_deref() {
+        None => Err(ResearchProjectSourceError::ProjectNotFound),
+        Some("active") => Ok(()),
+        Some("archived") => Err(ResearchProjectSourceError::ProjectArchived),
+        Some(_) => Err(ResearchProjectSourceError::ProjectNotActive),
+    }
+}
+
+fn query_project_source(
+    conn: &Connection,
+    project_id: &str,
+    source_id: &str,
+) -> std::result::Result<Option<ResearchProjectSourceDto>, ResearchProjectSourceError> {
+    Ok(conn
+        .query_row(
+            "SELECT ps.project_id, p.title, p.lifecycle_status,
+                    ps.source_id, s.title, s.kind, ps.use_context, ps.notes,
+                    ps.created_at_us, ps.updated_at_us
+             FROM research_project_sources ps
+             JOIN research_projects p ON p.id = ps.project_id
+             JOIN sources s ON s.id = ps.source_id
+             WHERE ps.project_id = ?1 AND ps.source_id = ?2",
+            params![project_id, source_id],
+            |row| {
+                Ok(ResearchProjectSourceDto {
+                    project_id: row.get(0)?,
+                    project_title: row.get(1)?,
+                    project_lifecycle_status: row.get(2)?,
+                    source_id: row.get(3)?,
+                    source_title: row.get(4)?,
+                    source_kind: row.get(5)?,
+                    use_context: row.get(6)?,
+                    notes: row.get(7)?,
+                    created_at_us: row.get(8)?,
+                    updated_at_us: row.get(9)?,
+                })
+            },
+        )
+        .optional()?)
+}
+
+pub fn associate_project_source(
+    conn: &mut Connection,
+    request: &AssociateResearchProjectSourceReq,
+    now: i64,
+) -> std::result::Result<ResearchProjectSourceDto, ResearchProjectSourceError> {
+    validate_project_source_context(&request.use_context, &request.notes)?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    ensure_source_exists(&tx, &request.source_id)?;
+    ensure_project_active(&tx, &request.project_id)?;
+
+    let already_associated: bool = tx.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM research_project_sources
+            WHERE project_id = ?1 AND source_id = ?2
+         )",
+        params![request.project_id, request.source_id],
+        |row| row.get(0),
+    )?;
+    if already_associated {
+        return Err(ResearchProjectSourceError::DuplicateAssociation);
+    }
+
+    tx.execute(
+        "INSERT INTO research_project_sources
+            (project_id, source_id, use_context, notes, created_at_us, updated_at_us)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+        params![
+            request.project_id,
+            request.source_id,
+            request.use_context,
+            request.notes,
+            now
+        ],
+    )?;
+    let association = query_project_source(&tx, &request.project_id, &request.source_id)?
+        .ok_or(ResearchProjectSourceError::AssociationNotFound)?;
+    tx.commit()?;
+    Ok(association)
+}
+
+pub fn list_project_sources(
+    conn: &Connection,
+    project_id: &str,
+) -> std::result::Result<Vec<ResearchProjectSourceDto>, ResearchProjectSourceError> {
+    ensure_project_exists(conn, project_id)?;
+    let mut statement = conn.prepare(
+        "SELECT ps.project_id, p.title, p.lifecycle_status,
+                ps.source_id, s.title, s.kind, ps.use_context, ps.notes,
+                ps.created_at_us, ps.updated_at_us
+         FROM research_project_sources ps
+         JOIN research_projects p ON p.id = ps.project_id
+         JOIN sources s ON s.id = ps.source_id
+         WHERE ps.project_id = ?1
+         ORDER BY s.title COLLATE NOCASE, s.id",
+    )?;
+    let rows = statement.query_map([project_id], |row| {
+        Ok(ResearchProjectSourceDto {
+            project_id: row.get(0)?,
+            project_title: row.get(1)?,
+            project_lifecycle_status: row.get(2)?,
+            source_id: row.get(3)?,
+            source_title: row.get(4)?,
+            source_kind: row.get(5)?,
+            use_context: row.get(6)?,
+            notes: row.get(7)?,
+            created_at_us: row.get(8)?,
+            updated_at_us: row.get(9)?,
+        })
+    })?;
+    rows.collect::<Result<Vec<_>>>()
+        .map_err(ResearchProjectSourceError::from)
+}
+
+pub fn list_source_projects(
+    conn: &Connection,
+    source_id: &str,
+) -> std::result::Result<Vec<ResearchProjectSourceDto>, ResearchProjectSourceError> {
+    ensure_source_exists(conn, source_id)?;
+    let mut statement = conn.prepare(
+        "SELECT ps.project_id, p.title, p.lifecycle_status,
+                ps.source_id, s.title, s.kind, ps.use_context, ps.notes,
+                ps.created_at_us, ps.updated_at_us
+         FROM research_project_sources ps
+         JOIN research_projects p ON p.id = ps.project_id
+         JOIN sources s ON s.id = ps.source_id
+         WHERE ps.source_id = ?1
+         ORDER BY p.title COLLATE NOCASE, p.id",
+    )?;
+    let rows = statement.query_map([source_id], |row| {
+        Ok(ResearchProjectSourceDto {
+            project_id: row.get(0)?,
+            project_title: row.get(1)?,
+            project_lifecycle_status: row.get(2)?,
+            source_id: row.get(3)?,
+            source_title: row.get(4)?,
+            source_kind: row.get(5)?,
+            use_context: row.get(6)?,
+            notes: row.get(7)?,
+            created_at_us: row.get(8)?,
+            updated_at_us: row.get(9)?,
+        })
+    })?;
+    rows.collect::<Result<Vec<_>>>()
+        .map_err(ResearchProjectSourceError::from)
+}
+
+pub fn get_project_source(
+    conn: &Connection,
+    project_id: &str,
+    source_id: &str,
+) -> std::result::Result<ResearchProjectSourceDto, ResearchProjectSourceError> {
+    ensure_source_exists(conn, source_id)?;
+    ensure_project_exists(conn, project_id)?;
+    query_project_source(conn, project_id, source_id)?
+        .ok_or(ResearchProjectSourceError::AssociationNotFound)
+}
+
+pub fn update_project_source_context(
+    conn: &mut Connection,
+    request: &UpdateResearchProjectSourceContextReq,
+    now: i64,
+) -> std::result::Result<ResearchProjectSourceDto, ResearchProjectSourceError> {
+    validate_project_source_context(&request.use_context, &request.notes)?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    ensure_source_exists(&tx, &request.source_id)?;
+    ensure_project_active(&tx, &request.project_id)?;
+    let updated = tx.execute(
+        "UPDATE research_project_sources
+         SET use_context = ?1, notes = ?2, updated_at_us = ?3
+         WHERE project_id = ?4 AND source_id = ?5",
+        params![
+            request.use_context,
+            request.notes,
+            now,
+            request.project_id,
+            request.source_id
+        ],
+    )?;
+    if updated != 1 {
+        return Err(ResearchProjectSourceError::AssociationNotFound);
+    }
+    let association = query_project_source(&tx, &request.project_id, &request.source_id)?
+        .ok_or(ResearchProjectSourceError::AssociationNotFound)?;
+    tx.commit()?;
+    Ok(association)
+}
+
 pub fn create_domain(
     conn: &Connection,
     req: &CreateResearchDomainReq,
@@ -3499,6 +3749,7 @@ fn query_ids(conn: &Connection, sql: &str) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::types::Value;
 
     fn initialized_connection() -> Connection {
         let conn = Connection::open_in_memory().expect("open in-memory database");
@@ -3532,6 +3783,162 @@ mod tests {
             now_ts_us().expect("timestamp"),
         )
         .expect("activate project")
+    }
+
+    fn project_source_request(
+        project_id: &str,
+        source_id: &str,
+        use_context: &str,
+        notes: &str,
+    ) -> AssociateResearchProjectSourceReq {
+        AssociateResearchProjectSourceReq {
+            project_id: project_id.into(),
+            source_id: source_id.into(),
+            use_context: use_context.into(),
+            notes: notes.into(),
+        }
+    }
+
+    fn project_source_lineage_snapshot(conn: &Connection) -> Vec<(String, Vec<Vec<Value>>)> {
+        const TABLES: &[&str] = &[
+            "sources",
+            "source_versions",
+            "segments",
+            "extracts",
+            "links",
+            "source_revisions",
+            "source_version_segments",
+            "knowledge_extractions",
+            "extraction_reviews",
+            "source_claims",
+            "acquisition_provenance_events",
+            "literature_reviews",
+            "literature_review_sources",
+            "prior_knowledge_sources",
+            "hypothesis_source_claim_evidence",
+            "analysis_evidence",
+            "research_dataset_version_references",
+            "knowledge_transfer_origins",
+            "transfer_eligibilities",
+            "transfer_eligibility_projects",
+            "transfer_restrictions",
+            "knowledge_transfers",
+            "transfer_attributions",
+            "transfer_contexts",
+            "knowledge_transfer_events",
+            "transfer_adaptations",
+        ];
+        TABLES
+            .iter()
+            .map(|table| {
+                let mut statement = conn
+                    .prepare(&format!("SELECT * FROM {table} ORDER BY rowid"))
+                    .expect("prepare lineage snapshot");
+                let column_count = statement.column_count();
+                let rows = statement
+                    .query_map([], |row| {
+                        (0..column_count)
+                            .map(|index| row.get::<_, Value>(index))
+                            .collect::<Result<Vec<_>>>()
+                    })
+                    .expect("query lineage snapshot")
+                    .collect::<Result<Vec<_>>>()
+                    .expect("read lineage snapshot");
+                ((*table).to_string(), rows)
+            })
+            .collect()
+    }
+
+    fn insert_project_source_lineage(conn: &Connection, project_id: &str) {
+        insert_migration_source(conn);
+        conn.execute(
+            "INSERT INTO segments (id, source_id, label, created_at, updated_at)
+             VALUES ('association-legacy-segment', 'migration-source', 'Page 1', 1, 1)",
+            [],
+        )
+        .expect("insert legacy source segment");
+        conn.execute(
+            "INSERT INTO extracts
+                (id, segment_id, transform_kind, content, created_at, updated_at)
+             VALUES ('association-legacy-extract', 'association-legacy-segment',
+                     'quoted', 'Quoted text', 1, 1)",
+            [],
+        )
+        .expect("insert legacy source extract");
+        conn.execute(
+            "INSERT INTO source_version_segments
+                (id, source_id, source_version_id, legacy_segment_id, label,
+                 location_kind, page_start, created_at_us)
+             VALUES ('association-version-segment', 'migration-source',
+                     'migration-source-version', 'association-legacy-segment',
+                     'Page 1', 'page', 1, 1)",
+            [],
+        )
+        .expect("insert versioned source segment");
+        conn.execute(
+            "INSERT INTO knowledge_extractions
+                (id, source_id, source_version_id, source_segment_id, kind,
+                 content, created_by, created_at_us)
+             VALUES ('association-claim-extraction', 'migration-source',
+                     'migration-source-version', 'association-version-segment',
+                     'source_claim', 'Claim text', 'test', 1)",
+            [],
+        )
+        .expect("insert source claim extraction");
+        conn.execute(
+            "INSERT INTO extraction_reviews
+                (id, extraction_id, review_status, reviewer_id, reviewed_at_us)
+             VALUES ('association-extraction-review', 'association-claim-extraction',
+                     'accepted', 'test', 2)",
+            [],
+        )
+        .expect("accept source claim extraction");
+        crate::source::acquisition::repository::create_source_claim(
+            conn,
+            "association-source-claim",
+            "association-claim-extraction",
+            "Source claim",
+            Some("test"),
+            Some("scope"),
+            3,
+        )
+        .expect("create source claim");
+        conn.execute(
+            "INSERT INTO literature_reviews
+                (id, project_id, title, search_scope, lifecycle_status, created_at_us)
+             VALUES ('association-citation-review', ?1, 'Citation review', 'scope',
+                     'draft', 4)",
+            [project_id],
+        )
+        .expect("insert literature review");
+        conn.execute(
+            "INSERT INTO literature_review_sources
+                (id, literature_review_id, source_id, source_version_id,
+                 source_claim_id, citation_note)
+             VALUES ('association-citation', 'association-citation-review',
+                     'migration-source', 'migration-source-version',
+                     'association-source-claim', 'Pinned to version')",
+            [],
+        )
+        .expect("insert source citation");
+        conn.execute(
+            "INSERT INTO research_dataset_version_references
+                (id, project_id, title, version_label, source_version_id, created_at_us)
+             VALUES ('association-dataset-reference', ?1, 'Dataset reference', 'v1',
+                     'migration-source-version', 5)",
+            [project_id],
+        )
+        .expect("insert dataset reference");
+        conn.execute(
+            "INSERT INTO analysis_evidence
+                (id, project_id, target_source_claim_id, artifact_source_claim_id,
+                 polarity, scope, quality_rationale, limitations, provenance_json, created_at_us)
+             VALUES ('association-evidence', ?1, 'association-source-claim',
+                     'association-source-claim', 'supports', 'scope',
+                     'quality rationale', 'limitations', '{}', 6)",
+            [project_id],
+        )
+        .expect("insert evidence referencing source claim");
     }
 
     fn version_one_fixture() -> Connection {
@@ -4378,6 +4785,7 @@ mod tests {
     fn legacy_synchronization_and_workspace_reads_do_not_assign_records() {
         let mut conn = initialized_connection();
         active_project(&mut conn, "Available but unselected project");
+        insert_migration_source(&conn);
         add_legacy_question(&conn, "unassigned-question", "Question", "Content");
         add_legacy_hypothesis(&conn, "unassigned-hypothesis", "missing-question", None);
 
@@ -4397,6 +4805,13 @@ mod tests {
         assert_eq!(question.ownership_state, "unassigned");
         assert_eq!(hypothesis.project_id, None);
         assert_eq!(hypothesis.ownership_state, "unassigned");
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM research_project_sources", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("count explicit Source associations"),
+            0
+        );
         assert_eq!(
             conn.query_row(
                 "SELECT count(*) FROM research_provenance_events
@@ -4965,6 +5380,399 @@ mod tests {
             )
             .expect("read v2 migration checksum"),
             schema_checksum(RESEARCH_SCHEMA_V2_SQL)
+        );
+    }
+
+    #[test]
+    fn project_source_associations_are_shared_explicit_and_context_isolated() {
+        let mut conn = initialized_connection();
+        let first_project = active_project(&mut conn, "Association project one");
+        let second_project = active_project(&mut conn, "Association project two");
+        insert_project_source_lineage(&conn, &first_project.id);
+        assert_eq!(
+            list_project_sources(&conn, &first_project.id)
+                .expect("list before association")
+                .len(),
+            0
+        );
+        let lineage_before = project_source_lineage_snapshot(&conn);
+
+        let first = associate_project_source(
+            &mut conn,
+            &project_source_request(
+                &first_project.id,
+                "migration-source",
+                "Compare against project one questions.",
+                "Project one note.",
+            ),
+            10,
+        )
+        .expect("associate shared Source with first project");
+        let second = associate_project_source(
+            &mut conn,
+            &project_source_request(
+                &second_project.id,
+                "migration-source",
+                "Use as background for project two.",
+                "Project two note.",
+            ),
+            11,
+        )
+        .expect("associate shared Source with second project");
+
+        assert_eq!(first.source_id, second.source_id);
+        assert_eq!(first.use_context, "Compare against project one questions.");
+        assert_eq!(second.use_context, "Use as background for project two.");
+        assert_eq!(first.notes, "Project one note.");
+        assert_eq!(second.notes, "Project two note.");
+        assert_eq!(
+            list_project_sources(&conn, &first_project.id).expect("list first project sources"),
+            vec![first.clone()]
+        );
+        let reverse_projects =
+            list_source_projects(&conn, "migration-source").expect("reverse lookup projects");
+        assert_eq!(
+            reverse_projects
+                .iter()
+                .map(|association| association.project_id.as_str())
+                .collect::<Vec<_>>(),
+            vec![first_project.id.as_str(), second_project.id.as_str()]
+        );
+        assert_eq!(
+            get_project_source(&conn, &first_project.id, "migration-source")
+                .expect("read specific association"),
+            first
+        );
+
+        let duplicate = associate_project_source(
+            &mut conn,
+            &project_source_request(
+                &first_project.id,
+                "migration-source",
+                "This duplicate must not replace context.",
+                "This duplicate must not replace notes.",
+            ),
+            12,
+        )
+        .expect_err("duplicate association must be rejected");
+        assert_eq!(duplicate, ResearchProjectSourceError::DuplicateAssociation);
+        let unchanged_after_duplicate =
+            get_project_source(&conn, &first_project.id, "migration-source")
+                .expect("read association after duplicate request");
+        assert_eq!(
+            unchanged_after_duplicate.use_context,
+            "Compare against project one questions."
+        );
+        assert_eq!(unchanged_after_duplicate.notes, "Project one note.");
+        let updated = update_project_source_context(
+            &mut conn,
+            &UpdateResearchProjectSourceContextReq {
+                project_id: first_project.id.clone(),
+                source_id: "migration-source".into(),
+                use_context: "Updated project one context.".into(),
+                notes: "Updated project one note.".into(),
+            },
+            13,
+        )
+        .expect("update project-specific context");
+        assert_eq!(updated.created_at_us, 10);
+        assert_eq!(updated.updated_at_us, 13);
+        assert_eq!(updated.use_context, "Updated project one context.");
+        assert_eq!(updated.notes, "Updated project one note.");
+        assert_eq!(
+            update_project_source_context(
+                &mut conn,
+                &UpdateResearchProjectSourceContextReq {
+                    project_id: first_project.id.clone(),
+                    source_id: "migration-source".into(),
+                    use_context: "invalid\u{0000}context".into(),
+                    notes: "must not be written".into(),
+                },
+                14,
+            )
+            .expect_err("invalid context update must be rejected"),
+            ResearchProjectSourceError::InvalidContext
+        );
+        assert_eq!(
+            get_project_source(&conn, &first_project.id, "migration-source")
+                .expect("read unchanged association after rejected update")
+                .use_context,
+            "Updated project one context."
+        );
+        let second_after_update = get_project_source(&conn, &second_project.id, "migration-source")
+            .expect("read independent second project context");
+        assert_eq!(
+            second_after_update.use_context,
+            "Use as background for project two."
+        );
+        assert_eq!(second_after_update.notes, "Project two note.");
+
+        initialize_schema(&conn).expect("repeat Research schema initialization");
+        assert_eq!(
+            list_source_projects(&conn, "migration-source")
+                .expect("list associations after repeated initialization")
+                .len(),
+            2
+        );
+        assert_eq!(project_source_lineage_snapshot(&conn), lineage_before);
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM research_project_sources", [], |row| {
+                row.get::<_, i64>(0)
+            },)
+                .expect("count scoped associations"),
+            2
+        );
+        assert_eq!(
+            serde_json::to_value(ResearchProjectSourceError::DuplicateAssociation)
+                .expect("serialize structured association error"),
+            serde_json::json!({"code": "duplicate_association"})
+        );
+    }
+
+    #[test]
+    fn project_source_association_rejects_missing_inactive_and_invalid_inputs() {
+        let mut conn = initialized_connection();
+        let source_project = active_project(&mut conn, "Active association destination");
+        let proposed = project(&mut conn, "Proposed destination");
+        insert_migration_source(&conn);
+
+        assert_eq!(
+            associate_project_source(
+                &mut conn,
+                &project_source_request(&source_project.id, "missing-source", "", ""),
+                1,
+            )
+            .expect_err("missing Source must be rejected"),
+            ResearchProjectSourceError::SourceNotFound
+        );
+        assert_eq!(
+            associate_project_source(
+                &mut conn,
+                &project_source_request("missing-project", "migration-source", "", ""),
+                1,
+            )
+            .expect_err("missing project must be rejected"),
+            ResearchProjectSourceError::ProjectNotFound
+        );
+        assert_eq!(
+            list_project_sources(&conn, "missing-project")
+                .expect_err("missing project list must be rejected"),
+            ResearchProjectSourceError::ProjectNotFound
+        );
+        assert_eq!(
+            list_source_projects(&conn, "missing-source")
+                .expect_err("missing Source reverse lookup must be rejected"),
+            ResearchProjectSourceError::SourceNotFound
+        );
+        assert_eq!(
+            get_project_source(&conn, "missing-project", "migration-source")
+                .expect_err("missing project association lookup must be rejected"),
+            ResearchProjectSourceError::ProjectNotFound
+        );
+        assert_eq!(
+            get_project_source(&conn, &source_project.id, "migration-source")
+                .expect_err("missing association lookup must be rejected"),
+            ResearchProjectSourceError::AssociationNotFound
+        );
+        assert_eq!(
+            update_project_source_context(
+                &mut conn,
+                &UpdateResearchProjectSourceContextReq {
+                    project_id: source_project.id.clone(),
+                    source_id: "migration-source".into(),
+                    use_context: "No association to update.".into(),
+                    notes: String::new(),
+                },
+                1,
+            )
+            .expect_err("missing association update must be rejected"),
+            ResearchProjectSourceError::AssociationNotFound
+        );
+
+        let paused = active_project(&mut conn, "Paused destination");
+        transition_project(&conn, &paused.id, ResearchProjectStatus::Paused, None, 2)
+            .expect("pause destination");
+        let completed = active_project(&mut conn, "Completed destination");
+        transition_project(
+            &conn,
+            &completed.id,
+            ResearchProjectStatus::Completed,
+            None,
+            3,
+        )
+        .expect("complete destination");
+        let archived = active_project(&mut conn, "Archived destination");
+        transition_project(
+            &conn,
+            &archived.id,
+            ResearchProjectStatus::Archived,
+            None,
+            4,
+        )
+        .expect("archive destination");
+        for (project_id, expected_error) in [
+            (&proposed.id, ResearchProjectSourceError::ProjectNotActive),
+            (&paused.id, ResearchProjectSourceError::ProjectNotActive),
+            (&completed.id, ResearchProjectSourceError::ProjectNotActive),
+            (&archived.id, ResearchProjectSourceError::ProjectArchived),
+        ] {
+            assert_eq!(
+                associate_project_source(
+                    &mut conn,
+                    &project_source_request(project_id, "migration-source", "", ""),
+                    5,
+                )
+                .expect_err("non-active destination must be rejected"),
+                expected_error
+            );
+        }
+
+        assert_eq!(
+            associate_project_source(
+                &mut conn,
+                &project_source_request(
+                    &source_project.id,
+                    "migration-source",
+                    &"x".repeat(MAX_PROJECT_SOURCE_CONTEXT_CHARS + 1),
+                    "",
+                ),
+                6,
+            )
+            .expect_err("overlong context must be rejected"),
+            ResearchProjectSourceError::InvalidContext
+        );
+        assert_eq!(
+            associate_project_source(
+                &mut conn,
+                &project_source_request(
+                    &source_project.id,
+                    "migration-source",
+                    "bad\u{0000}text",
+                    ""
+                ),
+                7,
+            )
+            .expect_err("unsupported control characters must be rejected"),
+            ResearchProjectSourceError::InvalidContext
+        );
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM research_project_sources", [], |row| {
+                row.get::<_, i64>(0)
+            },)
+                .expect("count associations after rejected requests"),
+            0
+        );
+    }
+
+    #[test]
+    fn archiving_project_preserves_shared_source_and_other_associations() {
+        let mut conn = initialized_connection();
+        let archived_project = active_project(&mut conn, "Project to archive");
+        let active_project = active_project(&mut conn, "Project to retain");
+        insert_migration_source(&conn);
+        associate_project_source(
+            &mut conn,
+            &project_source_request(
+                &archived_project.id,
+                "migration-source",
+                "Archived project context.",
+                "",
+            ),
+            1,
+        )
+        .expect("associate Source with project to archive");
+        associate_project_source(
+            &mut conn,
+            &project_source_request(
+                &active_project.id,
+                "migration-source",
+                "Active project context.",
+                "",
+            ),
+            2,
+        )
+        .expect("associate Source with active project");
+        let source_before: (String, String, String, i64, i64) = conn
+            .query_row(
+                "SELECT id, kind, title, created_at, updated_at FROM sources
+                 WHERE id = 'migration-source'",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .expect("read shared Source before archive");
+
+        transition_project(
+            &conn,
+            &archived_project.id,
+            ResearchProjectStatus::Archived,
+            None,
+            3,
+        )
+        .expect("archive one project");
+        assert_eq!(
+            update_project_source_context(
+                &mut conn,
+                &UpdateResearchProjectSourceContextReq {
+                    project_id: archived_project.id.clone(),
+                    source_id: "migration-source".into(),
+                    use_context: "Must not edit archived context.".into(),
+                    notes: String::new(),
+                },
+                4,
+            )
+            .expect_err("archived project context must remain read-only"),
+            ResearchProjectSourceError::ProjectArchived
+        );
+
+        let associated_projects =
+            list_source_projects(&conn, "migration-source").expect("read retained associations");
+        assert_eq!(associated_projects.len(), 2);
+        assert_eq!(
+            associated_projects
+                .iter()
+                .find(|association| association.project_id == archived_project.id)
+                .map(|association| association.project_lifecycle_status.as_str()),
+            Some("archived")
+        );
+        assert_eq!(
+            get_project_source(&conn, &active_project.id, "migration-source")
+                .expect("read other project's association")
+                .use_context,
+            "Active project context."
+        );
+        let source_after: (String, String, String, i64, i64) = conn
+            .query_row(
+                "SELECT id, kind, title, created_at, updated_at FROM sources
+                 WHERE id = 'migration-source'",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .expect("read shared Source after archive");
+        assert_eq!(source_after, source_before);
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM source_versions WHERE source_id = 'migration-source'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count unchanged SourceVersions"),
+            1
         );
     }
 

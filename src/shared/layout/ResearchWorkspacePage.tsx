@@ -3,6 +3,7 @@ import { AlertCircle, BookOpenCheck, Plus, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useResearchWorkspace } from "@/hooks/useResearchWorkspace";
 import { researchService } from "@/mind/services/researchService";
+import { srcListSources } from "@/source/services/sourceService";
 import { ExperimentWorkspacePanel } from "@/shared/layout/ExperimentWorkspacePanel";
 import { AnalysisWorkspacePanel } from "@/shared/layout/AnalysisWorkspacePanel";
 import { ModelWorkspacePanel } from "@/shared/layout/ModelWorkspacePanel";
@@ -14,7 +15,10 @@ import type {
   ObservationValueState,
   ResearchPathwayKey,
   ResearchProjectDto,
+  ResearchProjectSourceDto,
+  ResearchProjectSourceError,
   ResearchQuestionDto,
+  SourceSummary,
   SourceVersionReferenceDto,
 } from "@/types";
 
@@ -35,6 +39,47 @@ function isoDate(timestampUs: number): string {
 
 function latest<T>(items: T[]): T | undefined {
   return items[items.length - 1];
+}
+
+function isResearchProjectSourceError(value: unknown): value is ResearchProjectSourceError {
+  if (typeof value !== "object" || value === null || !("code" in value)) return false;
+  switch (value.code) {
+    case "source_not_found":
+    case "project_not_found":
+    case "project_archived":
+    case "project_not_active":
+    case "duplicate_association":
+    case "association_not_found":
+    case "invalid_context":
+    case "storage_error":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function projectSourceErrorMessage(error: unknown): string {
+  if (isResearchProjectSourceError(error)) {
+    switch (error.code) {
+      case "source_not_found":
+        return "The selected workspace Source no longer exists.";
+      case "project_not_found":
+        return "The selected Research Project no longer exists.";
+      case "project_archived":
+        return "Archived Research Projects cannot be associated with Sources.";
+      case "project_not_active":
+        return "Sources can only be associated with an active Research Project.";
+      case "duplicate_association":
+        return "This Source is already associated with this project. Its existing context was not changed.";
+      case "association_not_found":
+        return "This project–Source association could not be found.";
+      case "invalid_context":
+        return "Context and notes must be at most 4,000 characters and cannot contain unsupported control characters.";
+      case "storage_error":
+        return error.message ?? "The association could not be saved.";
+    }
+  }
+  return error instanceof Error ? error.message : "The Source association could not be completed.";
 }
 
 function observationValueState(value: string): ObservationValueState {
@@ -110,8 +155,19 @@ export const ResearchWorkspacePage: React.FC = () => {
   const [selectedPlanVersionId, setSelectedPlanVersionId] = useState("");
   const [selectedDatasetVersionId, setSelectedDatasetVersionId] = useState("");
   const [selectedHypothesisId, setSelectedHypothesisId] = useState("");
+  const [workspaceSources, setWorkspaceSources] = useState<SourceSummary[]>([]);
+  const [sourceCatalogError, setSourceCatalogError] = useState<string | null>(null);
+  const [projectSources, setProjectSources] = useState<ResearchProjectSourceDto[]>([]);
+  const [projectSourcesLoading, setProjectSourcesLoading] = useState(false);
+  const [projectSourcesRevision, setProjectSourcesRevision] = useState(0);
+  const [sourceSearch, setSourceSearch] = useState("");
+  const [projectSourceError, setProjectSourceError] = useState<string | null>(null);
+  const [editingProjectSourceId, setEditingProjectSourceId] = useState<string | null>(null);
+  const [editingUseContext, setEditingUseContext] = useState("");
+  const [editingNotes, setEditingNotes] = useState("");
 
   const sourceVersions = workspace?.sourceVersions ?? [];
+  const selectedProject = workspace?.projects.find((project) => project.id === projectId);
   const activeProjects = (workspace?.projects ?? []).filter(
     (project) => project.lifecycleStatus === "active",
   );
@@ -147,6 +203,50 @@ export const ResearchWorkspacePage: React.FC = () => {
       setQuestionProjectId(workspace.projects[0]?.id ?? "");
     }
   }, [workspace, projectId, questionProjectId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void srcListSources()
+      .then((sources) => {
+        if (!cancelled) setWorkspaceSources(sources);
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) {
+          setSourceCatalogError(cause instanceof Error ? cause.message : String(cause));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setProjectSourceError(null);
+    setEditingProjectSourceId(null);
+    if (!projectId) {
+      setProjectSources([]);
+      setProjectSourcesLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setProjectSourcesLoading(true);
+    void researchService.listProjectSources(projectId)
+      .then((sources) => {
+        if (!cancelled) setProjectSources(sources);
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) setProjectSourceError(projectSourceErrorMessage(cause));
+      })
+      .finally(() => {
+        if (!cancelled) setProjectSourcesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, projectSourcesRevision]);
 
   const act = async (action: () => Promise<unknown>): Promise<void> => {
     try {
@@ -208,6 +308,56 @@ export const ResearchWorkspacePage: React.FC = () => {
       null,
     ));
     target.reset();
+  };
+
+  const associateProjectSource = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    if (!selectedProject || selectedProject.lifecycleStatus !== "active") return;
+    const target = event.currentTarget;
+    const form = new FormData(target);
+    setProjectSourceError(null);
+    try {
+      const association = await researchService.associateProjectSource({
+        projectId: selectedProject.id,
+        sourceId: String(form.get("sourceId") ?? ""),
+        useContext: String(form.get("useContext") ?? ""),
+        notes: String(form.get("notes") ?? ""),
+      });
+      setProjectSources((current) =>
+        [...current, association].sort((left, right) =>
+          left.sourceTitle.localeCompare(right.sourceTitle)
+        )
+      );
+      target.reset();
+      setSourceSearch("");
+    } catch (cause) {
+      setProjectSourceError(projectSourceErrorMessage(cause));
+    }
+  };
+
+  const updateProjectSourceContext = async (
+    event: React.FormEvent<HTMLFormElement>,
+    sourceId: string,
+  ): Promise<void> => {
+    event.preventDefault();
+    if (!selectedProject || selectedProject.lifecycleStatus !== "active") return;
+    const target = event.currentTarget;
+    const form = new FormData(target);
+    setProjectSourceError(null);
+    try {
+      const association = await researchService.updateProjectSourceContext({
+        projectId: selectedProject.id,
+        sourceId,
+        useContext: String(form.get("useContext") ?? ""),
+        notes: String(form.get("notes") ?? ""),
+      });
+      setProjectSources((current) =>
+        current.map((item) => item.sourceId === sourceId ? association : item)
+      );
+      setEditingProjectSourceId(null);
+    } catch (cause) {
+      setProjectSourceError(projectSourceErrorMessage(cause));
+    }
   };
 
   const createPriorAssessment = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -599,6 +749,15 @@ export const ResearchWorkspacePage: React.FC = () => {
     .flatMap((plan) => plan.versions);
   const sourceOptionLabel = (source: SourceVersionReferenceDto): string =>
     `${source.sourceTitle} — ${source.editionLabel ?? "retrieval"}${source.sourceLocationLabel ? ` / ${source.sourceLocationLabel}` : ""}`;
+  const searchTerm = sourceSearch.trim().toLocaleLowerCase();
+  const availableWorkspaceSources = workspaceSources
+    .filter((source) =>
+      !projectSources.some((association) => association.sourceId === source.id)
+      && `${source.title} ${source.id} ${source.kind} ${source.author ?? ""}`
+        .toLocaleLowerCase()
+        .includes(searchTerm)
+    )
+    .sort((left, right) => left.title.localeCompare(right.title));
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6">
@@ -692,6 +851,161 @@ export const ResearchWorkspacePage: React.FC = () => {
               <p key={item.id} className="text-[11px] text-gray-500">{item.title} v{item.versionNo} · {item.useContext}</p>
             ))}
           </form>
+          {selectedProject && (
+            <section className="space-y-3 border-t border-[#292c34] pt-3" aria-labelledby="project-sources-heading">
+              <div className="flex items-center justify-between gap-2">
+                <h4 id="project-sources-heading" className="text-xs font-semibold text-gray-300">
+                  Project Sources
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setProjectSourcesRevision((revision) => revision + 1)}
+                  disabled={projectSourcesLoading}
+                  className="rounded border border-[#343741] p-1.5 text-gray-300 disabled:opacity-40"
+                  aria-label="Refresh project Sources"
+                >
+                  <RefreshCw size={13} />
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500">
+                Sources remain shared across the workspace. Associating one here records this project&apos;s use only; it does not change Source ownership.
+              </p>
+              {selectedProject.lifecycleStatus !== "active" && (
+                <p className="text-xs text-amber-300">
+                  This project is {selectedProject.lifecycleStatus}. Associations can only be created or edited while a project is active.
+                </p>
+              )}
+              {projectSourceError && (
+                <p role="alert" className="rounded border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">
+                  {projectSourceError}
+                </p>
+              )}
+              {sourceCatalogError && (
+                <p role="alert" className="text-xs text-rose-300">
+                  Workspace Sources could not be loaded: {sourceCatalogError}
+                </p>
+              )}
+              <form onSubmit={(event) => void associateProjectSource(event)} className="space-y-2">
+                <Field label="Search workspace Sources">
+                  <input
+                    className={inputClass}
+                    type="search"
+                    value={sourceSearch}
+                    onChange={(event) => setSourceSearch(event.target.value)}
+                    placeholder="Search title, author, kind, or ID"
+                    disabled={selectedProject.lifecycleStatus !== "active"}
+                  />
+                </Field>
+                <Field label="Existing Source">
+                  <select
+                    className={inputClass}
+                    name="sourceId"
+                    required
+                    disabled={selectedProject.lifecycleStatus !== "active" || projectSourcesLoading || workspaceSources.length === 0}
+                  >
+                    <option value="">
+                      {workspaceSources.length === 0 ? "No workspace Sources available" : "Select a Source"}
+                    </option>
+                    {availableWorkspaceSources.map((source) => (
+                      <option key={source.id} value={source.id}>
+                        {source.title} · {source.kind} · {source.id}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Project-specific use context">
+                  <textarea className={inputClass} name="useContext" rows={2} maxLength={4000} />
+                </Field>
+                <Field label="Project-specific notes">
+                  <textarea className={inputClass} name="notes" rows={2} maxLength={4000} />
+                </Field>
+                <button
+                  className={buttonClass}
+                  disabled={selectedProject.lifecycleStatus !== "active" || projectSourcesLoading || availableWorkspaceSources.length === 0}
+                >
+                  <Plus size={14} /> Associate Source
+                </button>
+              </form>
+              {projectSourcesLoading ? (
+                <p className="text-xs text-gray-500">Loading project Sources...</p>
+              ) : projectSources.length === 0 ? (
+                <p className="text-xs text-gray-500">No Sources are associated with this project yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {projectSources.map((association) => (
+                    <li key={association.sourceId} className="rounded-lg border border-[#292c34] bg-[#101114] p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-white">{association.sourceTitle}</p>
+                          <p className="text-[11px] text-gray-500">
+                            {association.sourceKind} · {association.sourceId} · workspace-shared
+                          </p>
+                        </div>
+                        {editingProjectSourceId !== association.sourceId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingProjectSourceId(association.sourceId);
+                              setEditingUseContext(association.useContext);
+                              setEditingNotes(association.notes);
+                            }}
+                            disabled={selectedProject.lifecycleStatus !== "active"}
+                            className="rounded border border-[#343741] px-2 py-1 text-[11px] text-gray-300 disabled:opacity-40"
+                          >
+                            Edit context
+                          </button>
+                        )}
+                      </div>
+                      {editingProjectSourceId === association.sourceId ? (
+                        <form
+                          onSubmit={(event) => void updateProjectSourceContext(event, association.sourceId)}
+                          className="mt-3 space-y-2"
+                        >
+                          <Field label="Project-specific use context">
+                            <textarea
+                              className={inputClass}
+                              name="useContext"
+                              rows={2}
+                              maxLength={4000}
+                              value={editingUseContext}
+                              onChange={(event) => setEditingUseContext(event.target.value)}
+                            />
+                          </Field>
+                          <Field label="Project-specific notes">
+                            <textarea
+                              className={inputClass}
+                              name="notes"
+                              rows={2}
+                              maxLength={4000}
+                              value={editingNotes}
+                              onChange={(event) => setEditingNotes(event.target.value)}
+                            />
+                          </Field>
+                          <div className="flex gap-2">
+                            <button className={buttonClass} disabled={selectedProject.lifecycleStatus !== "active"}>
+                              Save context
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingProjectSourceId(null)}
+                              className="rounded border border-[#343741] px-3 py-2 text-xs text-gray-300"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <div className="mt-2 space-y-1 text-xs text-gray-400">
+                          <p><span className="text-gray-500">Use:</span> {association.useContext || "No project-specific context."}</p>
+                          <p><span className="text-gray-500">Notes:</span> {association.notes || "No project-specific notes."}</p>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
         </div>
       </section>
 

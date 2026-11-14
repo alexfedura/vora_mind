@@ -4,6 +4,7 @@ import type {
   AddHypothesisEvidenceReq,
   AddHypothesisModelReferenceReq,
   AddLiteratureSourceReq,
+  AssociateResearchProjectSourceReq,
   CreateDatasetVersionReferenceReq,
   CreateIdeaReq,
   CreateLiteratureReviewReq,
@@ -42,11 +43,13 @@ import type {
   ResearchHypothesisDto,
   ResearchHypothesisStatus,
   ResearchProjectDto,
+  ResearchProjectSourceDto,
   ResearchQuestionDto,
   ResearchQuestionRelation,
   ResearchQuestionStatus,
   ResearchWorkspaceDto,
   ReviewGapExceptionReq,
+  UpdateResearchProjectSourceContextReq,
 } from "@/types";
 
 export const researchService = {
@@ -60,6 +63,16 @@ export const researchService = {
   ) => invoke<ResearchProjectDto>("research_transition_project", {
     projectId, nextStatus, actorId,
   }),
+  associateProjectSource: (request: AssociateResearchProjectSourceReq) =>
+    invoke<ResearchProjectSourceDto>("research_associate_project_source", { request }),
+  listProjectSources: (projectId: string) =>
+    invoke<ResearchProjectSourceDto[]>("research_list_project_sources", { projectId }),
+  listSourceProjects: (sourceId: string) =>
+    invoke<ResearchProjectSourceDto[]>("research_list_source_projects", { sourceId }),
+  getProjectSource: (projectId: string, sourceId: string) =>
+    invoke<ResearchProjectSourceDto>("research_get_project_source", { projectId, sourceId }),
+  updateProjectSourceContext: (request: UpdateResearchProjectSourceContextReq) =>
+    invoke<ResearchProjectSourceDto>("research_update_project_source_context", { request }),
   createDomain: (request: CreateResearchDomainReq) =>
     invoke<ResearchDomainDto>("research_create_domain", { request }),
   assignDomain: (projectId: string, domainId: string, rationale: string) =>

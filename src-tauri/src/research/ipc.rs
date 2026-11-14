@@ -29,6 +29,67 @@ pub fn research_transition_project(
 }
 
 #[tauri::command]
+pub fn research_associate_project_source(
+    state: State<AppState>,
+    request: AssociateResearchProjectSourceReq,
+) -> Result<ResearchProjectSourceDto, ResearchProjectSourceError> {
+    let mut conn = state
+        .db
+        .lock()
+        .map_err(|error| ResearchProjectSourceError::StorageError(error.to_string()))?;
+    associate_project_source(&mut conn, request)
+}
+
+#[tauri::command]
+pub fn research_list_project_sources(
+    state: State<AppState>,
+    project_id: String,
+) -> Result<Vec<ResearchProjectSourceDto>, ResearchProjectSourceError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|error| ResearchProjectSourceError::StorageError(error.to_string()))?;
+    list_project_sources(&conn, &project_id)
+}
+
+#[tauri::command]
+pub fn research_list_source_projects(
+    state: State<AppState>,
+    source_id: String,
+) -> Result<Vec<ResearchProjectSourceDto>, ResearchProjectSourceError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|error| ResearchProjectSourceError::StorageError(error.to_string()))?;
+    list_source_projects(&conn, &source_id)
+}
+
+#[tauri::command]
+pub fn research_get_project_source(
+    state: State<AppState>,
+    project_id: String,
+    source_id: String,
+) -> Result<ResearchProjectSourceDto, ResearchProjectSourceError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|error| ResearchProjectSourceError::StorageError(error.to_string()))?;
+    get_project_source(&conn, &project_id, &source_id)
+}
+
+#[tauri::command]
+pub fn research_update_project_source_context(
+    state: State<AppState>,
+    request: UpdateResearchProjectSourceContextReq,
+) -> Result<ResearchProjectSourceDto, ResearchProjectSourceError> {
+    let mut conn = state
+        .db
+        .lock()
+        .map_err(|error| ResearchProjectSourceError::StorageError(error.to_string()))?;
+    update_project_source_context(&mut conn, request)
+}
+
+#[tauri::command]
 pub fn research_create_domain(
     state: State<AppState>,
     request: CreateResearchDomainReq,

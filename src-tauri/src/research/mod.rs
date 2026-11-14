@@ -425,6 +425,58 @@ pub struct ResearchProjectDto {
     pub updated_at_us: i64,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(tag = "code", content = "message", rename_all = "snake_case")]
+pub enum ResearchProjectSourceError {
+    SourceNotFound,
+    ProjectNotFound,
+    ProjectArchived,
+    ProjectNotActive,
+    DuplicateAssociation,
+    AssociationNotFound,
+    InvalidContext,
+    StorageError(String),
+}
+
+impl std::fmt::Display for ResearchProjectSourceError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let message = match self {
+            Self::SourceNotFound => "Source was not found.",
+            Self::ProjectNotFound => "Research project was not found.",
+            Self::ProjectArchived => "Archived research projects cannot be associated with Sources.",
+            Self::ProjectNotActive => "Research project must be active.",
+            Self::DuplicateAssociation => "Source is already associated with this project.",
+            Self::AssociationNotFound => "Source association was not found.",
+            Self::InvalidContext => "Association context and notes must be at most 4000 characters and contain no unsupported control characters.",
+            Self::StorageError(message) => message,
+        };
+        formatter.write_str(message)
+    }
+}
+
+impl std::error::Error for ResearchProjectSourceError {}
+
+impl From<rusqlite::Error> for ResearchProjectSourceError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self::StorageError(error.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResearchProjectSourceDto {
+    pub project_id: String,
+    pub project_title: String,
+    pub project_lifecycle_status: String,
+    pub source_id: String,
+    pub source_title: String,
+    pub source_kind: String,
+    pub use_context: String,
+    pub notes: String,
+    pub created_at_us: i64,
+    pub updated_at_us: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ResearchDomainDto {
@@ -804,6 +856,24 @@ pub struct CreateResearchProjectReq {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct AssociateResearchProjectSourceReq {
+    pub project_id: String,
+    pub source_id: String,
+    pub use_context: String,
+    pub notes: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateResearchProjectSourceContextReq {
+    pub project_id: String,
+    pub source_id: String,
+    pub use_context: String,
+    pub notes: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateResearchDomainReq {
     pub name: String,
     pub description: String,
@@ -1137,6 +1207,44 @@ pub fn transition_project(
 ) -> Result<ResearchProjectDto, String> {
     repository::transition_project(conn, project_id, next_status, actor_id, now_ts_us()?)
         .map_err(|error| error.to_string())
+}
+
+pub fn associate_project_source(
+    conn: &mut Connection,
+    request: AssociateResearchProjectSourceReq,
+) -> Result<ResearchProjectSourceDto, ResearchProjectSourceError> {
+    let now = now_ts_us().map_err(ResearchProjectSourceError::StorageError)?;
+    repository::associate_project_source(conn, &request, now)
+}
+
+pub fn list_project_sources(
+    conn: &Connection,
+    project_id: &str,
+) -> Result<Vec<ResearchProjectSourceDto>, ResearchProjectSourceError> {
+    repository::list_project_sources(conn, project_id)
+}
+
+pub fn list_source_projects(
+    conn: &Connection,
+    source_id: &str,
+) -> Result<Vec<ResearchProjectSourceDto>, ResearchProjectSourceError> {
+    repository::list_source_projects(conn, source_id)
+}
+
+pub fn get_project_source(
+    conn: &Connection,
+    project_id: &str,
+    source_id: &str,
+) -> Result<ResearchProjectSourceDto, ResearchProjectSourceError> {
+    repository::get_project_source(conn, project_id, source_id)
+}
+
+pub fn update_project_source_context(
+    conn: &mut Connection,
+    request: UpdateResearchProjectSourceContextReq,
+) -> Result<ResearchProjectSourceDto, ResearchProjectSourceError> {
+    let now = now_ts_us().map_err(ResearchProjectSourceError::StorageError)?;
+    repository::update_project_source_context(conn, &request, now)
 }
 
 pub fn create_domain(

@@ -290,6 +290,15 @@ export interface SourceVersionDto {
   createdAtUs: number;
 }
 
+export interface SourceSummary {
+  id: string;
+  kind: string;
+  title: string;
+  author: string | null;
+  duration_sec: number | null;
+  status: string;
+}
+
 export interface CreateSourceVersionReq {
   sourceId: string;
   captureKind: SourceCaptureKind;
@@ -607,6 +616,48 @@ export interface ResearchProjectDto {
   createdBy: string | null;
   createdAtUs: number;
   updatedAtUs: number;
+}
+
+export interface ResearchProjectSourceDto {
+  projectId: string;
+  projectTitle: string;
+  projectLifecycleStatus: ResearchProjectStatus;
+  sourceId: string;
+  sourceTitle: string;
+  sourceKind: string;
+  useContext: string;
+  notes: string;
+  createdAtUs: number;
+  updatedAtUs: number;
+}
+
+export interface AssociateResearchProjectSourceReq {
+  projectId: string;
+  sourceId: string;
+  useContext: string;
+  notes: string;
+}
+
+export interface UpdateResearchProjectSourceContextReq {
+  projectId: string;
+  sourceId: string;
+  useContext: string;
+  notes: string;
+}
+
+export type ResearchProjectSourceErrorCode =
+  | "source_not_found"
+  | "project_not_found"
+  | "project_archived"
+  | "project_not_active"
+  | "duplicate_association"
+  | "association_not_found"
+  | "invalid_context"
+  | "storage_error";
+
+export interface ResearchProjectSourceError {
+  code: ResearchProjectSourceErrorCode;
+  message?: string;
 }
 
 export interface ResearchDomainDto {

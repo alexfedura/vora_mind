@@ -28,21 +28,15 @@ import type {
   ReviewFrameworkReq,
   SourceClaimDto,
   SourceLocationDto,
+  SourceSummary,
   SourceVersionDto,
   SourceRevisionDto,
   UpdateFrameworkVersionReq,
 } from "@/types";
 
-// ── Response types ────────────────────────────────────────────────
+export type { SourceSummary } from "@/types";
 
-export interface SourceSummary {
-  id: string;
-  kind: string;
-  title: string;
-  author: string | null;
-  duration_sec: number | null;
-  status: string;
-}
+// ── Response types ────────────────────────────────────────────────
 
 export interface SegmentNode {
   id: string;
