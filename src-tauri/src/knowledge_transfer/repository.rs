@@ -268,6 +268,7 @@ pub fn create_concept_version(
     )?;
 
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    crate::project_policy::ensure_project_writable(&tx, &request.project_id)?;
     let concept_id = request.concept_id.clone().unwrap_or_else(id);
     if let Some(parent_id) = &request.parent_version_id {
         let parent_project: Option<String> = tx
@@ -361,6 +362,7 @@ pub fn create_principle_version(
     )?;
 
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    crate::project_policy::ensure_project_writable(&tx, &request.project_id)?;
     let principle_id = request.principle_id.clone().unwrap_or_else(id);
     if let Some(parent_id) = &request.parent_version_id {
         let parent_project: Option<String> = tx
@@ -471,6 +473,12 @@ pub fn review_knowledge_version(
     if !version_exists {
         bail!("Knowledge version was not found.");
     }
+    let project_id: String = tx.query_row(
+        &format!("SELECT created_in_project_id FROM {table} WHERE id = ?1"),
+        [&request.version_id],
+        |row| row.get(0),
+    )?;
+    crate::project_policy::ensure_project_writable(&tx, &project_id)?;
     let current_status: String = tx.query_row(
         &format!(
             "SELECT {status_column} FROM {event_table}
@@ -507,13 +515,15 @@ pub fn create_origin(
 ) -> Result<KnowledgeTransferOriginDto> {
     required(&request.origin_project_id, "Origin project")?;
     required(&request.rationale, "Origin rationale")?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     ensure_exists(
-        conn,
+        &tx,
         "SELECT EXISTS(SELECT 1 FROM research_projects WHERE id = ?1)",
         &request.origin_project_id,
         "Origin research project was not found.",
     )?;
-    let info = artifact_info(conn, &request.artifact)?;
+    crate::project_policy::ensure_project_writable(&tx, &request.origin_project_id)?;
+    let info = artifact_info(&tx, &request.artifact)?;
     assert_transferable(&request.artifact, &info)?;
     if let Some(owner_project_id) = &info.owner_project_id {
         if owner_project_id != &request.origin_project_id {
@@ -523,37 +533,38 @@ pub fn create_origin(
     let origin_id = id();
     let now = now_us()?;
     match &request.artifact {
-        TransferArtifactRef::FindingVersion { version_id, .. } => conn.execute(
+        TransferArtifactRef::FindingVersion { version_id, .. } => tx.execute(
             "INSERT INTO knowledge_transfer_origins
                 (id, artifact_kind, finding_version_id, origin_project_id, rationale, recorded_by, recorded_at_us)
              VALUES (?1, 'finding_version', ?2, ?3, ?4, ?5, ?6)",
             params![origin_id, version_id, request.origin_project_id, request.rationale.trim(), request.recorded_by, now],
         )?,
-        TransferArtifactRef::ConceptVersion { version_id, .. } => conn.execute(
+        TransferArtifactRef::ConceptVersion { version_id, .. } => tx.execute(
             "INSERT INTO knowledge_transfer_origins
                 (id, artifact_kind, concept_version_id, origin_project_id, rationale, recorded_by, recorded_at_us)
              VALUES (?1, 'concept_version', ?2, ?3, ?4, ?5, ?6)",
             params![origin_id, version_id, request.origin_project_id, request.rationale.trim(), request.recorded_by, now],
         )?,
-        TransferArtifactRef::PrincipleVersion { version_id, .. } => conn.execute(
+        TransferArtifactRef::PrincipleVersion { version_id, .. } => tx.execute(
             "INSERT INTO knowledge_transfer_origins
                 (id, artifact_kind, principle_version_id, origin_project_id, rationale, recorded_by, recorded_at_us)
              VALUES (?1, 'principle_version', ?2, ?3, ?4, ?5, ?6)",
             params![origin_id, version_id, request.origin_project_id, request.rationale.trim(), request.recorded_by, now],
         )?,
-        TransferArtifactRef::FrameworkVersion { version_id, .. } => conn.execute(
+        TransferArtifactRef::FrameworkVersion { version_id, .. } => tx.execute(
             "INSERT INTO knowledge_transfer_origins
                 (id, artifact_kind, framework_version_id, origin_project_id, rationale, recorded_by, recorded_at_us)
              VALUES (?1, 'framework_version', ?2, ?3, ?4, ?5, ?6)",
             params![origin_id, version_id, request.origin_project_id, request.rationale.trim(), request.recorded_by, now],
         )?,
-        TransferArtifactRef::ModelVersion { version_id, .. } => conn.execute(
+        TransferArtifactRef::ModelVersion { version_id, .. } => tx.execute(
             "INSERT INTO knowledge_transfer_origins
                 (id, artifact_kind, model_version_id, origin_project_id, rationale, recorded_by, recorded_at_us)
              VALUES (?1, 'model_version', ?2, ?3, ?4, ?5, ?6)",
             params![origin_id, version_id, request.origin_project_id, request.rationale.trim(), request.recorded_by, now],
         )?,
     };
+    tx.commit()?;
     query_origin(conn, &origin_id)
 }
 
@@ -605,6 +616,9 @@ pub fn create_eligibility(
         _ => {}
     }
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    for project_id in &project_ids {
+        crate::project_policy::ensure_project_writable(&tx, project_id)?;
+    }
     let origin = query_origin(&tx, &request.origin_id)?;
     let artifact = artifact_info(&tx, &origin.artifact)?;
     assert_transferable(&origin.artifact, &artifact)?;
@@ -700,6 +714,7 @@ pub fn adopt_knowledge(
     required(&request.attribution_text, "Attribution text")?;
     required(&request.context, "Transfer context")?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    crate::project_policy::ensure_project_writable(&tx, &request.receiving_project_id)?;
     let eligibility = query_eligibility(&tx, &request.eligibility_id)?;
     if eligibility.state != TransferEligibilityState::Eligible {
         bail!("This transfer eligibility is no longer active.");
@@ -822,6 +837,9 @@ pub fn create_adaptation(
     {
         bail!("Adapted artifacts must be created in the receiving project.");
     }
+    if request.artifact.kind() != TransferArtifactKind::FrameworkVersion {
+        crate::project_policy::ensure_project_writable(&tx, &transfer.receiving_project_id)?;
+    }
     let adaptation_id = id();
     let now = now_us()?;
     match &request.artifact {
@@ -935,6 +953,7 @@ pub fn record_downstream_usage(
     required(&request.use_context, "Downstream-use context")?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let transfer = query_transfer(&tx, &request.transfer_id)?;
+    crate::project_policy::ensure_project_writable(&tx, &transfer.receiving_project_id)?;
     if transfer.state != KnowledgeTransferState::Accepted {
         bail!("Downstream use requires an active accepted transfer.");
     }
@@ -2551,6 +2570,296 @@ mod tests {
                 requested_by: Some("researcher-b".to_string()),
             },
         )
+    }
+
+    #[test]
+    fn archived_project_guards_preserve_workspace_transfer_and_read_semantics() -> Result<()> {
+        let (mut conn, source_version_id, _) = transfer_fixture()?;
+        let concept_id = create_concept_version(
+            &mut conn,
+            &CreateConceptVersionReq {
+                concept_id: None,
+                project_id: "project-a".to_string(),
+                parent_version_id: None,
+                title: "Origin concept".to_string(),
+                definition: "A test concept.".to_string(),
+                rationale: "Initial version.".to_string(),
+                created_by: Some("author-a".to_string()),
+            },
+        )?;
+        let principle_id = create_principle_version(
+            &mut conn,
+            &CreatePrincipleVersionReq {
+                principle_id: None,
+                project_id: "project-a".to_string(),
+                parent_version_id: None,
+                title: "Origin principle".to_string(),
+                statement: "A test principle.".to_string(),
+                rationale: "Initial version.".to_string(),
+                created_by: Some("author-a".to_string()),
+            },
+        )?;
+        let source_origin = create_origin(
+            &mut conn,
+            &CreateTransferOriginReq {
+                artifact: TransferArtifactRef::FindingVersion {
+                    finding_id: "finding-source".to_string(),
+                    version_id: source_version_id.clone(),
+                },
+                origin_project_id: "project-a".to_string(),
+                rationale: "Project A owns the source finding.".to_string(),
+                recorded_by: Some("reviewer-a".to_string()),
+            },
+        )?;
+        let source_eligibility = create_eligibility(
+            &mut conn,
+            &CreateTransferEligibilityReq {
+                origin_id: source_origin.id.clone(),
+                license_identifier: "CC BY 4.0".to_string(),
+                license_uri: None,
+                access_scope: TransferAccessScope::Workspace,
+                permitted_purposes: vec![TransferPurpose::Research],
+                allowed_project_ids: Vec::new(),
+                attribution_text: "Project A finding attribution".to_string(),
+                permission_basis: "Reviewed workspace-wide research permission.".to_string(),
+                permission_granted: true,
+                reviewed_by: "rights-reviewer".to_string(),
+            },
+        )?;
+        let source_transfer = adopt_knowledge(
+            &mut conn,
+            &AdoptKnowledgeReq {
+                eligibility_id: source_eligibility.id.clone(),
+                receiving_project_id: "project-b".to_string(),
+                intended_purpose: TransferPurpose::Research,
+                attribution_text: source_eligibility.attribution_text.clone(),
+                context: "Reuse in active Project B.".to_string(),
+                requested_by: Some("researcher-b".to_string()),
+            },
+        )?;
+        let recipient_version_id = create_accepted_finding(&conn, "project-b", "recipient")?;
+
+        create_published_framework_version(
+            &conn,
+            "framework-source",
+            "framework-source-v1",
+            "Source framework",
+        )?;
+        create_published_framework_version(
+            &conn,
+            "framework-recipient",
+            "framework-recipient-v1",
+            "Recipient framework",
+        )?;
+        let framework_origin = create_origin(
+            &mut conn,
+            &CreateTransferOriginReq {
+                artifact: TransferArtifactRef::FrameworkVersion {
+                    framework_id: "framework-source".to_string(),
+                    version_id: "framework-source-v1".to_string(),
+                },
+                origin_project_id: "project-a".to_string(),
+                rationale: "Project A records this framework as the source.".to_string(),
+                recorded_by: Some("reviewer-a".to_string()),
+            },
+        )?;
+        let framework_eligibility = create_eligibility(
+            &mut conn,
+            &CreateTransferEligibilityReq {
+                origin_id: framework_origin.id,
+                license_identifier: "CC BY 4.0".to_string(),
+                license_uri: None,
+                access_scope: TransferAccessScope::Workspace,
+                permitted_purposes: vec![TransferPurpose::Research],
+                allowed_project_ids: Vec::new(),
+                attribution_text: "Framework attribution".to_string(),
+                permission_basis: "Reviewed framework reuse permission.".to_string(),
+                permission_granted: true,
+                reviewed_by: "rights-reviewer".to_string(),
+            },
+        )?;
+        let framework_transfer = adopt_knowledge(
+            &mut conn,
+            &AdoptKnowledgeReq {
+                eligibility_id: framework_eligibility.id,
+                receiving_project_id: "project-b".to_string(),
+                intended_purpose: TransferPurpose::Research,
+                attribution_text: "Framework attribution".to_string(),
+                context: "Framework reuse in Project B.".to_string(),
+                requested_by: Some("researcher-b".to_string()),
+            },
+        )?;
+
+        conn.execute(
+            "UPDATE research_projects SET lifecycle_status = 'archived' WHERE id IN ('project-a', 'project-b')",
+            [],
+        )?;
+        let concept_event_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM knowledge_concept_version_events WHERE version_id = ?1",
+            [&concept_id],
+            |row| row.get(0),
+        )?;
+        let principle_event_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM knowledge_principle_version_events WHERE version_id = ?1",
+            [&principle_id],
+            |row| row.get(0),
+        )?;
+        assert!(create_concept_version(
+            &mut conn,
+            &CreateConceptVersionReq {
+                concept_id: None,
+                project_id: "project-a".to_string(),
+                parent_version_id: None,
+                title: "Blocked concept".to_string(),
+                definition: "Must not persist.".to_string(),
+                rationale: "Archived project.".to_string(),
+                created_by: Some("author-a".to_string()),
+            }
+        )
+        .is_err());
+        assert!(create_principle_version(
+            &mut conn,
+            &CreatePrincipleVersionReq {
+                principle_id: None,
+                project_id: "project-a".to_string(),
+                parent_version_id: None,
+                title: "Blocked principle".to_string(),
+                statement: "Must not persist.".to_string(),
+                rationale: "Archived project.".to_string(),
+                created_by: Some("author-a".to_string()),
+            }
+        )
+        .is_err());
+        assert!(review_knowledge_version(
+            &mut conn,
+            &ReviewKnowledgeVersionReq {
+                version_id: concept_id.clone(),
+                kind: KnowledgeVersionKind::Concept,
+                status: KnowledgeVersionStatus::Reviewed,
+                rationale: "Blocked review.".to_string(),
+                actor_id: Some("reviewer".to_string()),
+            }
+        )
+        .is_err());
+        assert!(create_origin(
+            &mut conn,
+            &CreateTransferOriginReq {
+                artifact: TransferArtifactRef::FindingVersion {
+                    finding_id: "finding-source".to_string(),
+                    version_id: source_version_id,
+                },
+                origin_project_id: "project-a".to_string(),
+                rationale: "Blocked origin.".to_string(),
+                recorded_by: Some("reviewer-a".to_string()),
+            }
+        )
+        .is_err());
+
+        let workspace_eligibility = create_eligibility(
+            &mut conn,
+            &CreateTransferEligibilityReq {
+                origin_id: source_origin.id.clone(),
+                license_identifier: "CC BY 4.0".to_string(),
+                license_uri: None,
+                access_scope: TransferAccessScope::Workspace,
+                permitted_purposes: vec![TransferPurpose::Research],
+                allowed_project_ids: Vec::new(),
+                attribution_text: "Project A finding attribution".to_string(),
+                permission_basis: "Workspace-wide rights remain valid.".to_string(),
+                permission_granted: true,
+                reviewed_by: "rights-reviewer".to_string(),
+            },
+        )?;
+        assert!(create_eligibility(
+            &mut conn,
+            &CreateTransferEligibilityReq {
+                origin_id: source_origin.id.clone(),
+                license_identifier: "CC BY 4.0".to_string(),
+                license_uri: None,
+                access_scope: TransferAccessScope::SelectedProjects,
+                permitted_purposes: vec![TransferPurpose::Research],
+                allowed_project_ids: vec!["project-b".to_string()],
+                attribution_text: "Project A finding attribution".to_string(),
+                permission_basis: "Restricted to an archived recipient.".to_string(),
+                permission_granted: true,
+                reviewed_by: "rights-reviewer".to_string(),
+            }
+        )
+        .is_err());
+        assert!(adopt_knowledge(
+            &mut conn,
+            &AdoptKnowledgeReq {
+                eligibility_id: workspace_eligibility.id,
+                receiving_project_id: "project-b".to_string(),
+                intended_purpose: TransferPurpose::Research,
+                attribution_text: "Project A finding attribution".to_string(),
+                context: "Blocked adoption.".to_string(),
+                requested_by: Some("researcher-b".to_string()),
+            }
+        )
+        .is_err());
+        assert!(create_adaptation(
+            &mut conn,
+            &CreateTransferAdaptationReq {
+                transfer_id: source_transfer.id.clone(),
+                artifact: TransferArtifactRef::FindingVersion {
+                    finding_id: "finding-recipient".to_string(),
+                    version_id: recipient_version_id.clone(),
+                },
+                relation_kind: TransferLineageRelation::DerivedFrom,
+                rationale: "Blocked project-owned adaptation.".to_string(),
+                adapted_by: Some("researcher-b".to_string()),
+            }
+        )
+        .is_err());
+        assert!(record_downstream_usage(
+            &mut conn,
+            &RecordDownstreamUsageReq {
+                transfer_id: source_transfer.id.clone(),
+                reference: DownstreamUseRef::FindingVersion {
+                    finding_id: "finding-recipient".to_string(),
+                    version_id: recipient_version_id,
+                },
+                use_context: "Blocked downstream use.".to_string(),
+                recorded_by: Some("researcher-b".to_string()),
+            }
+        )
+        .is_err());
+        let workspace_adaptation = create_adaptation(
+            &mut conn,
+            &CreateTransferAdaptationReq {
+                transfer_id: framework_transfer.id,
+                artifact: TransferArtifactRef::FrameworkVersion {
+                    framework_id: "framework-recipient".to_string(),
+                    version_id: "framework-recipient-v1".to_string(),
+                },
+                relation_kind: TransferLineageRelation::BasedOn,
+                rationale: "Workspace-scoped framework adaptation.".to_string(),
+                adapted_by: Some("researcher-b".to_string()),
+            },
+        )?;
+
+        assert_eq!(workspace_adaptation.receiving_project_id, "project-b");
+        assert_eq!(workspace(&conn)?.transfers.len(), 2);
+        assert_eq!(workspace(&conn)?.adaptations.len(), 1);
+        assert!(workspace(&conn)?.downstream_usage.is_empty());
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM knowledge_concept_version_events WHERE version_id = ?1",
+                [&concept_id],
+                |row| row.get::<_, i64>(0),
+            )?,
+            concept_event_count
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM knowledge_principle_version_events WHERE version_id = ?1",
+                [&principle_id],
+                |row| row.get::<_, i64>(0),
+            )?,
+            principle_event_count
+        );
+        Ok(())
     }
 
     #[test]

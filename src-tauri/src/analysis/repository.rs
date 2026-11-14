@@ -2783,10 +2783,11 @@ pub fn create_evidence(conn: &mut Connection, req: &CreateEvidenceReq) -> Result
     nonempty(&req.scope, "Evidence scope")?;
     nonempty(&req.quality_rationale, "Evidence quality rationale")?;
     nonempty(&req.limitations, "Evidence limitations")?;
-    project_exists(conn, &req.project_id)?;
-    crate::project_policy::ensure_project_writable(conn, &req.project_id)?;
-    validate_proposition_project(conn, &req.project_id, &req.proposition)?;
-    validate_artifact_project(conn, &req.project_id, &req.artifact)?;
+    let tx = conn.transaction()?;
+    project_exists(&tx, &req.project_id)?;
+    crate::project_policy::ensure_project_writable(&tx, &req.project_id)?;
+    validate_proposition_project(&tx, &req.project_id, &req.proposition)?;
+    validate_artifact_project(&tx, &req.project_id, &req.artifact)?;
     if !req.provenance.is_object() {
         return Err(anyhow!("Evidence provenance must be a JSON object."));
     }
@@ -2802,7 +2803,6 @@ pub fn create_evidence(conn: &mut Connection, req: &CreateEvidenceReq) -> Result
     ) = artifact_target_values(&req.artifact);
     let evidence_id = id();
     let now = now_us()?;
-    let tx = conn.transaction()?;
     tx.execute(
         "INSERT INTO analysis_evidence
             (id, project_id, target_source_claim_id, target_hypothesis_version_id,
@@ -3193,13 +3193,13 @@ pub fn create_finding_version(
         ));
     }
     project_exists(conn, &req.project_id)?;
-    crate::project_policy::ensure_project_writable(conn, &req.project_id)?;
     validate_proposition_project(conn, &req.project_id, &req.proposition)?;
 
     let now = now_us()?;
     let finding_id = req.finding_id.clone().unwrap_or_else(id);
     let version_id = id();
     let tx = conn.transaction()?;
+    crate::project_policy::ensure_project_writable(&tx, &req.project_id)?;
     let version_no = if let Some(parent_id) = req.parent_version_id.as_deref() {
         let (parent_finding, parent_project): (String, String) = tx.query_row(
             "SELECT v.finding_id, f.project_id
@@ -3782,6 +3782,296 @@ mod tests {
             }],
             created_by: Some("analyst".to_string()),
         }
+    }
+
+    #[test]
+    fn archived_project_blocks_analysis_mutations_without_blocking_reads() -> Result<()> {
+        let mut conn = Connection::open_in_memory()?;
+        crate::mind::portable_db::initialize_workspace_schema(&conn)
+            .map_err(|error| anyhow!(error.to_string()))?;
+        let project_id = id();
+        test_project(&conn, &project_id);
+
+        let (definition, metric) = create_locked_definition(&mut conn, &project_id);
+        let dataset_json = create_dataset(&mut conn, &project_id);
+        let dataset_pin: serde_json::Value = parse_json(&dataset_json)?;
+        let dataset_version_id = dataset_pin["datasetVersionId"]
+            .as_str()
+            .ok_or_else(|| anyhow!("dataset version ID missing"))?;
+        let split_group_id = dataset_pin["splitGroupId"]
+            .as_str()
+            .ok_or_else(|| anyhow!("dataset split group ID missing"))?;
+        let run_request = create_run_request(&definition.id, dataset_version_id, split_group_id);
+        let queued_run = create_run(&mut conn, &run_request)?;
+        let running_run = create_run(&mut conn, &run_request)?;
+        start_run(&mut conn, &running_run.id, Some("analyst"))?;
+        let completed_run = create_run(&mut conn, &run_request)?;
+        start_run(&mut conn, &completed_run.id, Some("analyst"))?;
+        let completed_run = finalize_run(
+            &mut conn,
+            &FinalizeAnalysisRunReq {
+                run_id: completed_run.id,
+                next_status: AnalysisRunStatus::Completed,
+                summary: "Completed for the archived-write test.".to_string(),
+                outputs: vec![AnalysisOutputReq {
+                    output_key: "result".to_string(),
+                    output_kind: "report".to_string(),
+                    title: "Test result".to_string(),
+                    payload: serde_json::json!({"estimate": 1}),
+                    artifact_uri: None,
+                    artifact_sha256: None,
+                    media_type: None,
+                    byte_length: None,
+                }],
+                metrics: Vec::new(),
+                errors: Vec::new(),
+                actor_id: Some("analyst".to_string()),
+            },
+        )?;
+
+        let source_claim_id = create_source_claim(&conn);
+        let evidence_request = CreateEvidenceReq {
+            project_id: project_id.clone(),
+            proposition: PropositionRefDto::SourceClaim(source_claim_id.clone()),
+            artifact: EvidenceArtifactRefDto::SourceClaim(source_claim_id.clone()),
+            polarity: EvidencePolarity::Supports,
+            scope: "The test scope.".to_string(),
+            quality_rationale: "The source claim is reviewable.".to_string(),
+            limitations: "The claim is limited.".to_string(),
+            provenance: serde_json::json!({}),
+            created_by: Some("analyst".to_string()),
+        };
+        let evidence = create_evidence(&mut conn, &evidence_request)?;
+        let make_finding = |statement: &str| CreateFindingVersionReq {
+            project_id: project_id.clone(),
+            finding_id: None,
+            parent_version_id: None,
+            title: "Archived policy test".to_string(),
+            statement: statement.to_string(),
+            proposition: PropositionRefDto::SourceClaim(source_claim_id.clone()),
+            scope: "The test scope.".to_string(),
+            applicability: "Test only.".to_string(),
+            uncertainty: "Known test uncertainty.".to_string(),
+            limitations: "Synthetic evidence.".to_string(),
+            conclusion_kind: FindingConclusionKind::Result,
+            analysis_run_ids: vec![completed_run.id.clone()],
+            evidence: vec![FindingEvidenceLinkReq {
+                evidence_id: evidence.id.clone(),
+                synthesis_polarity: EvidencePolarity::Supports,
+                rationale: "Same proposition and project.".to_string(),
+            }],
+            change_rationale: String::new(),
+            created_by: Some("analyst".to_string()),
+        };
+        let finding_a = create_finding_version(&mut conn, &make_finding("First finding."))?;
+        let finding_b = create_finding_version(&mut conn, &make_finding("Second finding."))?;
+
+        conn.execute(
+            "UPDATE research_projects SET lifecycle_status = 'archived' WHERE id = ?1",
+            [&project_id],
+        )?;
+        let counts_before: (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) = conn.query_row(
+            "SELECT
+                (SELECT COUNT(*) FROM analysis_methods),
+                (SELECT COUNT(*) FROM analysis_method_versions),
+                (SELECT COUNT(*) FROM analysis_metric_definitions),
+                (SELECT COUNT(*) FROM analysis_metric_definition_versions),
+                (SELECT COUNT(*) FROM analysis_definitions),
+                (SELECT COUNT(*) FROM analysis_definition_versions),
+                (SELECT COUNT(*) FROM analysis_runs),
+                (SELECT COUNT(*) FROM analysis_run_events),
+                (SELECT COUNT(*) FROM analysis_evidence_events),
+                (SELECT COUNT(*) FROM analysis_finding_events)",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get(9)?,
+                ))
+            },
+        )?;
+
+        assert!(create_method_version(
+            &mut conn,
+            &CreateAnalysisMethodVersionReq {
+                project_id: project_id.clone(),
+                method_id: None,
+                name: "Blocked method".to_string(),
+                version_label: "1.0".to_string(),
+                code_uri: "file:///analysis.py".to_string(),
+                code_revision: "git:blocked".to_string(),
+                dependency_lock_sha256: None,
+                environment: serde_json::json!({"python": "3.12"}),
+                assumptions: vec!["Independent observations.".to_string()],
+                test_suite_uri: "file:///tests/test_analysis.py".to_string(),
+                test_suite_sha256: "a".repeat(64),
+                tests_total: 1,
+                tests_passed: 1,
+                created_by: Some("analyst".to_string()),
+            }
+        )
+        .is_err());
+        assert!(create_metric_definition_version(
+            &mut conn,
+            &CreateMetricDefinitionVersionReq {
+                project_id: project_id.clone(),
+                metric_definition_id: None,
+                key: "blocked".to_string(),
+                name: "Blocked metric".to_string(),
+                version_label: "1.0".to_string(),
+                formula: "x".to_string(),
+                unit: "score".to_string(),
+                test_suite_uri: "file:///tests/test_metric.py".to_string(),
+                test_suite_sha256: "b".repeat(64),
+                tests_total: 1,
+                tests_passed: 1,
+                created_by: Some("analyst".to_string()),
+            }
+        )
+        .is_err());
+        assert!(create_definition_version(
+            &mut conn,
+            &CreateAnalysisDefinitionVersionReq {
+                project_id: project_id.clone(),
+                definition_id: None,
+                parent_version_id: None,
+                title: "Blocked definition".to_string(),
+                version_label: "1.0".to_string(),
+                change_rationale: String::new(),
+                method_version_id: definition.method_version_id.clone(),
+                metric_definition_version_ids: vec![metric.id.clone()],
+                specification: definition.specification.clone(),
+                created_by: Some("analyst".to_string()),
+            }
+        )
+        .is_err());
+        assert!(transition_definition(
+            &mut conn,
+            &TransitionAnalysisDefinitionReq {
+                version_id: definition.id.clone(),
+                next_status: AnalysisDefinitionStatus::Retired,
+                rationale: "Archive must block this lifecycle write.".to_string(),
+                actor_id: Some("reviewer".to_string()),
+            }
+        )
+        .is_err());
+        assert!(create_run(&mut conn, &run_request).is_err());
+        assert!(start_run(&mut conn, &queued_run.id, Some("analyst")).is_err());
+        assert!(add_run_log(
+            &mut conn,
+            &AddAnalysisRunLogReq {
+                run_id: running_run.id.clone(),
+                severity: AnalysisLogSeverity::Info,
+                message: "Blocked log".to_string(),
+                details: serde_json::json!({}),
+                recorded_by: Some("analyst".to_string()),
+            }
+        )
+        .is_err());
+        assert!(add_run_deviation(
+            &mut conn,
+            &running_run.id,
+            &AnalysisDeviationReq {
+                description: "Blocked deviation".to_string(),
+                rationale: "No mutation after archive.".to_string(),
+                impact_assessment: "None.".to_string(),
+                recorded_by: Some("analyst".to_string()),
+            }
+        )
+        .is_err());
+        assert!(finalize_run(
+            &mut conn,
+            &FinalizeAnalysisRunReq {
+                run_id: running_run.id.clone(),
+                next_status: AnalysisRunStatus::Failed,
+                summary: "Blocked finalization.".to_string(),
+                outputs: Vec::new(),
+                metrics: Vec::new(),
+                errors: vec![AnalysisErrorReq {
+                    error_kind: "runtime".to_string(),
+                    message: "Synthetic error.".to_string(),
+                    details: serde_json::json!({}),
+                }],
+                actor_id: Some("analyst".to_string()),
+            }
+        )
+        .is_err());
+        assert!(create_evidence(&mut conn, &evidence_request).is_err());
+        assert!(transition_evidence(
+            &mut conn,
+            &TransitionEvidenceReq {
+                evidence_id: evidence.id.clone(),
+                next_status: EvidenceStatus::Assessed,
+                rationale: "Blocked evidence transition.".to_string(),
+                actor_id: Some("reviewer".to_string()),
+            }
+        )
+        .is_err());
+        assert!(create_finding_version(&mut conn, &make_finding("Blocked finding.")).is_err());
+        assert!(transition_finding(
+            &mut conn,
+            &TransitionFindingReq {
+                version_id: finding_a.id.clone(),
+                next_status: FindingStatus::Review,
+                rationale: "Blocked finding transition.".to_string(),
+                actor_id: Some("reviewer".to_string()),
+            }
+        )
+        .is_err());
+        assert!(create_finding_relation(
+            &mut conn,
+            &CreateFindingRelationReq {
+                source_version_id: finding_a.id.clone(),
+                target_version_id: finding_b.id.clone(),
+                relation_kind: FindingRelationKind::Qualifies,
+                rationale: "Blocked relationship.".to_string(),
+                created_by: Some("analyst".to_string()),
+            }
+        )
+        .is_err());
+
+        let counts_after: (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) = conn.query_row(
+            "SELECT
+                (SELECT COUNT(*) FROM analysis_methods),
+                (SELECT COUNT(*) FROM analysis_method_versions),
+                (SELECT COUNT(*) FROM analysis_metric_definitions),
+                (SELECT COUNT(*) FROM analysis_metric_definition_versions),
+                (SELECT COUNT(*) FROM analysis_definitions),
+                (SELECT COUNT(*) FROM analysis_definition_versions),
+                (SELECT COUNT(*) FROM analysis_runs),
+                (SELECT COUNT(*) FROM analysis_run_events),
+                (SELECT COUNT(*) FROM analysis_evidence_events),
+                (SELECT COUNT(*) FROM analysis_finding_events)",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get(9)?,
+                ))
+            },
+        )?;
+        assert_eq!(counts_after, counts_before);
+        assert_eq!(query_run(&conn, &queued_run.id)?.lifecycle_status, AnalysisRunStatus::Queued);
+        assert_eq!(query_evidence(&conn, &evidence.id)?.status, EvidenceStatus::Recorded);
+        assert_eq!(query_finding_version(&conn, &finding_a.id)?.status, FindingStatus::Draft);
+        assert_eq!(workspace(&conn, &project_id)?.runs.len(), 3);
+        Ok(())
     }
 
     #[test]
