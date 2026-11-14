@@ -24,6 +24,11 @@ This is an operational policy for a trusted single-user local application, not
 authenticated authorization or multi-user membership enforcement. Actor IDs are
 audit metadata and do not establish an authenticated principal.
 
+Learning projects currently use a separate identity with no archived lifecycle
+state or ResearchProject mapping. The archived-project policy therefore does
+not apply to Learning writes until an authoritative lifecycle relationship is
+defined.
+
 ## Ownership examples
 
 Project-owned records include:

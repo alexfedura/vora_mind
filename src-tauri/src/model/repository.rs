@@ -85,20 +85,7 @@ fn ensure_workspace_source_claim(conn: &Connection, claim_id: &str) -> Result<()
 }
 
 fn ensure_project_writable(conn: &Connection, project_id: &str) -> Result<()> {
-    let status: Option<String> = conn
-        .query_row(
-            "SELECT lifecycle_status FROM research_projects WHERE id = ?1",
-            [project_id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let Some(status) = status else {
-        return Err(anyhow!("Research project was not found."));
-    };
-    if status == "archived" {
-        return Err(anyhow!("Archived research projects cannot be modified."));
-    }
-    Ok(())
+    crate::project_policy::ensure_project_writable(conn, project_id)
 }
 
 fn ensure_model_identity_writable(

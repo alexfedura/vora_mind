@@ -1,16 +1,21 @@
 use anyhow::{anyhow, Result};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 pub(crate) fn ensure_project_writable(connection: &Connection, project_id: &str) -> Result<()> {
-    let status: String = connection.query_row(
-        "SELECT lifecycle_status FROM research_projects WHERE id = ?1",
-        [project_id],
-        |row| row.get(0),
-    )?;
+    let status: Option<String> = connection
+        .query_row(
+            "SELECT lifecycle_status FROM research_projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(status) = status else {
+        return Err(anyhow!("Research project was not found."));
+    };
 
     if status == "archived" {
         return Err(anyhow!(
-            "project {project_id} is archived and cannot be modified"
+            "Archived research projects cannot be modified."
         ));
     }
 
@@ -55,5 +60,20 @@ mod tests {
             .expect("create project");
 
         assert!(ensure_project_writable(&connection, "active").is_ok());
+    }
+
+    #[test]
+    fn missing_project_is_not_writable() {
+        let connection = Connection::open_in_memory().expect("open database");
+        connection
+            .execute_batch(
+                "CREATE TABLE research_projects (
+                     id TEXT PRIMARY KEY,
+                     lifecycle_status TEXT NOT NULL
+                 );",
+            )
+            .expect("create project table");
+
+        assert!(ensure_project_writable(&connection, "missing").is_err());
     }
 }
