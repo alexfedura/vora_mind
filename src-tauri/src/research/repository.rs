@@ -2,8 +2,25 @@ use super::*;
 use rusqlite::{params, Connection, OptionalExtension, Result, Transaction, TransactionBehavior};
 use sha2::{Digest, Sha256};
 
-const RESEARCH_SCHEMA_VERSION: i64 = 1;
-const RESEARCH_SCHEMA_SQL: &str = include_str!("schema.sql");
+const RESEARCH_SCHEMA_V1_VERSION: i64 = 1;
+const RESEARCH_SCHEMA_V1_ID: &str = "research-domain-v1";
+const RESEARCH_SCHEMA_V1_SQL: &str = include_str!("schema.sql");
+const RESEARCH_SCHEMA_V2_VERSION: i64 = 2;
+const RESEARCH_SCHEMA_V2_ID: &str = "research-project-sources-v2";
+const RESEARCH_SCHEMA_V2_SQL: &str = include_str!("migrations/002_project_sources.sql");
+const RESEARCH_SCHEMA_MIGRATIONS_TABLE_SQL: &str = r#"CREATE TABLE IF NOT EXISTS research_schema_migrations (
+            version INTEGER PRIMARY KEY,
+            migration_id TEXT NOT NULL UNIQUE,
+            checksum TEXT NOT NULL,
+            applied_at_us INTEGER NOT NULL
+        );"#;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ResearchSchemaState {
+    Fresh,
+    VersionOne,
+    VersionTwo,
+}
 
 fn ensure_project_writable(conn: &Connection, project_id: &str) -> Result<()> {
     crate::project_policy::ensure_project_writable(conn, project_id)
@@ -23,51 +40,251 @@ fn ensure_record_project_writable(conn: &Connection, query: &str, id: &str) -> R
 }
 
 pub fn initialize_schema(conn: &Connection) -> Result<()> {
-    let checksum = format!("{:x}", Sha256::digest(RESEARCH_SCHEMA_SQL.as_bytes()));
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS research_schema_migrations (
-            version INTEGER PRIMARY KEY,
-            migration_id TEXT NOT NULL UNIQUE,
-            checksum TEXT NOT NULL,
-            applied_at_us INTEGER NOT NULL
-        );",
-    )?;
-    let tx = conn.unchecked_transaction()?;
-    let existing = tx
-        .query_row(
-            "SELECT checksum FROM research_schema_migrations WHERE version = ?1",
-            [RESEARCH_SCHEMA_VERSION],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()?;
-    match existing {
-        Some(applied_checksum) if applied_checksum != checksum => {
-            return Err(rusqlite::Error::InvalidQuery);
-        }
-        Some(_) => {}
-        None => {
-            tx.execute_batch(RESEARCH_SCHEMA_SQL)?;
-            tx.execute_batch(
-                "INSERT INTO research_pathways (id, pathway_key, title, description) VALUES
-                    ('pathway_existing_knowledge_acquisition', 'existing_knowledge_acquisition',
-                     'Existing Knowledge Acquisition', 'Acquire and reconstruct existing knowledge.'),
-                    ('pathway_existing_knowledge_investigation', 'existing_knowledge_investigation',
-                     'Existing Knowledge Investigation', 'Investigate and develop existing knowledge.'),
-                    ('pathway_first_principles_discovery', 'first_principles_discovery',
-                     'First-Principles Discovery', 'Investigate phenomena without assuming an adequate framework.');",
-            )?;
-            tx.execute(
-                "INSERT INTO research_schema_migrations (version, migration_id, checksum, applied_at_us)
-                 VALUES (?1, 'research-domain-v1', ?2, ?3)",
-                params![
-                    RESEARCH_SCHEMA_VERSION,
-                    checksum,
-                    now_ts_us().map_err(|_| rusqlite::Error::InvalidQuery)?
-                ],
-            )?;
-        }
+    conn.pragma_update(None, "foreign_keys", true)?;
+    let foreign_keys_enabled: i64 =
+        conn.pragma_query_value(None, "foreign_keys", |row| row.get(0))?;
+    if foreign_keys_enabled != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
     }
+
+    let v1_checksum = schema_checksum(RESEARCH_SCHEMA_V1_SQL);
+    let v2_checksum = schema_checksum(RESEARCH_SCHEMA_V2_SQL);
+    let tx = conn.unchecked_transaction()?;
+    conn.execute_batch(RESEARCH_SCHEMA_MIGRATIONS_TABLE_SQL)?;
+
+    let state = research_schema_state(&tx, &v1_checksum, &v2_checksum)?;
+    if state == ResearchSchemaState::Fresh {
+        apply_research_schema_v1(&tx, &v1_checksum)?;
+    }
+    if state != ResearchSchemaState::VersionTwo {
+        apply_research_schema_v2(&tx, &v2_checksum)?;
+    }
+
+    validate_project_sources_schema(&tx)?;
     tx.commit()
+}
+
+fn schema_checksum(sql: &str) -> String {
+    format!("{:x}", Sha256::digest(sql.as_bytes()))
+}
+
+fn research_schema_state(
+    conn: &Connection,
+    v1_checksum: &str,
+    v2_checksum: &str,
+) -> Result<ResearchSchemaState> {
+    let migrations = {
+        let mut statement = conn.prepare(
+            "SELECT version, migration_id, checksum
+             FROM research_schema_migrations ORDER BY version",
+        )?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>>>()?;
+        rows
+    };
+
+    match migrations.as_slice() {
+        [] => {
+            if has_research_schema_objects(conn)? {
+                return Err(rusqlite::Error::InvalidQuery);
+            }
+            Ok(ResearchSchemaState::Fresh)
+        }
+        [(version, migration_id, checksum)]
+            if *version == RESEARCH_SCHEMA_V1_VERSION
+                && migration_id == RESEARCH_SCHEMA_V1_ID
+                && checksum == v1_checksum
+                && table_exists(conn, "research_projects")?
+                && table_exists(conn, "sources")?
+                && !table_exists(conn, "research_project_sources")? =>
+        {
+            Ok(ResearchSchemaState::VersionOne)
+        }
+        [(v1_version, v1_id, v1_hash), (v2_version, v2_id, v2_hash)]
+            if *v1_version == RESEARCH_SCHEMA_V1_VERSION
+                && v1_id == RESEARCH_SCHEMA_V1_ID
+                && v1_hash == v1_checksum
+                && *v2_version == RESEARCH_SCHEMA_V2_VERSION
+                && v2_id == RESEARCH_SCHEMA_V2_ID
+                && v2_hash == v2_checksum
+                && table_exists(conn, "research_projects")?
+                && table_exists(conn, "sources")? =>
+        {
+            Ok(ResearchSchemaState::VersionTwo)
+        }
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn apply_research_schema_v1(conn: &Connection, checksum: &str) -> Result<()> {
+    conn.execute_batch(RESEARCH_SCHEMA_V1_SQL)?;
+    conn.execute_batch(
+        "INSERT INTO research_pathways (id, pathway_key, title, description) VALUES
+            ('pathway_existing_knowledge_acquisition', 'existing_knowledge_acquisition',
+             'Existing Knowledge Acquisition', 'Acquire and reconstruct existing knowledge.'),
+            ('pathway_existing_knowledge_investigation', 'existing_knowledge_investigation',
+             'Existing Knowledge Investigation', 'Investigate and develop existing knowledge.'),
+            ('pathway_first_principles_discovery', 'first_principles_discovery',
+             'First-Principles Discovery', 'Investigate phenomena without assuming an adequate framework.');",
+    )?;
+    conn.execute(
+        "INSERT INTO research_schema_migrations (version, migration_id, checksum, applied_at_us)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![
+            RESEARCH_SCHEMA_V1_VERSION,
+            RESEARCH_SCHEMA_V1_ID,
+            checksum,
+            now_ts_us().map_err(|_| rusqlite::Error::InvalidQuery)?
+        ],
+    )?;
+    Ok(())
+}
+
+fn apply_research_schema_v2(conn: &Connection, checksum: &str) -> Result<()> {
+    conn.execute_batch(RESEARCH_SCHEMA_V2_SQL)?;
+    conn.execute(
+        "INSERT INTO research_schema_migrations (version, migration_id, checksum, applied_at_us)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![
+            RESEARCH_SCHEMA_V2_VERSION,
+            RESEARCH_SCHEMA_V2_ID,
+            checksum,
+            now_ts_us().map_err(|_| rusqlite::Error::InvalidQuery)?
+        ],
+    )?;
+    Ok(())
+}
+
+fn has_research_schema_objects(conn: &Connection) -> Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM sqlite_master
+            WHERE type = 'table'
+              AND name <> 'research_schema_migrations'
+              AND (name GLOB 'research_*'
+                   OR name IN ('literature_reviews', 'literature_review_sources',
+                               'prior_knowledge_assessments', 'prior_knowledge_sources'))
+         )",
+        [],
+        |row| row.get(0),
+    )
+}
+
+fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1
+         )",
+        [table],
+        |row| row.get(0),
+    )
+}
+
+fn validate_project_sources_schema(conn: &Connection) -> Result<()> {
+    let columns = {
+        let mut statement = conn.prepare("PRAGMA table_info(research_project_sources)")?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, i64>(5)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>>>()?;
+        rows
+    };
+    let expected_columns = [
+        ("project_id", "TEXT", 1, None, 1),
+        ("source_id", "TEXT", 1, None, 2),
+        ("use_context", "TEXT", 1, Some("''"), 0),
+        ("notes", "TEXT", 1, Some("''"), 0),
+        ("created_at_us", "INTEGER", 1, None, 0),
+        ("updated_at_us", "INTEGER", 1, None, 0),
+    ];
+    if columns
+        .iter()
+        .map(|(name, kind, not_null, default, primary_key)| {
+            (
+                name.as_str(),
+                kind.as_str(),
+                *not_null,
+                default.as_deref(),
+                *primary_key,
+            )
+        })
+        .ne(expected_columns)
+    {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    let foreign_keys = {
+        let mut statement = conn.prepare("PRAGMA foreign_key_list(research_project_sources)")?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(6)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>>>()?;
+        rows
+    };
+    if foreign_keys.len() != 2
+        || !foreign_keys.iter().any(|(table, from, to, on_delete)| {
+            table == "research_projects"
+                && from == "project_id"
+                && to == "id"
+                && on_delete == "RESTRICT"
+        })
+        || !foreign_keys.iter().any(|(table, from, to, on_delete)| {
+            table == "sources" && from == "source_id" && to == "id" && on_delete == "RESTRICT"
+        })
+    {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    let reverse_index_valid = {
+        let mut statement = conn.prepare("PRAGMA index_list(research_project_sources)")?;
+        let indexes = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>>>()?;
+        indexes.iter().any(|(name, unique, origin)| {
+            name == "idx_research_project_sources_source" && *unique == 0 && origin == "c"
+        })
+    };
+    if !reverse_index_valid {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let reverse_index_columns = {
+        let mut statement =
+            conn.prepare("PRAGMA index_info(idx_research_project_sources_source)")?;
+        let columns = statement
+            .query_map([], |row| row.get::<_, String>(2))?
+            .collect::<Result<Vec<_>>>()?;
+        columns
+    };
+    if reverse_index_columns != ["source_id"] {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    Ok(())
 }
 
 pub fn synchronize_legacy_questions(conn: &Connection) -> Result<()> {
@@ -3317,6 +3534,111 @@ mod tests {
         .expect("activate project")
     }
 
+    fn version_one_fixture() -> Connection {
+        let conn = Connection::open_in_memory().expect("open in-memory v1 fixture");
+        crate::mind::canvas_db::init_db(&conn).expect("initialize synthetic canvas schema");
+        crate::mind::task_flow::init_schema(&conn).expect("initialize synthetic task schema");
+        crate::mind::journal::init_schema(&conn).expect("initialize synthetic journal schema");
+        crate::mind::questions::init_schema(&conn).expect("initialize synthetic question schema");
+        crate::mind::hypothesis::init_schema(&conn)
+            .expect("initialize synthetic hypothesis schema");
+        crate::market::db::init_schema(&conn).expect("initialize synthetic market schema");
+        crate::source::db::init_schema(&conn).expect("initialize synthetic Source schema");
+        conn.execute_batch(RESEARCH_SCHEMA_MIGRATIONS_TABLE_SQL)
+            .expect("create synthetic Research migration ledger");
+        let tx = conn
+            .unchecked_transaction()
+            .expect("begin synthetic v1 schema transaction");
+        apply_research_schema_v1(&tx, &schema_checksum(RESEARCH_SCHEMA_V1_SQL))
+            .expect("apply synthetic Research schema v1");
+        tx.commit().expect("commit synthetic Research schema v1");
+        crate::experiment::repository::initialize_schema(&conn)
+            .expect("initialize synthetic experiment schema");
+        crate::analysis::repository::initialize_schema(&conn)
+            .expect("initialize synthetic analysis schema");
+        crate::model::repository::initialize_schema(&conn)
+            .expect("initialize synthetic Model schema");
+        crate::learning::repository::initialize_schema(&conn)
+            .expect("initialize synthetic learning schema");
+        crate::knowledge_transfer::repository::initialize_schema(&conn)
+            .expect("initialize synthetic Knowledge Transfer schema");
+        crate::forge::index::CodeIndex::initialize_schema(&conn)
+            .expect("initialize synthetic code index");
+        crate::mind::portable_db::init_vora_schema(&conn)
+            .expect("initialize synthetic portable schema");
+        conn
+    }
+
+    fn insert_migration_source(conn: &Connection) {
+        conn.execute(
+            "INSERT INTO sources (id, kind, title, created_at, updated_at)
+             VALUES ('migration-source', 'book', 'Migration source', 1, 1)",
+            [],
+        )
+        .expect("insert synthetic source");
+        conn.execute(
+            "INSERT INTO source_versions
+                (id, source_id, capture_kind, captured_at_us, created_by, created_at_us)
+             VALUES ('migration-source-version', 'migration-source', 'edition', 1, 'test', 1)",
+            [],
+        )
+        .expect("insert synthetic source version");
+    }
+
+    fn insert_association_project(conn: &Connection, id: &str) {
+        conn.execute(
+            "INSERT INTO research_projects
+                (id, title, aim, lifecycle_status, created_at_us, updated_at_us)
+             VALUES (?1, 'Association project', '', 'active', 1, 1)",
+            [id],
+        )
+        .expect("insert synthetic association project");
+    }
+
+    fn schema_objects_for_tables(
+        conn: &Connection,
+        table_names: &[&str],
+    ) -> Vec<(String, String, String, Option<String>)> {
+        let mut objects = Vec::new();
+        for table_name in table_names {
+            let mut statement = conn
+                .prepare(
+                    "SELECT type, name, tbl_name, sql FROM sqlite_master
+                     WHERE tbl_name = ?1 ORDER BY type, name",
+                )
+                .expect("prepare schema snapshot query");
+            let rows = statement
+                .query_map([table_name], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                })
+                .expect("query schema snapshot")
+                .collect::<Result<Vec<_>>>()
+                .expect("read schema snapshot rows");
+            objects.extend(rows);
+        }
+        objects
+    }
+
+    fn research_schema_snapshot(
+        conn: &Connection,
+    ) -> Vec<(String, String, String, Option<String>)> {
+        let mut table_names = RESEARCH_SCHEMA_V1_SQL
+            .lines()
+            .filter_map(|line| {
+                line.trim()
+                    .strip_prefix("CREATE TABLE ")
+                    .and_then(|statement| statement.split_whitespace().next())
+                    .map(str::to_string)
+            })
+            .collect::<Vec<_>>();
+        table_names.extend([
+            "research_schema_migrations".to_string(),
+            "research_project_sources".to_string(),
+        ]);
+        let table_names = table_names.iter().map(String::as_str).collect::<Vec<_>>();
+        schema_objects_for_tables(conn, &table_names)
+    }
+
     fn add_legacy_question(conn: &Connection, id: &str, title: &str, description: &str) {
         conn.execute(
             "INSERT INTO questions (id, title, description, status, created_at, updated_at)
@@ -4608,5 +4930,391 @@ mod tests {
             8,
         )
         .is_ok());
+    }
+
+    #[test]
+    fn fresh_research_schema_initializes_at_v2_and_reinitialization_is_safe() {
+        let conn = initialized_connection();
+        let initial_schema = schema_objects_for_tables(&conn, &["research_project_sources"]);
+
+        assert_eq!(
+            conn.query_row(
+                "SELECT MAX(version) FROM research_schema_migrations",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("read latest Research schema version"),
+            RESEARCH_SCHEMA_V2_VERSION
+        );
+        assert_eq!(
+            conn.pragma_query_value(None, "foreign_keys", |row| row.get::<_, i64>(0))
+                .expect("read foreign-key setting"),
+            1
+        );
+
+        initialize_schema(&conn).expect("repeat Research schema initialization");
+        assert_eq!(
+            schema_objects_for_tables(&conn, &["research_project_sources"]),
+            initial_schema
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT checksum FROM research_schema_migrations WHERE version = 2",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .expect("read v2 migration checksum"),
+            schema_checksum(RESEARCH_SCHEMA_V2_SQL)
+        );
+    }
+
+    #[test]
+    fn version_one_migration_preserves_checksum_data_and_unassigned_sources() {
+        let mut conn = version_one_fixture();
+        let project = project(&mut conn, "Version-one project");
+        insert_migration_source(&conn);
+
+        let version_one_checksum: String = conn
+            .query_row(
+                "SELECT checksum FROM research_schema_migrations WHERE version = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read version-one checksum");
+        assert_eq!(
+            version_one_checksum,
+            schema_checksum(RESEARCH_SCHEMA_V1_SQL)
+        );
+        let unaffected_schema_before = schema_objects_for_tables(
+            &conn,
+            &[
+                "sources",
+                "source_versions",
+                "literature_review_sources",
+                "prior_knowledge_sources",
+                "hypothesis_source_claim_evidence",
+                "research_dataset_version_references",
+                "knowledge_transfers",
+                "model_versions",
+            ],
+        );
+
+        initialize_schema(&conn).expect("upgrade synthetic v1 database");
+
+        let version_one_after: (String, String) = conn
+            .query_row(
+                "SELECT migration_id, checksum
+                 FROM research_schema_migrations WHERE version = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read preserved version-one migration");
+        assert_eq!(
+            version_one_after,
+            (RESEARCH_SCHEMA_V1_ID.into(), version_one_checksum)
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM research_projects WHERE id = ?1",
+                [&project.id],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count preserved Research project"),
+            1
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM sources WHERE id = 'migration-source'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count preserved Source"),
+            1
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM source_versions
+                 WHERE id = 'migration-source-version'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count preserved SourceVersion"),
+            1
+        );
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM research_project_sources", [], |row| {
+                row.get::<_, i64>(0)
+            },)
+                .expect("count migrated associations"),
+            0
+        );
+        assert_eq!(
+            schema_objects_for_tables(
+                &conn,
+                &[
+                    "sources",
+                    "source_versions",
+                    "literature_review_sources",
+                    "prior_knowledge_sources",
+                    "hypothesis_source_claim_evidence",
+                    "research_dataset_version_references",
+                    "knowledge_transfers",
+                    "model_versions",
+                ],
+            ),
+            unaffected_schema_before
+        );
+
+        let fresh = initialized_connection();
+        let migrated_schema = research_schema_snapshot(&conn);
+        let fresh_schema = research_schema_snapshot(&fresh);
+        assert_eq!(migrated_schema.len(), fresh_schema.len());
+        for (migrated, fresh) in migrated_schema.iter().zip(&fresh_schema) {
+            assert!(
+                migrated == fresh,
+                "Research schema differs for {} {} (migrated SQL length {:?}, fresh SQL length {:?})",
+                migrated.0,
+                migrated.1,
+                migrated.3.as_ref().map(String::len),
+                fresh.3.as_ref().map(String::len),
+            );
+        }
+    }
+
+    #[test]
+    fn project_source_schema_enforces_columns_keys_indexes_and_foreign_keys() {
+        let conn = initialized_connection();
+        insert_association_project(&conn, "association-project-1");
+        insert_association_project(&conn, "association-project-2");
+        conn.execute(
+            "INSERT INTO sources (id, kind, title, created_at, updated_at)
+             VALUES ('association-source', 'book', 'Association source', 1, 1)",
+            [],
+        )
+        .expect("insert synthetic association source");
+
+        let columns = {
+            let mut statement = conn
+                .prepare("PRAGMA table_info(research_project_sources)")
+                .expect("prepare association columns");
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                        row.get::<_, i64>(5)?,
+                    ))
+                })
+                .expect("query association columns")
+                .collect::<Result<Vec<_>>>()
+                .expect("read association columns");
+            rows
+        };
+        assert_eq!(
+            columns,
+            vec![
+                ("project_id".into(), "TEXT".into(), 1, None, 1),
+                ("source_id".into(), "TEXT".into(), 1, None, 2),
+                ("use_context".into(), "TEXT".into(), 1, Some("''".into()), 0),
+                ("notes".into(), "TEXT".into(), 1, Some("''".into()), 0),
+                ("created_at_us".into(), "INTEGER".into(), 1, None, 0),
+                ("updated_at_us".into(), "INTEGER".into(), 1, None, 0),
+            ]
+        );
+
+        let index_columns = {
+            let mut statement = conn
+                .prepare("PRAGMA index_info(idx_research_project_sources_source)")
+                .expect("prepare reverse lookup index");
+            let columns = statement
+                .query_map([], |row| row.get::<_, String>(2))
+                .expect("query reverse lookup index")
+                .collect::<Result<Vec<_>>>()
+                .expect("read reverse lookup index");
+            columns
+        };
+        assert_eq!(index_columns, vec!["source_id"]);
+
+        let foreign_key_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_foreign_key_list('research_project_sources')
+                 WHERE on_delete = 'RESTRICT'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count restrictive foreign keys");
+        assert_eq!(foreign_key_count, 2);
+
+        conn.execute(
+            "INSERT INTO research_project_sources
+                (project_id, source_id, created_at_us, updated_at_us)
+             VALUES ('association-project-1', 'association-source', 1, 1)",
+            [],
+        )
+        .expect("associate first project");
+        conn.execute(
+            "INSERT INTO research_project_sources
+                (project_id, source_id, created_at_us, updated_at_us)
+             VALUES ('association-project-2', 'association-source', 1, 1)",
+            [],
+        )
+        .expect("associate second project with shared Source");
+
+        assert!(conn
+            .execute(
+                "INSERT INTO research_project_sources
+                    (project_id, source_id, created_at_us, updated_at_us)
+                 VALUES ('association-project-1', 'association-source', 2, 2)",
+                [],
+            )
+            .is_err());
+        assert!(conn
+            .execute(
+                "INSERT INTO research_project_sources
+                    (project_id, source_id, created_at_us, updated_at_us)
+                 VALUES ('missing-project', 'association-source', 3, 3)",
+                [],
+            )
+            .is_err());
+        assert!(conn
+            .execute(
+                "INSERT INTO research_project_sources
+                    (project_id, source_id, created_at_us, updated_at_us)
+                 VALUES ('association-project-1', 'missing-source', 3, 3)",
+                [],
+            )
+            .is_err());
+        assert!(conn
+            .execute(
+                "DELETE FROM research_projects WHERE id = 'association-project-1'",
+                [],
+            )
+            .is_err());
+        assert!(conn
+            .execute("DELETE FROM sources WHERE id = 'association-source'", [],)
+            .is_err());
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM research_project_sources", [], |row| {
+                row.get::<_, i64>(0)
+            },)
+                .expect("count valid associations"),
+            2
+        );
+    }
+
+    #[test]
+    fn failed_v2_migration_rolls_back_table_and_version_metadata() {
+        let conn = version_one_fixture();
+        conn.execute_batch(
+            "CREATE TRIGGER reject_v2_migration_metadata
+             BEFORE INSERT ON research_schema_migrations
+             WHEN NEW.version = 2
+             BEGIN
+                 SELECT RAISE(ABORT, 'synthetic v2 metadata failure');
+             END;",
+        )
+        .expect("install synthetic migration failure trigger");
+
+        assert!(initialize_schema(&conn).is_err());
+        assert!(!table_exists(&conn, "research_project_sources")
+            .expect("check rolled-back association table"));
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM research_schema_migrations WHERE version = 2",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count rolled-back v2 metadata"),
+            0
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM research_schema_migrations WHERE version = 1",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count preserved v1 metadata"),
+            1
+        );
+    }
+
+    #[test]
+    fn unsupported_or_inconsistent_research_migration_metadata_fails_closed() {
+        let future_version = version_one_fixture();
+        future_version
+            .execute(
+                "INSERT INTO research_schema_migrations
+                    (version, migration_id, checksum, applied_at_us)
+                 VALUES (3, 'future-schema-v3', 'synthetic', 3)",
+                [],
+            )
+            .expect("insert synthetic future migration");
+        assert!(initialize_schema(&future_version).is_err());
+        assert!(!table_exists(&future_version, "research_project_sources")
+            .expect("check future-version association table"));
+
+        let missing_v1_record = version_one_fixture();
+        missing_v1_record
+            .execute(
+                "DELETE FROM research_schema_migrations WHERE version = 1",
+                [],
+            )
+            .expect("remove synthetic v1 metadata");
+        assert!(initialize_schema(&missing_v1_record).is_err());
+        assert!(
+            !table_exists(&missing_v1_record, "research_project_sources")
+                .expect("check missing-metadata association table")
+        );
+
+        let inconsistent_checksum = version_one_fixture();
+        inconsistent_checksum
+            .execute(
+                "UPDATE research_schema_migrations SET checksum = 'incorrect'
+                 WHERE version = 1",
+                [],
+            )
+            .expect("corrupt synthetic v1 checksum");
+        assert!(initialize_schema(&inconsistent_checksum).is_err());
+        assert!(
+            !table_exists(&inconsistent_checksum, "research_project_sources")
+                .expect("check checksum-mismatch association table")
+        );
+
+        let unrecorded_v2_schema = version_one_fixture();
+        unrecorded_v2_schema
+            .execute_batch(RESEARCH_SCHEMA_V2_SQL)
+            .expect("install unrecorded synthetic v2 schema");
+        assert!(initialize_schema(&unrecorded_v2_schema).is_err());
+        assert_eq!(
+            unrecorded_v2_schema
+                .query_row(
+                    "SELECT COUNT(*) FROM research_schema_migrations WHERE version = 2",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("count missing v2 metadata"),
+            0
+        );
+
+        let missing_v2_schema = version_one_fixture();
+        missing_v2_schema
+            .execute(
+                "INSERT INTO research_schema_migrations
+                    (version, migration_id, checksum, applied_at_us)
+                 VALUES (?1, ?2, ?3, 3)",
+                params![
+                    RESEARCH_SCHEMA_V2_VERSION,
+                    RESEARCH_SCHEMA_V2_ID,
+                    schema_checksum(RESEARCH_SCHEMA_V2_SQL)
+                ],
+            )
+            .expect("insert v2 metadata without schema");
+        assert!(initialize_schema(&missing_v2_schema).is_err());
+        assert!(
+            !table_exists(&missing_v2_schema, "research_project_sources")
+                .expect("check missing v2 schema")
+        );
     }
 }
