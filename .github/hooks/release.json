@@ -1,12 +1,3 @@
 {
-  "hooks": {
-    "Stop": [
-      {
-        "type": "command",
-        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/auto-release.ps1",
-        "windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/auto-release.ps1",
-        "timeout": 60
-      }
-    ]
-  }
+  "hooks": {}
 }
