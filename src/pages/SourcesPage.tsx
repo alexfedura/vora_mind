@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   srcListSources,
   srcGetSourceBundle,
@@ -13,6 +13,11 @@ import { SourceDetailView } from "./sources/SourceDetailView";
 import { ArrowLeft, Plus, RefreshCw, AlertCircle } from "lucide-react";
 
 export const SourcesPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const requestedSourceId = searchParams.get("sourceId");
+  const requestedVersionId = searchParams.get("sourceVersionId");
+  const requestedLocationId = searchParams.get("sourceLocationId");
+  const requestedClaimId = searchParams.get("sourceClaimId");
   const [sources, setSources] = useState<SourceSummary[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
@@ -24,32 +29,75 @@ export const SourcesPage: React.FC = () => {
   const [showAddSource, setShowAddSource] = useState(false);
   const [showAddSegment, setShowAddSegment] = useState(false);
   const [targetParentSegmentId, setTargetParentSegmentId] = useState<string | null>(null);
+  const selectedSourceIdRef = useRef(selectedSourceId);
+  const appliedRouteSourceIdRef = useRef<string | null | undefined>(undefined);
+  const sourceListRequestRef = useRef(0);
+  const bundleRequestRef = useRef(0);
 
   const loadSources = useCallback(async (selectId?: string) => {
+    const requestId = ++sourceListRequestRef.current;
     setLoading(true);
     setError(null);
     try {
       const list = await srcListSources();
+      if (requestId !== sourceListRequestRef.current) return;
       setSources(list);
       if (selectId) {
-        setSelectedSourceId(selectId);
-      } else if (!selectedSourceId && list.length > 0) {
-        setSelectedSourceId(list[0].id);
+        if (list.some((source) => source.id === selectId)) {
+          setSelectedSourceId(selectId);
+        } else {
+          setError(`Source ${selectId} is not available in the shared Source Browser.`);
+        }
+      } else if (appliedRouteSourceIdRef.current !== requestedSourceId) {
+        appliedRouteSourceIdRef.current = requestedSourceId;
+        if (requestedSourceId) {
+          if (list.some((source) => source.id === requestedSourceId)) {
+            setSelectedSourceId(requestedSourceId);
+          } else {
+            setSelectedSourceId(null);
+            setError(`Requested Source ${requestedSourceId} is not available in the shared Source Browser.`);
+          }
+        } else if (!selectedSourceIdRef.current && list.length > 0) {
+          setSelectedSourceId(list[0].id);
+        }
+      } else if (
+        selectedSourceIdRef.current
+        && !list.some((source) => source.id === selectedSourceIdRef.current)
+      ) {
+        setSelectedSourceId(list[0]?.id ?? null);
+      }
+      if (
+        requestedSourceId
+        && (selectId ?? selectedSourceIdRef.current) === requestedSourceId
+        && !requestedVersionId
+        && (requestedLocationId || requestedClaimId)
+      ) {
+        setError("An exact SourceVersion ID is required to navigate to a SourceLocation or SourceClaim. Those requested targets were not selected.");
       }
     } catch (err) {
-      setError(String(err));
+      if (requestId === sourceListRequestRef.current) setError(String(err));
     } finally {
-      setLoading(false);
+      if (requestId === sourceListRequestRef.current) setLoading(false);
     }
-  }, [selectedSourceId]);
+  }, [requestedClaimId, requestedLocationId, requestedSourceId, requestedVersionId]);
 
   const loadBundle = useCallback(async (sourceId: string) => {
+    const requestId = ++bundleRequestRef.current;
     try {
       const b = await srcGetSourceBundle(sourceId);
-      setBundle(b);
+      if (requestId === bundleRequestRef.current) setBundle(b);
     } catch (err) {
-      setError(String(err));
+      if (requestId === bundleRequestRef.current) setError(String(err));
     }
+  }, []);
+
+  useEffect(() => {
+    selectedSourceIdRef.current = selectedSourceId;
+  }, [selectedSourceId]);
+
+  useEffect(() => () => {
+    sourceListRequestRef.current += 1;
+    bundleRequestRef.current += 1;
   }, []);
 
   useEffect(() => {
@@ -58,12 +106,16 @@ export const SourcesPage: React.FC = () => {
 
   useEffect(() => {
     if (selectedSourceId) {
+      setBundle(null);
       loadBundle(selectedSourceId);
       setSelectedSegmentId(null);
     } else {
       setBundle(null);
       setSelectedSegmentId(null);
     }
+    return () => {
+      bundleRequestRef.current += 1;
+    };
   }, [selectedSourceId, loadBundle]);
 
   const handleSourceCreated = (newId: string) => {
@@ -149,6 +201,9 @@ export const SourcesPage: React.FC = () => {
         <main className="flex-1 flex flex-col min-h-0 bg-background overflow-y-auto">
           <SourceDetailView
             bundle={bundle}
+            requestedVersionId={selectedSourceId === requestedSourceId ? requestedVersionId : null}
+            requestedLocationId={selectedSourceId === requestedSourceId && requestedVersionId ? requestedLocationId : null}
+            requestedClaimId={selectedSourceId === requestedSourceId && requestedVersionId ? requestedClaimId : null}
             selectedSegmentId={selectedSegmentId}
             onSelectSegment={(id) => setSelectedSegmentId(id)}
             onOpenAddSegment={handleOpenAddSegment}

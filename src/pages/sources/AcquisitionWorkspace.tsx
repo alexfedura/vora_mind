@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   srcAddFrameworkItem,
   srcCorrectKnowledgeExtraction,
@@ -59,6 +59,9 @@ type WorkspaceTab = "versions" | "knowledge" | "frameworks";
 interface AcquisitionWorkspaceProps {
   source: SourceRecord;
   segments: SegmentNode[];
+  initialVersionId: string | null;
+  initialLocationId: string | null;
+  initialClaimId: string | null;
 }
 
 interface LegacySegmentOption {
@@ -169,10 +172,13 @@ function claimRelationTargetKind(
 export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
   source,
   segments,
+  initialVersionId,
+  initialLocationId,
+  initialClaimId,
 }) => {
-  const [tab, setTab] = useState<WorkspaceTab>("versions");
+  const [tab, setTab] = useState<WorkspaceTab>(initialClaimId ? "knowledge" : "versions");
   const [versions, setVersions] = useState<SourceVersionDto[]>([]);
-  const [versionId, setVersionId] = useState("");
+  const [versionId, setVersionId] = useState(initialVersionId ?? "");
   const [locations, setLocations] = useState<SourceLocationDto[]>([]);
   const [extractions, setExtractions] = useState<KnowledgeExtractionDto[]>([]);
   const [claims, setClaims] = useState<SourceClaimDto[]>([]);
@@ -183,9 +189,13 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
   const [frameworkReviews, setFrameworkReviews] = useState<FrameworkReviewDto[]>([]);
   const [frameworkVersionId, setFrameworkVersionId] = useState("");
   const [compareVersionId, setCompareVersionId] = useState("");
-  const [selectedLocationId, setSelectedLocationId] = useState("");
+  const [selectedLocationId, setSelectedLocationId] = useState(initialLocationId ?? "");
   const [selectedExtractionId, setSelectedExtractionId] = useState("");
-  const [selectedClaimId, setSelectedClaimId] = useState("");
+  const [selectedClaimId, setSelectedClaimId] = useState(initialClaimId ?? "");
+  const [unavailableVersionId, setUnavailableVersionId] = useState<string | null>(null);
+  const initialVersionAppliedRef = useRef(false);
+  const unavailableVersionIdRef = useRef<string | null>(null);
+  const versionDetailsRequestRef = useRef(0);
   const [selectedItemId, setSelectedItemId] = useState("");
   const [relations, setRelations] = useState<ClaimRelationDto[]>([]);
   const [provenance, setProvenance] = useState<ProvenanceEventDto[]>([]);
@@ -242,21 +252,27 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
   const comparedVersion =
     frameworkVersions.find((version) => version.id === compareVersionId) ?? null;
   const selectedClaim = claims.find((claim) => claim.id === selectedClaimId) ?? null;
+  const selectedLocation = locations.find((location) => location.id === selectedLocationId) ?? null;
   const selectedExtraction =
     extractions.find((extraction) => extraction.id === selectedExtractionId) ?? null;
 
   const loadVersionDetails = useCallback(async (id: string) => {
+    const requestId = ++versionDetailsRequestRef.current;
     if (!id) {
       setLocations([]);
       setExtractions([]);
       return;
     }
+    setLocations([]);
+    setExtractions([]);
     const [nextLocations, nextExtractions] = await Promise.all([
       srcListSourceLocations(id),
       srcListKnowledgeExtractions(id),
     ]);
-    setLocations(nextLocations);
-    setExtractions(nextExtractions);
+    if (requestId === versionDetailsRequestRef.current) {
+      setLocations(nextLocations);
+      setExtractions(nextExtractions);
+    }
   }, []);
 
   const loadSourceData = useCallback(async () => {
@@ -270,17 +286,39 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
     setClaims(nextClaims);
     setItems(nextItems);
     setFrameworks(nextFrameworks);
-    setVersionId((current) =>
-      nextVersions.some((version) => version.id === current)
-        ? current
-        : nextVersions[0]?.id ?? "",
-    );
+    const initialTargetErrors: string[] = [];
+    if (initialVersionId && !initialVersionAppliedRef.current) {
+      initialVersionAppliedRef.current = true;
+      const versionExists = nextVersions.some((version) => version.id === initialVersionId);
+      setVersionId(initialVersionId);
+      unavailableVersionIdRef.current = versionExists ? null : initialVersionId;
+      setUnavailableVersionId(versionExists ? null : initialVersionId);
+      if (!versionExists) {
+        initialTargetErrors.push(`Requested exact SourceVersion ${initialVersionId} is unavailable; no replacement was selected.`);
+      }
+      if (initialLocationId) setSelectedLocationId(initialLocationId);
+      if (initialClaimId) {
+        setSelectedClaimId(initialClaimId);
+        if (!nextClaims.some((claim) =>
+          claim.id === initialClaimId && claim.sourceVersionId === initialVersionId
+        )) {
+          initialTargetErrors.push(`Requested SourceClaim ${initialClaimId} is unavailable for the exact SourceVersion reference.`);
+        }
+      }
+    } else {
+      setVersionId((current) =>
+        nextVersions.some((version) => version.id === current)
+          ? current
+          : unavailableVersionIdRef.current ?? nextVersions[0]?.id ?? "",
+      );
+    }
+    if (initialTargetErrors.length > 0) setError(initialTargetErrors.join(" "));
     setFrameworkId((current) =>
       nextFrameworks.some((framework) => framework.id === current)
         ? current
         : nextFrameworks[0]?.id ?? "",
     );
-  }, [source.id]);
+  }, [initialClaimId, initialLocationId, initialVersionId, source.id]);
 
   const loadFrameworkVersions = useCallback(async (id: string) => {
     if (!id) {
@@ -308,10 +346,9 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
   }, [loadSourceData]);
 
   useEffect(() => {
-    if (versionId) {
-      loadVersionDetails(versionId).catch((loadError: unknown) => setError(String(loadError)));
-    }
-  }, [versionId, loadVersionDetails]);
+    loadVersionDetails(selectedVersion?.id ?? "")
+      .catch((loadError: unknown) => setError(String(loadError)));
+  }, [selectedVersion?.id, loadVersionDetails]);
 
   useEffect(() => {
     loadFrameworkVersions(frameworkId).catch((loadError: unknown) =>
@@ -353,7 +390,7 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
     try {
       await action();
       await loadSourceData();
-      await loadVersionDetails(versionId);
+      await loadVersionDetails(selectedVersion?.id ?? "");
       if (frameworkId) await loadFrameworkVersions(frameworkId);
       setNotice(successMessage);
     } catch (actionError) {
@@ -467,12 +504,12 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
 
   const addExtraction = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedVersion || !selectedLocationId) return;
+    if (!selectedVersion || !selectedLocation) return;
     void runAction(async () => {
       const created = await srcCreateKnowledgeExtraction({
         sourceId: source.id,
         sourceVersionId: selectedVersion.id,
-        sourceSegmentId: selectedLocationId,
+        sourceSegmentId: selectedLocation.id,
         kind: extractionKind,
         content: extractionText.trim(),
         language: source.language,
@@ -767,6 +804,11 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
           <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,2fr)]">
             <div className="space-y-2">
               <h3 className="text-xs font-semibold text-gray-200">Immutable source versions</h3>
+              {unavailableVersionId && (
+                <p role="alert" className="rounded border border-amber-900/60 bg-amber-950/30 p-2 text-[10px] text-amber-200">
+                  Requested exact SourceVersion {unavailableVersionId} is unavailable. Select another version explicitly if needed.
+                </p>
+              )}
               {versions.length === 0 ? (
                 <p className="rounded border border-dashed border-[#384154] p-3 text-xs text-gray-500">
                   No version has been captured. Legacy source history is not treated as a version.
@@ -775,7 +817,15 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                 versions.map((version) => (
                   <button
                     key={version.id}
-                    onClick={() => setVersionId(version.id)}
+                    onClick={() => {
+                      setVersionId(version.id);
+                      unavailableVersionIdRef.current = null;
+                      setUnavailableVersionId(null);
+                      if (version.id !== initialVersionId) {
+                        setSelectedLocationId("");
+                        setSelectedClaimId("");
+                      }
+                    }}
                     className={`block w-full rounded border p-3 text-left ${
                       version.id === versionId
                         ? "border-amber-500/60 bg-amber-500/10"
@@ -888,7 +938,7 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                       const url = citedUrl(source, location);
                       const legacyId = location.legacySegmentId;
                       return (
-                        <li key={location.id} className="rounded border border-[#283143] p-2">
+                        <li key={location.id} className={`rounded border p-2 ${location.id === selectedLocationId ? "border-amber-500/60 bg-amber-500/5" : "border-[#283143]"}`}>
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="text-xs font-medium text-gray-200">
                               {location.label} <span className="ml-1 text-gray-400">({locationDescription(location)})</span>
@@ -913,7 +963,12 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
 
                 <div className="rounded-lg border border-[#293244] bg-[#141923] p-3">
                   <h3 className="text-xs font-semibold text-gray-200">Create an exact-version extraction</h3>
-                  {!selectedLocationId && <p className="mt-1 text-[10px] text-amber-300">Choose a citation location first.</p>}
+                  {initialLocationId && !locations.some((location) => location.id === initialLocationId) && (
+                    <p role="alert" className="mt-1 text-[10px] text-amber-300">
+                      The requested SourceLocation is unavailable for this version; select a recorded location explicitly.
+                    </p>
+                  )}
+                  {!selectedLocation && <p className="mt-1 text-[10px] text-amber-300">Choose a citation location first.</p>}
                   <form onSubmit={addExtraction} className="mt-3 space-y-2">
                     <div className="flex flex-wrap gap-2">
                       <select
@@ -928,7 +983,7 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
                       <input value={promptIdentity} onChange={(event) => setPromptIdentity(event.target.value)} placeholder="Prompt/config identity" className="rounded border border-[#394153] bg-[#0c1016] px-2 py-1.5 text-xs" />
                     </div>
                     <textarea required value={extractionText} onChange={(event) => setExtractionText(event.target.value)} rows={3} placeholder="Extraction content" className="w-full rounded border border-[#394153] bg-[#0c1016] px-2 py-1.5 text-xs" />
-                    <button disabled={busy || !selectedLocationId} className="rounded bg-amber-500 px-3 py-1.5 text-xs font-semibold text-black disabled:opacity-50">
+                    <button disabled={busy || !selectedLocation} className="rounded bg-amber-500 px-3 py-1.5 text-xs font-semibold text-black disabled:opacity-50">
                       Save as unreviewed
                     </button>
                     <p className="text-[10px] text-amber-300">Every new extraction starts unreviewed, including machine output.</p>
@@ -998,6 +1053,14 @@ export const AcquisitionWorkspace: React.FC<AcquisitionWorkspaceProps> = ({
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-3">
             <h3 className="text-xs font-semibold text-gray-200">Source-attributed claims</h3>
+            {initialClaimId && !claims.some((claim) =>
+              claim.id === initialClaimId
+              && (!initialVersionId || claim.sourceVersionId === initialVersionId)
+            ) && (
+              <p role="alert" className="rounded border border-amber-900/60 bg-amber-950/30 p-2 text-[10px] text-amber-200">
+                The requested SourceClaim is unavailable in this exact SourceVersion context.
+              </p>
+            )}
             {claims.length === 0 ? (
               <p className="text-xs text-gray-500">No source claims yet. Create one from an accepted source-claim extraction.</p>
             ) : claims.map((claim) => (

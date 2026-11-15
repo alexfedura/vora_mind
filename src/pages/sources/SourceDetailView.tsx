@@ -16,6 +16,9 @@ import {
 
 interface SourceDetailViewProps {
   bundle: SourceBundle | null;
+  requestedVersionId: string | null;
+  requestedLocationId: string | null;
+  requestedClaimId: string | null;
   selectedSegmentId: string | null;
   onSelectSegment: (id: string) => void;
   onOpenAddSegment: (parentId?: string | null) => void;
@@ -23,6 +26,9 @@ interface SourceDetailViewProps {
 
 export const SourceDetailView: React.FC<SourceDetailViewProps> = ({
   bundle,
+  requestedVersionId,
+  requestedLocationId,
+  requestedClaimId,
   selectedSegmentId,
   onSelectSegment,
   onOpenAddSegment,
@@ -192,7 +198,14 @@ export const SourceDetailView: React.FC<SourceDetailViewProps> = ({
         </div>
       )}
 
-      <AcquisitionWorkspace source={currentSource} segments={bundle.segment_tree} />
+      <AcquisitionWorkspace
+        key={`${currentSource.id}:${requestedVersionId ?? ""}:${requestedLocationId ?? ""}:${requestedClaimId ?? ""}`}
+        source={currentSource}
+        segments={bundle.segment_tree}
+        initialVersionId={requestedVersionId}
+        initialLocationId={requestedLocationId}
+        initialClaimId={requestedClaimId}
+      />
     </div>
   );
 };

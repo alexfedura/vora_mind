@@ -8,6 +8,10 @@ promise a complete end-to-end workbench. Rust repositories and their persisted
 schemas are authoritative; TypeScript services and panels are adapters. A
 frontend filter is not an authorization boundary.
 
+The Stage 3.2 Project Knowledge Workbench implementation and its validation
+evidence are documented in
+[VORA_STAGE_3_2_IMPLEMENTATION.md](./VORA_STAGE_3_2_IMPLEMENTATION.md).
+
 ## Workflow map
 
 ```text

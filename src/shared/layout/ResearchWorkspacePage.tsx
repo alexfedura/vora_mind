@@ -18,6 +18,7 @@ import { AnalysisWorkspacePanel } from "@/shared/layout/AnalysisWorkspacePanel";
 import { ModelWorkspacePanel } from "@/shared/layout/ModelWorkspacePanel";
 import { LearningWorkspacePanel } from "@/shared/layout/LearningWorkspacePanel";
 import { KnowledgeTransferWorkspacePanel } from "@/shared/layout/KnowledgeTransferWorkspacePanel";
+import { ProjectKnowledgeWorkbench } from "@/shared/layout/ProjectKnowledgeWorkbench";
 import type {
   ResearchGapDto,
   HypothesisExpectedDirection,
@@ -962,7 +963,7 @@ export const ResearchWorkspacePage: React.FC = () => {
               </span>
             ))}
           </div>
-          <form onSubmit={(event) => void adoptFrameworkVersion(event)} className="space-y-2 border-t border-[#292c34] pt-3">
+          <form id="project-framework-adoption" onSubmit={(event) => void adoptFrameworkVersion(event)} className="space-y-2 border-t border-[#292c34] pt-3">
             <h4 className="text-xs font-semibold text-gray-300">Adopt an external knowledge version</h4>
             <Field label="Published framework version"><select className={inputClass} name="frameworkVersionId" required><option value="">Select a published version</option>{workspace.frameworkVersions.map((version) => <option key={version.frameworkVersionId} value={version.frameworkVersionId}>{version.title} · v{version.versionNo}</option>)}</select></Field>
             <Field label="Use context"><input className={inputClass} name="context" required /></Field>
@@ -1131,9 +1132,26 @@ export const ResearchWorkspacePage: React.FC = () => {
         </div>
       </section>
 
+      {selectedProject && (
+        <ProjectKnowledgeWorkbench
+          key={projectId}
+          projectId={projectId}
+          projectSources={projectSources}
+          projectSourcesStatus={
+            projectSourcesLoading
+              ? "loading"
+              : currentProjectSourcesState?.status === "error"
+                ? "error"
+                : "loaded"
+          }
+          projectSourcesError={projectSourceError}
+          workspace={workspace}
+        />
+      )}
+
       {projectId && (
         <>
-          <section className="grid gap-5 lg:grid-cols-2">
+          <section id="research-literature" className="grid gap-5 lg:grid-cols-2">
             <form onSubmit={(event) => void createPriorAssessment(event)} className="space-y-3 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
               <h3 className="font-semibold text-white">Prior-knowledge assessment</h3>
               <p className="text-xs text-gray-500">A reviewable assessment can support research-gap acceptance.</p>
@@ -1257,7 +1275,7 @@ export const ResearchWorkspacePage: React.FC = () => {
 
           <section className="grid gap-5 lg:grid-cols-2">
             <div className="space-y-3 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
-              <h3 className="font-semibold text-white">Question lifecycle</h3>
+              <h3 id="research-question-lifecycle" className="font-semibold text-white">Question lifecycle</h3>
               <form onSubmit={(event) => void createQuestion(event)} className="space-y-3">
                 <ProjectSelect projects={workspace.projects} value={questionProjectId} onChange={setQuestionProjectId} />
                 <Field label="Accepted gap (optional)">
