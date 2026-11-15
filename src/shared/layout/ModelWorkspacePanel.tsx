@@ -1,12 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { analysisService } from "@/mind/services/analysisService";
 import { experimentService } from "@/mind/services/experimentService";
+import { useProjectWorkspace } from "@/hooks/useProjectWorkspace";
 import { modelService } from "@/mind/services/modelService";
 import type {
-  AnalysisWorkspaceDto,
   CreateModelVersionReq,
-  ExperimentWorkspaceDto,
   ModelArtifactRef,
   ModelDatasetUseReq,
   ModelDependencyReq,
@@ -231,55 +230,29 @@ function ModelFormLabel({ title, children }: { title: string; children: React.Re
 }
 
 export function ModelWorkspacePanel({ projectId }: { projectId: string }): React.JSX.Element {
-  const [workspace, setWorkspace] = useState<ModelWorkspaceDto | null>(null);
-  const [analysis, setAnalysis] = useState<AnalysisWorkspaceDto | null>(null);
-  const [experiments, setExperiments] = useState<ExperimentWorkspaceDto | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const {
+    workspace: data,
+    error,
+    busy,
+    refresh,
+    perform,
+    setError,
+  } = useProjectWorkspace(projectId, async (id) => {
+    const [models, analyses, experimentData] = await Promise.all([
+      modelService.getWorkspace(id),
+      analysisService.getWorkspace(id),
+      experimentService.getWorkspace(id),
+    ]);
+    return { models, analysis: analyses, experiments: experimentData };
+  });
+  const workspace = data?.models ?? null;
+  const analysis = data?.analysis ?? null;
+  const experiments = data?.experiments ?? null;
   const [selectedModelId, setSelectedModelId] = useState("");
   const [compareLeftId, setCompareLeftId] = useState("");
   const [compareRightId, setCompareRightId] = useState("");
   const [evaluationRunId, setEvaluationRunId] = useState("");
   const [validationId, setValidationId] = useState("");
-
-  const refresh = useCallback(async (): Promise<void> => {
-    if (!projectId) {
-      setWorkspace(null);
-      setAnalysis(null);
-      setExperiments(null);
-      return;
-    }
-    setBusy(true);
-    try {
-      const [models, analyses, experimentData] = await Promise.all([
-        modelService.getWorkspace(projectId),
-        analysisService.getWorkspace(projectId),
-        experimentService.getWorkspace(projectId),
-      ]);
-      setWorkspace(models);
-      setAnalysis(analyses);
-      setExperiments(experimentData);
-      setError(null);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
-  }, [projectId]);
-
-  useEffect(() => { void refresh(); }, [refresh]);
-
-  const perform = async (operation: () => Promise<unknown>): Promise<void> => {
-    setBusy(true);
-    try {
-      await operation();
-      await refresh();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const versionsForModel = useMemo(
     () => (workspace?.versions ?? []).filter((version) => version.modelId === selectedModelId),
@@ -309,17 +282,17 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
     event.preventDefault();
     const form = event.currentTarget;
     const values = new FormData(form);
-    await perform(async () => {
-      const model = await modelService.create({
-        displayName: String(values.get("displayName") ?? ""),
-        description: String(values.get("description") ?? ""),
-        originProjectId: projectId,
-        domainId: null,
-        createdBy: null,
-      });
-      setSelectedModelId(model.id);
+    const result = await perform(() => modelService.create({
+      displayName: String(values.get("displayName") ?? ""),
+      description: String(values.get("description") ?? ""),
+      originProjectId: projectId,
+      domainId: null,
+      createdBy: null,
+    }));
+    if (result.status === "completed") {
+      setSelectedModelId(result.value.id);
       form.reset();
-    });
+    }
   };
 
   const createVersion = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -329,7 +302,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
     const modelId = String(values.get("modelId") ?? "");
     const assumptionKey = String(values.get("assumptionKey") ?? "").trim();
     const assumptionStatement = String(values.get("assumptionStatement") ?? "").trim();
-    await perform(async () => {
+    const result = await perform(async () => {
       const impacts = parseArray(
         String(values.get("impacts") ?? "[]"),
         "Affected claims/assumptions",
@@ -380,10 +353,13 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
         evidenceIds: parseArray(String(values.get("evidenceIds") ?? "[]"), "Evidence IDs", isString),
         createdBy: null,
       });
-      setSelectedModelId(modelId);
-      setCompareRightId(created.id);
-      form.reset();
+      return created;
     });
+    if (result.status === "completed") {
+      setSelectedModelId(modelId);
+      setCompareRightId(result.value.id);
+      form.reset();
+    }
   };
 
   const createEvidence = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -518,6 +494,31 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
   const modelEvidence = workspace?.evidence ?? [];
   const modelVersions = workspace?.versions ?? [];
   if (!projectId) return <></>;
+
+  if (!workspace || !analysis || !experiments) {
+    return (
+      <section className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="font-semibold text-white">Model development and scientific validation</h3>
+            <p className="mt-1 text-xs text-gray-400">
+              Model identities are independent of hypotheses. Versions and outcomes are immutable records; validation scope is not a claim of scientific truth.
+            </p>
+          </div>
+          <button type="button" className={buttonClass} onClick={() => void refresh()} disabled={busy} aria-label="Refresh model workspace">
+            <RefreshCw size={14} className={busy ? "animate-spin" : ""} />
+          </button>
+        </div>
+        {error ? (
+          <div role="alert" className="flex gap-2 rounded-lg border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">
+            <AlertCircle size={14} />{error}
+          </div>
+        ) : (
+          <p role="status" className="text-xs text-gray-400">Loading model workspace and project evidence…</p>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">

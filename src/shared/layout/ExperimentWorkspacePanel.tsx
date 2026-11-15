@@ -1,8 +1,9 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { FormEvent, ReactElement, ReactNode } from "react";
 import { experimentService } from "@/mind/services/experimentService";
 import { researchService } from "@/mind/services/researchService";
+import { useProjectWorkspace } from "@/hooks/useProjectWorkspace";
 import type {
   AddDatasetSplitGroupReq,
   ComparisonGroupDto,
@@ -28,7 +29,6 @@ import type {
   ResearchWorkspaceDto,
   TradeSampleDto,
   MarketOrderType,
-  ExperimentWorkspaceDto,
 } from "@/types";
 
 const inputClass = "w-full rounded border border-[#343741] bg-[#15171b] px-2 py-1.5 text-xs text-gray-200";
@@ -373,45 +373,24 @@ export function ExperimentWorkspacePanel({
   projectId,
   research,
 }: ExperimentWorkspacePanelProps): ReactElement {
-  const [workspace, setWorkspace] = useState<ExperimentWorkspaceDto | null>(null);
+  const {
+    workspace,
+    error,
+    isLoading,
+    busy,
+    perform,
+    setError,
+    isCurrentProject,
+  } = useProjectWorkspace(projectId, (id) => experimentService.getWorkspace(id));
   const [samplePage, setSamplePage] = useState<DatasetSamplePageDto | null>(null);
   const [sampleVersionId, setSampleVersionId] = useState("");
   const [sampleJson, setSampleJson] = useState("");
   const [selectedFilePath, setSelectedFilePath] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const refresh = useCallback(async (): Promise<void> => {
-    if (!projectId) {
-      setWorkspace(null);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      setWorkspace(await experimentService.getWorkspace(projectId));
-      setError(null);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
 
   const act = useCallback(async <T,>(action: () => Promise<T>): Promise<T | null> => {
-    setError(null);
-    try {
-      const result = await action();
-      await refresh();
-      return result;
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-      return null;
-    }
-  }, [refresh]);
+    const result = await perform(action);
+    return result.status === "completed" ? result.value : null;
+  }, [perform]);
 
   const allDatasetVersions = useMemo(
     () => workspace?.datasets.flatMap((dataset) => dataset.versions.map((version) => ({
@@ -554,9 +533,12 @@ export function ExperimentWorkspacePanel({
   const pickDatasetAsset = async (): Promise<void> => {
     try {
       const selected = await open({ multiple: false, directory: false });
+      if (!isCurrentProject()) return;
       if (typeof selected === "string") setSelectedFilePath(selected);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (isCurrentProject()) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      }
     }
   };
 
@@ -658,8 +640,23 @@ export function ExperimentWorkspacePanel({
     return <p className={mutedClass}>Select a research project to manage experiment designs and datasets.</p>;
   }
 
+  if (!workspace) {
+    return (
+      <section className="space-y-3 border-t border-[#343741] pt-5">
+        <h3 className="text-sm font-semibold text-gray-200">Experimental architecture</h3>
+        {error ? (
+          <p role="alert" className="rounded border border-rose-900 bg-rose-950/30 p-2 text-xs text-rose-300">{error}</p>
+        ) : (
+          <p role="status" className={mutedClass}>
+            {isLoading ? "Refreshing persisted experiment state…" : "Experiment workspace is not available."}
+          </p>
+        )}
+      </section>
+    );
+  }
+
   return (
-    <section className="space-y-5 border-t border-[#343741] pt-5">
+    <section aria-busy={busy} className="space-y-5 border-t border-[#343741] pt-5">
       <div>
         <h3 className="text-sm font-semibold text-gray-200">Experimental architecture</h3>
         <p className={mutedClass}>
@@ -667,7 +664,11 @@ export function ExperimentWorkspacePanel({
         </p>
       </div>
       {error && <p role="alert" className="rounded border border-rose-900 bg-rose-950/30 p-2 text-xs text-rose-300">{error}</p>}
-      {isLoading && <p className={mutedClass}>Refreshing persisted experiment state…</p>}
+      {busy && (
+        <p role="status" className={mutedClass}>
+          {isLoading ? "Refreshing persisted experiment state…" : "Saving experiment changes…"}
+        </p>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-2">
         <form onSubmit={(event) => void createDesignVersion(event)} className="space-y-3 rounded-lg border border-[#292c34] bg-[#101114] p-3">

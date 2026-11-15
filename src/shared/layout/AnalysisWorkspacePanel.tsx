@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { analysisService } from "@/mind/services/analysisService";
+import { useProjectWorkspace } from "@/hooks/useProjectWorkspace";
 import type {
   AnalysisRunDto,
-  AnalysisWorkspaceDto,
   EvidenceArtifactRefDto,
   EvidencePolarity,
   EvidenceStatus,
@@ -210,45 +210,17 @@ function RunCard({ run }: { run: AnalysisRunDto }): React.JSX.Element {
 }
 
 export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): React.JSX.Element {
-  const [workspace, setWorkspace] = useState<AnalysisWorkspaceDto | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const {
+    workspace,
+    error,
+    busy,
+    refresh,
+    perform,
+    setError,
+  } = useProjectWorkspace(projectId, (id) => analysisService.getWorkspace(id));
   const [findingPropositionKind, setFindingPropositionKind] =
     useState<PropositionRefDto["kind"]>("source_claim");
   const [findingPropositionId, setFindingPropositionId] = useState("");
-
-  const refresh = useCallback(async (): Promise<void> => {
-    if (!projectId) {
-      setWorkspace(null);
-      return;
-    }
-    setBusy(true);
-    try {
-      setWorkspace(await analysisService.getWorkspace(projectId));
-      setError(null);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  const perform = async (operation: () => Promise<unknown>): Promise<void> => {
-    setBusy(true);
-    try {
-      await operation();
-      await refresh();
-      setError(null);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const createEvidence = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -262,7 +234,7 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
       setError("Choose typed evidence endpoints and provide both endpoint IDs.");
       return;
     }
-    await perform(async () => {
+    const result = await perform(async () => {
       await analysisService.createEvidence({
         projectId,
         proposition: { kind: propositionKind, id: propositionId },
@@ -274,8 +246,8 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
         provenance: { capturedIn: "analysis-workspace" },
         createdBy: null,
       });
-      form.reset();
     });
+    if (result.status === "completed") form.reset();
   };
 
   const createFinding = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -294,7 +266,7 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
       setError("Select at least one completed analysis and proposition-matched evidence record.");
       return;
     }
-    await perform(async () => {
+    const result = await perform(async () => {
       await analysisService.createFindingVersion({
         projectId,
         findingId: null,
@@ -316,8 +288,8 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
         changeRationale: "",
         createdBy: null,
       });
-      form.reset();
     });
+    if (result.status === "completed") form.reset();
   };
 
   const projectRuns = useMemo(
@@ -329,6 +301,31 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
   );
 
   if (!projectId) return <></>;
+
+  if (!workspace) {
+    return (
+      <section className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="font-semibold text-white">Analysis, evidence, and findings</h3>
+            <p className="mt-1 text-xs text-gray-400">
+              External runs retain exact version pins. Unassessed safeguards remain visible; findings are scoped assessments, not verified facts.
+            </p>
+          </div>
+          <button type="button" className={buttonClass} onClick={() => void refresh()} disabled={busy} aria-label="Refresh analysis workspace">
+            <RefreshCw size={14} className={busy ? "animate-spin" : ""} />
+          </button>
+        </div>
+        {error ? (
+          <div role="alert" className="flex items-center gap-2 rounded-lg border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">
+            <AlertCircle size={14} /> {error}
+          </div>
+        ) : (
+          <p role="status" className="text-xs text-gray-400">Loading analysis workspace…</p>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">

@@ -216,6 +216,13 @@ export const ResearchWorkspacePage: React.FC = () => {
   }, [workspace, projectId, questionProjectId]);
 
   useEffect(() => {
+    setSelectedSourceKey("");
+    setSelectedPlanVersionId("");
+    setSelectedDatasetVersionId("");
+    setSelectedHypothesisId("");
+  }, [projectId]);
+
+  useEffect(() => {
     let cancelled = false;
     void srcListSources()
       .then((sources) => {
@@ -277,6 +284,7 @@ export const ResearchWorkspacePage: React.FC = () => {
 
   const createProject = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    const activeProjectId = projectIdRef.current;
     const target = event.currentTarget;
     const form = new FormData(target);
     try {
@@ -286,6 +294,7 @@ export const ResearchWorkspacePage: React.FC = () => {
         pathways,
         createdBy: null,
       }));
+      if (projectIdRef.current !== activeProjectId) return;
       setProjectId(project.id);
       setQuestionProjectId(project.id);
       target.reset();
@@ -508,6 +517,7 @@ export const ResearchWorkspacePage: React.FC = () => {
 
   const createObservationPlan = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    const activeProjectId = projectId;
     const target = event.currentTarget;
     const form = new FormData(target);
     await act(async () => {
@@ -522,9 +532,11 @@ export const ResearchWorkspacePage: React.FC = () => {
         createdBy: null,
       });
       const version = plan.versions[0];
-      if (version) setSelectedPlanVersionId(version.id);
+      if (version && projectIdRef.current === activeProjectId) {
+        setSelectedPlanVersionId(version.id);
+      }
     });
-    target.reset();
+    if (projectIdRef.current === activeProjectId) target.reset();
   };
 
   const createObservation = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -557,6 +569,7 @@ export const ResearchWorkspacePage: React.FC = () => {
 
   const createDatasetVersion = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    const activeProjectId = projectId;
     const target = event.currentTarget;
     const form = new FormData(target);
     const sourceVersion = sourceVersions.find(
@@ -573,9 +586,11 @@ export const ResearchWorkspacePage: React.FC = () => {
         sourceVersionId: sourceVersion.sourceVersionId,
         createdBy: null,
       });
-      setSelectedDatasetVersionId(dataset.id);
+      if (projectIdRef.current === activeProjectId) {
+        setSelectedDatasetVersionId(dataset.id);
+      }
     });
-    target.reset();
+    if (projectIdRef.current === activeProjectId) target.reset();
   };
 
   const createPattern = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -795,7 +810,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     .sort((left, right) => left.title.localeCompare(right.title));
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6">
+    <div key={projectId} className="mx-auto w-full max-w-5xl space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-white">Research domain</h2>
@@ -1454,9 +1469,9 @@ export const ResearchWorkspacePage: React.FC = () => {
           </section>
         </>
       )}
-      <ExperimentWorkspacePanel projectId={projectId} research={workspace} />
-      <AnalysisWorkspacePanel projectId={projectId} />
-      <ModelWorkspacePanel projectId={projectId} />
+      <ExperimentWorkspacePanel key={projectId} projectId={projectId} research={workspace} />
+      <AnalysisWorkspacePanel key={projectId} projectId={projectId} />
+      <ModelWorkspacePanel key={projectId} projectId={projectId} />
       <LearningWorkspacePanel />
       <KnowledgeTransferWorkspacePanel />
     </div>
