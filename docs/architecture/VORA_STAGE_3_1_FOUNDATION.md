@@ -56,7 +56,8 @@ No new entity, persistence relationship, or ownership rule was introduced.
 | Analysis | Project loads wrote workspace/error/loading state without request identity. A prior load, failure, or finalizer could affect a later project; form resets followed the awaited mutation. | Loads and mutations now use project/request identity. A failed load clears workspace and renders an error instead of empty-success counts. Creation forms reset only after a current-project mutation response. |
 | Experiment | Refresh and `act` had no request identity. Dataset sample, file-picker, form, and selection state could be updated by an obsolete operation. | Shared controller gates load/mutation publication; the file picker checks current-project identity; stale action results do not set sample state or reset forms. The workspace reports loading/saving state and exposes no empty-success workspace on load failure. |
 | Model | A `Promise.all` refresh could publish results/errors or busy finalizers after a project switch. Create handlers changed selected model/version and reset forms inside the pending action. | Model, Analysis, and Experiment responses are published as one project-scoped snapshot; the create handlers apply selection/form changes only for a current successful response. |
-| Research page project-local UI | Global Research data is not a project-scoped workspace request, but project-local selections and forms persisted across a switch; two asynchronous create handlers also selected returned IDs. | The project subtree remounts on project change, project-specific selections clear, and delayed plan/dataset selection writes are guarded by the captured project ID. The shared Source association flow retains its existing request-ID and cancellation protection. |
+| Research page project-local UI | Global Research data is not a project-scoped workspace request. Some delayed mutation completions could reset a form or publish a failure after the user changed projects. | Project and Question-project contexts use separate request identities. Domain/adoption, Research record, Question/Hypothesis, plan/dataset, observation, and Source-association completion/error updates are guarded before changing project-local UI. Successful backend operation sequences remain intact. |
+| Global Research workspace refresh | Overlapping workspace refreshes could publish out of order, and completion after unmount could update hook state. | `LatestRequestGuard` lets only the newest active refresh publish workspace, loading, and error state; cleanup invalidates outstanding requests. A stale failure is suppressed. |
 
 `src/shared/layout/projectWorkspaceState.ts` is the production external-store
 controller used by `useProjectWorkspace`. It rejects responses from prior
@@ -136,10 +137,43 @@ change:
   undo a successful write to the project where it began.
 - The Research workspace API remains workspace-wide; this stage does not
   convert it to project-scoped transport.
+- Refresh ordering prevents stale publication, but does not cancel obsolete
+  service requests. The global Research page error still reports failures from
+  the workspace-global refresh itself.
 - Stage 2 migration-startup, legacy-profile, external-writer/WAL, and
   platform-specific durability limitations remain unchanged.
 - The trusted-local application has no authenticated principal or
   project-membership authorization boundary; actor IDs remain audit metadata.
+
+## Stage 3.1.2 corrective audit
+
+The Research page now guards delayed domain creation/assignment and Framework
+adoption forms; Research record create/reset flows; Question-project creation
+and refinement; plan/dataset selection; observation, pattern, idea, hypothesis,
+evidence, model-reference, and design forms; gap exception review; and Source
+association success/error updates. Main-project and Question-project contexts
+are tracked separately, and context generations also reject A→B→A stale
+completions.
+
+The Research workspace DTO, source catalog, and workspace-refresh error are
+global. Project-bound action errors and local form/selection updates are
+project-scoped. Project creation remains a global operation whose follow-up
+selection is guarded by the originating selected-project context. Backend calls
+are not cancelled or rolled back by these UI guards.
+
+`useResearchWorkspace` uses the production `LatestRequestGuard` for latest-wins
+refresh publication and unmount cleanup. Synthetic state tests exercise that
+guard and the project-operation guard directly. They are state-level tests;
+the repository still has no mounted React DOM test environment, so rendered
+form and browser-event behavior is not covered.
+
+Stage 3.1.2 validation:
+
+| Command | Result |
+|---|---|
+| `node --experimental-strip-types --test tests/researchAsyncGuards.test.mjs tests/projectWorkspaceState.test.mjs tests/projectSourcesState.test.mjs` | Passed: 18 tests, 0 failures. The 7 new cases cover stale/current and A→B→A project mutations, stale errors, latest global refresh ordering, older failure after newer success, and cleanup. |
+| `pnpm tsc --noEmit` | Passed. |
+| `git -c core.whitespace=cr-at-eol diff --check` | Passed for the final diff. |
 
 ## Stage 3.2 prerequisites
 

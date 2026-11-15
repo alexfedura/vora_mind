@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { AlertCircle, BookOpenCheck, Plus, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useResearchWorkspace } from "@/hooks/useResearchWorkspace";
@@ -8,6 +8,10 @@ import {
   projectSourcesReducer,
   selectProjectSourcesState,
 } from "@/shared/layout/projectSourcesState";
+import {
+  ProjectOperationGuard,
+  type ProjectOperationToken,
+} from "@/shared/layout/researchAsyncGuards";
 import { ExperimentWorkspacePanel } from "@/shared/layout/ExperimentWorkspacePanel";
 import { AnalysisWorkspacePanel } from "@/shared/layout/AnalysisWorkspacePanel";
 import { ModelWorkspacePanel } from "@/shared/layout/ModelWorkspacePanel";
@@ -35,6 +39,10 @@ const inputClass =
   "w-full rounded-lg border border-[#343741] bg-[#101114] px-3 py-2 text-sm text-white outline-none focus:border-[#e8ad55]";
 const buttonClass =
   "inline-flex items-center gap-2 rounded-lg bg-[#e8ad55] px-3 py-2 text-sm font-semibold text-[#17130d] disabled:cursor-not-allowed disabled:opacity-40";
+
+type ResearchActionResult<T> =
+  | { status: "completed"; value: T; token: ProjectOperationToken | null }
+  | { status: "failed" | "stale"; token: ProjectOperationToken | null };
 
 function isoDate(timestampUs: number): string {
   return new Date(timestampUs / 1000).toLocaleString();
@@ -164,6 +172,7 @@ export const ResearchWorkspacePage: React.FC = () => {
   const projectSourcesRequestId = useRef(0);
   const projectIdRef = useRef(projectId);
   projectIdRef.current = projectId;
+  const projectOperationGuard = useRef(new ProjectOperationGuard()).current;
   const [projectSourcesRevision, setProjectSourcesRevision] = useState(0);
   const [sourceSearch, setSourceSearch] = useState("");
   const [editingProjectSourceId, setEditingProjectSourceId] = useState<string | null>(null);
@@ -204,6 +213,11 @@ export const ResearchWorkspacePage: React.FC = () => {
   const projectHypotheses = (workspace?.hypotheses ?? []).filter(
     (hypothesis) => hypothesis.projectId === projectId,
   );
+
+  useLayoutEffect(() => {
+    projectOperationGuard.setCurrentProject("project", projectId);
+    projectOperationGuard.setCurrentProject("questionProject", questionProjectId);
+  }, [projectId, projectOperationGuard, questionProjectId]);
 
   useEffect(() => {
     if (!workspace) return;
@@ -274,17 +288,25 @@ export const ResearchWorkspacePage: React.FC = () => {
     };
   }, [projectId, projectSourcesRevision]);
 
-  const act = async (action: () => Promise<unknown>): Promise<void> => {
+  const act = async <T,>(
+    action: () => Promise<T>,
+    context: string | null = "project",
+  ): Promise<ResearchActionResult<T>> => {
+    const token = context ? projectOperationGuard.capture(context) : null;
+    const isCurrent = (): boolean => token === null || projectOperationGuard.isCurrent(token);
     try {
-      await run(action);
+      const value = await run(action, isCurrent);
+      return isCurrent()
+        ? { status: "completed", value, token }
+        : { status: "stale", token };
     } catch {
-      // The hook exposes the failure in the page-level alert.
+      return isCurrent() ? { status: "failed", token } : { status: "stale", token };
     }
   };
 
   const createProject = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const activeProjectId = projectIdRef.current;
+    const token = projectOperationGuard.capture("project");
     const target = event.currentTarget;
     const form = new FormData(target);
     try {
@@ -294,10 +316,11 @@ export const ResearchWorkspacePage: React.FC = () => {
         pathways,
         createdBy: null,
       }));
-      if (projectIdRef.current !== activeProjectId) return;
-      setProjectId(project.id);
-      setQuestionProjectId(project.id);
-      target.reset();
+      projectOperationGuard.commit(token, () => {
+        setProjectId(project.id);
+        setQuestionProjectId(project.id);
+        target.reset();
+      });
     } catch {
       // The hook exposes the failure in the page-level alert.
     }
@@ -308,7 +331,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     if (!projectId) return;
     const target = event.currentTarget;
     const form = new FormData(target);
-    await act(async () => {
+    const result = await act(async () => {
       const domain = await researchService.createDomain({
         name: String(form.get("name") ?? ""),
         description: String(form.get("description") ?? ""),
@@ -317,7 +340,9 @@ export const ResearchWorkspacePage: React.FC = () => {
       });
       await researchService.assignDomain(projectId, domain.id, "Assigned to this research project.");
     });
-    target.reset();
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const adoptFrameworkVersion = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -328,19 +353,22 @@ export const ResearchWorkspacePage: React.FC = () => {
       (item) => item.frameworkVersionId === String(form.get("frameworkVersionId") ?? ""),
     );
     if (!version) return;
-    await act(() => researchService.adoptFrameworkVersion(
+    const result = await act(() => researchService.adoptFrameworkVersion(
       projectId,
       version.frameworkId,
       version.frameworkVersionId,
       String(form.get("context") ?? ""),
       null,
     ));
-    target.reset();
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const associateProjectSource = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     if (!selectedProject || selectedProject.lifecycleStatus !== "active") return;
+    const token = projectOperationGuard.capture("project");
     const target = event.currentTarget;
     const form = new FormData(target);
     dispatchProjectSources({ type: "clearError", projectId: selectedProject.id });
@@ -351,22 +379,23 @@ export const ResearchWorkspacePage: React.FC = () => {
         useContext: String(form.get("useContext") ?? ""),
         notes: String(form.get("notes") ?? ""),
       });
-      if (projectIdRef.current !== selectedProject.id) return;
-      dispatchProjectSources({
-        type: "associationAdded",
-        projectId: selectedProject.id,
-        association,
+      projectOperationGuard.commit(token, () => {
+        dispatchProjectSources({
+          type: "associationAdded",
+          projectId: selectedProject.id,
+          association,
+        });
+        target.reset();
+        setSourceSearch("");
       });
-      target.reset();
-      setSourceSearch("");
     } catch (cause) {
-      if (projectIdRef.current === selectedProject.id) {
+      projectOperationGuard.commit(token, () => {
         dispatchProjectSources({
           type: "operationFailed",
           projectId: selectedProject.id,
           error: projectSourceErrorMessage(cause),
         });
-      }
+      });
     }
   };
 
@@ -376,6 +405,7 @@ export const ResearchWorkspacePage: React.FC = () => {
   ): Promise<void> => {
     event.preventDefault();
     if (!selectedProject || selectedProject.lifecycleStatus !== "active") return;
+    const token = projectOperationGuard.capture("project");
     const target = event.currentTarget;
     const form = new FormData(target);
     dispatchProjectSources({ type: "clearError", projectId: selectedProject.id });
@@ -386,21 +416,22 @@ export const ResearchWorkspacePage: React.FC = () => {
         useContext: String(form.get("useContext") ?? ""),
         notes: String(form.get("notes") ?? ""),
       });
-      if (projectIdRef.current !== selectedProject.id) return;
-      dispatchProjectSources({
-        type: "associationUpdated",
-        projectId: selectedProject.id,
-        association,
+      projectOperationGuard.commit(token, () => {
+        dispatchProjectSources({
+          type: "associationUpdated",
+          projectId: selectedProject.id,
+          association,
+        });
+        setEditingProjectSourceId(null);
       });
-      setEditingProjectSourceId(null);
     } catch (cause) {
-      if (projectIdRef.current === selectedProject.id) {
+      projectOperationGuard.commit(token, () => {
         dispatchProjectSources({
           type: "operationFailed",
           projectId: selectedProject.id,
           error: projectSourceErrorMessage(cause),
         });
-      }
+      });
     }
   };
 
@@ -408,7 +439,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     event.preventDefault();
     const target = event.currentTarget;
     const form = new FormData(target);
-    await act(async () => {
+    const result = await act(async () => {
       const assessment = await researchService.createPriorAssessment({
         projectId,
         title: String(form.get("title") ?? ""),
@@ -418,7 +449,9 @@ export const ResearchWorkspacePage: React.FC = () => {
       });
       await researchService.reviewPriorAssessment(assessment.id, null);
     });
-    target.reset();
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const createLiteratureReview = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -426,7 +459,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     if (!selectedSource) return;
     const target = event.currentTarget;
     const form = new FormData(target);
-    await act(() => researchService.createReviewedLiteratureReview({
+    const result = await act(() => researchService.createReviewedLiteratureReview({
         projectId,
         title: String(form.get("title") ?? ""),
         searchScope: String(form.get("scope") ?? ""),
@@ -438,11 +471,14 @@ export const ResearchWorkspacePage: React.FC = () => {
         createdBy: null,
         reviewerId: null,
       }));
-    target.reset();
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const createGap = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    const token = projectOperationGuard.capture("project");
     const target = event.currentTarget;
     const form = new FormData(target);
     try {
@@ -453,7 +489,7 @@ export const ResearchWorkspacePage: React.FC = () => {
         title: String(form.get("title") ?? ""),
         statement: String(form.get("statement") ?? ""),
         createdBy: null,
-      }));
+      }), () => projectOperationGuard.isCurrent(token));
       const evidenceId = String(form.get("evidenceId") ?? "");
       const evidenceKind = String(form.get("evidenceKind") ?? "");
       if (evidenceId) {
@@ -461,9 +497,9 @@ export const ResearchWorkspacePage: React.FC = () => {
         gapId: gap.id,
         literatureReviewId: evidenceKind === "literature" ? evidenceId : null,
         priorAssessmentId: evidenceKind === "prior" ? evidenceId : null,
-        }));
+        }), () => projectOperationGuard.isCurrent(token));
       }
-      target.reset();
+      projectOperationGuard.commit(token, () => target.reset());
     } catch {
       // The hook exposes the failure in the page-level alert.
     }
@@ -478,7 +514,7 @@ export const ResearchWorkspacePage: React.FC = () => {
       gapId: gap.id,
       literatureReviewId: evidenceKind === "literature" ? evidenceId : null,
       priorAssessmentId: evidenceKind === "prior" ? evidenceId : null,
-    }));
+    }), "project");
   };
 
   const createQuestion = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -486,7 +522,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     const target = event.currentTarget;
     const form = new FormData(target);
     const gapId = String(form.get("gapId") ?? "");
-    await act(() => researchService.createQuestion({
+    const result = await act(() => researchService.createQuestion({
       projectId: questionProjectId || null,
       researchGapId: gapId || null,
       domainId: String(form.get("domainId") ?? "") || null,
@@ -494,15 +530,17 @@ export const ResearchWorkspacePage: React.FC = () => {
       description: String(form.get("description") ?? ""),
       rationale: String(form.get("rationale") ?? ""),
       createdBy: null,
-    }));
-    target.reset();
+    }), "questionProject");
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const createPhenomenon = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const target = event.currentTarget;
     const form = new FormData(target);
-    await act(() => researchService.createPhenomenon({
+    const result = await act(() => researchService.createPhenomenon({
       projectId,
       domainId: String(form.get("domainId") ?? "") || null,
       title: String(form.get("title") ?? ""),
@@ -512,16 +550,16 @@ export const ResearchWorkspacePage: React.FC = () => {
       temporalBoundary: String(form.get("temporalBoundary") ?? ""),
       createdBy: null,
     }));
-    target.reset();
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const createObservationPlan = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const activeProjectId = projectId;
     const target = event.currentTarget;
     const form = new FormData(target);
-    await act(async () => {
-      const plan = await researchService.createObservationPlan({
+    const result = await act(() => researchService.createObservationPlan({
         projectId,
         phenomenonId: String(form.get("phenomenonId") ?? ""),
         title: String(form.get("title") ?? ""),
@@ -530,13 +568,14 @@ export const ResearchWorkspacePage: React.FC = () => {
         conditionsTemplate: String(form.get("conditions") ?? ""),
         inclusionRules: String(form.get("inclusionRules") ?? ""),
         createdBy: null,
+      }));
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => {
+        const version = result.value.versions[0];
+        if (version) setSelectedPlanVersionId(version.id);
+        target.reset();
       });
-      const version = plan.versions[0];
-      if (version && projectIdRef.current === activeProjectId) {
-        setSelectedPlanVersionId(version.id);
-      }
-    });
-    if (projectIdRef.current === activeProjectId) target.reset();
+    }
   };
 
   const createObservation = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -549,7 +588,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     const target = event.currentTarget;
     const form = new FormData(target);
     const state = observationValueState(String(form.get("valueState") ?? "observed"));
-    await act(() => researchService.createObservation({
+    const result = await act(() => researchService.createObservation({
       projectId,
       phenomenonId: plan.phenomenonId,
       planId: plan.id,
@@ -564,20 +603,20 @@ export const ResearchWorkspacePage: React.FC = () => {
       sampleIdentifier: String(form.get("sampleId") ?? "") || null,
       createdBy: null,
     }));
-    target.reset();
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const createDatasetVersion = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const activeProjectId = projectId;
     const target = event.currentTarget;
     const form = new FormData(target);
     const sourceVersion = sourceVersions.find(
       (source) => source.sourceVersionId === String(form.get("sourceVersionId") ?? ""),
     );
     if (!sourceVersion) return;
-    await act(async () => {
-      const dataset = await researchService.createDatasetVersionReference({
+    const result = await act(() => researchService.createDatasetVersionReference({
         projectId,
         title: String(form.get("title") ?? ""),
         versionLabel: String(form.get("version") ?? ""),
@@ -585,12 +624,13 @@ export const ResearchWorkspacePage: React.FC = () => {
         contentSha256: null,
         sourceVersionId: sourceVersion.sourceVersionId,
         createdBy: null,
+      }));
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => {
+        setSelectedDatasetVersionId(result.value.id);
+        target.reset();
       });
-      if (projectIdRef.current === activeProjectId) {
-        setSelectedDatasetVersionId(dataset.id);
-      }
-    });
-    if (projectIdRef.current === activeProjectId) target.reset();
+    }
   };
 
   const createPattern = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -598,8 +638,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     const target = event.currentTarget;
     const form = new FormData(target);
     const observationId = String(form.get("observationId") ?? "");
-    await act(async () => {
-      await researchService.createPattern({
+    const result = await act(() => researchService.createPattern({
         projectId,
         title: String(form.get("title") ?? ""),
         statement: String(form.get("statement") ?? ""),
@@ -608,9 +647,10 @@ export const ResearchWorkspacePage: React.FC = () => {
         observationIds: observationId ? [observationId] : [],
         datasetVersionReferenceIds: [],
         createdBy: null,
-      });
-    });
-    target.reset();
+      }));
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const createIdea = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -619,7 +659,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     const form = new FormData(target);
     const originKind = String(form.get("originKind") ?? "");
     const originId = String(form.get("originId") ?? "");
-    await act(() => researchService.createIdea({
+    const result = await act(() => researchService.createIdea({
       projectId,
       title: String(form.get("title") ?? ""),
       content: String(form.get("content") ?? ""),
@@ -629,7 +669,9 @@ export const ResearchWorkspacePage: React.FC = () => {
       questionId: originKind === "question" ? originId : null,
       createdBy: null,
     }));
-    target.reset();
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const createHypothesis = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -637,7 +679,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     const target = event.currentTarget;
     const form = new FormData(target);
     const questionId = String(form.get("questionId") ?? "");
-    await act(() => researchService.createTypedHypothesis({
+    const result = await act(() => researchService.createTypedHypothesis({
       projectId,
       researchQuestionId: questionId,
       parentHypothesisId: null,
@@ -671,7 +713,9 @@ export const ResearchWorkspacePage: React.FC = () => {
       ],
       createdBy: null,
     }));
-    target.reset();
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const addHypothesisEvidence = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -686,7 +730,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     const polarity = polarityValue === "contradicts"
       ? "contradicts"
       : polarityValue === "qualifies" ? "qualifies" : "supports";
-    await act(() => researchService.addHypothesisEvidence({
+    const result = await act(() => researchService.addHypothesisEvidence({
       hypothesisVersionId: definition.id,
       sourceClaimId: kind === "source_claim" ? id : null,
       observationId: kind === "observation" ? id : null,
@@ -695,27 +739,31 @@ export const ResearchWorkspacePage: React.FC = () => {
       rationale: String(form.get("rationale") ?? ""),
       createdBy: null,
     }));
-    target.reset();
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const addCompetingHypotheses = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const target = event.currentTarget;
     const form = new FormData(target);
-    await act(() => researchService.linkCompetingHypotheses({
+    const result = await act(() => researchService.linkCompetingHypotheses({
       hypothesisId: String(form.get("hypothesisId") ?? ""),
       competingHypothesisId: String(form.get("competingId") ?? ""),
       rationale: String(form.get("rationale") ?? ""),
       createdBy: null,
     }));
-    target.reset();
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const addModelReference = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const target = event.currentTarget;
     const form = new FormData(target);
-    await act(() => researchService.addHypothesisModelReference({
+    const result = await act(() => researchService.addHypothesisModelReference({
       hypothesisId: String(form.get("hypothesisId") ?? ""),
       modelId: String(form.get("modelId") ?? ""),
       modelVersionId: String(form.get("modelVersionId") ?? ""),
@@ -723,21 +771,25 @@ export const ResearchWorkspacePage: React.FC = () => {
       rationale: String(form.get("rationale") ?? ""),
       createdBy: null,
     }));
-    target.reset();
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const refineQuestion = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const target = event.currentTarget;
     const form = new FormData(target);
-    await act(() => researchService.refineQuestion(
+    const result = await act(() => researchService.refineQuestion(
       String(form.get("parentQuestionId") ?? ""),
       String(form.get("title") ?? ""),
       String(form.get("description") ?? ""),
       String(form.get("rationale") ?? ""),
       null,
-    ));
-    target.reset();
+    ), "questionProject");
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const createDesign = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -747,7 +799,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     if (!hypothesis || !definition) return;
     const target = event.currentTarget;
     const form = new FormData(target);
-    await act(() => researchService.createLinkedDesign({
+    const result = await act(() => researchService.createLinkedDesign({
         projectId,
         title: String(form.get("title") ?? ""),
         description: String(form.get("description") ?? ""),
@@ -757,11 +809,16 @@ export const ResearchWorkspacePage: React.FC = () => {
         rationale: String(form.get("rationale") ?? ""),
         createdBy: null,
       }));
-    target.reset();
+    if (result.status === "completed" && result.token) {
+      projectOperationGuard.commit(result.token, () => target.reset());
+    }
   };
 
   const updateQuestionStatus = (question: ResearchQuestionDto, status: "review" | "accepted" | "deferred" | "rejected") =>
-    act(() => researchService.transitionQuestion(question.id, status, null, "Updated in Research workspace."));
+    act(
+      () => researchService.transitionQuestion(question.id, status, null, "Updated in Research workspace."),
+      "questionProject",
+    );
 
   const assignQuestion = (event: React.FormEvent<HTMLFormElement>, questionId: string): void => {
     event.preventDefault();
@@ -771,7 +828,7 @@ export const ResearchWorkspacePage: React.FC = () => {
       String(form.get("projectId") ?? ""),
       String(form.get("rationale") ?? ""),
       null,
-    ));
+    ), "questionProject");
   };
 
   const assignHypothesis = (event: React.FormEvent<HTMLFormElement>, hypothesisId: string): void => {
@@ -871,10 +928,10 @@ export const ResearchWorkspacePage: React.FC = () => {
                     <span className="mt-1 block text-[11px] text-gray-500">{project.domainIds.length} domain assignment(s)</span>
                   </button>
                   <div className="mt-2 flex gap-2">
-                    {project.lifecycleStatus === "proposed" && <button type="button" onClick={() => void act(() => researchService.transitionProject(project.id, "active", null))} className="rounded border border-emerald-800 px-2 py-1 text-[11px] text-emerald-300">Activate</button>}
-                    {project.lifecycleStatus === "active" && <button type="button" onClick={() => void act(() => researchService.transitionProject(project.id, "paused", null))} className="rounded border border-[#343741] px-2 py-1 text-[11px] text-gray-300">Pause</button>}
-                    {project.lifecycleStatus === "paused" && <button type="button" onClick={() => void act(() => researchService.transitionProject(project.id, "active", null))} className="rounded border border-emerald-800 px-2 py-1 text-[11px] text-emerald-300">Resume</button>}
-                    {["active", "paused"].includes(project.lifecycleStatus) && <button type="button" onClick={() => void act(() => researchService.transitionProject(project.id, "completed", null))} className="rounded border border-[#343741] px-2 py-1 text-[11px] text-gray-300">Complete</button>}
+                    {project.lifecycleStatus === "proposed" && <button type="button" onClick={() => void act(() => researchService.transitionProject(project.id, "active", null), null)} className="rounded border border-emerald-800 px-2 py-1 text-[11px] text-emerald-300">Activate</button>}
+                    {project.lifecycleStatus === "active" && <button type="button" onClick={() => void act(() => researchService.transitionProject(project.id, "paused", null), null)} className="rounded border border-[#343741] px-2 py-1 text-[11px] text-gray-300">Pause</button>}
+                    {project.lifecycleStatus === "paused" && <button type="button" onClick={() => void act(() => researchService.transitionProject(project.id, "active", null), null)} className="rounded border border-emerald-800 px-2 py-1 text-[11px] text-emerald-300">Resume</button>}
+                    {["active", "paused"].includes(project.lifecycleStatus) && <button type="button" onClick={() => void act(() => researchService.transitionProject(project.id, "completed", null), null)} className="rounded border border-[#343741] px-2 py-1 text-[11px] text-gray-300">Complete</button>}
                   </div>
                 </article>
               ))}
@@ -1166,14 +1223,18 @@ export const ResearchWorkspacePage: React.FC = () => {
             </div>
             <form onSubmit={(event) => {
               event.preventDefault();
-              const form = new FormData(event.currentTarget);
+              const target = event.currentTarget;
+              const form = new FormData(target);
               void act(() => researchService.reviewGapException({
                 gapId: String(form.get("gapId") ?? ""),
                 rationale: String(form.get("rationale") ?? ""),
                 reviewerId: null,
                 reviewDecision: "accepted",
-              }));
-              event.currentTarget.reset();
+              })).then((result) => {
+                if (result.status === "completed" && result.token) {
+                  projectOperationGuard.commit(result.token, () => target.reset());
+                }
+              });
             }} className="grid gap-2 border-t border-[#292c34] pt-3 md:grid-cols-[1fr_2fr_auto]">
               <Field label="Reviewed exception for"><select className={inputClass} name="gapId" required><option value="">Select a gap</option>{workspace.gaps.filter((gap) => gap.projectId === projectId).map((gap) => <option key={gap.id} value={gap.id}>{gap.title}</option>)}</select></Field>
               <Field label="Rationale"><input className={inputClass} name="rationale" required /></Field>

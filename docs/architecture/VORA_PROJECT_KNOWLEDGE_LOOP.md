@@ -72,6 +72,30 @@ SourceVersion and may pin its SourceLocation and SourceClaim.
    this trusted single-user application; they are not authenticated principals
    or project-membership authorization.
 
+## Research UI asynchronous state
+
+The Research workspace read is intentionally workspace-global: it returns
+records for multiple Research projects, which the page filters by project.
+Source catalog data is also global. Refreshes use request identity so only the
+latest active request may publish workspace, loading, or error state. Hook
+cleanup invalidates outstanding refreshes.
+
+Project-local selections, project Source associations, form resets, and
+mutation errors are guarded by the identity of their owning project context.
+The main Research project and the independently selected Question project have
+separate identities. Late results may still complete their original backend
+operation, but cannot publish project-local UI changes after that context
+switches.
+
+Synthetic state tests exercise the production project-operation and
+latest-refresh guards. They cover late/current mutation completion, stale
+errors, out-of-order refreshes, and cleanup. They do not mount React
+components or verify browser-rendered form behavior.
+
+These are presentation-state safeguards only. They do not cancel IPC calls,
+roll back completed writes, or provide authenticated authorization or project
+membership enforcement. The Research workspace transport remains global.
+
 ## Stage 3.2 prerequisites
 
 - Write a feature specification before adding a Project Knowledge Workbench or
