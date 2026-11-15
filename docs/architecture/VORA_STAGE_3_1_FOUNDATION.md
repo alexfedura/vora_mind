@@ -241,3 +241,46 @@ exception to the Stage 3.1 scope. The implementation baseline was
 `8c566118433c8425e7f2d783859a56f26e3e81ee`; the release commit and publication
 status must be reported from the final Git result. No active workspace database
 was opened, initialized, migrated, or modified.
+
+## Stage 3.1 formal closure
+
+**ACCEPT WITH DOCUMENTED LIMITATIONS — STAGE 3.1 CLOSED**
+
+This decision applies only to Stage 3.1: project-workspace stale-response
+protections and the Project Knowledge Loop architecture foundation. It is not
+whole-application, multi-user security, authorization, production-migration,
+or Stage 3.2 acceptance.
+
+The accepted implementation rejects stale project A→B→A results, gates latest
+workspace-refresh success/failure/finally publication, and invalidates pending
+mutation publication on page cleanup. Strict Mode setup/cleanup/setup can
+reactivate the guard while lifecycle generations keep old tokens stale.
+Question and Hypothesis assignments are tied to the exact submitted
+destination; changing it suppresses stale results and errors. Workspace-global
+project transitions use lifecycle protection without selected-project scoping.
+`createProject` passes its token predicate to `run`, preventing late error
+publication after unmount. No remaining relevant unguarded asynchronous
+mutation path was identified in the audited Research callsites.
+
+Historical validation evidence (not rerun for this closure): Stage 3.1.4
+reported 26 passing tests; Stage 3.1.6 reported 29 passing tests,
+`pnpm tsc --noEmit`, and a CRLF-aware diff check. The tests exercise production
+guard classes and state-level behavior, but some manually simulate publication
+or commit behavior. React components and effects were not mounted; actual
+browser event and effect lifecycle integration remains unverified.
+
+These are UI stale-response protections only. Backend operations are not
+canceled or rolled back, so a write may persist after its UI result is
+discarded. The guards do not provide authorization or multi-user isolation.
+
+Stage 3.1 process deviations: the three version declarations were
+unauthorizedly advanced in four patch steps, `0.24.2`→`0.24.3` in
+`522e78d2909ab5f8e3c0805c2b520cc2206b95dc`,
+`0.24.3`→`0.24.4` in
+`8f1f3ea2da4c7ef3f6bb500616960214288468d2`,
+`0.24.4`→`0.24.5` in
+`1bc0c5634d919810320e504f5d22becbfa173456`, and `0.24.5`→`0.24.6` in
+`c43e677009877d3153e4af255001f6542c2b14a1`. The Stage 3.1 implementation
+was also committed and pushed in those four commits; all are present in
+`origin/main` at closure. Final HEAD at closure:
+`c43e677009877d3153e4af255001f6542c2b14a1`.
