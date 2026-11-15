@@ -56,6 +56,69 @@ test("a project mutation still applies its UI update when its project remains cu
   assert.deepEqual(state, { form: "", selection: "created item" });
 });
 
+test("a current createProject failure publishes its error", async () => {
+  const guard = new ProjectOperationGuard();
+  const pending = deferred();
+  const state = { error: null };
+  guard.setCurrentProject("project", "origin");
+  const token = guard.capture("project");
+  const isCurrent = () => guard.isCurrent(token);
+  const operation = pending.promise.catch((error) => {
+    if (isCurrent()) state.error = error.message;
+  });
+
+  pending.reject(new Error("project creation failed"));
+  await operation;
+
+  assert.equal(state.error, "project creation failed");
+});
+
+test("a createProject failure after lifecycle invalidation publishes no error", async () => {
+  const guard = new ProjectOperationGuard();
+  const pending = deferred();
+  const state = { error: null };
+  guard.setCurrentProject("project", "origin");
+  const token = guard.capture("project");
+  const isCurrent = () => guard.isCurrent(token);
+  const operation = pending.promise.catch((error) => {
+    if (isCurrent()) state.error = error.message;
+  });
+
+  guard.invalidate();
+  pending.reject(new Error("late project creation failure"));
+  await operation;
+
+  assert.equal(state.error, null);
+});
+
+test("a current createProject success retains its guarded follow-up updates", async () => {
+  const guard = new ProjectOperationGuard();
+  const pending = deferred();
+  const state = {
+    projectId: "origin",
+    questionProjectId: "question-origin",
+    form: "submitted",
+  };
+  guard.setCurrentProject("project", "origin");
+  const token = guard.capture("project");
+  const operation = pending.promise.then((project) => {
+    guard.commit(token, () => {
+      state.projectId = project.id;
+      state.questionProjectId = project.id;
+      state.form = "";
+    });
+  });
+
+  pending.resolve({ id: "created-project" });
+  await operation;
+
+  assert.deepEqual(state, {
+    projectId: "created-project",
+    questionProjectId: "created-project",
+    form: "",
+  });
+});
+
 test("a successful mutation cannot publish after the Research page unmounts", async () => {
   const guard = new ProjectOperationGuard();
   const pending = deferred();

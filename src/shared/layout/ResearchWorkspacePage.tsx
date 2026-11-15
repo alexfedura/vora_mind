@@ -326,7 +326,7 @@ export const ResearchWorkspacePage: React.FC = () => {
         aim: String(form.get("aim") ?? ""),
         pathways,
         createdBy: null,
-      }));
+      }), () => projectOperationGuard.isCurrent(token));
       projectOperationGuard.commit(token, () => {
         setProjectId(project.id);
         setQuestionProjectId(project.id);

@@ -88,6 +88,11 @@ to the exact destination project submitted; changing that destination makes
 the pending operation stale without conflating it with either selected
 Research project.
 
+Project creation remains a workspace-level operation. Its existing follow-up
+selection/reset is guarded by the captured origin context, and its error
+publication now receives that same token's currentness predicate, preventing a
+late failure from updating hook state after the page lifecycle is invalidated.
+
 The project-operation guard captures a lifecycle generation in each token.
 The page effect activates the guard and invalidates it during cleanup, which
 rejects every outstanding mutation token. Invalidation is idempotent, and

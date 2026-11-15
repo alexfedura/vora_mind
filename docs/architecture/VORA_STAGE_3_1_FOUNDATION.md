@@ -205,6 +205,19 @@ destination changes, and a failure with an unchanged destination. Tests remain
 state-level; no mounted React DOM test environment is available, so actual
 component effect and browser-event execution are not covered.
 
+## Stage 3.1.6 createProject lifecycle error guard
+
+The `createProject` handler now passes the currentness predicate for its
+captured operation token to `useResearchWorkspace.run`. A failed request can
+publish the page error only while the token remains current; success retains
+the existing guarded project-selection and form-reset behavior. Project
+creation remains global and the backend operation is unchanged.
+
+The focused regression tests exercise `ProjectOperationGuard` and manually
+simulate the hook's conditional error publication and the success commit.
+They do not execute the `createProject` React callsite or mount the component,
+so wiring and browser/effect behavior are not component-level tested.
+
 ## Stage 3.2 prerequisites
 
 Before a Project Knowledge Workbench is built:
