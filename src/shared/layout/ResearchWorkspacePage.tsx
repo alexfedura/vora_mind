@@ -1146,6 +1146,7 @@ export const ResearchWorkspacePage: React.FC = () => {
           }
           projectSourcesError={projectSourceError}
           workspace={workspace}
+          onOpenProject={setProjectId}
         />
       )}
 

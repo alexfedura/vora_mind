@@ -9,6 +9,8 @@ import {
   buildProjectKnowledgeOverview,
   type ProjectKnowledgeReference,
 } from "@/shared/layout/projectKnowledgeModel";
+import { ProjectLifecycleNavigator } from "@/shared/layout/ProjectLifecycleNavigator";
+import { useProjectLifecycleWorkbench } from "@/hooks/useProjectLifecycleWorkbench";
 import type {
   ResearchProjectSourceDto,
   ResearchWorkspaceDto,
@@ -22,6 +24,7 @@ interface ProjectKnowledgeWorkbenchProps {
   projectSourcesStatus: LoadStatus;
   projectSourcesError: string | null;
   workspace: ResearchWorkspaceDto;
+  onOpenProject: (projectId: string) => void;
 }
 
 const panelClass = "rounded-xl border border-[#292c34] bg-[#17191f] p-4";
@@ -59,11 +62,13 @@ export const ProjectKnowledgeWorkbench: React.FC<ProjectKnowledgeWorkbenchProps>
   projectSourcesStatus,
   projectSourcesError,
   workspace,
+  onOpenProject,
 }) => {
   const overview = useMemo(
     () => buildProjectKnowledgeOverview(projectId, workspace, projectSources),
     [projectId, projectSources, workspace],
   );
+  const lifecycle = useProjectLifecycleWorkbench(projectId);
   const [selectedSourceId, setSelectedSourceId] = useState("");
   const [selectedVersionId, setSelectedVersionId] = useState("");
   const [selectedLocationId, setSelectedLocationId] = useState("");
@@ -182,7 +187,7 @@ export const ProjectKnowledgeWorkbench: React.FC<ProjectKnowledgeWorkbenchProps>
     selectedFramework?.status === "loaded" ? selectedFramework.version : null;
 
   return (
-    <section className="space-y-4 rounded-xl border border-[#3b3428] bg-[#191813] p-4" aria-labelledby="project-knowledge-heading">
+    <section id="project-lifecycle-project-knowledge" className="space-y-4 rounded-xl border border-[#3b3428] bg-[#191813] p-4" aria-labelledby="project-knowledge-heading">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -200,6 +205,14 @@ export const ProjectKnowledgeWorkbench: React.FC<ProjectKnowledgeWorkbenchProps>
         </Link>
       </div>
 
+      <nav aria-label="Project Knowledge Loop" className="flex flex-wrap gap-2 text-xs">
+        <a href="#project-lifecycle-project-knowledge" className="rounded border border-[#49402f] px-2.5 py-1.5 text-amber-200">Knowledge</a>
+        <a href="#project-lifecycle-experiment-panel" className="rounded border border-[#343741] px-2.5 py-1.5 text-gray-300">Experiment</a>
+        <a href="#project-lifecycle-analysis-panel" className="rounded border border-[#343741] px-2.5 py-1.5 text-gray-300">Analysis</a>
+        <a href="#project-lifecycle-model-panel" className="rounded border border-[#343741] px-2.5 py-1.5 text-gray-300">Model</a>
+        <a href="#project-lifecycle-transfer-panel" className="rounded border border-[#343741] px-2.5 py-1.5 text-gray-300">Knowledge Transfer</a>
+      </nav>
+
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="Project Source associations" value={projectSources.filter((source) => source.projectId === projectId).length} />
         <SummaryCard label="Exact Research references" value={overview.references.length} />
@@ -209,6 +222,15 @@ export const ProjectKnowledgeWorkbench: React.FC<ProjectKnowledgeWorkbenchProps>
         <SummaryCard label="Design versions" value={overview.designVersionCount} />
         <SummaryCard label="FrameworkVersion adoptions" value={overview.adoptions.length} />
       </div>
+
+      <ProjectLifecycleNavigator
+        projectId={projectId}
+        overview={overview}
+        research={workspace}
+        snapshot={lifecycle}
+        onRefresh={lifecycle.refresh}
+        onOpenProject={onOpenProject}
+      />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(240px,0.8fr)_minmax(0,2fr)]">
         <div className={`${panelClass} space-y-3`}>
@@ -561,7 +583,14 @@ export const ProjectKnowledgeWorkbench: React.FC<ProjectKnowledgeWorkbenchProps>
           ) : (
             <ul className="space-y-2">
               {overview.references.map((reference, index) => (
-                <li key={`${reference.kind}:${reference.recordId}:${reference.sourceClaimId ?? reference.sourceVersionId ?? index}`} className="rounded border border-[#292c34] bg-[#101114] p-3">
+                <li
+                  key={`${reference.kind}:${reference.recordId}:${reference.sourceClaimId ?? reference.sourceVersionId ?? index}`}
+                  id={reference.kind === "literature_review"
+                    && overview.references.findIndex((item) => item.recordId === reference.recordId) === index
+                    ? `project-lifecycle-research_literature_review-${encodeURIComponent(reference.recordId)}`
+                    : undefined}
+                  className="rounded border border-[#292c34] bg-[#101114] p-3"
+                >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-xs font-medium text-white">{referenceLabel(reference)}</p>
@@ -608,7 +637,11 @@ export const ProjectKnowledgeWorkbench: React.FC<ProjectKnowledgeWorkbenchProps>
                 ) : (
                   <ul className="mt-1 space-y-1">
                     {questionGapRecords.map((record) => (
-                      <li key={`${record.kind}:${record.id}`} className="rounded border border-[#292c34] p-2">
+                      <li
+                        key={`${record.kind}:${record.id}`}
+                        id={record.kind === "Question" ? `project-lifecycle-research_question-${encodeURIComponent(record.id)}` : undefined}
+                        className="rounded border border-[#292c34] p-2"
+                      >
                         <p className="text-[11px] text-gray-200">{record.kind}: {record.title} · {record.status}</p>
                         <p className="mt-1 text-[10px] text-gray-400">{record.detail}</p>
                         <p className="mt-1 break-all font-mono text-[10px] text-gray-600">{record.id}</p>
@@ -624,12 +657,20 @@ export const ProjectKnowledgeWorkbench: React.FC<ProjectKnowledgeWorkbenchProps>
                 ) : (
                   <ul className="mt-1 space-y-2">
                     {overview.hypotheses.map((hypothesis) => (
-                      <li key={hypothesis.id} className="rounded border border-[#292c34] p-2">
+                      <li
+                        key={hypothesis.id}
+                        id={`project-lifecycle-research_hypothesis-${encodeURIComponent(hypothesis.id)}`}
+                        className="rounded border border-[#292c34] p-2"
+                      >
                         <p className="text-[11px] text-gray-200">
                           Hypothesis {hypothesis.id} · {hypothesis.lifecycleStatus}
                         </p>
                         {hypothesis.definitions.map((definition) => (
-                          <div key={definition.id} className="mt-1 border-l border-[#454955] pl-2">
+                          <div
+                            key={definition.id}
+                            id={`project-lifecycle-hypothesis_version-${encodeURIComponent(definition.id)}`}
+                            className="mt-1 border-l border-[#454955] pl-2"
+                          >
                             <p className="text-[10px] text-gray-300">
                               Definition v{definition.versionNo} · {definition.lifecycleStatus}
                             </p>
@@ -650,7 +691,13 @@ export const ProjectKnowledgeWorkbench: React.FC<ProjectKnowledgeWorkbenchProps>
                   ) : (
                     <ul className="mt-1 space-y-1">
                       {patternIdeaRecords.map((record) => (
-                        <li key={`${record.kind}:${record.id}`} className="rounded border border-[#292c34] p-2">
+                        <li
+                          key={`${record.kind}:${record.id}`}
+                          id={record.kind === "Pattern"
+                            ? `project-lifecycle-research_pattern-${encodeURIComponent(record.id)}`
+                            : undefined}
+                          className="rounded border border-[#292c34] p-2"
+                        >
                           <p className="text-[10px] text-gray-300">{record.kind}: {record.title}</p>
                           <p className="mt-1 text-[10px] text-gray-500">{record.detail}</p>
                         </li>
@@ -660,6 +707,19 @@ export const ProjectKnowledgeWorkbench: React.FC<ProjectKnowledgeWorkbenchProps>
                   <p className="mt-2 text-[10px] text-gray-500">
                     {overview.observations.length} project Observation record(s) · no measurement or conclusion is inferred here.
                   </p>
+                  {overview.observations.length > 0 && (
+                    <ul className="mt-1 space-y-1">
+                      {overview.observations.map((observation) => (
+                        <li
+                          key={observation.id}
+                          id={`project-lifecycle-research_observation-${encodeURIComponent(observation.id)}`}
+                          className="break-all font-mono text-[10px] text-gray-500"
+                        >
+                          Observation {observation.id} · {observation.qualityStatus}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 <div>
                   <h4 className="text-[11px] font-semibold text-gray-300">Research design versions</h4>
@@ -668,7 +728,11 @@ export const ProjectKnowledgeWorkbench: React.FC<ProjectKnowledgeWorkbenchProps>
                   ) : (
                     <ul className="mt-1 space-y-1">
                       {overview.designVersions.map((design) => (
-                        <li key={design.id} className="rounded border border-[#292c34] p-2">
+                        <li
+                          key={design.id}
+                          id={`project-lifecycle-research_design-${encodeURIComponent(design.id)}`}
+                          className="rounded border border-[#292c34] p-2"
+                        >
                           <p className="text-[10px] text-gray-300">{design.title} · v{design.versionNo} · {design.lifecycleStatus}</p>
                           <p className="mt-1 break-all font-mono text-[10px] text-gray-600">{design.id}</p>
                         </li>
@@ -705,6 +769,7 @@ export const ProjectKnowledgeWorkbench: React.FC<ProjectKnowledgeWorkbenchProps>
               {overview.adoptions.map((adoption) => (
                 <button
                   key={adoption.id}
+                  id={`project-lifecycle-framework_adoption-${encodeURIComponent(adoption.id)}`}
                   type="button"
                   onClick={() => setSelectedAdoptionId(adoption.id)}
                   aria-pressed={selectedAdoptionId === adoption.id}
@@ -715,7 +780,10 @@ export const ProjectKnowledgeWorkbench: React.FC<ProjectKnowledgeWorkbenchProps>
                   }`}
                 >
                   <span className="block text-xs font-medium text-white">{adoption.title} · v{adoption.versionNo}</span>
-                  <span className="mt-1 block break-all font-mono text-[10px] text-gray-500">
+                  <span
+                    id={`project-lifecycle-framework_version-${encodeURIComponent(adoption.frameworkVersionId)}`}
+                    className="mt-1 block break-all font-mono text-[10px] text-gray-500"
+                  >
                     Framework {adoption.frameworkId} · exact version {adoption.frameworkVersionId}
                   </span>
                   <span className="mt-1 block text-[11px] text-gray-400">{adoption.useContext}</span>

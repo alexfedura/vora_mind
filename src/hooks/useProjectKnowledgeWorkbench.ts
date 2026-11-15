@@ -326,8 +326,9 @@ export function useProjectKnowledgeWorkbench({
   }, []);
 
   const closeProvenance = useCallback(() => {
+    provenanceGuard.begin();
     setProvenanceData(null);
-  }, []);
+  }, [provenanceGuard]);
 
   return {
     sourceData,

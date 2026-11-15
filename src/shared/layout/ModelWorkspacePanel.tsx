@@ -497,7 +497,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
 
   if (!workspace || !analysis || !experiments) {
     return (
-      <section className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
+      <section id="project-lifecycle-model-panel" className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="font-semibold text-white">Model development and scientific validation</h3>
@@ -521,7 +521,7 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
   }
 
   return (
-    <section className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
+    <section id="project-lifecycle-model-panel" className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
       <header className="flex items-start justify-between gap-4">
         <div>
           <h3 className="font-semibold text-white">Model development and scientific validation</h3>
@@ -622,7 +622,11 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
               </button>
             )}
             {(workspace?.versions ?? []).filter((version) => version.modelId === model.id).map((version) => (
-              <details key={version.id} className="mt-2 rounded border border-[#343741] p-3">
+              <details
+                key={version.id}
+                id={`project-lifecycle-model_version-${encodeURIComponent(version.id)}`}
+                className="mt-2 rounded border border-[#343741] p-3"
+              >
                 <summary className="cursor-pointer text-xs text-gray-200">
                   v{version.versionNo} · {version.lifecycleStatus} · {version.changeClass} · {version.createdAtUs} · SHA-256 {version.contentSha256}
                 </summary>
@@ -744,8 +748,12 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
           <textarea className={fieldClass} name="limitations" placeholder="Evaluation scope and limitations" required />
           <button className={buttonClass} disabled={busy || projectRuns.length === 0}>Save evaluation</button>
           {(workspace?.evaluations ?? []).map((evaluation) => (
-            <p key={evaluation.id} className="break-all text-xs text-gray-400">
-              {evaluation.modelVersionId} · {evaluation.effectEstimate} {evaluation.unit} ({evaluation.estimand}, n={evaluation.sampleSize}) · {evaluation.role} · dataset {evaluation.datasetVersionId} · run {evaluation.analysisRunId}
+            <p
+              key={evaluation.id}
+              id={`project-lifecycle-model_evaluation-${encodeURIComponent(evaluation.id)}`}
+              className="break-all text-xs text-gray-400"
+            >
+              Evaluation {evaluation.id} · {evaluation.modelVersionId} · {evaluation.effectEstimate} {evaluation.unit} ({evaluation.estimand}, n={evaluation.sampleSize}) · {evaluation.role} · dataset {evaluation.datasetVersionId} · run {evaluation.analysisRunId} · metric {evaluation.analysisMetricId} / definition {evaluation.metricDefinitionVersionId}
             </p>
           ))}
         </form>
@@ -826,13 +834,30 @@ export function ModelWorkspacePanel({ projectId }: { projectId: string }): React
       <div className="space-y-2">
         <h4 className="text-sm font-medium text-gray-200">Validation and replication history</h4>
         {(workspace?.validations ?? []).map((validation) => (
-          <p key={validation.id} className="rounded border border-[#343741] p-2 text-xs text-gray-300">
+          <p
+            key={validation.id}
+            id={`project-lifecycle-model_validation-${encodeURIComponent(validation.id)}`}
+            className="rounded border border-[#343741] p-2 text-xs text-gray-300"
+          >
             Validation {validation.outcome ?? "planned"} · {validation.target.kind}:{validation.target.id} · criterion {JSON.stringify(validation.criteria)} · {validation.evaluatorIdentity} ({validation.independenceState}; COI: {validation.conflictOfInterest})
           </p>
         ))}
         {(workspace?.replications ?? []).map((replication) => (
-          <p key={replication.id} className="rounded border border-[#343741] p-2 text-xs text-gray-300">
+          <p
+            key={replication.id}
+            id={`project-lifecycle-model_replication-${encodeURIComponent(replication.id)}`}
+            className="rounded border border-[#343741] p-2 text-xs text-gray-300"
+          >
             {replication.replicationKind} replication · {replication.outcome} · model {replication.modelVersionId} · original run {replication.originalExperimentRunId} / design {replication.originalDesignVersionId} · {replication.independentTeamOperator}: {replication.resultSummary}
+          </p>
+        ))}
+        {(workspace?.evidence ?? []).map((evidence) => (
+          <p
+            key={evidence.id}
+            id={`project-lifecycle-model_evidence-${encodeURIComponent(evidence.id)}`}
+            className="break-all rounded border border-[#343741] p-2 text-xs text-gray-300"
+          >
+            ModelEvidence {evidence.id} · {evidence.modelVersionId} · {evidence.polarity} · {evidence.artifact.kind}:{evidence.artifact.id} · {evidence.limitations}
           </p>
         ))}
       </div>

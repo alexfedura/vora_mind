@@ -642,7 +642,7 @@ export function ExperimentWorkspacePanel({
 
   if (!workspace) {
     return (
-      <section className="space-y-3 border-t border-[#343741] pt-5">
+      <section id="project-lifecycle-experiment-panel" className="space-y-3 border-t border-[#343741] pt-5">
         <h3 className="text-sm font-semibold text-gray-200">Experimental architecture</h3>
         {error ? (
           <p role="alert" className="rounded border border-rose-900 bg-rose-950/30 p-2 text-xs text-rose-300">{error}</p>
@@ -656,7 +656,7 @@ export function ExperimentWorkspacePanel({
   }
 
   return (
-    <section aria-busy={busy} className="space-y-5 border-t border-[#343741] pt-5">
+    <section id="project-lifecycle-experiment-panel" aria-busy={busy} className="space-y-5 border-t border-[#343741] pt-5">
       <div>
         <h3 className="text-sm font-semibold text-gray-200">Experimental architecture</h3>
         <p className={mutedClass}>
@@ -810,7 +810,11 @@ export function ExperimentWorkspacePanel({
             <h4 className="text-xs font-semibold text-gray-200">Design version history and review</h4>
             {projectDesigns.length === 0 && <p className={mutedClass}>No design versions are registered.</p>}
             {projectDesigns.map((design) => (
-              <article key={design.id} className="space-y-2 rounded border border-[#292c34] p-2 text-xs">
+              <article
+                key={design.id}
+                id={`project-lifecycle-experiment_design-${encodeURIComponent(design.id)}`}
+                className="space-y-2 rounded border border-[#292c34] p-2 text-xs"
+              >
                 <p className="font-medium text-gray-200">{design.title} · v{design.versionNo} · {design.lifecycleStatus}</p>
                 <p className={mutedClass}>ID {design.id} · {design.specification ? `SHA-256 ${design.specificationSha256}` : "legacy/unconfigured; not eligible for runs"}</p>
                 {design.parentVersionId && <p className={mutedClass}>Revises {design.parentVersionId}: {design.changeRationale}</p>}
@@ -936,7 +940,11 @@ export function ExperimentWorkspacePanel({
         <section className="space-y-3 rounded-lg border border-[#292c34] bg-[#101114] p-3">
           <h4 className="text-xs font-semibold text-gray-200">Dataset version inspection</h4>
           {allDatasetVersions.map((version) => (
-            <article key={version.id} className="space-y-1 rounded border border-[#292c34] p-2 text-xs">
+            <article
+              key={version.id}
+              id={`project-lifecycle-dataset_version-${encodeURIComponent(version.id)}`}
+              className="space-y-1 rounded border border-[#292c34] p-2 text-xs"
+            >
               <p className="font-medium text-gray-200">{version.datasetTitle} · v{version.versionNo} · {version.lifecycleStatus}</p>
               <p className={mutedClass}>{version.actualSampleCount}/{version.expectedSampleCount} samples · schema {version.schema.schemaId}@{version.schema.schemaVersion}</p>
               {version.contentSha256 && <p className="break-all font-mono text-[10px] text-gray-500">SHA-256 {version.contentSha256}</p>}
@@ -965,7 +973,11 @@ export function ExperimentWorkspacePanel({
             </article>
           ))}
           {workspace?.transformations.map((item) => (
-            <article key={item.id} className="rounded border border-[#292c34] p-2 text-xs">
+            <article
+              key={item.id}
+              id={`project-lifecycle-dataset_transformation-${encodeURIComponent(item.id)}`}
+              className="rounded border border-[#292c34] p-2 text-xs"
+            >
               <p>Transformation: {item.method} → {item.outputDatasetVersionId}</p>
               <p className={mutedClass}>Inputs: {item.inputs.map((input) => `${input.datasetVersionId} (${input.role})`).join(", ")}</p>
             </article>
@@ -1058,7 +1070,10 @@ function RunMonitor({ run, datasets, onTransition, onDeviation, onLog }: RunMoni
   };
 
   return (
-    <article className="space-y-2 rounded border border-[#292c34] p-2 text-xs">
+    <article
+      id={`project-lifecycle-experiment_run-${encodeURIComponent(run.id)}`}
+      className="space-y-2 rounded border border-[#292c34] p-2 text-xs"
+    >
       <p className="font-medium text-gray-200">Run {run.id} · {run.lifecycleStatus}</p>
       <p className={mutedClass}>Pins design {run.designVersionId} · {run.datasetPins.map((pin) => `${pin.usageKind} ${pin.role}: ${pin.datasetTitle} v${pin.versionNo} (${pin.datasetVersionId})`).join(" · ") || "no dataset input"}</p>
       <div className="flex flex-wrap gap-2">

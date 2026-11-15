@@ -367,3 +367,22 @@ test("cleanup prevents an obsolete global refresh from publishing", async () => 
 
   assert.deepEqual(state, { workspace: null, isLoading: true });
 });
+
+test("closing Provenance invalidates its pending result but permits an intentional reopen", () => {
+  const guard = new LatestRequestGuard();
+  const state = { provenance: null };
+  guard.activate();
+  const pendingRequestId = guard.begin();
+
+  guard.begin();
+  state.provenance = null;
+  const reopenedRequestId = guard.begin();
+
+  assert.equal(guard.commit(pendingRequestId, () => {
+    state.provenance = "stale result";
+  }), false);
+  assert.equal(guard.commit(reopenedRequestId, () => {
+    state.provenance = "reopened result";
+  }), true);
+  assert.equal(state.provenance, "reopened result");
+});

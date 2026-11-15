@@ -406,7 +406,7 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
   };
 
   return (
-    <section className="space-y-4 rounded-xl border border-[#343741] bg-[#17191e] p-4">
+    <section id="project-lifecycle-transfer-panel" className="space-y-4 rounded-xl border border-[#343741] bg-[#17191e] p-4">
       <header className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-white">
@@ -669,7 +669,11 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
               </form>
               <div className="space-y-2">
                 {(workspace?.knowledgeVersions ?? []).map((version) => (
-                  <div key={version.versionId} className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300">
+                  <div
+                    key={version.versionId}
+                    id={`project-lifecycle-${version.kind}_version-${encodeURIComponent(version.versionId)}`}
+                    className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300"
+                  >
                     <p className="font-medium text-white">{version.kind}: {version.title} · v{version.versionNo} · {version.status}</p>
                     <p className="mt-1 text-gray-400">{version.content}</p>
                     {version.status === "draft" && (
@@ -687,8 +691,21 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
                 <ShieldCheck size={14} /> Eligibility and history
               </h3>
               <div className="space-y-2">
+                {(workspace?.origins ?? []).map((origin) => (
+                  <p
+                    key={origin.id}
+                    id={`project-lifecycle-transfer_origin-${encodeURIComponent(origin.id)}`}
+                    className="break-all rounded-lg bg-[#101114] p-3 text-xs text-gray-300"
+                  >
+                    Origin {origin.id} · {origin.originProjectTitle} · {origin.artifact.kind} {origin.artifact.versionId}
+                  </p>
+                ))}
                 {(workspace?.eligibilities ?? []).map((eligibility) => (
-                  <div key={eligibility.id} className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300">
+                  <div
+                    key={eligibility.id}
+                    id={`project-lifecycle-transfer_eligibility-${encodeURIComponent(eligibility.id)}`}
+                    className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300"
+                  >
                     <p className="font-medium text-white">{eligibility.origin.originProjectTitle} → {eligibility.licenseIdentifier} · {eligibility.state}</p>
                     <p className="mt-1 text-gray-400">{eligibility.origin.artifact.kind} {eligibility.origin.artifact.versionId} · {eligibility.accessScope.replace(/_/g, " ")} · reviewer {eligibility.reviewedBy}</p>
                     <p className="mt-1 text-gray-500">{eligibility.stateRationale}</p>
@@ -729,7 +746,12 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
 
           <div className="grid gap-4 xl:grid-cols-2">
             <HistoryList title="Transfers and attribution" items={(workspace?.transfers ?? []).map((transfer) => (
-              <div key={transfer.id} className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300">
+              <div
+                key={transfer.id}
+                id={`project-lifecycle-knowledge_transfer-${encodeURIComponent(transfer.id)}`}
+                className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300"
+              >
+                <p className="font-mono text-[10px] text-gray-500">Transfer {transfer.id} · eligibility {transfer.eligibilityId}</p>
                 <p className="font-medium text-white">{transfer.origin.originProjectTitle} → {transfer.receivingProjectTitle} · {transfer.state}</p>
                 <p className="mt-1">{transfer.origin.artifact.kind} {transfer.origin.artifact.versionId}</p>
                 <p className="mt-1">Purpose: {transfer.intendedPurpose} · Attribution: {transfer.attributionText}</p>
@@ -738,17 +760,36 @@ export const KnowledgeTransferWorkspacePanel: React.FC = () => {
             ))} />
             <HistoryList title="Lineage and downstream use" items={[
               ...(workspace?.lineage ?? []).map((item) => (
-                <div key={item.id} className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300">
+                <div
+                  key={item.id}
+                  id={`project-lifecycle-transfer_lineage-${encodeURIComponent(item.id)}`}
+                  className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300"
+                >
                   <p className="flex items-center gap-1 font-medium text-white"><GitBranch size={12} />{item.relationKind}: {item.originProjectId} → {item.receivingProjectId}</p>
                   <p className="mt-1">Origin {item.origin.kind} {item.origin.versionId}{item.adaptation ? ` → ${item.adaptation.kind} ${item.adaptation.versionId}` : ""}</p>
                   <p className="mt-1 text-gray-500">{item.rationale}</p>
                 </div>
               )),
               ...(workspace?.downstreamUsage ?? []).map((item) => (
-                <div key={item.id} className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300">
+                <div
+                  key={item.id}
+                  id={`project-lifecycle-downstream_usage-${encodeURIComponent(item.id)}`}
+                  className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300"
+                >
                   <p className="font-medium text-white">Downstream use · {item.reference.kind}</p>
                   <p className="mt-1">Project {item.projectId} · record {referenceId(item.reference)}</p>
                   <p className="mt-1 text-gray-500">{item.useContext}</p>
+                </div>
+              )),
+              ...(workspace?.adaptations ?? []).map((item) => (
+                <div
+                  key={item.id}
+                  id={`project-lifecycle-transfer_adaptation-${encodeURIComponent(item.id)}`}
+                  className="rounded-lg bg-[#101114] p-3 text-xs text-gray-300"
+                >
+                  <p className="font-medium text-white">Adaptation {item.id} · {item.title}</p>
+                  <p className="mt-1">{item.origin.artifact.kind} {item.origin.artifact.versionId} → {item.artifact.kind} {item.artifact.versionId}</p>
+                  <p className="mt-1 text-gray-500">Transfer {item.transferId} · {item.rationale}</p>
                 </div>
               )),
             ]} />

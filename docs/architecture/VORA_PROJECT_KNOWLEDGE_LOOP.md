@@ -11,6 +11,8 @@ frontend filter is not an authorization boundary.
 The Stage 3.2 Project Knowledge Workbench implementation and its validation
 evidence are documented in
 [VORA_STAGE_3_2_IMPLEMENTATION.md](./VORA_STAGE_3_2_IMPLEMENTATION.md).
+Stage 3.3 cross-domain lifecycle navigation and its limitations are documented
+in [VORA_STAGE_3_3_INTEGRATION.md](./VORA_STAGE_3_3_INTEGRATION.md).
 
 ## Workflow map
 
@@ -137,3 +139,27 @@ membership enforcement. The Research workspace transport remains global.
   The current metadata fields do not guarantee it.
 - Do not add generic graph edges, automatic claim synthesis, truth scores,
   ownership conversion, or implicit Knowledge Transfer as a shortcut.
+
+## Stage 3.3 lifecycle integration
+
+The Project Knowledge Workbench links the selected project's explicit Research
+references to existing Experiment, Analysis, Model, and Knowledge Transfer
+records. The navigator uses typed workspace data and stored IDs; it does not
+create a generic graph or persist new relationships. Project-scoped records
+are filtered to the selected Research project. Transfer records are shown only
+when their origin or receiving project is the selected project, with origin,
+eligibility, adaptation, lineage, and downstream use kept as distinct
+records.
+
+An unavailable exact version remains unavailable; the navigator never
+substitutes another version. A FrameworkVersion adoption remains a reference
+to a workspace-shared version, and a Transfer adaptation remains a separate
+recipient artifact rather than an ownership change. SourceClaims remain
+attributed evidence, not scientific conclusions. The Stage 3.2 Provenance
+panel invalidates a pending read when closed.
+
+The implementation and validation limitations are recorded in
+[VORA_STAGE_3_3_INTEGRATION.md](./VORA_STAGE_3_3_INTEGRATION.md). In particular,
+request guards prevent stale UI publication but do not cancel IPC or roll back
+backend operations, and focused tests do not mount React components or prove
+browser/effect lifecycle integration.

@@ -101,7 +101,10 @@ function formatTime(timestampUs: number): string {
 
 function RunCard({ run }: { run: AnalysisRunDto }): React.JSX.Element {
   return (
-    <details className="rounded-lg border border-[#343741] bg-[#101114] p-3">
+    <details
+      id={`project-lifecycle-analysis_run-${encodeURIComponent(run.id)}`}
+      className="rounded-lg border border-[#343741] bg-[#101114] p-3"
+    >
       <summary className="cursor-pointer list-none">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="font-medium text-white">{run.id}</span>
@@ -119,7 +122,11 @@ function RunCard({ run }: { run: AnalysisRunDto }): React.JSX.Element {
           {run.inputs.length === 0 ? <p className="text-xs text-gray-500">No input pins recorded.</p> : (
             <div className="space-y-2">
               {run.inputs.map((input) => (
-                <details key={input.id} className="rounded-md border border-[#292c34] p-2">
+                <details
+                  key={input.id}
+                  id={`project-lifecycle-analysis_input-${encodeURIComponent(input.id)}`}
+                  className="rounded-md border border-[#292c34] p-2"
+                >
                   <summary className="cursor-pointer text-xs text-gray-200">
                     {input.role} · {input.datasetVersionId} · {input.sampleCount} samples
                   </summary>
@@ -171,7 +178,11 @@ function RunCard({ run }: { run: AnalysisRunDto }): React.JSX.Element {
           {run.outputs.length === 0 && <p className="text-xs text-gray-500">No outputs recorded.</p>}
           <div className="space-y-2">
             {run.outputs.map((output) => (
-              <div key={output.id} className="rounded-md border border-[#292c34] p-2">
+              <div
+                key={output.id}
+                id={`project-lifecycle-analysis_output-${encodeURIComponent(output.id)}`}
+                className="rounded-md border border-[#292c34] p-2"
+              >
                 <p className="text-xs font-medium text-gray-200">{output.title} <span className="text-gray-500">({output.outputKind})</span></p>
                 <p className="mt-1 break-all text-[11px] text-gray-400">
                   {output.artifactUri ? `${output.artifactUri} · SHA-256 ${output.artifactSha256}` : `Inline output · SHA-256 ${output.payloadSha256}`}
@@ -180,7 +191,11 @@ function RunCard({ run }: { run: AnalysisRunDto }): React.JSX.Element {
                   {JSON.stringify(output.payload, null, 2)}
                 </pre>
                 {run.metrics.filter((metric) => metric.outputId === output.id).map((metric) => (
-                  <div key={metric.id} className="mt-2 border-t border-[#292c34] pt-2 text-xs text-gray-300">
+                  <div
+                    key={metric.id}
+                    id={`project-lifecycle-analysis_metric_result-${encodeURIComponent(metric.id)}`}
+                    className="mt-2 border-t border-[#292c34] pt-2 text-xs text-gray-300"
+                  >
                     <p>{metric.estimand}: {metric.effectEstimate} {metric.unit} (n={metric.sampleSize})</p>
                     <p>Uncertainty: {metric.uncertainty.kind === "interval"
                       ? `${metric.uncertainty.interval.lower}–${metric.uncertainty.interval.upper} (${metric.uncertainty.interval.level})`
@@ -304,7 +319,7 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
 
   if (!workspace) {
     return (
-      <section className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
+      <section id="project-lifecycle-analysis-panel" className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="font-semibold text-white">Analysis, evidence, and findings</h3>
@@ -328,7 +343,7 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
   }
 
   return (
-    <section className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
+    <section id="project-lifecycle-analysis-panel" className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="font-semibold text-white">Analysis, evidence, and findings</h3>
@@ -356,6 +371,45 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
         </div>
         <div className="rounded-lg border border-[#343741] p-3 text-xs text-gray-300">
           <p className="text-lg font-semibold text-white">{workspace?.findings.length ?? 0}</p>Versioned findings
+        </div>
+      </div>
+
+      <div className="grid gap-2 lg:grid-cols-3">
+        <div className="space-y-1 rounded-lg border border-[#343741] p-3">
+          <h4 className="text-xs font-semibold text-gray-300">Definition versions</h4>
+          {(workspace?.definitions ?? []).filter((item) => item.projectId === projectId).map((definition) => (
+            <p
+              key={definition.id}
+              id={`project-lifecycle-analysis_definition-${encodeURIComponent(definition.id)}`}
+              className="break-all text-[10px] text-gray-400"
+            >
+              {definition.title} · exact ID {definition.id} · method {definition.methodVersionId} · metrics {definition.metricDefinitionVersionIds.join(", ") || "none"}
+            </p>
+          ))}
+        </div>
+        <div className="space-y-1 rounded-lg border border-[#343741] p-3">
+          <h4 className="text-xs font-semibold text-gray-300">Method versions</h4>
+          {(workspace?.methods ?? []).filter((item) => item.projectId === projectId).map((method) => (
+            <p
+              key={method.id}
+              id={`project-lifecycle-analysis_method-${encodeURIComponent(method.id)}`}
+              className="break-all text-[10px] text-gray-400"
+            >
+              {method.name} · v{method.versionNo} · exact ID {method.id} · {method.verificationStatus}
+            </p>
+          ))}
+        </div>
+        <div className="space-y-1 rounded-lg border border-[#343741] p-3">
+          <h4 className="text-xs font-semibold text-gray-300">Metric definition versions</h4>
+          {(workspace?.metrics ?? []).filter((item) => item.projectId === projectId).map((metric) => (
+            <p
+              key={metric.id}
+              id={`project-lifecycle-analysis_metric-${encodeURIComponent(metric.id)}`}
+              className="break-all text-[10px] text-gray-400"
+            >
+              {metric.name} · v{metric.versionNo} · exact ID {metric.id} · {metric.verificationStatus}
+            </p>
+          ))}
         </div>
       </div>
 
@@ -483,7 +537,11 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
         <h4 className="text-sm font-medium text-gray-200">Evidence review</h4>
         {(workspace?.evidence ?? []).length === 0 && <p className="text-xs text-gray-500">No evidence records yet.</p>}
         {(workspace?.evidence ?? []).map((item) => (
-          <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#343741] p-3 text-xs">
+          <div
+            key={item.id}
+            id={`project-lifecycle-analysis_evidence-${encodeURIComponent(item.id)}`}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#343741] p-3 text-xs"
+          >
             <div className="min-w-0">
               <p className="font-medium text-gray-200">{item.polarity.toUpperCase()} · {item.status}</p>
               <p className="mt-1 break-all text-gray-400">{item.proposition.kind}:{item.proposition.id} ← {item.artifact.kind}:{item.artifact.id}</p>
@@ -512,7 +570,11 @@ export function AnalysisWorkspacePanel({ projectId }: { projectId: string }): Re
       <div className="space-y-2">
         <h4 className="text-sm font-medium text-gray-200">Finding review and synthesis history</h4>
         {(workspace?.findings ?? []).map((finding) => (
-          <div key={finding.id} className="rounded-lg border border-[#343741] p-3">
+          <div
+            key={finding.id}
+            id={`project-lifecycle-finding_version-${encodeURIComponent(finding.id)}`}
+            className="rounded-lg border border-[#343741] p-3"
+          >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <p className="text-sm font-medium text-white">{finding.title} · v{finding.versionNo}</p>
