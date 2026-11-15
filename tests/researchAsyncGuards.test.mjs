@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assignmentContext,
   LatestRequestGuard,
   ProjectOperationGuard,
 } from "../src/shared/layout/researchAsyncGuards.ts";
@@ -55,6 +56,91 @@ test("a project mutation still applies its UI update when its project remains cu
   assert.deepEqual(state, { form: "", selection: "created item" });
 });
 
+test("a successful mutation cannot publish after the Research page unmounts", async () => {
+  const guard = new ProjectOperationGuard();
+  const pending = deferred();
+  const state = { form: "submitted", selection: "" };
+  guard.setCurrentProject("project", "A");
+  const token = guard.capture("project");
+  const operation = pending.promise.then((value) => {
+    guard.commit(token, () => {
+      state.form = "";
+      state.selection = value;
+    });
+  });
+
+  guard.invalidate();
+  pending.resolve("created item");
+  await operation;
+
+  assert.deepEqual(state, { form: "submitted", selection: "" });
+});
+
+test("a failed mutation cannot publish an error after the Research page unmounts", async () => {
+  const guard = new ProjectOperationGuard();
+  const pending = deferred();
+  const state = { error: null };
+  const token = guard.capture("project");
+  const operation = pending.promise.catch((error) => {
+    guard.commit(token, () => {
+      state.error = error.message;
+    });
+  });
+
+  guard.invalidate();
+  pending.reject(new Error("late failure"));
+  await operation;
+
+  assert.equal(state.error, null);
+});
+
+test("lifecycle invalidation rejects all outstanding tokens", () => {
+  const guard = new ProjectOperationGuard();
+  guard.setCurrentProject("project", "A");
+  guard.setCurrentProject("questionProject", "B");
+  const projectToken = guard.capture("project");
+  const questionToken = guard.capture("questionProject");
+  const workspaceToken = guard.captureForProject("workspace", "");
+  assert.equal(guard.isCurrent(workspaceToken), true);
+
+  guard.invalidate();
+
+  assert.equal(guard.isCurrent(projectToken), false);
+  assert.equal(guard.isCurrent(questionToken), false);
+  assert.equal(guard.isCurrent(workspaceToken), false);
+});
+
+test("repeated lifecycle invalidation is idempotent", () => {
+  const guard = new ProjectOperationGuard();
+  const firstToken = guard.capture("project");
+  guard.invalidate();
+  const invalidatedToken = guard.capture("project");
+  guard.invalidate();
+  const stillInvalidatedToken = guard.capture("project");
+
+  assert.equal(guard.isCurrent(firstToken), false);
+  assert.equal(
+    stillInvalidatedToken.lifecycleGeneration,
+    invalidatedToken.lifecycleGeneration,
+  );
+});
+
+test("activation after cleanup supports Strict Mode setup while rejecting old tokens", () => {
+  const guard = new ProjectOperationGuard();
+  guard.setCurrentProject("project", "A");
+  const oldToken = guard.capture("project");
+  guard.invalidate();
+  guard.activate();
+  const state = { selection: "" };
+  const currentToken = guard.capture("project");
+
+  assert.equal(guard.isCurrent(oldToken), false);
+  assert.equal(guard.commit(currentToken, () => {
+    state.selection = "current result";
+  }), true);
+  assert.equal(state.selection, "current result");
+});
+
 test("returning to project A does not reactivate an older A operation", () => {
   const guard = new ProjectOperationGuard();
   const state = { selection: "" };
@@ -87,6 +173,66 @@ test("a late project A failure cannot publish an error after switching to B", as
   await operation;
 
   assert.equal(state.error, null);
+});
+
+test("a late Question assignment failure is suppressed after its destination changes", async () => {
+  const guard = new ProjectOperationGuard();
+  const pending = deferred();
+  const state = { error: null };
+  guard.setCurrentProject("questionProject", "question-project");
+  const context = assignmentContext("question", "question-1");
+  const token = guard.captureForProject(context, "destination-A");
+  const operation = pending.promise.catch((error) => {
+    guard.commit(token, () => {
+      state.error = error.message;
+    });
+  });
+
+  guard.setCurrentProject(context, "destination-B");
+  pending.reject(new Error("destination A assignment failed"));
+  await operation;
+
+  assert.equal(state.error, null);
+  assert.equal(guard.isCurrent(guard.capture("questionProject")), true);
+});
+
+test("a late Hypothesis assignment failure is suppressed after its destination changes", async () => {
+  const guard = new ProjectOperationGuard();
+  const pending = deferred();
+  const state = { error: null };
+  guard.setCurrentProject("project", "main-project");
+  const context = assignmentContext("hypothesis", "hypothesis-1");
+  const token = guard.captureForProject(context, "destination-A");
+  const operation = pending.promise.catch((error) => {
+    guard.commit(token, () => {
+      state.error = error.message;
+    });
+  });
+
+  guard.setCurrentProject(context, "destination-B");
+  pending.reject(new Error("destination A assignment failed"));
+  await operation;
+
+  assert.equal(state.error, null);
+  assert.equal(guard.isCurrent(guard.capture("project")), true);
+});
+
+test("an assignment failure remains visible while its destination is unchanged", async () => {
+  const guard = new ProjectOperationGuard();
+  const pending = deferred();
+  const state = { error: null };
+  const context = assignmentContext("question", "question-1");
+  const token = guard.captureForProject(context, "destination-A");
+  const operation = pending.promise.catch((error) => {
+    guard.commit(token, () => {
+      state.error = error.message;
+    });
+  });
+
+  pending.reject(new Error("assignment failed"));
+  await operation;
+
+  assert.equal(state.error, "assignment failed");
 });
 
 test("the latest global workspace refresh wins when requests resolve out of order", async () => {

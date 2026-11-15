@@ -81,16 +81,32 @@ latest active request may publish workspace, loading, or error state. Hook
 cleanup invalidates outstanding refreshes.
 
 Project-local selections, project Source associations, form resets, and
-mutation errors are guarded by the identity of their owning project context.
-The main Research project and the independently selected Question project have
-separate identities. Late results may still complete their original backend
-operation, but cannot publish project-local UI changes after that context
-switches.
+mutation errors are guarded by their owning context and the page lifecycle.
+The main Research project and independently selected Question project retain
+separate identities. Assignment operations use a record-specific context keyed
+to the exact destination project submitted; changing that destination makes
+the pending operation stale without conflating it with either selected
+Research project.
+
+The project-operation guard captures a lifecycle generation in each token.
+The page effect activates the guard and invalidates it during cleanup, which
+rejects every outstanding mutation token. Invalidation is idempotent, and
+activation after cleanup creates a new generation so React Strict Mode's
+setup/cleanup/setup cycle does not leave the guard inactive. Project selection
+changes continue to use their separate context generations and do not
+invalidate the page lifecycle. Workspace-global actions use a lifecycle-only
+token so their late errors are also suppressed after unmount.
+
+Late success, failure, and subsequent form/selection updates are published
+only while both the relevant lifecycle and project/destination context remain
+current. An already-started backend write is not canceled or rolled back; a
+completed write may therefore persist even when its UI result is discarded.
 
 Synthetic state tests exercise the production project-operation and
-latest-refresh guards. They cover late/current mutation completion, stale
-errors, out-of-order refreshes, and cleanup. They do not mount React
-components or verify browser-rendered form behavior.
+latest-refresh guards, including mutation invalidation, reactivation,
+destination changes, and unchanged-destination failures. They do not mount
+React components or verify browser-rendered form behavior or the effect
+lifecycle itself.
 
 These are presentation-state safeguards only. They do not cancel IPC calls,
 roll back completed writes, or provide authenticated authorization or project

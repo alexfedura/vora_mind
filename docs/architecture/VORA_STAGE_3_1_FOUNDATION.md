@@ -147,19 +147,23 @@ change:
 
 ## Stage 3.1.2 corrective audit
 
-The Research page now guards delayed domain creation/assignment and Framework
-adoption forms; Research record create/reset flows; Question-project creation
-and refinement; plan/dataset selection; observation, pattern, idea, hypothesis,
-evidence, model-reference, and design forms; gap exception review; and Source
-association success/error updates. Main-project and Question-project contexts
-are tracked separately, and context generations also reject A→B→A stale
-completions.
+The Stage 3.1.2 implementation guarded delayed domain creation/assignment and
+Framework adoption forms; Research record create/reset flows; Question-project
+creation and refinement; plan/dataset selection; observation, pattern, idea,
+hypothesis, evidence, model-reference, and design forms; gap exception review;
+and Source association success/error updates. Main-project and Question-project
+contexts were tracked separately, and context generations rejected A→B→A stale
+completions. The initial implementation did not invalidate mutation tokens on
+page unmount and did not key legacy Question/Hypothesis assignment errors to
+their submitted destination; Stage 3.1.4 closes those two gaps.
 
 The Research workspace DTO, source catalog, and workspace-refresh error are
 global. Project-bound action errors and local form/selection updates are
 project-scoped. Project creation remains a global operation whose follow-up
-selection is guarded by the originating selected-project context. Backend calls
-are not cancelled or rolled back by these UI guards.
+selection is guarded by the originating selected-project context. Stage 3.1.4
+also uses a workspace lifecycle token for global project-transition actions,
+without treating those actions as project-selection changes. Backend calls are
+not cancelled or rolled back by these UI guards.
 
 `useResearchWorkspace` uses the production `LatestRequestGuard` for latest-wins
 refresh publication and unmount cleanup. Synthetic state tests exercise that
@@ -174,6 +178,32 @@ Stage 3.1.2 validation:
 | `node --experimental-strip-types --test tests/researchAsyncGuards.test.mjs tests/projectWorkspaceState.test.mjs tests/projectSourcesState.test.mjs` | Passed: 18 tests, 0 failures. The 7 new cases cover stale/current and A→B→A project mutations, stale errors, latest global refresh ordering, older failure after newer success, and cleanup. |
 | `pnpm tsc --noEmit` | Passed. |
 | `git -c core.whitespace=cr-at-eol diff --check` | Passed for the final diff. |
+
+## Stage 3.1.4 mutation lifecycle and assignment identity correction
+
+`ProjectOperationGuard` captures a lifecycle generation in every token.
+`ResearchWorkspacePage` activates the guard in an effect and invalidates it in
+effect cleanup. Invalidation is idempotent and rejects all outstanding
+mutation tokens. React Strict Mode's setup/cleanup/setup cycle reactivates the
+guard with a new generation; tokens from before cleanup remain stale. Project
+selection changes continue to advance only their own context generations.
+
+Question and Hypothesis assignments use distinct record-specific guard
+contexts. Each handler captures the exact destination project ID submitted to
+the unchanged service call. Changing the destination select updates that
+context, so a delayed result for the former destination cannot publish an
+error. An unchanged destination still permits its result/error. Existing
+Question-project and main-project identities remain separate. Actions that
+previously had no project context use a workspace lifecycle token so their
+late errors are suppressed after unmount. These guards do not cancel, roll
+back, or authorize backend writes.
+
+Focused synthetic tests exercise the production guard and assignment-context
+mechanism. They cover success and failure after invalidation, invalidation of
+multiple tokens, idempotency, reactivation, Question and Hypothesis
+destination changes, and a failure with an unchanged destination. Tests remain
+state-level; no mounted React DOM test environment is available, so actual
+component effect and browser-event execution are not covered.
 
 ## Stage 3.2 prerequisites
 

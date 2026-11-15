@@ -2,6 +2,7 @@ export interface ProjectOperationToken {
   context: string;
   projectId: string;
   generation: number;
+  lifecycleGeneration: number;
 }
 
 interface ProjectContext {
@@ -11,6 +12,20 @@ interface ProjectContext {
 
 export class ProjectOperationGuard {
   private readonly contexts = new Map<string, ProjectContext>();
+  private active = true;
+  private lifecycleGeneration = 0;
+
+  activate(): void {
+    if (this.active) return;
+    this.active = true;
+    this.lifecycleGeneration += 1;
+  }
+
+  invalidate(): void {
+    if (!this.active) return;
+    this.active = false;
+    this.lifecycleGeneration += 1;
+  }
 
   setCurrentProject(context: string, projectId: string): void {
     const current = this.contexts.get(context);
@@ -23,12 +38,20 @@ export class ProjectOperationGuard {
 
   capture(context: string): ProjectOperationToken {
     const current = this.contexts.get(context) ?? { projectId: "", generation: 0 };
-    return { context, ...current };
+    return { context, ...current, lifecycleGeneration: this.lifecycleGeneration };
+  }
+
+  captureForProject(context: string, projectId: string): ProjectOperationToken {
+    this.setCurrentProject(context, projectId);
+    return this.capture(context);
   }
 
   isCurrent(token: ProjectOperationToken): boolean {
     const current = this.contexts.get(token.context);
-    return current?.projectId === token.projectId
+    return this.active
+      && token.lifecycleGeneration === this.lifecycleGeneration
+      && current !== undefined
+      && current.projectId === token.projectId
       && current.generation === token.generation;
   }
 
@@ -37,6 +60,10 @@ export class ProjectOperationGuard {
     update();
     return true;
   }
+}
+
+export function assignmentContext(kind: "question" | "hypothesis", recordId: string): string {
+  return `${kind}Assignment:${recordId}`;
 }
 
 export class LatestRequestGuard {

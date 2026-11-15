@@ -10,6 +10,7 @@ import {
 } from "@/shared/layout/projectSourcesState";
 import {
   ProjectOperationGuard,
+  assignmentContext,
   type ProjectOperationToken,
 } from "@/shared/layout/researchAsyncGuards";
 import { ExperimentWorkspacePanel } from "@/shared/layout/ExperimentWorkspacePanel";
@@ -220,6 +221,11 @@ export const ResearchWorkspacePage: React.FC = () => {
   }, [projectId, projectOperationGuard, questionProjectId]);
 
   useEffect(() => {
+    projectOperationGuard.activate();
+    return () => projectOperationGuard.invalidate();
+  }, [projectOperationGuard]);
+
+  useEffect(() => {
     if (!workspace) return;
     if (!workspace.projects.some((project) => project.id === projectId)) {
       setProjectId(workspace.projects[0]?.id ?? "");
@@ -291,9 +297,14 @@ export const ResearchWorkspacePage: React.FC = () => {
   const act = async <T,>(
     action: () => Promise<T>,
     context: string | null = "project",
+    projectId?: string,
   ): Promise<ResearchActionResult<T>> => {
-    const token = context ? projectOperationGuard.capture(context) : null;
-    const isCurrent = (): boolean => token === null || projectOperationGuard.isCurrent(token);
+    const token = context === null
+      ? projectOperationGuard.captureForProject("workspace", "")
+      : projectId === undefined
+        ? projectOperationGuard.capture(context)
+        : projectOperationGuard.captureForProject(context, projectId);
+    const isCurrent = (): boolean => projectOperationGuard.isCurrent(token);
     try {
       const value = await run(action, isCurrent);
       return isCurrent()
@@ -823,23 +834,25 @@ export const ResearchWorkspacePage: React.FC = () => {
   const assignQuestion = (event: React.FormEvent<HTMLFormElement>, questionId: string): void => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const destinationProjectId = String(form.get("projectId") ?? "");
     void act(() => researchService.assignUnassignedQuestion(
       questionId,
-      String(form.get("projectId") ?? ""),
+      destinationProjectId,
       String(form.get("rationale") ?? ""),
       null,
-    ), "questionProject");
+    ), assignmentContext("question", questionId), destinationProjectId);
   };
 
   const assignHypothesis = (event: React.FormEvent<HTMLFormElement>, hypothesisId: string): void => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const destinationProjectId = String(form.get("projectId") ?? "");
     void act(() => researchService.assignUnassignedHypothesis(
       hypothesisId,
-      String(form.get("projectId") ?? ""),
+      destinationProjectId,
       String(form.get("rationale") ?? ""),
       null,
-    ));
+    ), assignmentContext("hypothesis", hypothesisId), destinationProjectId);
   };
 
   if (isLoading && !workspace) {
@@ -1269,7 +1282,16 @@ export const ResearchWorkspacePage: React.FC = () => {
                     {!question.projectId && question.ownershipState === "unassigned" && (
                       <form onSubmit={(event) => assignQuestion(event, question.id)} className="mt-3 flex flex-wrap items-end gap-2 border-t border-[#292c34] pt-3">
                         <Field label="Explicitly assign to active project">
-                          <select className={inputClass} name="projectId" required disabled={activeProjects.length === 0}>
+                          <select
+                            className={inputClass}
+                            name="projectId"
+                            required
+                            disabled={activeProjects.length === 0}
+                            onChange={(event) => projectOperationGuard.setCurrentProject(
+                              assignmentContext("question", question.id),
+                              event.currentTarget.value,
+                            )}
+                          >
                             <option value="">Select destination project</option>
                             {activeProjects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
                           </select>
@@ -1432,7 +1454,16 @@ export const ResearchWorkspacePage: React.FC = () => {
                       {hypothesis.legacyStatementH0 && <p className="mt-1 text-xs text-gray-400">H0: {hypothesis.legacyStatementH0}</p>}
                       <form onSubmit={(event) => assignHypothesis(event, hypothesis.id)} className="mt-3 flex flex-wrap items-end gap-2 border-t border-[#292c34] pt-3">
                         <Field label="Explicitly assign to active project">
-                          <select className={inputClass} name="projectId" required disabled={activeProjects.length === 0}>
+                          <select
+                            className={inputClass}
+                            name="projectId"
+                            required
+                            disabled={activeProjects.length === 0}
+                            onChange={(event) => projectOperationGuard.setCurrentProject(
+                              assignmentContext("hypothesis", hypothesis.id),
+                              event.currentTarget.value,
+                            )}
+                          >
                             <option value="">Select destination project</option>
                             {activeProjects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
                           </select>
