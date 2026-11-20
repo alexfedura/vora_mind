@@ -355,6 +355,13 @@ pub fn m_for_scale(user_step: u8, z0: u8, s: u8) -> Option<u8> {
     }
 }
 
+fn next_pivot(pivots: &[Pivot], after: usize, kind: PivotKind) -> Option<Pivot> {
+    pivots
+        .iter()
+        .copied()
+        .find(|pivot| pivot.idx > after && pivot.kind == kind)
+}
+
 pub fn detect_boxes(
     candles: &[Candle],
     params: Parameters,
@@ -583,69 +590,52 @@ fn scan_rbr(
     }
     let mut out: Vec<Box> = Vec::new();
     let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+    let pivots = detect_pivots(candles, 2);
 
-    for t1 in 0..n {
+    for l1 in pivots.iter().filter(|pivot| pivot.kind == PivotKind::Low) {
         if crate::market::cancel::is_cancelled(&cancel) {
             return Vec::new();
         }
-        let p1 = candles[t1].low;
-
-        let mut t2_opt: Option<usize> = None;
-        for j in (t1 + 1)..n {
-            if candles[j].high > p1 {
-                t2_opt = Some(j);
-                break;
-            }
-        }
-        let t2 = match t2_opt {
-            Some(v) => v,
+        let h1 = match next_pivot(&pivots, l1.idx, PivotKind::High) {
+            Some(pivot) => pivot,
             None => continue,
         };
-        let h1 = candles[t2].high;
-
-        let mut t4_opt: Option<usize> = None;
-        for j in (t2 + 1)..n {
-            if candles[j].high > h1 {
-                t4_opt = Some(j);
-                break;
-            }
-        }
-        let t4 = match t4_opt {
-            Some(v) => v,
+        let hl = match next_pivot(&pivots, h1.idx, PivotKind::Low) {
+            Some(pivot) => pivot,
             None => continue,
         };
-
-        if t4 <= t2 + 1 {
+        let hh = match next_pivot(&pivots, hl.idx, PivotKind::High) {
+            Some(pivot) => pivot,
+            None => continue,
+        };
+        if hl.price <= l1.price || hh.price <= h1.price {
             continue;
         }
-        let mut t3 = t2 + 1;
-        let mut hl = candles[t3].low;
-        for i in (t2 + 1)..t4 {
-            if candles[i].low < hl {
-                hl = candles[i].low;
-                t3 = i;
-            }
+        if candles[l1.idx..=hh.idx]
+            .iter()
+            .any(|candle| candle.low < l1.price)
+        {
+            continue;
         }
-
-        if hl <= p1 {
+        let engulf_idx = match ((hh.idx + 1)..n).find(|&idx| candles[idx].low < l1.price) {
+            Some(idx) => idx,
+            None => continue,
+        };
+        if !seen.insert((h1.idx, hl.idx)) {
             continue;
         }
 
-        if !seen.insert((t2, t3)) {
-            continue;
-        }
-
-        let box_high = h1;
-        let box_low = hl;
-        let origin_price = h1;
-        let scale = classify_scale_from_base(h1 - hl, origin_price);
+        let box_high = h1.price;
+        let box_low = hl.price;
+        let origin_price = h1.price;
+        let scale = classify_scale_from_base(h1.price - hl.price, origin_price);
 
         let box_center = (box_high + box_low) / 2.0;
         let y_abs = y_abs_of(box_center, price_ref);
         let y_band = y_band_of(y_abs);
 
         let period_sec: i64 = TF_SECONDS[step as usize] as i64;
-        let x_idx = candles[t2].ts / period_sec;
+        let x_idx = candles[h1.idx].ts / period_sec;
 
         let address = format!(
             "{}~M{}~P{}~X{}~Y{}~RBR",
@@ -661,16 +651,16 @@ fn scan_rbr(
             zone: BoxZone::Demand,
             scale,
             x_idx,
-            ts_start: candles[t2].ts,
-            ts_end: candles[t4].ts,
-            engulf_ts: Some(candles[t4].ts),
-            duration_sec: candles[t4].ts - candles[t2].ts,
+            ts_start: candles[h1.idx].ts,
+            ts_end: candles[hl.idx].ts,
+            engulf_ts: Some(candles[engulf_idx].ts),
+            duration_sec: candles[hl.idx].ts - candles[h1.idx].ts,
             scale_sec: 0,
             high: box_high,
             low: box_low,
             origin_price,
-            leg1_magnitude: h1 - p1,
-            leg2_magnitude: candles[t4].high - hl,
+            leg1_magnitude: h1.price - l1.price,
+            leg2_magnitude: hh.price - hl.price,
             parent_address: None,
             children_addresses: Vec::new(),
             x: x_idx,
@@ -699,69 +689,52 @@ fn scan_dbd(
     }
     let mut out: Vec<Box> = Vec::new();
     let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+    let pivots = detect_pivots(candles, 2);
 
-    for t1 in 0..n {
+    for h1 in pivots.iter().filter(|pivot| pivot.kind == PivotKind::High) {
         if crate::market::cancel::is_cancelled(&cancel) {
             return Vec::new();
         }
-        let h1 = candles[t1].high;
-
-        let mut t2_opt: Option<usize> = None;
-        for j in (t1 + 1)..n {
-            if candles[j].low < h1 {
-                t2_opt = Some(j);
-                break;
-            }
-        }
-        let t2 = match t2_opt {
-            Some(v) => v,
+        let l1 = match next_pivot(&pivots, h1.idx, PivotKind::Low) {
+            Some(pivot) => pivot,
             None => continue,
         };
-        let l1 = candles[t2].low;
-
-        let mut t4_opt: Option<usize> = None;
-        for j in (t2 + 1)..n {
-            if candles[j].low < l1 {
-                t4_opt = Some(j);
-                break;
-            }
-        }
-        let t4 = match t4_opt {
-            Some(v) => v,
+        let lh = match next_pivot(&pivots, l1.idx, PivotKind::High) {
+            Some(pivot) => pivot,
             None => continue,
         };
-
-        if t4 <= t2 + 1 {
+        let ll = match next_pivot(&pivots, lh.idx, PivotKind::Low) {
+            Some(pivot) => pivot,
+            None => continue,
+        };
+        if lh.price >= h1.price || ll.price >= l1.price {
             continue;
         }
-        let mut t3 = t2 + 1;
-        let mut lh = candles[t3].high;
-        for i in (t2 + 1)..t4 {
-            if candles[i].high > lh {
-                lh = candles[i].high;
-                t3 = i;
-            }
+        if candles[h1.idx..=ll.idx]
+            .iter()
+            .any(|candle| candle.high > h1.price)
+        {
+            continue;
         }
-
-        if lh >= h1 {
+        let engulf_idx = match ((ll.idx + 1)..n).find(|&idx| candles[idx].high > h1.price) {
+            Some(idx) => idx,
+            None => continue,
+        };
+        if !seen.insert((l1.idx, lh.idx)) {
             continue;
         }
 
-        if !seen.insert((t2, t3)) {
-            continue;
-        }
-
-        let box_high = lh;
-        let box_low = l1;
-        let origin_price = l1;
-        let scale = classify_scale_from_base(lh - l1, origin_price);
+        let box_high = lh.price;
+        let box_low = l1.price;
+        let origin_price = l1.price;
+        let scale = classify_scale_from_base(lh.price - l1.price, origin_price);
 
         let box_center = (box_high + box_low) / 2.0;
         let y_abs = y_abs_of(box_center, price_ref);
         let y_band = y_band_of(y_abs);
 
         let period_sec: i64 = TF_SECONDS[step as usize] as i64;
-        let x_idx = candles[t2].ts / period_sec;
+        let x_idx = candles[l1.idx].ts / period_sec;
 
         let address = format!(
             "{}~M{}~P{}~X{}~Y{}~DBD",
@@ -777,16 +750,16 @@ fn scan_dbd(
             zone: BoxZone::Supply,
             scale,
             x_idx,
-            ts_start: candles[t2].ts,
-            ts_end: candles[t4].ts,
-            engulf_ts: Some(candles[t4].ts),
-            duration_sec: candles[t4].ts - candles[t2].ts,
+            ts_start: candles[l1.idx].ts,
+            ts_end: candles[lh.idx].ts,
+            engulf_ts: Some(candles[engulf_idx].ts),
+            duration_sec: candles[lh.idx].ts - candles[l1.idx].ts,
             scale_sec: 0,
             high: box_high,
             low: box_low,
             origin_price,
-            leg1_magnitude: h1 - l1,
-            leg2_magnitude: lh - candles[t4].low,
+            leg1_magnitude: h1.price - l1.price,
+            leg2_magnitude: lh.price - ll.price,
             parent_address: None,
             children_addresses: Vec::new(),
             x: x_idx,
@@ -934,7 +907,7 @@ mod tests {
         v.push(c(19, 101.5, 101.5, 100.5, 101.0));
         v.push(c(20, 101.0, 101.0, 100.0, 100.5)); // HL = 100
         v.push(c(21, 100.5, 102.0, 100.5, 101.5));
-        v.push(c(22, 101.5, 106.0, 99.0, 105.0)); // violation wick 99 + engulf close 105 > 103
+        v.push(c(22, 101.5, 106.0, 100.5, 105.0)); // stays above L1; HH pivot follows at 23
         v.push(c(23, 105.0, 110.0, 105.0, 109.0)); // HH = 110
         v.push(c(24, 109.0, 109.0, 100.0, 101.0));
         v.push(c(25, 101.0, 101.0, 96.0, 97.0));
@@ -955,7 +928,7 @@ mod tests {
         v.push(c(19, 98.0, 98.8, 97.5, 98.5));
         v.push(c(20, 98.5, 99.5, 98.3, 99.0)); // LH = 99.5
         v.push(c(21, 99.0, 99.0, 97.5, 98.0));
-        v.push(c(22, 96.0, 100.5, 95.0, 95.0)); // violation wick 100.5 + engulf close 95 < 97
+        v.push(c(22, 98.8, 99.0, 97.2, 98.0)); // stays below H1; LL pivot follows at 23
         v.push(c(23, 95.5, 95.5, 90.0, 91.0)); // LL = 90
         v.push(c(24, 91.0, 96.0, 91.0, 95.0));
         v.push(c(25, 95.0, 100.0, 95.0, 100.0));
@@ -1055,8 +1028,7 @@ mod tests {
 
     #[test]
     fn rbr_pending_no_engulf() {
-        // v6.4.17: candle-based HH = first candle after hl_idx(20) with high>103 → idx22 (high 106).
-        // box_low = HL scalar = min(low) over (17,22) = min(101.5,100.5,100.0,100.5) = 100.0.
+        // A confirmed four-pivot pattern without a post-HH L1 break is not emitted.
         let mut v = rbr_seq();
         v.truncate(25);
         let boxes = call(&v);
@@ -1064,26 +1036,12 @@ mod tests {
             .iter()
             .filter(|b| b.pattern == BoxPattern::RBR)
             .collect();
-        assert!(!rbr.is_empty(), "expected pending RBR, got {:?}", boxes);
-        let b = rbr[0];
-        assert!(b.engulf_ts.is_none());
-        assert_eq!(b.ts_end, 24);
-        assert!(
-            (b.low - 100.0).abs() < 1e-9,
-            "low must be HL scalar 100.0, got {}",
-            b.low
-        );
-        assert!(
-            (b.high - 103.0).abs() < 1e-9,
-            "high must be H1, got {}",
-            b.high
-        );
+        assert!(rbr.is_empty(), "unengulfed RBR should not be emitted");
     }
 
     #[test]
     fn rbr_confirmed_fixed_levels() {
-        // v6.4.17: H1=103 (17), HH candle=22, HL = min(low) over (17,22) = 100.0, box_low = 100.0.
-        // engulf = first wick low<100.0 after HH → idx25 low=96.0 → ts_end=25.
+        // The box covers H1→HL; engulf is the first post-HH wick below L1.
         let boxes = call(&rbr_seq());
         let rbr: Vec<_> = boxes
             .iter()
@@ -1092,15 +1050,17 @@ mod tests {
         assert!(!rbr.is_empty());
         let b = rbr[0];
         assert!(b.engulf_ts.is_some());
-        assert_eq!(b.ts_end, 25);
+        assert_eq!(b.ts_start, 17);
+        assert_eq!(b.ts_end, 20);
+        assert_eq!(b.engulf_ts, Some(26));
         assert!((b.low - 100.0).abs() < 1e-9);
         assert!((b.high - 103.0).abs() < 1e-9);
+        assert!((b.leg2_magnitude - 10.0).abs() < 1e-9);
     }
 
     #[test]
     fn dbd_pending_no_engulf() {
-        // v6.4.17: candle-based LL = first candle after lh_idx(20) with low<97 → idx22 (low 95).
-        // box_high = LH scalar = max(high) over (17,22) = max(98.5,98.8,99.5,99.0) = 99.5.
+        // A confirmed four-pivot pattern without a post-LL H1 break is not emitted.
         let mut v = dbd_seq();
         v.truncate(25);
         let boxes = call(&v);
@@ -1108,22 +1068,12 @@ mod tests {
             .iter()
             .filter(|b| b.pattern == BoxPattern::DBD)
             .collect();
-        assert!(!dbd.is_empty(), "expected pending DBD, got {:?}", boxes);
-        let b = dbd[0];
-        assert!(b.engulf_ts.is_none());
-        assert_eq!(b.ts_end, 24);
-        assert!(
-            (b.high - 99.5).abs() < 1e-9,
-            "high must be highest wick 99.5, got {}",
-            b.high
-        );
-        assert!((b.low - 97.0).abs() < 1e-9, "low must be L1, got {}", b.low);
+        assert!(dbd.is_empty(), "unengulfed DBD should not be emitted");
     }
 
     #[test]
     fn dbd_confirmed_fixed_levels() {
-        // v6.4.17: L1=97 (17), LL candle=22, LH = max(high) over (17,22) = 99.5, box_high = 99.5.
-        // engulf = first wick high>99.5 after LL → idx25 high=100.0 → ts_end=25.
+        // The box covers L1→LH; engulf is the first post-LL wick above H1.
         let boxes = call(&dbd_seq());
         let dbd: Vec<_> = boxes
             .iter()
@@ -1132,9 +1082,12 @@ mod tests {
         assert!(!dbd.is_empty());
         let b = dbd[0];
         assert!(b.engulf_ts.is_some());
-        assert_eq!(b.ts_end, 25);
+        assert_eq!(b.ts_start, 17);
+        assert_eq!(b.ts_end, 20);
+        assert_eq!(b.engulf_ts, Some(27));
         assert!((b.high - 99.5).abs() < 1e-9);
         assert!((b.low - 97.0).abs() < 1e-9);
+        assert!((b.leg2_magnitude - 9.5).abs() < 1e-9);
     }
 
     #[test]

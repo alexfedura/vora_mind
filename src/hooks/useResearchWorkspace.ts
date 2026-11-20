@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { researchService } from "@/mind/services/researchService";
 import { LatestRequestGuard } from "@/shared/layout/researchAsyncGuards";
+import { useProjectWorkspace } from "@/hooks/useProjectWorkspace";
 import type { ResearchWorkspaceDto } from "@/types";
 
 export function useResearchWorkspace() {
@@ -51,4 +52,9 @@ export function useResearchWorkspace() {
   }, [refresh]);
 
   return { workspace, isLoading, error, refresh, run };
+}
+
+export function useResearchProjectContext(projectId: string) {
+  return useProjectWorkspace(projectId, (requestedProjectId) =>
+    researchService.getProjectContext(requestedProjectId));
 }

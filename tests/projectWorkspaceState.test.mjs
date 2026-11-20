@@ -38,6 +38,41 @@ test("a late project A response cannot replace project B after a switch", async 
   });
 });
 
+test("a late Research context cannot replace the selected project's exact provenance", async () => {
+  const controller = new ProjectWorkspaceController();
+  const projectA = deferred();
+  const projectB = deferred();
+
+  controller.activateProject("A");
+  const requestA = controller.refresh("A", () => projectA.promise);
+  controller.deactivateProject("A");
+  controller.activateProject("B");
+  const requestB = controller.refresh("B", () => projectB.promise);
+  projectB.resolve({
+    projectId: "B",
+    literatureReviews: [{
+      projectId: "B",
+      sources: [{ sourceId: "shared", sourceVersionId: "version-b" }],
+    }],
+  });
+  assert.equal(await requestB, true);
+
+  projectA.resolve({
+    projectId: "A",
+    literatureReviews: [{
+      projectId: "A",
+      sources: [{ sourceId: "shared", sourceVersionId: "version-a" }],
+    }],
+  });
+  assert.equal(await requestA, false);
+
+  assert.equal(controller.getSnapshot().workspace.projectId, "B");
+  assert.equal(
+    controller.getSnapshot().workspace.literatureReviews[0].sources[0].sourceVersionId,
+    "version-b",
+  );
+});
+
 test("a late project A failure cannot replace loaded project B state", async () => {
   const controller = new ProjectWorkspaceController();
   const projectA = deferred();

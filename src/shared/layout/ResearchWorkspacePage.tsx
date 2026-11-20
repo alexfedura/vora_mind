@@ -1,7 +1,10 @@
 import React, { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { AlertCircle, BookOpenCheck, Plus, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useResearchWorkspace } from "@/hooks/useResearchWorkspace";
+import {
+  useResearchProjectContext,
+  useResearchWorkspace,
+} from "@/hooks/useResearchWorkspace";
 import { researchService } from "@/mind/services/researchService";
 import { srcListSources } from "@/source/services/sourceService";
 import {
@@ -164,6 +167,8 @@ export const ResearchWorkspacePage: React.FC = () => {
   const [projectId, setProjectId] = useState("");
   const [pathways, setPathways] = useState<ResearchPathwayKey[]>(["existing_knowledge_acquisition"]);
   const [questionProjectId, setQuestionProjectId] = useState("");
+  const projectContext = useResearchProjectContext(projectId);
+  const questionContext = useResearchProjectContext(questionProjectId);
   const [selectedSourceKey, setSelectedSourceKey] = useState("");
   const [selectedPlanVersionId, setSelectedPlanVersionId] = useState("");
   const [selectedDatasetVersionId, setSelectedDatasetVersionId] = useState("");
@@ -197,24 +202,55 @@ export const ResearchWorkspacePage: React.FC = () => {
     () => sourceVersions.find((source) => sourceKey(source) === selectedSourceKey),
     [sourceVersions, selectedSourceKey],
   );
-  const projectQuestions = (workspace?.questions ?? []).filter(
-    (question) => question.projectId === questionProjectId,
-  );
-  const projectPhenomena = (workspace?.phenomena ?? []).filter(
-    (phenomenon) => phenomenon.projectId === projectId,
-  );
+  const discoveryContext = projectContext.status === "loaded"
+    ? projectContext.workspace
+    : null;
+  const projectPhenomena = discoveryContext
+    ? discoveryContext.phenomena
+    : (workspace?.phenomena ?? []).filter(
+        (phenomenon) => phenomenon.projectId === projectId,
+      );
   const projectDomains = (workspace?.domains ?? []).filter((domain) =>
     workspace?.projects.find((project) => project.id === projectId)?.domainIds.includes(domain.id),
   );
   const questionProjectDomains = (workspace?.domains ?? []).filter((domain) =>
     workspace?.projects.find((project) => project.id === questionProjectId)?.domainIds.includes(domain.id),
   );
-  const projectObservations = (workspace?.observations ?? []).filter(
-    (observation) => observation.projectId === projectId,
-  );
-  const projectHypotheses = (workspace?.hypotheses ?? []).filter(
-    (hypothesis) => hypothesis.projectId === projectId,
-  );
+  const projectObservations = discoveryContext
+    ? discoveryContext.observations
+    : (workspace?.observations ?? []).filter(
+        (observation) => observation.projectId === projectId,
+      );
+  const projectHypotheses = discoveryContext
+    ? discoveryContext.hypotheses
+    : (workspace?.hypotheses ?? []).filter(
+        (hypothesis) => hypothesis.projectId === projectId,
+      );
+  const projectObservationPlans = discoveryContext
+    ? discoveryContext.observationPlans
+    : (workspace?.observationPlans ?? []).filter(
+        (plan) => plan.projectId === projectId,
+      );
+  const projectDatasetVersions = discoveryContext
+    ? discoveryContext.datasetVersions
+    : (workspace?.datasetVersions ?? []).filter(
+        (dataset) => dataset.projectId === projectId,
+      );
+  const projectPatterns = discoveryContext
+    ? discoveryContext.patterns
+    : (workspace?.patterns ?? []).filter(
+        (pattern) => pattern.projectId === projectId,
+      );
+  const projectIdeas = discoveryContext
+    ? discoveryContext.ideas
+    : (workspace?.ideas ?? []).filter(
+        (idea) => idea.projectId === projectId,
+      );
+  const projectDesignVersions = discoveryContext
+    ? discoveryContext.designVersions
+    : (workspace?.designVersions ?? []).filter(
+        (design) => design.projectId === projectId,
+      );
 
   useLayoutEffect(() => {
     projectOperationGuard.setCurrentProject("project", projectId);
@@ -314,6 +350,17 @@ export const ResearchWorkspacePage: React.FC = () => {
     } catch {
       return isCurrent() ? { status: "failed", token } : { status: "stale", token };
     }
+  };
+
+  const actWithContextRefresh = async <T,>(
+    action: () => Promise<T>,
+    context: string,
+    contextProjectId: string,
+    refreshContext: () => Promise<boolean>,
+  ): Promise<ResearchActionResult<T>> => {
+    const result = await act(action, context, contextProjectId);
+    if (result.status === "completed") await refreshContext();
+    return result;
   };
 
   const createProject = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -451,7 +498,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     event.preventDefault();
     const target = event.currentTarget;
     const form = new FormData(target);
-    const result = await act(async () => {
+    const result = await actWithContextRefresh(async () => {
       const assessment = await researchService.createPriorAssessment({
         projectId,
         title: String(form.get("title") ?? ""),
@@ -459,8 +506,13 @@ export const ResearchWorkspacePage: React.FC = () => {
         frameworkVersionId: null,
         createdBy: null,
       });
-      await researchService.reviewPriorAssessment(assessment.id, null);
-    });
+      try {
+        await researchService.reviewPriorAssessment(assessment.id, null);
+      } catch (cause) {
+        await projectContext.refresh();
+        throw cause;
+      }
+    }, "project", projectId, projectContext.refresh);
     if (result.status === "completed" && result.token) {
       projectOperationGuard.commit(result.token, () => target.reset());
     }
@@ -471,7 +523,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     if (!selectedSource) return;
     const target = event.currentTarget;
     const form = new FormData(target);
-    const result = await act(() => researchService.createReviewedLiteratureReview({
+    const result = await actWithContextRefresh(() => researchService.createReviewedLiteratureReview({
         projectId,
         title: String(form.get("title") ?? ""),
         searchScope: String(form.get("scope") ?? ""),
@@ -482,7 +534,7 @@ export const ResearchWorkspacePage: React.FC = () => {
         citationNote: String(form.get("citationNote") ?? ""),
         createdBy: null,
         reviewerId: null,
-      }));
+      }), "project", projectId, projectContext.refresh);
     if (result.status === "completed" && result.token) {
       projectOperationGuard.commit(result.token, () => target.reset());
     }
@@ -493,6 +545,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     const token = projectOperationGuard.capture("project");
     const target = event.currentTarget;
     const form = new FormData(target);
+    let gapCreated = false;
     try {
       const domainId = String(form.get("domainId") ?? "");
       const gap = await run(() => researchService.createGap({
@@ -502,6 +555,7 @@ export const ResearchWorkspacePage: React.FC = () => {
         statement: String(form.get("statement") ?? ""),
         createdBy: null,
       }), () => projectOperationGuard.isCurrent(token));
+      gapCreated = true;
       const evidenceId = String(form.get("evidenceId") ?? "");
       const evidenceKind = String(form.get("evidenceKind") ?? "");
       if (evidenceId) {
@@ -511,9 +565,12 @@ export const ResearchWorkspacePage: React.FC = () => {
         priorAssessmentId: evidenceKind === "prior" ? evidenceId : null,
         }), () => projectOperationGuard.isCurrent(token));
       }
+      if (projectOperationGuard.isCurrent(token)) await projectContext.refresh();
       projectOperationGuard.commit(token, () => target.reset());
     } catch {
-      // The hook exposes the failure in the page-level alert.
+      if (gapCreated && projectOperationGuard.isCurrent(token)) {
+        await projectContext.refresh();
+      }
     }
   };
 
@@ -522,11 +579,11 @@ export const ResearchWorkspacePage: React.FC = () => {
     const evidenceId = String(values.get("evidenceId") ?? "");
     const evidenceKind = String(values.get("evidenceKind") ?? "");
     if (!evidenceId) return;
-    await act(() => researchService.addGapEvidence({
+    await actWithContextRefresh(() => researchService.addGapEvidence({
       gapId: gap.id,
       literatureReviewId: evidenceKind === "literature" ? evidenceId : null,
       priorAssessmentId: evidenceKind === "prior" ? evidenceId : null,
-    }), "project");
+    }), "project", projectId, projectContext.refresh);
   };
 
   const createQuestion = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -534,7 +591,7 @@ export const ResearchWorkspacePage: React.FC = () => {
     const target = event.currentTarget;
     const form = new FormData(target);
     const gapId = String(form.get("gapId") ?? "");
-    const result = await act(() => researchService.createQuestion({
+    const result = await actWithContextRefresh(() => researchService.createQuestion({
       projectId: questionProjectId || null,
       researchGapId: gapId || null,
       domainId: String(form.get("domainId") ?? "") || null,
@@ -542,7 +599,7 @@ export const ResearchWorkspacePage: React.FC = () => {
       description: String(form.get("description") ?? ""),
       rationale: String(form.get("rationale") ?? ""),
       createdBy: null,
-    }), "questionProject");
+    }), "questionProject", questionProjectId, questionContext.refresh);
     if (result.status === "completed" && result.token) {
       projectOperationGuard.commit(result.token, () => target.reset());
     }
@@ -592,10 +649,10 @@ export const ResearchWorkspacePage: React.FC = () => {
 
   const createObservation = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const version = workspace?.observationPlans
+    const version = projectObservationPlans
       .flatMap((plan) => plan.versions)
       .find((item) => item.id === selectedPlanVersionId);
-    const plan = workspace?.observationPlans.find((item) => item.id === version?.planId);
+    const plan = projectObservationPlans.find((item) => item.id === version?.planId);
     if (!version || !plan) return;
     const target = event.currentTarget;
     const form = new FormData(target);
@@ -863,11 +920,12 @@ export const ResearchWorkspacePage: React.FC = () => {
     return <p role="alert" className="mx-auto max-w-5xl py-8 text-sm text-rose-300">{error ?? "Research workspace is unavailable."}</p>;
   }
 
-  const projectReviews = workspace.literatureReviews.filter((review) => review.projectId === projectId);
-  const projectAssessments = workspace.priorAssessments.filter((item) => item.projectId === projectId);
-  const planVersions = workspace.observationPlans
-    .filter((plan) => plan.projectId === projectId)
-    .flatMap((plan) => plan.versions);
+  const projectReviews = projectContext.workspace?.literatureReviews ?? [];
+  const projectAssessments = projectContext.workspace?.priorAssessments ?? [];
+  const projectGaps = projectContext.workspace?.gaps ?? [];
+  const projectQuestions = questionContext.workspace?.questions ?? [];
+  const questionGaps = questionContext.workspace?.gaps ?? [];
+  const planVersions = projectObservationPlans.flatMap((plan) => plan.versions);
   const sourceOptionLabel = (source: SourceVersionReferenceDto): string =>
     `${source.sourceTitle} — ${source.editionLabel ?? "retrieval"}${source.sourceLocationLabel ? ` / ${source.sourceLocationLabel}` : ""}`;
   const searchTerm = sourceSearch.trim().toLocaleLowerCase();
@@ -1153,6 +1211,14 @@ export const ResearchWorkspacePage: React.FC = () => {
       {projectId && (
         <>
           <section id="research-literature" className="grid gap-5 lg:grid-cols-2">
+            {projectContext.status === "loading" && (
+              <p className="text-sm text-gray-400 lg:col-span-2">Loading Research context for the selected project…</p>
+            )}
+            {projectContext.status === "error" && (
+              <p role="alert" className="text-sm text-rose-300 lg:col-span-2">
+                Could not load this project’s Research context: {projectContext.error}
+              </p>
+            )}
             <form onSubmit={(event) => void createPriorAssessment(event)} className="space-y-3 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
               <h3 className="font-semibold text-white">Prior-knowledge assessment</h3>
               <p className="text-xs text-gray-500">A reviewable assessment can support research-gap acceptance.</p>
@@ -1184,20 +1250,49 @@ export const ResearchWorkspacePage: React.FC = () => {
               <Field label="Citation note"><input className={inputClass} name="citationNote" /></Field>
               <button className={buttonClass} disabled={!selectedSource}><BookOpenCheck size={14} /> Add citation and review</button>
             </form>
-            {projectReviews.map((review) => (
-              <article key={review.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3">
-                <h4 className="text-sm text-white">{review.title} · {review.lifecycleStatus}</h4>
-                <p className="mt-1 text-xs text-gray-500">Search scope: {review.searchScope}</p>
-                {review.sources.map((citation) => (
-                  <p key={citation.id} className="mt-1 text-[11px] text-gray-400">
-                    {citation.sourceId} · exact version {citation.sourceVersionId}
-                    {citation.sourceLocationId ? ` · location ${citation.sourceLocationId}` : " · location unspecified"}
-                    {citation.sourceClaimId ? ` · source claim ${citation.sourceClaimId}` : ""}
-                    {" · "}{citation.citationNote || "no note"} · <Link to="/sources" className="text-amber-300 underline">Open source workspace</Link>
-                  </p>
-                ))}
+            {projectAssessments.map((assessment) => (
+              <article key={assessment.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3">
+                <h4 className="text-sm text-white">{assessment.title} · {assessment.lifecycleStatus}</h4>
+                <p className="mt-1 whitespace-pre-wrap text-xs text-gray-400">{assessment.assessment}</p>
+                <p className="mt-1 text-[11px] text-gray-500">Assessment ID {assessment.id}</p>
               </article>
             ))}
+            {projectReviews.map((review) => (
+              <article
+                key={review.id}
+                id={`research-literature-review-${encodeURIComponent(review.id)}`}
+                className="rounded-lg border border-[#292c34] bg-[#101114] p-3"
+              >
+                <h4 className="text-sm text-white">{review.title} · {review.lifecycleStatus}</h4>
+                <p className="mt-1 text-xs text-gray-500">Search scope: {review.searchScope}</p>
+                {review.sources.map((citation) => {
+                  const exactReferenceAvailable = projectContext.workspace?.sourceVersions.some(
+                    (version) => version.sourceId === citation.sourceId
+                      && version.sourceVersionId === citation.sourceVersionId
+                      && (!citation.sourceLocationId
+                        || version.sourceLocationId === citation.sourceLocationId)
+                      && (!citation.sourceClaimId
+                        || version.sourceClaimId === citation.sourceClaimId),
+                  ) ?? false;
+                  return (
+                    <p key={citation.id} className="mt-1 text-[11px] text-gray-400">
+                      {citation.sourceId} · exact version {citation.sourceVersionId}
+                      {citation.sourceLocationId ? ` · location ${citation.sourceLocationId}` : " · location unspecified"}
+                      {citation.sourceClaimId ? ` · source claim ${citation.sourceClaimId}` : ""}
+                      {" · "}{citation.citationNote || "no note"} · <Link to="/sources" className="text-amber-300 underline">Open source workspace</Link>
+                      {!exactReferenceAvailable && (
+                        <span role="alert" className="ml-1 text-rose-300">
+                          Exact SourceVersion or location unavailable; no substitute was selected.
+                        </span>
+                      )}
+                    </p>
+                  );
+                })}
+              </article>
+            ))}
+            {projectContext.status === "loaded" && projectReviews.length === 0 && (
+              <p className="text-sm text-gray-500 lg:col-span-2">No literature reviews are recorded for this project.</p>
+            )}
           </section>
 
           <section className="space-y-4 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
@@ -1226,8 +1321,12 @@ export const ResearchWorkspacePage: React.FC = () => {
               <div><button className={buttonClass}><Plus size={14} /> Create gap</button></div>
             </form>
             <div className="space-y-2">
-              {workspace.gaps.filter((gap) => gap.projectId === projectId).map((gap) => (
-                <article key={gap.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3">
+              {projectGaps.map((gap) => (
+                <article
+                  key={gap.id}
+                  id={`research-gap-${encodeURIComponent(gap.id)}`}
+                  className="rounded-lg border border-[#292c34] bg-[#101114] p-3"
+                >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div><h4 className="text-sm font-medium text-white">{gap.title}</h4><p className="mt-1 text-xs text-gray-400">{gap.statement}</p></div>
                     <span className="rounded bg-[#242630] px-2 py-1 text-[11px] text-gray-300">{gap.lifecycleStatus}</span>
@@ -1235,6 +1334,29 @@ export const ResearchWorkspacePage: React.FC = () => {
                   <p className="mt-2 text-[11px] text-gray-500">
                     Evidence: {gap.literatureReviewIds.length} literature review(s), {gap.priorAssessmentIds.length} assessment(s), {gap.hasReviewedException ? "reviewed exception" : "no exception"}
                   </p>
+                  {(gap.literatureReviewIds.length > 0 || gap.priorAssessmentIds.length > 0) && (
+                    <ul className="mt-1 space-y-1 text-[11px] text-gray-400">
+                      {gap.literatureReviewIds.map((reviewId) => {
+                        const review = projectReviews.find((item) => item.id === reviewId);
+                        return (
+                          <li key={reviewId}>
+                            Literature review: {review?.title ?? reviewId} · {reviewId}
+                            {review && <> · <a href={`#research-literature-review-${encodeURIComponent(reviewId)}`} className="text-amber-300 underline">Open exact review</a></>}
+                            {!review && <span role="alert" className="text-rose-300"> · Review unavailable in this project context.</span>}
+                          </li>
+                        );
+                      })}
+                      {gap.priorAssessmentIds.map((assessmentId) => {
+                        const assessment = projectAssessments.find((item) => item.id === assessmentId);
+                        return (
+                          <li key={assessmentId}>
+                            Prior assessment: {assessment?.title ?? assessmentId} · {assessmentId}
+                            {!assessment && <span role="alert" className="text-rose-300"> · Assessment unavailable in this project context.</span>}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                   <form onSubmit={(event) => { event.preventDefault(); void addGapEvidence(gap, event.currentTarget); }} className="mt-2 flex flex-wrap gap-2">
                     <select className="min-w-[170px] rounded border border-[#343741] bg-[#17191f] px-2 py-1 text-xs text-white" name="evidenceKind">
                       <option value="prior">Prior assessment</option><option value="literature">Literature review</option>
@@ -1247,28 +1369,31 @@ export const ResearchWorkspacePage: React.FC = () => {
                     <button className="rounded border border-[#343741] px-2 py-1 text-xs text-gray-300">Attach evidence</button>
                   </form>
                   <div className="mt-2 flex gap-2">
-                    {gap.lifecycleStatus === "candidate" && <button type="button" onClick={() => void act(() => researchService.transitionGap(gap.id, "assessed", null))} className="rounded border border-[#343741] px-2 py-1 text-xs text-gray-300">Mark assessed</button>}
-                    {gap.lifecycleStatus === "assessed" && <button type="button" onClick={() => void act(() => researchService.transitionGap(gap.id, "accepted", null))} className="rounded border border-emerald-800 px-2 py-1 text-xs text-emerald-300">Accept gap</button>}
+                    {gap.lifecycleStatus === "candidate" && <button type="button" onClick={() => void actWithContextRefresh(() => researchService.transitionGap(gap.id, "assessed", null), "project", projectId, projectContext.refresh)} className="rounded border border-[#343741] px-2 py-1 text-xs text-gray-300">Mark assessed</button>}
+                    {gap.lifecycleStatus === "assessed" && <button type="button" onClick={() => void actWithContextRefresh(() => researchService.transitionGap(gap.id, "accepted", null), "project", projectId, projectContext.refresh)} className="rounded border border-emerald-800 px-2 py-1 text-xs text-emerald-300">Accept gap</button>}
                   </div>
                 </article>
               ))}
+              {projectContext.status === "loaded" && projectGaps.length === 0 && (
+                <p className="text-sm text-gray-500">No research gaps are recorded for this project.</p>
+              )}
             </div>
             <form onSubmit={(event) => {
               event.preventDefault();
               const target = event.currentTarget;
               const form = new FormData(target);
-              void act(() => researchService.reviewGapException({
+              void actWithContextRefresh(() => researchService.reviewGapException({
                 gapId: String(form.get("gapId") ?? ""),
                 rationale: String(form.get("rationale") ?? ""),
                 reviewerId: null,
                 reviewDecision: "accepted",
-              })).then((result) => {
+              }), "project", projectId, projectContext.refresh).then((result) => {
                 if (result.status === "completed" && result.token) {
                   projectOperationGuard.commit(result.token, () => target.reset());
                 }
               });
             }} className="grid gap-2 border-t border-[#292c34] pt-3 md:grid-cols-[1fr_2fr_auto]">
-              <Field label="Reviewed exception for"><select className={inputClass} name="gapId" required><option value="">Select a gap</option>{workspace.gaps.filter((gap) => gap.projectId === projectId).map((gap) => <option key={gap.id} value={gap.id}>{gap.title}</option>)}</select></Field>
+              <Field label="Reviewed exception for"><select className={inputClass} name="gapId" required><option value="">Select a gap</option>{projectGaps.map((gap) => <option key={gap.id} value={gap.id}>{gap.title}</option>)}</select></Field>
               <Field label="Rationale"><input className={inputClass} name="rationale" required /></Field>
               <button className={`${buttonClass} self-end`}>Record reviewed exception</button>
             </form>
@@ -1277,12 +1402,20 @@ export const ResearchWorkspacePage: React.FC = () => {
           <section className="grid gap-5 lg:grid-cols-2">
             <div className="space-y-3 rounded-xl border border-[#292c34] bg-[#17191f] p-4">
               <h3 id="research-question-lifecycle" className="font-semibold text-white">Question lifecycle</h3>
+              {questionContext.status === "loading" && (
+                <p className="text-sm text-gray-400">Loading Research context for the question project…</p>
+              )}
+              {questionContext.status === "error" && (
+                <p role="alert" className="text-sm text-rose-300">
+                  Could not load this question project’s Research context: {questionContext.error}
+                </p>
+              )}
               <form onSubmit={(event) => void createQuestion(event)} className="space-y-3">
                 <ProjectSelect projects={workspace.projects} value={questionProjectId} onChange={setQuestionProjectId} />
                 <Field label="Accepted gap (optional)">
                   <select className={inputClass} name="gapId">
                     <option value="">Unlinked draft question</option>
-                    {(workspace.gaps.filter((gap) => gap.projectId === questionProjectId && gap.lifecycleStatus === "accepted")).map((gap) => <option key={gap.id} value={gap.id}>{gap.title}</option>)}
+                    {questionGaps.filter((gap) => gap.lifecycleStatus === "accepted").map((gap) => <option key={gap.id} value={gap.id}>{gap.title}</option>)}
                   </select>
                 </Field>
                 <Field label="Domain (optional)"><select className={inputClass} name="domainId"><option value="">No domain</option>{questionProjectDomains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></Field>
@@ -1292,12 +1425,17 @@ export const ResearchWorkspacePage: React.FC = () => {
                 <button className={buttonClass}><Plus size={14} /> Create draft question</button>
               </form>
               <div className="space-y-2 border-t border-[#292c34] pt-3">
-                {workspace.questions.filter((question) => question.projectId === questionProjectId || (!question.projectId && (question.ownershipState === "unassigned" || question.lifecycleStatus === "legacy_unassessed"))).map((question) => (
+                {[...projectQuestions, ...workspace.questions.filter((question) => !question.projectId && (question.ownershipState === "unassigned" || question.lifecycleStatus === "legacy_unassessed"))].map((question) => (
                   <article key={question.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3">
                     <div className="flex items-center justify-between gap-2"><h4 className="text-sm text-white">{question.title}</h4><span className="text-[11px] text-gray-400">{question.lifecycleStatus} · {question.ownershipState}</span></div>
                     <p className="mt-1 text-xs text-gray-400">{question.description}</p>
                     {question.migrationNote && <p className="mt-1 text-[11px] text-amber-300">{question.migrationNote}</p>}
-                    <p className="mt-1 text-[11px] text-gray-500">Question ID {question.id}{question.researchGapId ? ` · gap ${question.researchGapId}` : " · no gap link"}</p>
+                    <p className="mt-1 text-[11px] text-gray-500">
+                      Question ID {question.id}
+                      {question.researchGapId ? (
+                        <> · <a href={`#research-gap-${encodeURIComponent(question.researchGapId)}`} className="text-amber-300 underline">Gap {question.researchGapId}</a></>
+                      ) : " · no gap link"}
+                    </p>
                     {!question.projectId && question.ownershipState === "unassigned" && (
                       <form onSubmit={(event) => assignQuestion(event, question.id)} className="mt-3 flex flex-wrap items-end gap-2 border-t border-[#292c34] pt-3">
                         <Field label="Explicitly assign to active project">
@@ -1331,6 +1469,9 @@ export const ResearchWorkspacePage: React.FC = () => {
                     )}
                   </article>
                 ))}
+                {questionContext.status === "loaded" && projectQuestions.length === 0 && (
+                  <p className="text-sm text-gray-500">No project-assigned Questions are recorded for this project.</p>
+                )}
               </div>
               <form onSubmit={(event) => void refineQuestion(event)} className="space-y-2 border-t border-[#292c34] pt-3">
                 <h4 className="text-xs font-semibold text-gray-300">Refine an accepted question</h4>
@@ -1366,7 +1507,7 @@ export const ResearchWorkspacePage: React.FC = () => {
                 {planVersions.map((version) => (
                   <div key={version.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#292c34] bg-[#101114] p-2">
                     <button type="button" onClick={() => setSelectedPlanVersionId(version.id)} className="text-left text-xs text-gray-300">
-                      {workspace.observationPlans.find((plan) => plan.id === version.planId)?.title} · v{version.versionNo} · {version.lifecycleStatus}
+                      {projectObservationPlans.find((plan) => plan.id === version.planId)?.title} · v{version.versionNo} · {version.lifecycleStatus}
                     </button>
                     {version.lifecycleStatus === "draft" && <button type="button" onClick={() => void act(() => researchService.reviewObservationPlan(version.id, false, null))} className="rounded border border-[#343741] px-2 py-1 text-xs text-gray-300">Review plan</button>}
                   </div>
@@ -1381,7 +1522,7 @@ export const ResearchWorkspacePage: React.FC = () => {
               </form>
               <form onSubmit={(event) => void createObservation(event)} className="space-y-2 border-t border-[#292c34] pt-3">
                 <Field label="Reviewed plan version"><select className={inputClass} value={selectedPlanVersionId} onChange={(event) => setSelectedPlanVersionId(event.target.value)} required><option value="">Select reviewed plan</option>{planVersions.filter((version) => version.lifecycleStatus === "reviewed" || version.lifecycleStatus === "preregistered").map((version) => <option key={version.id} value={version.id}>{version.id} · {version.lifecycleStatus}</option>)}</select></Field>
-                <Field label="Dataset version (optional)"><select className={inputClass} value={selectedDatasetVersionId} onChange={(event) => setSelectedDatasetVersionId(event.target.value)}><option value="">No external dataset reference</option>{workspace.datasetVersions.filter((dataset) => dataset.projectId === projectId).map((dataset) => <option key={dataset.id} value={dataset.id}>{dataset.title} · {dataset.versionLabel} · source version {dataset.sourceVersionId}</option>)}</select></Field>
+                <Field label="Dataset version (optional)"><select className={inputClass} value={selectedDatasetVersionId} onChange={(event) => setSelectedDatasetVersionId(event.target.value)}><option value="">No external dataset reference</option>{projectDatasetVersions.map((dataset) => <option key={dataset.id} value={dataset.id}>{dataset.title} · {dataset.versionLabel} · source version {dataset.sourceVersionId}</option>)}</select></Field>
                 <Field label="Value state"><select className={inputClass} name="valueState"><option value="observed">Observed value</option><option value="not_measured">Not measured</option><option value="not_recorded">Not recorded</option><option value="unknown">Unknown</option><option value="not_applicable">Not applicable</option><option value="withheld">Withheld</option><option value="invalid">Invalid</option></select></Field>
                 <div className="grid grid-cols-2 gap-2"><Field label="Value"><input className={inputClass} name="value" /></Field><Field label="Unit"><input className={inputClass} name="unit" /></Field></div>
                 <Field label="Observed conditions"><input className={inputClass} name="conditions" required /></Field>
@@ -1411,7 +1552,7 @@ export const ResearchWorkspacePage: React.FC = () => {
                 <Field label="Origin record">
                   <select className={inputClass} name="originId" required>
                     <option value="">Select origin</option>
-                    {workspace.patterns.filter((item) => item.projectId === projectId).map((item) => <option key={`p-${item.id}`} value={item.id}>{item.title}</option>)}
+                    {projectPatterns.map((item) => <option key={`p-${item.id}`} value={item.id}>{item.title}</option>)}
                     {projectQuestions.map((item) => <option key={`q-${item.id}`} value={item.id}>{item.title}</option>)}
                     {projectObservations.map((item) => <option key={`o-${item.id}`} value={item.id}>Observation {item.id}</option>)}
                     {projectPhenomena.map((item) => <option key={`f-${item.id}`} value={item.id}>{item.title}</option>)}
@@ -1420,14 +1561,14 @@ export const ResearchWorkspacePage: React.FC = () => {
                 <button className={buttonClass}><Plus size={14} /> Capture unvalidated idea</button>
               </form>
               <div className="space-y-2 border-t border-[#292c34] pt-3">
-                {workspace.patterns.filter((item) => item.projectId === projectId).map((pattern) => (
+                {projectPatterns.map((pattern) => (
                   <article key={pattern.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3">
                     <h4 className="text-sm text-white">{pattern.title} <span className="text-xs text-gray-500">· {pattern.lifecycleStatus}</span></h4>
                     <p className="mt-1 text-xs text-gray-400">{pattern.statement}</p>
                     <p className="mt-1 text-[11px] text-gray-500">Interpretation of observations: {pattern.observationIds.join(", ") || "none"}</p>
                   </article>
                 ))}
-                {workspace.ideas.filter((item) => item.projectId === projectId).map((idea) => (
+                {projectIdeas.map((idea) => (
                   <p key={idea.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3 text-xs text-gray-300">
                     Idea · {idea.title} · unvalidated · origin {idea.patternId ?? idea.questionId ?? idea.observationId ?? idea.phenomenonId}
                   </p>
@@ -1533,7 +1674,7 @@ export const ResearchWorkspacePage: React.FC = () => {
                   <option value="">Select source claim, observation, or pattern</option>
                   {sourceVersions.filter((source) => source.sourceClaimId).map((source, index) => <option key={`${source.sourceClaimId}-${index}`} value={`source_claim|${source.sourceClaimId}`}>Source claim {source.sourceClaimId} · source version {source.sourceVersionId}</option>)}
                   {projectObservations.map((observation) => <option key={observation.id} value={`observation|${observation.id}`}>Observation {observation.id}</option>)}
-                  {workspace.patterns.filter((item) => item.projectId === projectId).map((pattern) => <option key={pattern.id} value={`pattern|${pattern.id}`}>Pattern {pattern.title}</option>)}
+                  {projectPatterns.map((pattern) => <option key={pattern.id} value={`pattern|${pattern.id}`}>Pattern {pattern.title}</option>)}
                 </select></Field>
                 <Field label="Evidence relationship"><select className={inputClass} name="polarity"><option value="supports">Supports</option><option value="contradicts">Contradicts</option><option value="qualifies">Qualifies</option></select></Field>
                 <Field label="Rationale"><input className={inputClass} name="rationale" required /></Field>
@@ -1566,7 +1707,7 @@ export const ResearchWorkspacePage: React.FC = () => {
                 <button className={buttonClass} disabled={!selectedHypothesisId}><Plus size={14} /> Create design and link hypothesis</button>
               </form>
               <div className="space-y-2 border-t border-[#292c34] pt-3">
-                {workspace.designVersions.filter((design) => design.projectId === projectId).map((design) => (
+                {projectDesignVersions.map((design) => (
                   <div key={design.id} className="rounded-lg border border-[#292c34] bg-[#101114] p-3 text-xs text-gray-300">
                     <p>Design v{design.versionNo} · {design.title} · {design.lifecycleStatus}</p>
                     <div className="mt-2 flex gap-2">
@@ -1590,5 +1731,5 @@ export const ResearchWorkspacePage: React.FC = () => {
 };
 
 function sourceKey(source: SourceVersionReferenceDto): string {
-  return `${source.sourceId}|${source.sourceVersionId}|${source.sourceLocationId ?? ""}`;
+  return `${source.sourceId}|${source.sourceVersionId}|${source.sourceLocationId ?? ""}|${source.sourceClaimId ?? ""}`;
 }

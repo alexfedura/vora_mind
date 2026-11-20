@@ -43,6 +43,7 @@ import type {
   ResearchHypothesisDto,
   ResearchHypothesisStatus,
   ResearchProjectDto,
+  ResearchProjectContextDto,
   ResearchProjectSourceDto,
   ResearchQuestionDto,
   ResearchQuestionRelation,
@@ -55,6 +56,18 @@ import type {
 
 export const researchService = {
   getWorkspace: () => invoke<ResearchWorkspaceDto>("research_get_workspace"),
+  getProjectContext: async (projectId: string): Promise<ResearchProjectContextDto> => {
+    const context = await invoke<ResearchProjectContextDto>("research_get_project_context", {
+      projectId,
+    });
+    if (!context || typeof context !== "object") {
+      throw new Error("Research context response was malformed.");
+    }
+    if (context.projectId !== projectId) {
+      throw new Error("Research context response did not match the requested project.");
+    }
+    return context;
+  },
   createProject: (request: CreateResearchProjectReq) =>
     invoke<ResearchProjectDto>("research_create_project", { request }),
   transitionProject: (

@@ -985,6 +985,26 @@ export interface ResearchWorkspaceDto {
   designVersions: ResearchExperimentDesignVersionDto[];
 }
 
+export interface ResearchProjectContextDto {
+  projectId: string;
+  project: ResearchProjectDto;
+  domains: ResearchDomainDto[];
+  projectSources: ResearchProjectSourceDto[];
+  sourceVersions: SourceVersionReferenceDto[];
+  literatureReviews: LiteratureReviewDto[];
+  priorAssessments: PriorKnowledgeAssessmentDto[];
+  gaps: ResearchGapDto[];
+  questions: ResearchQuestionDto[];
+  phenomena: PhenomenonDto[];
+  observationPlans: ObservationPlanDto[];
+  datasetVersions: DatasetVersionReferenceDto[];
+  observations: ObservationDto[];
+  patterns: PatternDto[];
+  ideas: IdeaDto[];
+  hypotheses: ResearchHypothesisDto[];
+  designVersions: ResearchExperimentDesignVersionDto[];
+}
+
 export interface CreateResearchProjectReq {
   title: string;
   aim: string;

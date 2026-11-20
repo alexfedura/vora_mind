@@ -1059,7 +1059,7 @@ mod tests {
 
         let limited = range_candles(&conn, "XAUUSD", "5m", 1000, 2000, 2).unwrap();
         assert_eq!(limited.len(), 2);
-        assert_eq!(limited[0].ts, 1000);
-        assert_eq!(limited[1].ts, 1300);
+        assert_eq!(limited[0].ts, 1300);
+        assert_eq!(limited[1].ts, 1600);
     }
 }

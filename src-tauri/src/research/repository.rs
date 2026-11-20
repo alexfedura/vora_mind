@@ -4965,6 +4965,493 @@ mod tests {
     }
 
     #[test]
+    fn existing_knowledge_investigation_preserves_project_and_source_lineage() {
+        use crate::source::acquisition::{
+            self, CreateKnowledgeExtractionReq, CreateSourceClaimReq, CreateSourceLocationReq,
+            CreateSourceVersionReq, ExtractionKind, ExtractionReviewStatus, ReviewExtractionReq,
+            SourceCaptureKind, SourceLocationKind,
+        };
+        use crate::source::ipc::{create_source_impl, CreateSourceReq};
+
+        let mut conn = initialized_connection();
+        let create_investigation_project = |conn: &mut Connection, title: &str| {
+            super::super::create_project(
+                conn,
+                CreateResearchProjectReq {
+                    title: title.into(),
+                    aim: "Investigate an existing attributed claim.".into(),
+                    pathways: vec![ResearchPathwayKey::ExistingKnowledgeInvestigation],
+                    created_by: Some("fixture".into()),
+                },
+            )
+            .expect("create investigation project")
+        };
+        let project_a = create_investigation_project(&mut conn, "Synthetic investigation A");
+        let project_b = create_investigation_project(&mut conn, "Synthetic control B");
+        for project in [&project_a, &project_b] {
+            super::super::transition_project(
+                &conn,
+                &project.id,
+                ResearchProjectStatus::Active,
+                Some("fixture"),
+            )
+            .expect("activate synthetic project");
+        }
+
+        let domain = super::super::create_domain(
+            &mut conn,
+            CreateResearchDomainReq {
+                name: "Synthetic evidence domain".into(),
+                description: "Test-only domain for an existing-knowledge investigation.".into(),
+                parent_domain_id: None,
+                created_by: Some("fixture".into()),
+            },
+        )
+        .expect("create research domain");
+        super::super::assign_domain(&conn, &project_a.id, &domain.id, "Explicit fixture scope")
+            .expect("assign domain to project A");
+
+        let source_id = create_source_impl(
+            &conn,
+            CreateSourceReq {
+                kind: "book".into(),
+                title: "Synthetic source fixture".into(),
+                path: Some("https://example.test/synthetic-source".into()),
+                author: Some("Synthetic Author".into()),
+                language: Some("en".into()),
+                duration_sec: None,
+                page_count: Some(12),
+                notes: Some("Synthetic test data only.".into()),
+            },
+        )
+        .expect("create shared synthetic source");
+        let source_version = acquisition::create_source_version(
+            &conn,
+            CreateSourceVersionReq {
+                source_id: source_id.clone(),
+                capture_kind: SourceCaptureKind::Edition,
+                edition_label: Some("Fixture edition 1".into()),
+                canonical_uri: Some("https://example.test/synthetic-source".into()),
+                captured_at_us: Some(1_000),
+                content_sha256: None,
+                external_asset_ref: None,
+                metadata_json: Some("{}".into()),
+            },
+            Some("fixture"),
+        )
+        .expect("create exact synthetic SourceVersion");
+        let location = acquisition::create_source_location(
+            &conn,
+            CreateSourceLocationReq {
+                source_id: source_id.clone(),
+                source_version_id: source_version.id.clone(),
+                legacy_segment_id: None,
+                label: "Page 3, paragraph 2".into(),
+                location_kind: SourceLocationKind::Paragraph,
+                page_start: Some(3),
+                page_end: Some(3),
+                paragraph_start: Some(2),
+                paragraph_end: Some(2),
+                line_start: None,
+                line_end: None,
+                time_start_ms: None,
+                time_end_ms: None,
+                stable_selector: Some("fixture:p3:paragraph2".into()),
+                locator_text: Some("Synthetic attributed statement.".into()),
+                notes: None,
+                parent_segment_id: None,
+                order_index: Some(0),
+            },
+        )
+        .expect("create exact SourceLocation");
+        let extraction = acquisition::create_extraction(
+            &conn,
+            CreateKnowledgeExtractionReq {
+                source_id: source_id.clone(),
+                source_version_id: source_version.id.clone(),
+                source_segment_id: location.id.clone(),
+                kind: ExtractionKind::SourceClaim,
+                content: "The source attributes a statement to its author.".into(),
+                language: Some("en".into()),
+                parent_extraction_id: None,
+                tool_identity: None,
+                tool_version: None,
+                prompt_config_identity: None,
+                confidence_decimal: None,
+                uncertainty: None,
+                created_by: Some("fixture".into()),
+            },
+        )
+        .expect("create attributed extraction");
+        assert_eq!(extraction.review_status, ExtractionReviewStatus::Unreviewed);
+        acquisition::review_extraction(
+            &conn,
+            ReviewExtractionReq {
+                extraction_id: extraction.id.clone(),
+                review_status: ExtractionReviewStatus::Accepted,
+                reviewer_id: Some("fixture-reviewer".into()),
+                rationale: Some("The extraction matches the synthetic source passage.".into()),
+            },
+        )
+        .expect("review extraction quality");
+        let claim = acquisition::create_source_claim(
+            &conn,
+            CreateSourceClaimReq {
+                extraction_id: extraction.id.clone(),
+                statement: extraction.content.clone(),
+                asserted_by: Some("Synthetic Author".into()),
+                scope: Some("Source-attributed proposition only".into()),
+            },
+        )
+        .expect("create attributed SourceClaim");
+
+        let association = super::super::associate_project_source(
+            &mut conn,
+            AssociateResearchProjectSourceReq {
+                project_id: project_a.id.clone(),
+                source_id: source_id.clone(),
+                use_context: "Prior knowledge under investigation".into(),
+                notes: "Association is project context, not a citation.".into(),
+            },
+        )
+        .expect("associate shared Source with project A");
+        assert_eq!(association.source_id, source_id);
+        assert_eq!(
+            super::super::list_project_sources(&conn, &project_a.id)
+                .expect("list project A source associations")
+                .iter()
+                .filter(|item| item.source_id == source_id)
+                .count(),
+            1
+        );
+        assert_eq!(
+            super::super::list_project_sources(&conn, &project_b.id)
+                .expect("list project B source associations")
+                .len(),
+            0
+        );
+
+        let review = super::super::create_reviewed_literature_review(
+            &conn,
+            CreateReviewedLiteratureReviewReq {
+                project_id: project_a.id.clone(),
+                title: "Synthetic prior-knowledge review".into(),
+                search_scope: "One synthetic source and exact edition".into(),
+                source_id: source_id.clone(),
+                source_version_id: source_version.id.clone(),
+                source_location_id: Some(location.id.clone()),
+                source_claim_id: Some(claim.id.clone()),
+                citation_note: "Exact synthetic edition and location.".into(),
+                created_by: Some("fixture".into()),
+                reviewer_id: Some("fixture-reviewer".into()),
+            },
+        )
+        .expect("create reviewed exact-version literature citation");
+        assert_eq!(review.lifecycle_status, ReviewLifecycleStatus::Reviewed);
+        assert_eq!(review.sources.len(), 1);
+        assert_eq!(review.sources[0].source_id, source_id);
+        assert_eq!(review.sources[0].source_version_id, source_version.id);
+        assert_eq!(
+            review.sources[0].source_location_id.as_deref(),
+            Some(location.id.as_str())
+        );
+        assert_eq!(
+            review.sources[0].source_claim_id.as_deref(),
+            Some(claim.id.as_str())
+        );
+
+        let gap_a = super::super::create_gap(
+            &conn,
+            CreateResearchGapReq {
+                project_id: project_a.id.clone(),
+                domain_id: Some(domain.id.clone()),
+                title: "Synthetic unresolved gap".into(),
+                statement: "The reviewed source does not resolve the investigation question."
+                    .into(),
+                created_by: Some("fixture".into()),
+            },
+        )
+        .expect("create project A research gap");
+        assert!(
+            super::super::transition_gap(
+                &conn,
+                &gap_a.id,
+                ResearchGapStatus::Accepted,
+                Some("fixture"),
+            )
+            .is_err(),
+            "a gap without a reviewed basis must not be accepted"
+        );
+        super::super::add_gap_evidence(
+            &conn,
+            AddGapEvidenceReq {
+                gap_id: gap_a.id.clone(),
+                literature_review_id: Some(review.id.clone()),
+                prior_assessment_id: None,
+            },
+        )
+        .expect("link reviewed prior knowledge to the gap");
+        super::super::transition_gap(
+            &conn,
+            &gap_a.id,
+            ResearchGapStatus::Assessed,
+            Some("fixture-reviewer"),
+        )
+        .expect("assess gap");
+        let accepted_gap = super::super::transition_gap(
+            &conn,
+            &gap_a.id,
+            ResearchGapStatus::Accepted,
+            Some("fixture-reviewer"),
+        )
+        .expect("accept gap with reviewed basis");
+        assert_eq!(accepted_gap.project_id, project_a.id);
+        assert_eq!(accepted_gap.literature_review_ids, vec![review.id.clone()]);
+
+        let question = super::super::create_question(
+            &mut conn,
+            CreateResearchQuestionReq {
+                project_id: Some(project_a.id.clone()),
+                research_gap_id: Some(gap_a.id.clone()),
+                domain_id: Some(domain.id.clone()),
+                title: "Synthetic investigation question".into(),
+                description: "Question derived from the accepted evidence-backed gap.".into(),
+                rationale: "The question explicitly follows the accepted gap.".into(),
+                created_by: Some("fixture".into()),
+            },
+        )
+        .expect("create question linked to accepted gap");
+        assert_eq!(question.project_id.as_deref(), Some(project_a.id.as_str()));
+        assert_eq!(question.research_gap_id.as_deref(), Some(gap_a.id.as_str()));
+        assert_eq!(question.domain_id.as_deref(), Some(domain.id.as_str()));
+        assert_eq!(question.ownership_state, "project");
+
+        let gap_b = super::super::create_gap(
+            &conn,
+            CreateResearchGapReq {
+                project_id: project_b.id.clone(),
+                domain_id: None,
+                title: "Synthetic control gap".into(),
+                statement: "This control project has no prior-knowledge review.".into(),
+                created_by: Some("fixture".into()),
+            },
+        )
+        .expect("create project B control gap");
+        assert!(
+            super::super::add_gap_evidence(
+                &conn,
+                AddGapEvidenceReq {
+                    gap_id: gap_b.id.clone(),
+                    literature_review_id: Some(review.id.clone()),
+                    prior_assessment_id: None,
+                },
+            )
+            .is_err(),
+            "project A review cannot be attached to project B gap"
+        );
+        assert!(
+            super::super::transition_gap(
+                &conn,
+                &gap_b.id,
+                ResearchGapStatus::Accepted,
+                Some("fixture"),
+            )
+            .is_err(),
+            "the control gap has no accepted evidence basis"
+        );
+        assert!(
+            super::super::create_question(
+                &mut conn,
+                CreateResearchQuestionReq {
+                    project_id: Some(project_b.id.clone()),
+                    research_gap_id: Some(gap_a.id.clone()),
+                    domain_id: None,
+                    title: "Invalid cross-project question".into(),
+                    description: "Must not persist.".into(),
+                    rationale: "Negative isolation control.".into(),
+                    created_by: Some("fixture".into()),
+                },
+            )
+            .is_err(),
+            "a question cannot link project B to project A's gap"
+        );
+
+        let review_count_before_missing_version: i64 = conn
+            .query_row("SELECT COUNT(*) FROM literature_reviews", [], |row| {
+                row.get(0)
+            })
+            .expect("count reviews before missing-version request");
+        assert!(
+            super::super::create_reviewed_literature_review(
+                &conn,
+                CreateReviewedLiteratureReviewReq {
+                    project_id: project_a.id.clone(),
+                    title: "Unavailable exact version".into(),
+                    search_scope: "Negative fixture".into(),
+                    source_id: source_id.clone(),
+                    source_version_id: "synthetic-missing-version".into(),
+                    source_location_id: None,
+                    source_claim_id: None,
+                    citation_note: "Must fail without substitution.".into(),
+                    created_by: Some("fixture".into()),
+                    reviewer_id: Some("fixture-reviewer".into()),
+                },
+            )
+            .is_err(),
+            "an unavailable exact SourceVersion must remain unavailable"
+        );
+        let review_count_after_missing_version: i64 = conn
+            .query_row("SELECT COUNT(*) FROM literature_reviews", [], |row| {
+                row.get(0)
+            })
+            .expect("count reviews after missing-version request");
+        assert_eq!(
+            review_count_after_missing_version,
+            review_count_before_missing_version
+        );
+
+        add_legacy_question(
+            &conn,
+            "synthetic-unassigned-question",
+            "Unassigned fixture question",
+            "This legacy question must remain unassigned.",
+        );
+        add_legacy_hypothesis(
+            &conn,
+            "synthetic-unassigned-hypothesis",
+            "synthetic-unassigned-question",
+            None,
+        );
+        let workspace =
+            super::super::workspace(&conn).expect("retrieve persisted Research workspace");
+        let persisted_question = workspace
+            .questions
+            .iter()
+            .find(|item| item.id == question.id)
+            .expect("retrieved persisted investigation question");
+        assert_eq!(
+            persisted_question.project_id.as_deref(),
+            Some(project_a.id.as_str())
+        );
+        assert_eq!(
+            persisted_question.research_gap_id.as_deref(),
+            Some(gap_a.id.as_str())
+        );
+        assert!(workspace
+            .questions
+            .iter()
+            .any(|item| item.id == "synthetic-unassigned-question"
+                && item.project_id.is_none()
+                && item.ownership_state == "unassigned"));
+        assert!(workspace
+            .hypotheses
+            .iter()
+            .any(|item| item.legacy_hypothesis_id.as_deref()
+                == Some("synthetic-unassigned-hypothesis")
+                && item.project_id.is_none()
+                && item.ownership_state == "unassigned"));
+        let persisted_review = workspace
+            .literature_reviews
+            .iter()
+            .find(|item| item.id == review.id)
+            .expect("retrieved persisted reviewed prior knowledge");
+        assert_eq!(
+            persisted_review.sources[0].source_version_id,
+            source_version.id
+        );
+        assert_eq!(
+            persisted_review.sources[0].source_location_id.as_deref(),
+            Some(location.id.as_str())
+        );
+        assert_eq!(
+            persisted_review.sources[0].source_claim_id.as_deref(),
+            Some(claim.id.as_str())
+        );
+        assert!(workspace.gaps.iter().any(|item| item.id == gap_a.id
+            && item.project_id == project_a.id
+            && item.lifecycle_status == ResearchGapStatus::Accepted));
+        assert!(!workspace
+            .questions
+            .iter()
+            .any(
+                |item| item.project_id.as_deref() == Some(project_b.id.as_str())
+                    && item.research_gap_id.as_deref() == Some(gap_a.id.as_str())
+            ));
+
+        assert_eq!(
+            acquisition::list_source_versions(&conn, &source_id)
+                .expect("retrieve source versions")
+                .iter()
+                .filter(|item| item.id == source_version.id)
+                .count(),
+            1
+        );
+        assert_eq!(
+            acquisition::list_source_locations(&conn, &source_version.id)
+                .expect("retrieve source locations")
+                .iter()
+                .filter(|item| item.id == location.id)
+                .count(),
+            1
+        );
+        assert_eq!(
+            acquisition::list_source_claims(&conn, &source_id)
+                .expect("retrieve source claims")
+                .iter()
+                .filter(|item| item.id == claim.id && item.extraction_id == extraction.id)
+                .count(),
+            1
+        );
+
+        let questions_before_failed_create: i64 = conn
+            .query_row("SELECT COUNT(*) FROM questions", [], |row| row.get(0))
+            .expect("count legacy questions before failed create");
+        let research_questions_before_failed_create: i64 = conn
+            .query_row("SELECT COUNT(*) FROM research_questions", [], |row| {
+                row.get(0)
+            })
+            .expect("count Research questions before failed create");
+        conn.execute_batch(
+            "CREATE TRIGGER reject_synthetic_question_event
+             BEFORE INSERT ON research_provenance_events
+             WHEN NEW.target_kind = 'question' AND NEW.event_kind = 'draft'
+             BEGIN
+                 SELECT RAISE(ABORT, 'synthetic provenance failure');
+             END;",
+        )
+        .expect("install synthetic failure trigger");
+        assert!(super::super::create_question(
+            &mut conn,
+            CreateResearchQuestionReq {
+                project_id: Some(project_a.id.clone()),
+                research_gap_id: Some(gap_a.id.clone()),
+                domain_id: Some(domain.id.clone()),
+                title: "Question whose provenance write fails".into(),
+                description: "Neither paired question row should persist.".into(),
+                rationale: "Atomicity regression fixture.".into(),
+                created_by: Some("fixture".into()),
+            },
+        )
+        .is_err());
+        let questions_after_failed_create: i64 = conn
+            .query_row("SELECT COUNT(*) FROM questions", [], |row| row.get(0))
+            .expect("count legacy questions after failed create");
+        let research_questions_after_failed_create: i64 = conn
+            .query_row("SELECT COUNT(*) FROM research_questions", [], |row| {
+                row.get(0)
+            })
+            .expect("count Research questions after failed create");
+        assert_eq!(
+            questions_after_failed_create,
+            questions_before_failed_create
+        );
+        assert_eq!(
+            research_questions_after_failed_create,
+            research_questions_before_failed_create
+        );
+    }
+
+    #[test]
     fn source_versions_coexist_and_literature_citations_pin_the_exact_location() {
         let conn = initialized_connection();
         let mut conn = conn;
@@ -5171,6 +5658,291 @@ mod tests {
             )
             .expect("count linked designs");
         assert_eq!(design_count, 2);
+    }
+
+    #[test]
+    fn first_principles_repository_lifecycle_preserves_ids_and_isolates_projects() {
+        let path = std::env::temp_dir().join(format!("vora-discovery-{}.db", Uuid::now_v7()));
+        let mut conn = Connection::open(&path).expect("open temporary Discovery database");
+        crate::mind::portable_db::initialize_workspace_schema(&mut conn)
+            .expect("initialize temporary Discovery schema");
+
+        let project = active_project(&mut conn, "First-principles lifecycle");
+        let other_project = active_project(&mut conn, "Unrelated Discovery project");
+        let question = accepted_question(&mut conn, &project.id);
+
+        let phenomenon = create_phenomenon(
+            &conn,
+            &CreatePhenomenonReq {
+                project_id: project.id.clone(),
+                domain_id: None,
+                title: "Temperature response".into(),
+                description: "A response varies with temperature.".into(),
+                population_scope: "Synthetic samples".into(),
+                context: "Controlled synthetic session".into(),
+                temporal_boundary: "One session".into(),
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create lifecycle phenomenon");
+
+        let plan = create_observation_plan(
+            &mut conn,
+            &CreateObservationPlanReq {
+                project_id: project.id.clone(),
+                phenomenon_id: phenomenon.id.clone(),
+                title: "Temperature plan".into(),
+                measurement_method: "Synthetic sensor".into(),
+                sample_frame: "Five samples".into(),
+                conditions_template: "Controlled environment".into(),
+                inclusion_rules: "Complete readings only".into(),
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create lifecycle observation plan");
+        let plan_version = plan.versions.first().expect("plan version");
+        let reviewed_plan = review_observation_plan(
+            &conn,
+            &plan_version.id,
+            true,
+            None,
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("preregister lifecycle plan");
+
+        let observation = create_observation(
+            &conn,
+            &CreateObservationReq {
+                project_id: project.id.clone(),
+                phenomenon_id: phenomenon.id.clone(),
+                plan_id: plan.id.clone(),
+                plan_version_id: reviewed_plan.id,
+                dataset_version_reference_id: None,
+                measured_at_us: now_ts_us().expect("timestamp"),
+                value_decimal: Some("4.2".into()),
+                value_state: ObservationValueState::Observed,
+                unit: Some("points".into()),
+                measurement_method: "Synthetic sensor".into(),
+                conditions: "Controlled environment".into(),
+                sample_identifier: Some("sample-1".into()),
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create lifecycle observation");
+
+        let pattern = create_pattern(
+            &mut conn,
+            &CreatePatternReq {
+                project_id: project.id.clone(),
+                title: "Increasing response".into(),
+                statement: "The synthetic observation supports an increasing interpretation."
+                    .into(),
+                analysis_method: "Ordered comparison".into(),
+                uncertainty: "Insufficient samples for a scientific conclusion.".into(),
+                observation_ids: vec![observation.id.clone()],
+                dataset_version_reference_ids: Vec::new(),
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create lifecycle pattern");
+
+        let hypothesis = typed_hypothesis(&mut conn, &project.id, &question.id, None);
+        let hypothesis_definition = hypothesis
+            .definitions
+            .first()
+            .expect("typed hypothesis definition");
+        add_hypothesis_evidence(
+            &conn,
+            &AddHypothesisEvidenceReq {
+                hypothesis_version_id: hypothesis_definition.id.clone(),
+                source_claim_id: None,
+                observation_id: Some(observation.id.clone()),
+                pattern_id: None,
+                polarity: ResearchPolarity::Supports,
+                rationale: "The observation is an explicit typed evidence link.".into(),
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("attach observation evidence");
+
+        let idea = create_idea(
+            &conn,
+            &CreateIdeaReq {
+                project_id: project.id.clone(),
+                title: "Temperature mechanism".into(),
+                content: "An unvalidated proposal derived from the pattern.".into(),
+                phenomenon_id: None,
+                observation_id: None,
+                pattern_id: Some(pattern.id.clone()),
+                question_id: None,
+                created_by: None,
+            },
+            &Uuid::now_v7().to_string(),
+            now_ts_us().expect("timestamp"),
+        )
+        .expect("create pattern-origin idea");
+
+        assert_eq!(question.project_id.as_deref(), Some(project.id.as_str()));
+        assert_eq!(phenomenon.project_id, project.id);
+        assert_eq!(plan.project_id, project.id);
+        assert_eq!(plan.phenomenon_id, phenomenon.id);
+        assert_eq!(
+            reviewed_plan.lifecycle_status,
+            ObservationPlanStatus::Preregistered
+        );
+        assert_eq!(observation.project_id, project.id);
+        assert_eq!(observation.phenomenon_id, phenomenon.id);
+        assert_eq!(observation.plan_id, plan.id);
+        assert_eq!(observation.plan_version_id, plan.versions[0].id);
+        assert_eq!(pattern.project_id, project.id);
+        assert_eq!(pattern.observation_ids, vec![observation.id.clone()]);
+        assert_eq!(hypothesis.project_id.as_deref(), Some(project.id.as_str()));
+        assert_eq!(
+            hypothesis.research_question_id.as_deref(),
+            Some(question.id.as_str())
+        );
+        assert_eq!(idea.project_id, project.id);
+        assert_eq!(idea.pattern_id.as_deref(), Some(pattern.id.as_str()));
+
+        assert!(
+            create_observation(
+                &conn,
+                &CreateObservationReq {
+                    project_id: other_project.id.clone(),
+                    phenomenon_id: phenomenon.id.clone(),
+                    plan_id: plan.id.clone(),
+                    plan_version_id: plan.versions[0].id.clone(),
+                    dataset_version_reference_id: None,
+                    measured_at_us: now_ts_us().expect("timestamp"),
+                    value_decimal: Some("9.9".into()),
+                    value_state: ObservationValueState::Observed,
+                    unit: Some("points".into()),
+                    measurement_method: "Synthetic sensor".into(),
+                    conditions: "Wrong project".into(),
+                    sample_identifier: Some("wrong-project".into()),
+                    created_by: None,
+                },
+                &Uuid::now_v7().to_string(),
+                now_ts_us().expect("timestamp"),
+            )
+            .is_err(),
+            "cross-project observation references must fail"
+        );
+        assert!(
+            create_typed_hypothesis(
+                &mut conn,
+                &CreateTypedHypothesisReq {
+                    project_id: other_project.id.clone(),
+                    research_question_id: question.id.clone(),
+                    parent_hypothesis_id: None,
+                    lineage_rationale: None,
+                    statement_h0: "No effect.".into(),
+                    statement_h1: "An effect.".into(),
+                    population_scope: "Other project".into(),
+                    research_scope: "Wrong project".into(),
+                    expected_direction: HypothesisExpectedDirection::NonDirectional,
+                    expected_effect_decimal: None,
+                    expected_effect_unit: None,
+                    falsification_criteria: "Invalid lifecycle link.".into(),
+                    assumptions: "None are shared implicitly.".into(),
+                    variables: vec![
+                        HypothesisVariableInput {
+                            role: HypothesisVariableRole::Independent,
+                            name: "Temperature".into(),
+                            operational_definition: "Temperature".into(),
+                            value_kind: HypothesisValueKind::Continuous,
+                            unit: Some("C".into()),
+                            measurement_method: "Sensor".into(),
+                        },
+                        HypothesisVariableInput {
+                            role: HypothesisVariableRole::Dependent,
+                            name: "Response".into(),
+                            operational_definition: "Response".into(),
+                            value_kind: HypothesisValueKind::Continuous,
+                            unit: Some("points".into()),
+                            measurement_method: "Scale".into(),
+                        },
+                    ],
+                    created_by: None,
+                },
+                &Uuid::now_v7().to_string(),
+                &Uuid::now_v7().to_string(),
+                &Uuid::now_v7().to_string(),
+                now_ts_us().expect("timestamp"),
+            )
+            .is_err(),
+            "a question from another project cannot support a typed hypothesis"
+        );
+
+        drop(conn);
+        let reopened = Connection::open(&path).expect("reopen temporary Discovery database");
+        crate::mind::portable_db::initialize_workspace_schema(&reopened)
+            .expect("verify schema after reopen");
+        let workspace = super::super::workspace(&reopened).expect("reload Discovery workspace");
+        let reopened_project = workspace
+            .projects
+            .iter()
+            .find(|item| item.id == project.id)
+            .expect("find lifecycle project");
+        assert_eq!(reopened_project.id, project.id);
+        assert_eq!(
+            workspace
+                .observations
+                .iter()
+                .find(|item| item.id == observation.id)
+                .expect("reload exact observation")
+                .plan_version_id,
+            plan.versions[0].id
+        );
+        assert_eq!(
+            workspace
+                .patterns
+                .iter()
+                .find(|item| item.id == pattern.id)
+                .expect("reload exact pattern")
+                .observation_ids,
+            vec![observation.id.clone()]
+        );
+        let reopened_hypothesis = workspace
+            .hypotheses
+            .iter()
+            .find(|item| item.id == hypothesis.id)
+            .expect("reload exact hypothesis");
+        assert_eq!(
+            reopened_hypothesis.research_question_id.as_deref(),
+            Some(question.id.as_str())
+        );
+        assert_eq!(reopened_hypothesis.evidence.len(), 1);
+        assert_eq!(reopened_hypothesis.evidence[0].target_kind, "observation");
+        assert_eq!(reopened_hypothesis.evidence[0].target_id, observation.id);
+        assert_eq!(
+            reopened_hypothesis.evidence[0].polarity,
+            ResearchPolarity::Supports
+        );
+        assert_eq!(
+            reopened_hypothesis.evidence[0].rationale,
+            "The observation is an explicit typed evidence link."
+        );
+        assert!(
+            workspace
+                .observations
+                .iter()
+                .all(|item| item.project_id != other_project.id),
+            "unrelated project observations must not enter the lifecycle"
+        );
+        drop(reopened);
+        std::fs::remove_file(path).expect("remove temporary Discovery database");
     }
 
     #[test]

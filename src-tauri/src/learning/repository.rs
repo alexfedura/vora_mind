@@ -2308,6 +2308,94 @@ mod tests {
     }
 
     #[test]
+    fn acquisition_mastery_rejects_cross_project_and_unavailable_assessment_references() {
+        let mut conn = connection();
+        let learner = create_learner(
+            &mut conn,
+            &CreateLearnerReq {
+                display_name: "Isolated learner".to_string(),
+                created_by: None,
+            },
+        )
+        .expect("create learner");
+        let project_a = create_learning_project(&mut conn, &learner.id, "framework-a-v1");
+        let project_b = create_learning_project(&mut conn, &learner.id, "framework-a-v1");
+        let objective = create_objective_version(
+            &mut conn,
+            &CreateLearningObjectiveReq {
+                objective_id: None,
+                learning_project_id: project_a.id.clone(),
+                title: "Pinned acquired framework objective".to_string(),
+                observable_outcome: "The learner demonstrates the acquired concept".to_string(),
+                criteria_text: "Evidence is explicit and evaluated".to_string(),
+                level: "introductory".to_string(),
+                parent_version_id: None,
+                prerequisite_version_ids: Vec::new(),
+                created_by: None,
+            },
+        )
+        .expect("create objective");
+        let assessment = create_assessment_version(
+            &mut conn,
+            &CreateAssessmentVersionReq {
+                assessment_id: None,
+                learning_project_id: project_a.id.clone(),
+                title: "Pinned acquisition assessment".to_string(),
+                change_rationale: "Synthetic Phase 8.3 fixture".to_string(),
+                rubric_title: "Acquisition rubric".to_string(),
+                rubric_pass_threshold: 0.7,
+                questions: vec![CreateAssessmentQuestionReq {
+                    objective_version_id: objective.id.clone(),
+                    question_order: 0,
+                    prompt: "Explain the acquired concept".to_string(),
+                    response_kind: "text".to_string(),
+                    max_points: 1.0,
+                    required: true,
+                }],
+                rubric_criteria: vec![CreateRubricCriterionReq {
+                    objective_version_id: objective.id.clone(),
+                    criterion_key: "evidence".to_string(),
+                    description: "Explicit evaluated evidence".to_string(),
+                    max_points: 1.0,
+                }],
+                created_by: None,
+            },
+        )
+        .expect("create assessment draft");
+
+        assert!(
+            create_attempt(
+                &mut conn,
+                &CreateAssessmentAttemptReq {
+                    learning_project_id: project_b.id,
+                    learner_id: learner.id.clone(),
+                    assessment_version_id: assessment.id.clone(),
+                },
+            )
+            .is_err(),
+            "an assessment from Project A must not be reused in Project B",
+        );
+        assert!(
+            create_attempt(
+                &mut conn,
+                &CreateAssessmentAttemptReq {
+                    learning_project_id: project_a.id.clone(),
+                    learner_id: learner.id,
+                    assessment_version_id: "missing-assessment-version".to_string(),
+                },
+            )
+            .is_err(),
+            "a missing exact assessment version must remain unavailable",
+        );
+
+        let workspace = workspace(&conn).expect("load workspace after negative writes");
+        assert_eq!(workspace.projects.len(), 2);
+        assert_eq!(workspace.attempts.len(), 0);
+        assert_eq!(workspace.progress.len(), 1);
+        assert_eq!(workspace.progress[0].status, "not_started");
+    }
+
+    #[test]
     fn learning_projects_pin_coexisting_framework_versions() {
         let path = std::env::temp_dir().join(format!("vora-learning-{}.sqlite", id()));
         let mut conn = persistent_connection(&path);

@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -854,6 +854,28 @@ pub struct ResearchWorkspaceDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct ResearchProjectContextDto {
+    pub project_id: String,
+    pub project: ResearchProjectDto,
+    pub domains: Vec<ResearchDomainDto>,
+    pub project_sources: Vec<ResearchProjectSourceDto>,
+    pub source_versions: Vec<SourceVersionReferenceDto>,
+    pub literature_reviews: Vec<LiteratureReviewDto>,
+    pub prior_assessments: Vec<PriorKnowledgeAssessmentDto>,
+    pub gaps: Vec<ResearchGapDto>,
+    pub questions: Vec<ResearchQuestionDto>,
+    pub phenomena: Vec<PhenomenonDto>,
+    pub observation_plans: Vec<ObservationPlanDto>,
+    pub dataset_versions: Vec<DatasetVersionReferenceDto>,
+    pub observations: Vec<ObservationDto>,
+    pub patterns: Vec<PatternDto>,
+    pub ideas: Vec<IdeaDto>,
+    pub hypotheses: Vec<ResearchHypothesisDto>,
+    pub design_versions: Vec<ResearchExperimentDesignVersionDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateResearchProjectReq {
     pub title: String,
     pub aim: String,
@@ -1184,6 +1206,179 @@ pub fn workspace(conn: &Connection) -> Result<ResearchWorkspaceDto, String> {
     repository::workspace(conn).map_err(|error| error.to_string())
 }
 
+pub fn project_context(
+    conn: &Connection,
+    project_id: &str,
+) -> Result<ResearchProjectContextDto, String> {
+    let workspace = workspace(conn)?;
+    let project = workspace
+        .projects
+        .iter()
+        .find(|project| project.id == project_id)
+        .cloned()
+        .ok_or_else(|| format!("Research project `{project_id}` was not found."))?;
+    let domains = workspace
+        .domains
+        .into_iter()
+        .filter(|domain| project.domain_ids.contains(&domain.id))
+        .collect();
+    let project_sources =
+        list_project_sources(conn, project_id).map_err(|error| error.to_string())?;
+    let literature_reviews = workspace
+        .literature_reviews
+        .into_iter()
+        .filter(|review| review.project_id == project_id)
+        .collect::<Vec<_>>();
+    let source_versions = workspace
+        .source_versions
+        .into_iter()
+        .filter(|version| {
+            literature_reviews
+                .iter()
+                .flat_map(|review| &review.sources)
+                .any(|citation| {
+                    citation.source_id == version.source_id
+                        && citation.source_version_id == version.source_version_id
+                        && citation
+                            .source_location_id
+                            .as_deref()
+                            .is_none_or(|location_id| {
+                                version.source_location_id.as_deref() == Some(location_id)
+                            })
+                })
+        })
+        .collect();
+
+    Ok(ResearchProjectContextDto {
+        project_id: project_id.to_string(),
+        domains,
+        project_sources,
+        source_versions,
+        literature_reviews,
+        prior_assessments: workspace
+            .prior_assessments
+            .into_iter()
+            .filter(|assessment| assessment.project_id == project_id)
+            .collect(),
+        gaps: workspace
+            .gaps
+            .into_iter()
+            .filter(|gap| gap.project_id == project_id)
+            .collect(),
+        questions: workspace
+            .questions
+            .into_iter()
+            .filter(|question| question.project_id.as_deref() == Some(project_id))
+            .collect(),
+        phenomena: workspace
+            .phenomena
+            .into_iter()
+            .filter(|phenomenon| phenomenon.project_id == project_id)
+            .collect(),
+        observation_plans: workspace
+            .observation_plans
+            .into_iter()
+            .filter(|plan| plan.project_id == project_id)
+            .collect(),
+        dataset_versions: workspace
+            .dataset_versions
+            .into_iter()
+            .filter(|dataset| dataset.project_id == project_id)
+            .collect(),
+        observations: workspace
+            .observations
+            .into_iter()
+            .filter(|observation| observation.project_id == project_id)
+            .collect(),
+        patterns: workspace
+            .patterns
+            .into_iter()
+            .filter(|pattern| pattern.project_id == project_id)
+            .collect(),
+        ideas: workspace
+            .ideas
+            .into_iter()
+            .filter(|idea| idea.project_id == project_id)
+            .collect(),
+        hypotheses: workspace
+            .hypotheses
+            .into_iter()
+            .filter(|hypothesis| hypothesis.project_id.as_deref() == Some(project_id))
+            .collect(),
+        design_versions: workspace
+            .design_versions
+            .into_iter()
+            .filter(|design| design.project_id == project_id)
+            .collect(),
+        project,
+    })
+}
+
+fn project_id_for_record(
+    conn: &Connection,
+    query: &str,
+    record_id: &str,
+) -> Result<Option<String>, String> {
+    conn.query_row(query, [record_id], |row| row.get(0))
+        .optional()
+        .map_err(|error| error.to_string())
+}
+
+fn validate_source_citation(
+    conn: &Connection,
+    source_id: &str,
+    source_version_id: &str,
+    source_location_id: Option<&str>,
+    source_claim_id: Option<&str>,
+) -> Result<(), String> {
+    let has_version: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM source_versions WHERE id = ?1 AND source_id = ?2)",
+            rusqlite::params![source_version_id, source_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !has_version {
+        return Err(format!(
+            "Exact SourceVersion `{source_version_id}` is unavailable for Source `{source_id}`."
+        ));
+    }
+
+    if let Some(location_id) = source_location_id {
+        let has_location: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM source_version_segments
+                 WHERE id = ?1 AND source_id = ?2 AND source_version_id = ?3)",
+                rusqlite::params![location_id, source_id, source_version_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if !has_location {
+            return Err(format!(
+                "SourceLocation `{location_id}` is unavailable for exact SourceVersion `{source_version_id}`."
+            ));
+        }
+    }
+
+    if let Some(claim_id) = source_claim_id {
+        let has_claim: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM source_claims
+                 WHERE id = ?1 AND source_id = ?2 AND source_version_id = ?3)",
+                rusqlite::params![claim_id, source_id, source_version_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if !has_claim {
+            return Err(format!(
+                "SourceClaim `{claim_id}` does not belong to exact SourceVersion `{source_version_id}`."
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 pub fn create_project(
     conn: &mut Connection,
     req: CreateResearchProjectReq,
@@ -1314,6 +1509,13 @@ pub fn create_reviewed_literature_review(
 ) -> Result<LiteratureReviewDto, String> {
     validate_required(&req.title, "literature review title")?;
     validate_required(&req.search_scope, "literature search scope")?;
+    validate_source_citation(
+        conn,
+        &req.source_id,
+        &req.source_version_id,
+        req.source_location_id.as_deref(),
+        req.source_claim_id.as_deref(),
+    )?;
     repository::create_reviewed_literature_review(
         conn,
         &req,
@@ -1328,6 +1530,13 @@ pub fn add_literature_source(
     conn: &Connection,
     req: AddLiteratureSourceReq,
 ) -> Result<LiteratureReviewSourceDto, String> {
+    validate_source_citation(
+        conn,
+        &req.source_id,
+        &req.source_version_id,
+        req.source_location_id.as_deref(),
+        req.source_claim_id.as_deref(),
+    )?;
     repository::add_literature_source(conn, &req, &new_id("literature_source"))
         .map_err(|error| error.to_string())
 }
@@ -1374,6 +1583,40 @@ pub fn add_gap_evidence(conn: &Connection, req: AddGapEvidenceReq) -> Result<(),
     if req.literature_review_id.is_some() && req.prior_assessment_id.is_some() {
         return Err("add one typed gap-evidence relation per request".into());
     }
+    let gap_project_id = project_id_for_record(
+        conn,
+        "SELECT project_id FROM research_gaps WHERE id = ?1",
+        &req.gap_id,
+    )?
+    .ok_or_else(|| format!("ResearchGap `{}` was not found.", req.gap_id))?;
+    if let Some(review_id) = req.literature_review_id.as_deref() {
+        let review_project_id = project_id_for_record(
+            conn,
+            "SELECT project_id FROM literature_reviews WHERE id = ?1",
+            review_id,
+        )?
+        .ok_or_else(|| format!("LiteratureReview `{review_id}` was not found."))?;
+        if review_project_id != gap_project_id {
+            return Err(format!(
+                "LiteratureReview `{review_id}` belongs to project `{review_project_id}` and cannot be linked to ResearchGap `{}` in project `{gap_project_id}`.",
+                req.gap_id
+            ));
+        }
+    }
+    if let Some(assessment_id) = req.prior_assessment_id.as_deref() {
+        let assessment_project_id = project_id_for_record(
+            conn,
+            "SELECT project_id FROM prior_knowledge_assessments WHERE id = ?1",
+            assessment_id,
+        )?
+        .ok_or_else(|| format!("PriorKnowledgeAssessment `{assessment_id}` was not found."))?;
+        if assessment_project_id != gap_project_id {
+            return Err(format!(
+                "PriorKnowledgeAssessment `{assessment_id}` belongs to project `{assessment_project_id}` and cannot be linked to ResearchGap `{}` in project `{gap_project_id}`.",
+                req.gap_id
+            ));
+        }
+    }
     repository::add_gap_evidence(conn, &req).map_err(|error| error.to_string())
 }
 
@@ -1398,6 +1641,21 @@ pub fn create_question(
     req: CreateResearchQuestionReq,
 ) -> Result<ResearchQuestionDto, String> {
     validate_required(&req.title, "question title")?;
+    if let (Some(project_id), Some(gap_id)) =
+        (req.project_id.as_deref(), req.research_gap_id.as_deref())
+    {
+        let gap_project_id = project_id_for_record(
+            conn,
+            "SELECT project_id FROM research_gaps WHERE id = ?1",
+            gap_id,
+        )?
+        .ok_or_else(|| format!("ResearchGap `{gap_id}` was not found."))?;
+        if gap_project_id != project_id {
+            return Err(format!(
+                "ResearchGap `{gap_id}` belongs to project `{gap_project_id}` and cannot be linked to a question in project `{project_id}`."
+            ));
+        }
+    }
     repository::create_question(conn, &req, &new_id("question"), now_ts_us()?)
         .map_err(|error| error.to_string())
 }

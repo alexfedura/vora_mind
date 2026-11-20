@@ -1,6 +1,6 @@
 [package]
 name = "vora_mind"
-version = "0.24.11"
+version = "0.24.12"
 description = "A Tauri App"
 edition = "2021"
 default-run = "vora_mind"
@@ -59,6 +59,8 @@ path = "src/bin/vora_source.rs"
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_System_Threading"] }
 
+[dev-dependencies]
+tauri = { version = "2", default-features = false, features = ["test"] }
 
 [[bench]]
 name = "load_test"

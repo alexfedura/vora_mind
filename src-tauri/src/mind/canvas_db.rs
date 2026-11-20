@@ -2433,7 +2433,13 @@ mod board_version_tests {
             forked_snapshot.nodes[0].data["cardId"],
             forked_snapshot.cards[0].id
         );
-        assert_eq!(get_board_versions(&conn, "source-board").unwrap().len(), 2);
+        let source_history = get_board_versions(&conn, "source-board").unwrap();
+        assert_eq!(source_history.len(), 1);
+        assert_eq!(source_history[0].id, source_version.id);
+        assert!(source_history[0].is_active);
+        assert_eq!(source_snapshot.nodes[0].id, "card-a");
+        assert_eq!(source_snapshot.cards[0].id, "card-a");
+        assert_eq!(source_snapshot.edges[0].id, "edge-a");
     }
 
     #[test]

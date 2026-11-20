@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { learningService } from "@/mind/services/learningService";
+import { useLearningWorkspace } from "@/hooks/useLearningWorkspace";
 import type {
   LearningAssessmentOutcome,
   LearningWorkspaceDto,
@@ -53,39 +54,19 @@ function formatTime(timestampUs: number): string {
 }
 
 export function LearningWorkspacePanel(): React.JSX.Element {
-  const [workspace, setWorkspace] = useState<LearningWorkspaceDto | null>(null);
+  const { workspace, isLoading: loading, error, refresh, run } = useLearningWorkspace();
   const [projectId, setProjectId] = useState("");
   const [attemptId, setAttemptId] = useState("");
   const [submissionId, setSubmissionId] = useState("");
   const [ruleCompetencyId, setRuleCompetencyId] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const refresh = async (): Promise<void> => {
-    setLoading(true);
-    try {
-      const result = await learningService.getWorkspace();
-      setWorkspace(result);
-      setError(null);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const perform = async (action: () => Promise<unknown>): Promise<void> => {
     try {
-      await action();
-      await refresh();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      await run(action);
+    } catch {
+      // The hook publishes the error; keep mutation callers fire-and-forget.
     }
   };
-
-  useEffect(() => {
-    void refresh();
-  }, []);
 
   useEffect(() => {
     if (!workspace) return;
