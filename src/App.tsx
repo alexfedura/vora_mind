@@ -117,6 +117,7 @@ import { CreateHypothesisFromSourceModal } from "./shared/layout/CreateHypothesi
 import { applyDagreLayout } from "./mind/utils/generatedBoardLayout";
 import { OpenPanel } from "./mind/types";
 import type { SourceHypothesisInput } from "./types";
+import { isElectronRuntime } from "./services/runtimeService";
 
 type ShapeTool = VoraDiagramShape | null;
 type ShapePreview = { shape: VoraDiagramShape; points: { x: number; y: number }[] };
@@ -1117,6 +1118,7 @@ function AppContent() {
   }, [addMediaNodeAtPosition, canvasBoardId, isWorkspacePageOpen, toCanvasFlowPosition]);
 
   useEffect(() => {
+    if (isElectronRuntime()) return;
     let disposed = false;
     let unlisten: (() => void) | null = null;
     void getCurrentWebview().onDragDropEvent((event) => {

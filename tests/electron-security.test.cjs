@@ -17,10 +17,13 @@ test("rejects unexpected shell status payload", () => {
   assert.throws(() => validateShellStatusPayload({ arbitrary: true }), /Invalid shell status payload/);
 });
 
-test("rejects insecure update URLs", () => {
-  const updaterModule = require("../dist-electron/update-url.js");
-  assert.equal(updaterModule.validateUpdateUrl("http://example.com"), null);
-  assert.equal(updaterModule.validateUpdateUrl("https://user:password@example.com"), null);
-  assert.equal(updaterModule.validateUpdateUrl("not-a-url"), null);
-  assert.equal(updaterModule.validateUpdateUrl("https://updates.example.com/vora")?.hostname, "updates.example.com");
+test("uses GitHub latest provider configuration", () => {
+  const updaterModule = require("../dist-electron/update-config.js");
+  assert.deepEqual(updaterModule.getGitHubUpdateFeed(), {
+    provider: "github",
+    owner: "alexfedura",
+    repo: "vora_mind",
+    private: false,
+    channel: "latest"
+  });
 });

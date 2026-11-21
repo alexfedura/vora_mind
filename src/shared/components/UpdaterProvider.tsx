@@ -15,6 +15,7 @@ import {
   AUTOMATIC_UPDATES_SETTING_KEY,
   useSettingsStore,
 } from "@/shared/store/useSettingsStore";
+import { isElectronRuntime } from "@/services/runtimeService";
 
 type UpdateStatus = "idle" | "checking" | "downloading" | "ready" | "installing" | "error";
 
@@ -313,6 +314,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
   }, [installAvailableUpdate, reportError]);
 
   useEffect(() => {
+    if (isElectronRuntime()) return;
     if (!isWindows) return;
     let active = true;
     let unlisten: (() => void) | undefined;
@@ -337,6 +339,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }): ReactEle
   }, []);
 
   useEffect(() => {
+    if (isElectronRuntime()) return;
     if (import.meta.env.DEV || !automaticUpdatesEnabled) return;
     let active = true;
     let interval: number | undefined;

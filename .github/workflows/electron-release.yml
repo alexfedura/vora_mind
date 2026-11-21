@@ -1,13 +1,16 @@
-name: Electron Windows x64 Release Validation
+name: Electron Windows x64 GitHub Release
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  validate-electron-release:
+  build-release-electron:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -19,52 +22,35 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:electron
+      - run: pnpm test:frontend
       - run: pnpm tsc --noEmit
       - run: pnpm electron:build
-      - name: Validate release configuration
+      - name: Require Windows signing certificate
         shell: pwsh
         env:
-          VORA_UPDATE_URL: ${{ secrets.VORA_UPDATE_URL }}
-          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
-          AZURE_TRUSTED_SIGNING_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
-          AZURE_TRUSTED_SIGNING_PUBLISHER: ${{ secrets.AZURE_TRUSTED_SIGNING_PUBLISHER }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
-          $required = @(
-            'VORA_UPDATE_URL',
-            'AZURE_TRUSTED_SIGNING_ENDPOINT',
-            'AZURE_TRUSTED_SIGNING_ACCOUNT',
-            'AZURE_TRUSTED_SIGNING_PROFILE',
-            'AZURE_TRUSTED_SIGNING_PUBLISHER',
-            'AZURE_TENANT_ID',
-            'AZURE_CLIENT_ID',
-            'AZURE_CLIENT_SECRET'
-          )
-          foreach ($name in $required) {
-            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
-              throw "Required Electron release configuration is missing: $name"
-            }
+          if ([string]::IsNullOrWhiteSpace($env:CSC_LINK)) {
+            throw "Required signing secret missing: WIN_CSC_LINK"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:CSC_KEY_PASSWORD)) {
+            throw "Required signing secret missing: WIN_CSC_KEY_PASSWORD"
           }
       - name: Build and sign Windows x64 NSIS
+        shell: pwsh
         env:
           ELECTRON_REQUIRE_SIGNING: "1"
-          VORA_UPDATE_URL: ${{ secrets.VORA_UPDATE_URL }}
-          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
-          AZURE_TRUSTED_SIGNING_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
-          AZURE_TRUSTED_SIGNING_PUBLISHER: ${{ secrets.AZURE_TRUSTED_SIGNING_PUBLISHER }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ELECTRON_PUBLISH: ${{ github.event_name == 'push' && '1' || '0' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: pnpm electron:release:validate
       - name: Validate installer metadata
         run: pnpm electron:validate-artifacts artifacts/electron
       - uses: actions/upload-artifact@v4
         with:
-          name: vora-mind-electron-x64-validation
+          name: vora-mind-electron-x64
           path: |
             artifacts/electron/*.exe
             artifacts/electron/*.exe.blockmap

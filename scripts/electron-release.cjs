@@ -1,9 +1,11 @@
 const path = require("node:path");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
+const { spawnSync } = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
 const outDir = path.resolve(process.env.ELECTRON_OUTPUT_DIR || path.join(root, "artifacts/electron"));
+const publish = process.env.ELECTRON_PUBLISH === "1";
 
 function requireEnv(name) {
   const value = process.env[name]?.trim();
@@ -11,34 +13,23 @@ function requireEnv(name) {
   return value;
 }
 
-function validateHttpsUrl(value) {
-  let url;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error("VORA_UPDATE_URL is not a valid URL");
-  }
-  if (url.protocol !== "https:" || url.username || url.password) {
-    throw new Error("VORA_UPDATE_URL must be HTTPS and must not contain credentials");
-  }
-  return url.toString().replace(/\/+$/, "");
-}
-
 async function main() {
   const signingRequired = process.env.ELECTRON_REQUIRE_SIGNING === "1";
-  const updateUrl = validateHttpsUrl(requireEnv("VORA_UPDATE_URL"));
-  let azureSignOptions;
-
   if (signingRequired) {
-    azureSignOptions = {
-      endpoint: requireEnv("AZURE_TRUSTED_SIGNING_ENDPOINT"),
-      codeSigningAccountName: requireEnv("AZURE_TRUSTED_SIGNING_ACCOUNT"),
-      certificateProfileName: requireEnv("AZURE_TRUSTED_SIGNING_PROFILE"),
-      publisherName: requireEnv("AZURE_TRUSTED_SIGNING_PUBLISHER"),
-      fileDigest: "SHA256",
-      timestampDigest: "SHA256",
-      timestampRfc3161: "http://timestamp.acs.microsoft.com"
-    };
+    const certificate = process.env.CSC_LINK || process.env.WIN_CSC_LINK;
+    if (!certificate) throw new Error("Missing Windows signing certificate: CSC_LINK or WIN_CSC_LINK");
+    if (!process.env.CSC_KEY_PASSWORD && !process.env.WIN_CSC_KEY_PASSWORD) {
+      throw new Error("Missing Windows signing certificate password");
+    }
+  }
+
+  const build = spawnSync("pnpm", ["electron:build"], {
+    cwd: root,
+    stdio: "inherit",
+    shell: true
+  });
+  if (build.status !== 0) {
+    throw new Error(`Electron build failed with exit code ${build.status ?? "unknown"}`);
   }
 
   const electronBuilder = require("electron-builder");
@@ -51,27 +42,32 @@ async function main() {
       files: ["dist/**", "dist-electron/**", "package.json"],
       asar: true,
       publish: {
-        provider: "generic",
-        url: updateUrl,
-        channel: "latest"
+        provider: "github",
+        owner: "alexfedura",
+        repo: "vora_mind",
+        channel: "latest",
+        private: false
       },
       win: {
         target: ["nsis"],
-        artifactName: "${productName}-${version}-${arch}-setup.${ext}",
-        forceCodeSigning: signingRequired,
-        ...(azureSignOptions ? { azureSignOptions } : {})
+        artifactName: "Vora-Mind-${version}-${arch}-setup.${ext}",
+        forceCodeSigning: signingRequired
       },
       nsis: {
         oneClick: false,
         perMachine: false,
         allowToChangeInstallationDirectory: true,
+        allowElevation: false,
+        deleteAppDataOnUninstall: false,
         createDesktopShortcut: true,
         createStartMenuShortcut: true
       }
-    }
+    },
+    publish: publish ? "always" : "never"
   });
 
   validateLatestMetadata(outDir);
+  if (publish) requireEnv("GITHUB_TOKEN");
 }
 
 function parseYamlScalar(text, key) {
@@ -84,6 +80,7 @@ function validateLatestMetadata(outputDirectory) {
   if (!fs.existsSync(latestPath)) {
     throw new Error(`latest.yml was not generated at ${latestPath}`);
   }
+
   const text = fs.readFileSync(latestPath, "utf8");
   const version = parseYamlScalar(text, "version");
   if (!version) throw new Error("latest.yml has no version");
@@ -104,6 +101,7 @@ function validateLatestMetadata(outputDirectory) {
     }
     entries.push({ url, sha512 });
   }
+
   if (entries.length === 0) throw new Error("latest.yml has no installer file entry");
   for (const entry of entries) {
     const filePath = path.join(outputDirectory, entry.url);

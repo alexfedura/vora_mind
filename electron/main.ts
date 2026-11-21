@@ -13,8 +13,6 @@ function allowedUrls(window: BrowserWindow): readonly string[] {
     const fileUrl = pathToFileUrl(path.join(__dirname, "..", "dist", "index.html"));
     urls.push(fileUrl);
   }
-  const currentUrl = window.webContents.getURL();
-  if (currentUrl) urls.push(currentUrl);
   return urls;
 }
 
@@ -67,6 +65,17 @@ async function createWindow(): Promise<void> {
   });
 
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const csp = app.isPackaged
+      ? "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; font-src 'self' data:; connect-src 'self'"
+      : "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; font-src 'self' data:; connect-src 'self' ws://localhost:1420 http://localhost:1420";
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [csp]
+      }
+    });
+  });
 
   if (!app.isPackaged) {
     await window.loadURL(DEV_URL);
@@ -75,11 +84,18 @@ async function createWindow(): Promise<void> {
   }
   log("info", `Renderer loaded: ${window.webContents.getURL()}`);
   if (process.env.VORA_E2_SMOKE === "1") {
-    setTimeout(() => {
+    try {
+      const runtimeInfo = await window.webContents.executeJavaScript(
+        "window.voraElectron.getRuntimeInfo()"
+      );
+      log("info", `Renderer runtime info: ${JSON.stringify(runtimeInfo)}`);
+    } catch (error: unknown) {
+      log("error", `Renderer runtime info failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
       log("info", "E2 smoke completed");
       window.close();
       app.exit(0);
-    }, 750);
+    }
   }
 }
 
@@ -98,6 +114,24 @@ function registerIpc(): void {
         platform: process.platform,
         arch: process.arch,
         packaged: app.isPackaged
+      }
+    };
+  });
+  ipcMain.handle("vora:shell:runtime-info", (event: Electron.IpcMainInvokeEvent) => {
+    if (!mainWindow) {
+      throw Object.assign(new Error("Main window unavailable"), { code: "WINDOW_UNAVAILABLE" });
+    }
+    authorizeInvoke(event, mainWindow.webContents, allowedUrls(mainWindow));
+    validateShellStatusPayload(undefined);
+    return {
+      ok: true,
+      result: {
+        electron: process.versions.electron,
+        node: process.versions.node,
+        platform: process.platform,
+        arch: process.arch,
+        packaged: app.isPackaged,
+        appVersion: app.getVersion()
       }
     };
   });

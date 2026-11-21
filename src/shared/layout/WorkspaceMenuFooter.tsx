@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Settings } from "lucide-react";
 import { SettingsModal } from "@/shared/modals/SettingsModal";
 import { UpdateCheckButton } from "@/shared/components/UpdateCheckButton";
+import { ElectronRuntimeBadge } from "@/shared/components/ElectronRuntimeBadge";
 
 export const WorkspaceMenuFooter: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -9,6 +10,7 @@ export const WorkspaceMenuFooter: React.FC = () => {
   return (
     <>
       <div className="flex items-center gap-1 border-t border-[#1d212b] pt-1">
+        <ElectronRuntimeBadge />
         <button
           type="button"
           onClick={() => setIsSettingsOpen(true)}

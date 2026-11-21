@@ -1,7 +1,7 @@
 {
   "name": "vora-mind",
   "private": true,
-  "version": "0.26.0",
+  "version": "0.26.2",
   "type": "module",
   "scripts": {
     "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
@@ -23,7 +23,9 @@
     "electron:package:dir": "pnpm electron:build && electron-builder --dir --x64",
     "electron:package": "pnpm electron:build && electron-builder --x64 --publish never",
     "electron:release:validate": "node scripts/electron-release.cjs",
+    "electron:release:publish": "node scripts/electron-release.cjs",
     "electron:validate-artifacts": "node scripts/electron-validate-artifacts.cjs",
+    "test:frontend": "node --experimental-test-module-mocks --test tests/*.test.mjs",
     "test:electron": "tsc -p tsconfig.electron.json && node -e \"require('node:fs').writeFileSync('dist-electron/package.json','{\\\"type\\\":\\\"commonjs\\\"}\\n')\" && node --test tests/electron-security.test.cjs"
   },
   "dependencies": {
@@ -94,7 +96,7 @@
   "build": {
     "appId": "com.alexfedura.voramind",
     "productName": "Vora Mind",
-    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "artifactName": "Vora-Mind-${version}-${arch}.${ext}",
     "directories": {
       "output": "artifacts/electron"
     },
@@ -108,12 +110,14 @@
       "target": [
         "nsis"
       ],
-      "artifactName": "${productName}-${version}-${arch}-setup.${ext}"
+      "artifactName": "Vora-Mind-${version}-${arch}-setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
+      "allowElevation": false,
+      "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
