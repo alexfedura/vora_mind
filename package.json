@@ -1,7 +1,7 @@
 {
   "name": "vora-mind",
   "private": true,
-  "version": "0.24.12",
+  "version": "0.25.0",
   "type": "module",
   "scripts": {
     "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
@@ -16,7 +16,13 @@
     "release:minor": "node scripts/release.js minor",
     "release:major": "node scripts/release.js major",
     "release:sync": "node scripts/release.js sync",
-    "release:verify": "node scripts/release.js verify"
+    "release:verify": "node scripts/release.js verify",
+    "electron:build": "tsc -p tsconfig.electron.json && node -e \"require('node:fs').writeFileSync('dist-electron/package.json','{\\\"type\\\":\\\"commonjs\\\"}\\n')\" && vite build",
+    "electron:dev": "tsc -p tsconfig.electron.json && node electron/dev-start.cjs",
+    "electron:start": "pnpm electron:build && electron dist-electron/main.js",
+    "electron:package:dir": "pnpm electron:build && electron-builder --dir --x64",
+    "electron:package": "pnpm electron:build && electron-builder --x64 --publish never",
+    "test:electron": "tsc -p tsconfig.electron.json && node -e \"require('node:fs').writeFileSync('dist-electron/package.json','{\\\"type\\\":\\\"commonjs\\\"}\\n')\" && node --test tests/electron-security.test.cjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.1",
@@ -41,6 +47,7 @@
     "dagre": "^0.8.5",
     "diff": "^9.0.0",
     "dompurify": "^3.4.17",
+    "electron-updater": "^6.8.11",
     "framer-motion": "^13.1.0",
     "idb": "^8.0.4",
     "katex": "^0.16.11",
@@ -69,14 +76,45 @@
     "@types/dompurify": "^3.2.0",
     "@types/markdown-it": "^14.1.2",
     "@types/markdown-it-container": "^2.0.10",
+    "@types/node": "24.10.1",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.5.4",
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
+  },
+  "main": "dist-electron/main.js",
+  "build": {
+    "appId": "com.alexfedura.voramind",
+    "productName": "Vora Mind",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "artifacts/electron"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "${productName}-${version}-${arch}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   },
   "packageManager": "pnpm@12.6.0+sha512.3ef68f951cb111ac204b4a5a16f0b2ddf0da56a96e0413e81d855d9f0b55ef926714709028e1cd00c405c2c5fb7b9e8ec4dc46777c805d0373c2f2ff00fd20ec"
 }

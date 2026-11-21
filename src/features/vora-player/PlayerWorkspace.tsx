@@ -101,10 +101,10 @@ export function PlayerWorkspace({
     if (!player.source) return;
     setSliceActionMessage(null);
     setSliceActionError(null);
-    const link = `vora://media/${encodeURIComponent(player.source.id)}?t=${encodeURIComponent(String(slice.start_seconds))}`;
+    const link = `media-source=${encodeURIComponent(player.source.id)};start=${encodeURIComponent(String(slice.start_seconds))}`;
     try {
       await navigator.clipboard.writeText(link);
-      setSliceActionMessage("Lineage link copied.");
+      setSliceActionMessage("Internal lineage reference copied.");
     } catch (cause: unknown) {
       console.error("Could not copy the media lineage link:", cause);
       setSliceActionError(cause instanceof Error ? cause.message : String(cause));
@@ -247,7 +247,7 @@ export function PlayerWorkspace({
                   onClick={() => void copyLineage(slice)}
                   disabled={!player.source}
                   className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-300 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
-                  title="Copy a Vora deep link to this timestamp"
+                  title="Copy an internal lineage reference"
                 >
                   <Copy size={13} aria-hidden="true" />
                   Lineage

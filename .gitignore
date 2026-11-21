@@ -16,6 +16,8 @@ node_modules/
 **/node_modules/
 dist/
 dist-ssr/
+dist-electron/
+artifacts/
 build/
 .turbo/
 *.local
