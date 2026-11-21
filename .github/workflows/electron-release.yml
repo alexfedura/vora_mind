@@ -1,0 +1,73 @@
+name: Electron Windows x64 Release Validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-electron-release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:electron
+      - run: pnpm tsc --noEmit
+      - run: pnpm electron:build
+      - name: Validate release configuration
+        shell: pwsh
+        env:
+          VORA_UPDATE_URL: ${{ secrets.VORA_UPDATE_URL }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          AZURE_TRUSTED_SIGNING_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
+          AZURE_TRUSTED_SIGNING_PUBLISHER: ${{ secrets.AZURE_TRUSTED_SIGNING_PUBLISHER }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          $required = @(
+            'VORA_UPDATE_URL',
+            'AZURE_TRUSTED_SIGNING_ENDPOINT',
+            'AZURE_TRUSTED_SIGNING_ACCOUNT',
+            'AZURE_TRUSTED_SIGNING_PROFILE',
+            'AZURE_TRUSTED_SIGNING_PUBLISHER',
+            'AZURE_TENANT_ID',
+            'AZURE_CLIENT_ID',
+            'AZURE_CLIENT_SECRET'
+          )
+          foreach ($name in $required) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Required Electron release configuration is missing: $name"
+            }
+          }
+      - name: Build and sign Windows x64 NSIS
+        env:
+          ELECTRON_REQUIRE_SIGNING: "1"
+          VORA_UPDATE_URL: ${{ secrets.VORA_UPDATE_URL }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          AZURE_TRUSTED_SIGNING_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
+          AZURE_TRUSTED_SIGNING_PUBLISHER: ${{ secrets.AZURE_TRUSTED_SIGNING_PUBLISHER }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: pnpm electron:release:validate
+      - name: Validate installer metadata
+        run: pnpm electron:validate-artifacts artifacts/electron
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vora-mind-electron-x64-validation
+          path: |
+            artifacts/electron/*.exe
+            artifacts/electron/*.exe.blockmap
+            artifacts/electron/latest.yml
+            artifacts/electron/latest-validation.json
+          if-no-files-found: error

@@ -1,7 +1,7 @@
 {
   "name": "vora-mind",
   "private": true,
-  "version": "0.25.0",
+  "version": "0.26.0",
   "type": "module",
   "scripts": {
     "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
@@ -22,6 +22,8 @@
     "electron:start": "pnpm electron:build && electron dist-electron/main.js",
     "electron:package:dir": "pnpm electron:build && electron-builder --dir --x64",
     "electron:package": "pnpm electron:build && electron-builder --x64 --publish never",
+    "electron:release:validate": "node scripts/electron-release.cjs",
+    "electron:validate-artifacts": "node scripts/electron-validate-artifacts.cjs",
     "test:electron": "tsc -p tsconfig.electron.json && node -e \"require('node:fs').writeFileSync('dist-electron/package.json','{\\\"type\\\":\\\"commonjs\\\"}\\n')\" && node --test tests/electron-security.test.cjs"
   },
   "dependencies": {

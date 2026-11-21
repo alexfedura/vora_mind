@@ -1,6 +1,7 @@
 import { autoUpdater } from "electron-updater";
 import { app } from "electron";
 import { log } from "./logger";
+import { validateUpdateUrl } from "./update-url";
 
 export function configureUpdater(): void {
   const updateUrl = process.env.VORA_UPDATE_URL?.trim();
@@ -8,12 +9,17 @@ export function configureUpdater(): void {
     log("warn", "Auto-updater is disabled: VORA_UPDATE_URL is not configured");
     return;
   }
+  const parsedUrl = validateUpdateUrl(updateUrl);
+  if (!parsedUrl) {
+    log("error", "Auto-updater disabled: update URL must be HTTPS and must not contain credentials");
+    return;
+  }
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.setFeedURL({
     provider: "generic",
-    url: updateUrl,
+    url: parsedUrl.toString().replace(/\/+$/, ""),
     channel: "latest"
   });
   autoUpdater.on("checking-for-update", () => log("info", "Checking for updates"));
