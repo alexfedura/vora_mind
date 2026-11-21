@@ -3,6 +3,8 @@ import { getRuntimeInfo, type RuntimeInfo } from "@/services/runtimeService";
 
 export const ElectronRuntimeBadge: React.FC = () => {
   const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
+  const [sidecar, setSidecar] = useState<"checking" | "ready" | "blocked">("checking");
+  const [engine, setEngine] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -11,6 +13,20 @@ export const ElectronRuntimeBadge: React.FC = () => {
     }).catch((error: unknown) => {
       console.error("Could not read the application runtime:", error);
     });
+    if (window.voraElectron?.getSidecarStatus) {
+      void window.voraElectron.getSidecarStatus().then((response) => {
+        if (active) setSidecar(response.ok ? "ready" : "blocked");
+      }).catch(() => {
+        if (active) setSidecar("blocked");
+      });
+      void window.voraElectron.getSidecarEngineInfo().then((response) => {
+        if (!active || !response.ok) return;
+        const result = response.result as { engine?: string } | undefined;
+        setEngine(result?.engine ?? null);
+      }).catch(() => undefined);
+    } else if (active) {
+      setSidecar("blocked");
+    }
     return () => {
       active = false;
     };
@@ -28,6 +44,12 @@ export const ElectronRuntimeBadge: React.FC = () => {
       {runtime.kind === "electron"
         ? `Electron ${runtime.appVersion}`
         : "Tauri"}
+      {runtime.kind === "electron" && (
+        <span className="ml-1 text-[9px]">
+          / Sidecar {sidecar}
+          {engine ? ` / ${engine}` : ""}
+        </span>
+      )}
     </div>
   );
 };

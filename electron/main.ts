@@ -3,9 +3,13 @@ import path from "node:path";
 import { authorizeInvoke, validateShellStatusPayload } from "./security";
 import { log } from "./logger";
 import { configureUpdater } from "./updater";
+import { SidecarManager } from "./sidecar-manager";
+import { registerSidecarIpc } from "./sidecar-ipc";
 
 const DEV_URL = process.env.VORA_DEV_SERVER_URL ?? "http://localhost:1420";
 let mainWindow: BrowserWindow | null = null;
+const sidecarManager = new SidecarManager();
+let quitting = false;
 
 function allowedUrls(window: BrowserWindow): readonly string[] {
   const urls = [DEV_URL, `${DEV_URL.replace(/\/+$/, "")}/`];
@@ -83,23 +87,12 @@ async function createWindow(): Promise<void> {
     await window.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
   log("info", `Renderer loaded: ${window.webContents.getURL()}`);
-  if (process.env.VORA_E2_SMOKE === "1") {
-    try {
-      const runtimeInfo = await window.webContents.executeJavaScript(
-        "window.voraElectron.getRuntimeInfo()"
-      );
-      log("info", `Renderer runtime info: ${JSON.stringify(runtimeInfo)}`);
-    } catch (error: unknown) {
-      log("error", `Renderer runtime info failed: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      log("info", "E2 smoke completed");
-      window.close();
-      app.exit(0);
-    }
-  }
 }
 
 function registerIpc(): void {
+  if (!mainWindow) {
+    throw new Error("Main window unavailable");
+  }
   ipcMain.handle("vora:shell:status", (event: Electron.IpcMainInvokeEvent) => {
     if (!mainWindow) {
       throw Object.assign(new Error("Main window unavailable"), { code: "WINDOW_UNAVAILABLE" });
@@ -135,6 +128,7 @@ function registerIpc(): void {
       }
     };
   });
+  registerSidecarIpc(sidecarManager, mainWindow);
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -149,16 +143,53 @@ if (!hasSingleInstanceLock) {
   });
 
   app.whenReady().then(async () => {
-    registerIpc();
     configureUpdater();
     await createWindow();
+    registerIpc();
+    try {
+      await sidecarManager.start();
+      log("info", "Rust Sidecar ready");
+    } catch (error: unknown) {
+      log("error", `Rust Sidecar startup failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (process.env.VORA_E2_SMOKE === "1" && mainWindow) {
+      try {
+        const runtimeInfo = await mainWindow.webContents.executeJavaScript(
+          "window.voraElectron.getRuntimeInfo()"
+        );
+        log("info", `Renderer runtime info: ${JSON.stringify(runtimeInfo)}`);
+        const sidecarStatus = await mainWindow.webContents.executeJavaScript(
+          "window.voraElectron.getSidecarStatus()"
+        );
+        log("info", `Renderer Sidecar status: ${JSON.stringify(sidecarStatus)}`);
+        const engineInfo = await mainWindow.webContents.executeJavaScript(
+          "window.voraElectron.getSidecarEngineInfo()"
+        );
+        log("info", `Renderer Sidecar engine info: ${JSON.stringify(engineInfo)}`);
+        const sidecarSmoke = await mainWindow.webContents.executeJavaScript(
+          "window.voraElectron.runSidecarSmoke()"
+        );
+        log("info", `Renderer Sidecar smoke: ${JSON.stringify(sidecarSmoke)}`);
+      } catch (error: unknown) {
+        log("error", `Renderer integration smoke failed: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        log("info", "E2 smoke completed");
+        await sidecarManager.shutdown();
+        mainWindow.close();
+        app.exit(0);
+      }
+    }
   }).catch((error: unknown) => {
     log("error", `Electron startup failed: ${error instanceof Error ? error.message : String(error)}`);
     app.quit();
   });
 }
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
+  event.preventDefault();
+  if (quitting) return;
+  quitting = true;
+  void sidecarManager.shutdown().finally(() => app.exit(0));
   log("info", "Electron before-quit");
 });
 

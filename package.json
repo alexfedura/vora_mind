@@ -1,7 +1,7 @@
 {
   "name": "vora-mind",
   "private": true,
-  "version": "0.26.2",
+  "version": "0.26.4",
   "type": "module",
   "scripts": {
     "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
@@ -25,8 +25,10 @@
     "electron:release:validate": "node scripts/electron-release.cjs",
     "electron:release:publish": "node scripts/electron-release.cjs",
     "electron:validate-artifacts": "node scripts/electron-validate-artifacts.cjs",
+    "electron:sidecar:build": "cargo build --manifest-path electron/sidecar/Cargo.toml --release",
     "test:frontend": "node --experimental-test-module-mocks --test tests/*.test.mjs",
-    "test:electron": "tsc -p tsconfig.electron.json && node -e \"require('node:fs').writeFileSync('dist-electron/package.json','{\\\"type\\\":\\\"commonjs\\\"}\\n')\" && node --test tests/electron-security.test.cjs"
+    "test:electron": "tsc -p tsconfig.electron.json && node -e \"require('node:fs').writeFileSync('dist-electron/package.json','{\\\"type\\\":\\\"commonjs\\\"}\\n')\" && node --test tests/electron-security.test.cjs",
+    "test:sidecar": "node --test tests/electron-sidecar.test.cjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.1",
@@ -70,6 +72,7 @@
     "react-pdf": "^11.0.0",
     "react-router-dom": "^7.18.4",
     "tailwind-merge": "^3.6.0",
+    "zod": "4.6.7",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
@@ -104,6 +107,15 @@
       "dist/**",
       "dist-electron/**",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "electron/sidecar/bin",
+        "to": "sidecar/bin",
+        "filter": [
+          "**/*.exe"
+        ]
+      }
     ],
     "asar": true,
     "win": {

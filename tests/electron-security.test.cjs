@@ -17,6 +17,15 @@ test("rejects unexpected shell status payload", () => {
   assert.throws(() => validateShellStatusPayload({ arbitrary: true }), /Invalid shell status payload/);
 });
 
+test("rejects arbitrary Sidecar IPC payloads", () => {
+  const { validateSidecarIpcPayload } = require("../dist-electron/sidecar-ipc.js");
+  assert.equal(validateSidecarIpcPayload(undefined), undefined);
+  assert.throws(
+    () => validateSidecarIpcPayload({ method: "shutdown" }),
+    /Invalid Sidecar IPC payload/
+  );
+});
+
 test("uses GitHub latest provider configuration", () => {
   const updaterModule = require("../dist-electron/update-config.js");
   assert.deepEqual(updaterModule.getGitHubUpdateFeed(), {

@@ -26,6 +26,9 @@ declare global {
     voraElectron?: {
       getRuntimeInfo(): Promise<ElectronRuntimeResult | ElectronRuntimeError>;
       getShellStatus(): Promise<unknown>;
+      getSidecarStatus(): Promise<{ ok: boolean; result?: unknown; error?: { code: string; message: string } }>;
+      getSidecarEngineInfo(): Promise<{ ok: boolean; result?: unknown; error?: { code: string; message: string } }>;
+      runSidecarSmoke(): Promise<{ ok: boolean; result?: unknown; error?: { code: string; message: string } }>;
     };
   }
 }
