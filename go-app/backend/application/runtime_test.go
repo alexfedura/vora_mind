@@ -1,0 +1,81 @@
+package application
+
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/alexfedura/vora_mind/go-app/backend/capabilities"
+	"github.com/alexfedura/vora_mind/go-app/backend/infrastructure"
+	"github.com/alexfedura/vora_mind/go-app/backend/persistence"
+)
+
+func testRuntime(t *testing.T) *Runtime {
+	t.Helper()
+	store, err := persistence.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.DB.Close() })
+	filesystem, err := infrastructure.NewFilesystemScope(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return NewRuntime(store, filesystem, "Vora Test", "0.26.4", "v3.1.0")
+}
+
+func TestProjectCRUDAndRepeatedInitialization(t *testing.T) {
+	runtime := testRuntime(t)
+	created := runtime.Execute("project.create", map[string]interface{}{"name": "Research", "description": "Test project"}, string(capabilities.OriginHuman))
+	if created.Status != "succeeded" {
+		t.Fatalf("project create failed: %#v", created.Error)
+	}
+	data := created.Data.(map[string]interface{})
+	project := data["project"]
+	projects := runtime.Execute("project.list", map[string]interface{}{}, string(capabilities.OriginHuman))
+	if projects.Status != "succeeded" {
+		t.Fatal(projects.Error)
+	}
+	if project == nil {
+		t.Fatal("created project missing")
+	}
+}
+
+func TestUnauthorizedFilesystemWriteCannotExecute(t *testing.T) {
+	runtime := testRuntime(t)
+	result := runtime.Execute("filesystem.create_text", map[string]interface{}{"path": "forbidden.txt", "content": "no"}, "ai_agent")
+	if result.Status != "succeeded" {
+		if result.Error == nil || result.Error.Code != "PERMISSION_DENIED" {
+			t.Fatalf("expected permission denied, got %#v", result)
+		}
+		return
+	}
+	t.Fatal("AI origin unexpectedly had filesystem write permission")
+}
+
+func TestInvalidInputAndDiscovery(t *testing.T) {
+	runtime := testRuntime(t)
+	invalid := runtime.Execute("project.create", map[string]interface{}{"name": ""}, string(capabilities.OriginHuman))
+	if invalid.Status != "succeeded" || invalid.Error != nil {
+		if invalid.Error == nil || invalid.Error.Code != "INVALID_INPUT" {
+			t.Fatalf("expected invalid input, got %#v", invalid)
+		}
+	} else {
+		t.Fatal("empty project name should fail")
+	}
+	discovery := runtime.Execute("capability.list", map[string]interface{}{}, string(capabilities.OriginHuman))
+	if discovery.Status != "succeeded" {
+		t.Fatal(discovery.Error)
+	}
+}
+
+func TestAuditEventIsPersisted(t *testing.T) {
+	runtime := testRuntime(t)
+	runtime.Execute("project.list", map[string]interface{}{}, string(capabilities.OriginHuman))
+	var count int
+	if err := runtime.DB.QueryRow("SELECT COUNT(*) FROM audit_events").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count < 1 {
+		t.Fatal("expected audit event")
+	}
+}

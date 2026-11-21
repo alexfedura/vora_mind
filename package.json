@@ -1,7 +1,7 @@
 {
   "name": "vora-mind",
   "private": true,
-  "version": "0.26.4",
+  "version": "0.26.5",
   "type": "module",
   "scripts": {
     "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
@@ -26,6 +26,9 @@
     "electron:release:publish": "node scripts/electron-release.cjs",
     "electron:validate-artifacts": "node scripts/electron-validate-artifacts.cjs",
     "electron:sidecar:build": "cargo build --manifest-path electron/sidecar/Cargo.toml --release",
+    "wails:test": "cd go-app && go test ./...",
+    "wails:dev": "cd go-app && wails3 dev -config ./build/config.yml",
+    "wails:build": "cd go-app && wails3 build",
     "test:frontend": "node --experimental-test-module-mocks --test tests/*.test.mjs",
     "test:electron": "tsc -p tsconfig.electron.json && node -e \"require('node:fs').writeFileSync('dist-electron/package.json','{\\\"type\\\":\\\"commonjs\\\"}\\n')\" && node --test tests/electron-security.test.cjs",
     "test:sidecar": "node --test tests/electron-sidecar.test.cjs"
