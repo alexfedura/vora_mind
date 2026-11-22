@@ -21,7 +21,7 @@ func NewGateway(runtime *application.Runtime) *Gateway {
 	gateway := &Gateway{
 		runtime: runtime,
 		server: officialmcp.NewServer(
-			&officialmcp.Implementation{Name: "vora-mind", Title: "Vora Mind", Version: "0.26.12"},
+			&officialmcp.Implementation{Name: "vora-mind", Title: "Vora Mind", Version: "0.26.13"},
 			nil,
 		),
 	}

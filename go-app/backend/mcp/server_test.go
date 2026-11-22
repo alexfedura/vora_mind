@@ -2,6 +2,7 @@ package mcpgateway
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,6 +48,31 @@ func TestMCPProtocolDiscoveryAndInvocation(t *testing.T) {
 	}
 	if len(tools.Tools) == 0 {
 		t.Fatal("MCP tool discovery returned no tools")
+	}
+	var projectListSchema map[string]interface{}
+	for _, tool := range tools.Tools {
+		if tool.Name != "project_list" {
+			continue
+		}
+		schemaJSON, err := json.Marshal(tool.InputSchema)
+		if err != nil {
+			t.Fatalf("could not marshal project_list input schema: %v", err)
+		}
+		if err := json.Unmarshal(schemaJSON, &projectListSchema); err != nil {
+			t.Fatalf("could not decode project_list input schema: %v", err)
+		}
+		break
+	}
+	if projectListSchema == nil {
+		t.Fatal("MCP discovery did not expose the project_list tool")
+	}
+	properties, ok := projectListSchema["properties"].(map[string]interface{})
+	if !ok || len(properties) != 0 {
+		t.Fatalf("project_list properties must be an empty object, got %#v", projectListSchema["properties"])
+	}
+	required, ok := projectListSchema["required"].([]interface{})
+	if !ok || len(required) != 0 {
+		t.Fatalf("project_list required must be an empty array, got %#v", projectListSchema["required"])
 	}
 
 	result, err := session.CallTool(ctx, &officialmcp.CallToolParams{

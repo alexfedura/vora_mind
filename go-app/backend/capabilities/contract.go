@@ -67,6 +67,12 @@ type ExecutionContext struct {
 }
 
 func JSONObjectSchema(required []string, properties map[string]interface{}) map[string]interface{} {
+	if required == nil {
+		required = []string{}
+	}
+	if properties == nil {
+		properties = map[string]interface{}{}
+	}
 	return map[string]interface{}{
 		"type":                 "object",
 		"properties":           properties,
