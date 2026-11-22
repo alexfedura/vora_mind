@@ -17,8 +17,14 @@
 ## Phase 3 evidence
 
 - Wails frontend production build passed.
-- SQLite opens and migrations passed in Go tests.
-- Automated visual and Windows process-launch acceptance was not available.
+- Wails binding generation passed.
+- Wails Windows executable build passed.
+- The executable remained running for a 30-second smoke window.
+- An isolated SQLite database was created and migrations completed.
+- The embedded frontend asset was present.
+- Process shutdown exited cleanly.
 
-Known limitation: no claim of desktop visual acceptance is made until a real
-Windows GUI launch and screenshot/interaction evidence is recorded.
+Blocked/limited: visual interface observation and GUI interaction were not
+performed. No project creation, capability explorer, workflow controls, API
+status, or closing behavior was visually verified. This report claims only
+process-level runtime acceptance.

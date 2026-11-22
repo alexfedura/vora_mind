@@ -13,3 +13,8 @@ Restore is a staged, approval-gated operation:
 
 A restore outside the backup directory or a corrupted backup is rejected.
 The live database is never intentionally left on a partially restored file.
+
+Verified behavior includes post-restore runtime rebind tests and successful
+real-query execution after reopen. Windows replacement/rollback at OS process
+level remains limited until GUI/application integration invokes the restore
+operation and exercises real service shutdown.

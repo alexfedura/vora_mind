@@ -2,7 +2,7 @@
 
 ## Status
 
-Partially implemented and verified. Version: 0.26.7.
+Partially implemented and verified. Version: 0.26.8.
 
 The shared Go capability runtime, official MCP adapter, workflow persistence,
 API, and backup foundation remain the source of truth. This phase closed the
@@ -32,11 +32,18 @@ and implemented staged database restore.
   documentation; OS secret protection and full UI controls remain open.
 
 ## Verification
+Starting HEAD: `104c1fab945dc179198f0b5440e48709a355409a`.
 
-- `go test ./...`: passed.
+- `go test -timeout 60s ./...`: passed; 11 packages with tests or no test files.
 - `go vet ./...`: passed.
 - Wails frontend `pnpm build`: passed.
 - Root `pnpm build`: passed.
+- Root `pnpm tsc --noEmit`: passed.
+- Wails binding generation: passed.
+- Wails Windows build: passed.
 - MCP executable build: passed.
-- Wails Windows build: not yet rerun in this phase.
-- Visual GUI smoke test: not performed.
+- MCP protocol discovery/invocation/cancellation test: passed.
+- Windows executable 30-second process-level smoke test: passed.
+- SQLite database initialization during smoke test: passed.
+- Clean process shutdown: passed.
+- Visual GUI interaction: not performed; browser/GUI automation was unavailable.

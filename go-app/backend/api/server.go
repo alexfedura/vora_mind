@@ -2,9 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -19,30 +16,33 @@ import (
 )
 
 type Server struct {
-	server      *http.Server
-	runtime     *application.Runtime
-	token       string
-	limitMu     sync.Mutex
-	requests    map[string][]time.Time
-	running     bool
-	address     string
-	credentials *security.CredentialManager
+	server            *http.Server
+	runtime           *application.Runtime
+	token             string
+	limitMu           sync.Mutex
+	requests          map[string][]time.Time
+	running           bool
+	address           string
+	credentials       *security.CredentialManager
+	tokenCredentialID string
 }
+
+type credentialContextKey struct{}
 
 func NewServer(runtime *application.Runtime) *Server {
 	s := &Server{runtime: runtime, requests: make(map[string][]time.Time), credentials: security.NewCredentialManager(runtime.DB)}
-	_, token, err := s.credentials.Generate([]security.Permission{
+	credential, token, err := s.credentials.Generate([]security.Permission{
 		security.ProjectRead,
 		security.ProjectWrite,
 		security.DatabaseInspect,
 		security.CapabilitiesDiscover,
 	})
 	if err != nil {
-		tokenBytes := make([]byte, 32)
-		_, _ = rand.Read(tokenBytes)
-		token = hex.EncodeToString(tokenBytes)
+		s.token = ""
+	} else {
+		s.token = token
 	}
-	s.token = token
+	s.tokenCredentialID = credential.ID
 	mux := http.NewServeMux()
 	s.register(mux)
 	s.server = &http.Server{Handler: withSecurityHeaders(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
@@ -107,24 +107,19 @@ func structuredError(code, message string, status int) map[string]interface{} {
 	return map[string]interface{}{"error": map[string]interface{}{"code": code, "message": message, "retryable": false}, "status": status}
 }
 
-func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) bool {
+func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) (security.Credential, bool) {
 	authorization := r.Header.Get("Authorization")
 	const prefix = "Bearer "
 	if !strings.HasPrefix(authorization, prefix) {
 		writeJSON(w, http.StatusUnauthorized, structuredError("UNAUTHORIZED", "Bearer authentication is required", http.StatusUnauthorized))
-		return false
+		return security.Credential{}, false
 	}
 	token := strings.TrimSpace(strings.TrimPrefix(authorization, prefix))
-	if _, ok := s.credentials.Authenticate(token); ok {
-		return true
+	if credential, ok := s.credentials.Authenticate(token); ok {
+		return credential, true
 	}
-	expected := []byte(s.token)
-	supplied := []byte(token)
-	if len(expected) != len(supplied) || subtle.ConstantTimeCompare(expected, supplied) != 1 {
-		writeJSON(w, http.StatusUnauthorized, structuredError("UNAUTHORIZED", "Invalid bearer token", http.StatusUnauthorized))
-		return false
-	}
-	return true
+	writeJSON(w, http.StatusUnauthorized, structuredError("UNAUTHORIZED", "Invalid or revoked bearer token", http.StatusUnauthorized))
+	return security.Credential{}, false
 }
 
 func (s *Server) rateLimited(r *http.Request) bool {
@@ -211,14 +206,17 @@ func (s *Server) protected(next http.HandlerFunc) http.HandlerFunc {
 			writeJSON(w, http.StatusTooManyRequests, structuredError("RATE_LIMITED", "Too many requests", http.StatusTooManyRequests))
 			return
 		}
-		if s.authenticate(w, r) {
-			next(w, r)
+		credential, authenticated := s.authenticate(w, r)
+		if authenticated {
+			ctx := context.WithValue(r.Context(), credentialContextKey{}, credential)
+			next(w, r.WithContext(ctx))
 		}
 	}
 }
 
 func (s *Server) executeResponse(w http.ResponseWriter, r *http.Request, id string, input map[string]interface{}) {
-	result := s.runtime.ExecuteWithContext(trustedContext(r, capabilities.OriginExternal), id, input)
+	credential, _ := r.Context().Value(credentialContextKey{}).(security.Credential)
+	result := s.runtime.ExecuteWithContext(trustedContext(r, credential), id, input)
 	status := http.StatusOK
 	if result.Status == "failed" {
 		status = http.StatusBadRequest
@@ -229,16 +227,20 @@ func (s *Server) executeResponse(w http.ResponseWriter, r *http.Request, id stri
 	writeJSON(w, status, result)
 }
 
-func trustedContext(r *http.Request, origin capabilities.ExecutionOrigin) capabilities.ExecutionContext {
+func trustedContext(r *http.Request, credential security.Credential) capabilities.ExecutionContext {
 	correlation := r.Header.Get("X-Correlation-ID")
 	if correlation == "" {
 		correlation = "http_" + time.Now().UTC().Format("150405.000000000")
 	}
+	principalID := "bearer_external"
+	if credential.ID != "" {
+		principalID = credential.ID
+	}
 	return capabilities.ExecutionContext{
 		ExecutionID:   "",
-		Origin:        origin,
-		Principal:     capabilities.Principal{ID: "bearer_external", Type: "api_client"},
-		Permissions:   []security.Permission{security.ProjectRead, security.ProjectWrite, security.DatabaseInspect},
+		Origin:        capabilities.OriginExternal,
+		Principal:     capabilities.Principal{ID: principalID, Type: "api_client"},
+		Permissions:   credential.Permissions,
 		CorrelationID: correlation,
 	}
 }

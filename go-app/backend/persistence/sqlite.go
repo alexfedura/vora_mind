@@ -7,13 +7,31 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	_ "modernc.org/sqlite"
 )
 
 type Store struct {
-	DB       *sql.DB
-	Database string
+	DB              *sql.DB
+	Database        string
+	reopenMu        sync.RWMutex
+	reopenCallbacks []func(*sql.DB)
+}
+
+func (s *Store) RegisterReopenCallback(callback func(*sql.DB)) {
+	s.reopenMu.Lock()
+	defer s.reopenMu.Unlock()
+	s.reopenCallbacks = append(s.reopenCallbacks, callback)
+}
+
+func (s *Store) notifyReopened(db *sql.DB) {
+	s.reopenMu.RLock()
+	callbacks := append([]func(*sql.DB){}, s.reopenCallbacks...)
+	s.reopenMu.RUnlock()
+	for _, callback := range callbacks {
+		callback(db)
+	}
 }
 
 var migrations = []struct {
@@ -117,6 +135,13 @@ CREATE TABLE IF NOT EXISTS api_credentials (
  revoked_at TEXT,
  last_used_at TEXT
 );
+`},
+	{4, `
+CREATE TABLE IF NOT EXISTS application_identity (
+ key TEXT PRIMARY KEY,
+ value TEXT NOT NULL
+);
+INSERT OR REPLACE INTO application_identity(key, value) VALUES('database_owner','alexfedura/vora_mind');
 `},
 }
 

@@ -20,7 +20,7 @@ func testRuntime(t *testing.T) *Runtime {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewRuntime(store, filesystem, "Vora Test", "0.26.4", "v3.1.0")
+	return NewRuntime(store, filesystem, "Vora Test", "0.26.8", "v3.1.0")
 }
 
 func TestProjectCRUDAndRepeatedInitialization(t *testing.T) {
@@ -77,5 +77,43 @@ func TestAuditEventIsPersisted(t *testing.T) {
 	}
 	if count < 1 {
 		t.Fatal("expected audit event")
+	}
+}
+
+func TestRestoreRebindKeepsRuntimeServicesUsable(t *testing.T) {
+	root := t.TempDir()
+	store, err := persistence.Open(filepath.Join(root, "active.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.DB.Close() })
+	filesystem, err := infrastructure.NewFilesystemScope(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := NewRuntime(store, filesystem, "Vora Test", "0.26.8", "v3.1.0")
+	backupRoot := filepath.Join(root, "backups")
+	manager, err := persistence.NewBackupManager(store, backupRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := manager.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := runtime.Execute("project.create", map[string]interface{}{"name": "after-backup"}, string(capabilities.OriginHuman))
+	if created.Status != "succeeded" {
+		t.Fatal(created.Error)
+	}
+	restored, err := manager.Restore(record.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !restored {
+		t.Fatal("restore should succeed")
+	}
+	projects := runtime.Execute("project.list", map[string]interface{}{}, string(capabilities.OriginHuman))
+	if projects.Status != "succeeded" {
+		t.Fatalf("runtime should remain usable after restore: %#v", projects.Error)
 	}
 }

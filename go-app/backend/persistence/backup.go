@@ -90,6 +90,35 @@ func ValidateDatabase(path string) (bool, error) {
 	if foreignKey != "" {
 		return false, errors.New(foreignKey)
 	}
+	requiredTables := []string{"schema_migrations", "projects", "audit_events", "execution_history", "workflows", "workflow_steps"}
+	for _, table := range requiredTables {
+		var count int
+		if err := db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&count); err != nil {
+			return false, err
+		}
+		if count != 1 {
+			return false, fmt.Errorf("incompatible backup: missing required table %s", table)
+		}
+	}
+	var migrationCount int
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&migrationCount); err != nil {
+		return false, fmt.Errorf("incompatible backup: migration metadata unavailable: %w", err)
+	}
+	if migrationCount < 2 {
+		return false, errors.New("incompatible backup: migration version is too old")
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM application_identity WHERE key='database_owner'").Scan(&migrationCount); err != nil {
+		return false, fmt.Errorf("could not verify backup owner: %w", err)
+	}
+	if migrationCount == 1 {
+		var owner string
+		if err := db.QueryRow("SELECT value FROM application_identity WHERE key='database_owner'").Scan(&owner); err != nil {
+			return false, fmt.Errorf("could not verify backup owner: %w", err)
+		}
+		if owner != "alexfedura/vora_mind" {
+			return false, errors.New("backup belongs to a different application database")
+		}
+	}
 	return true, nil
 }
 
@@ -122,11 +151,19 @@ func (m *BackupManager) PreflightRestore(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	allowed, err := filepath.Rel(m.root, absolute)
-	if err != nil || allowed == ".." || filepath.IsAbs(allowed) {
+	absoluteRoot, err := filepath.EvalSymlinks(m.root)
+	if err != nil {
+		return false, err
+	}
+	absoluteSource, err := filepath.EvalSymlinks(absolute)
+	if err != nil {
+		return false, err
+	}
+	allowed, err := filepath.Rel(absoluteRoot, absoluteSource)
+	if err != nil || allowed == ".." || filepath.IsAbs(allowed) || strings.HasPrefix(allowed, ".."+string(filepath.Separator)) {
 		return false, errors.New("restore source must be inside the backup directory")
 	}
-	return ValidateDatabase(absolute)
+	return ValidateDatabase(absoluteSource)
 }
 
 func (m *BackupManager) Restore(path string) (bool, error) {
@@ -142,8 +179,6 @@ func (m *BackupManager) Restore(path string) (bool, error) {
 		return false, fmt.Errorf("could not quiesce database: %w", err)
 	}
 	activePath := m.store.Database
-	_ = os.Remove(activePath + "-shm")
-	_ = os.Remove(activePath + "-wal")
 	recoveryPath := activePath + ".pre-restore-" + time.Now().UTC().Format("20060102T150405.000000000Z")
 	if err := copyFile(activePath, recoveryPath); err != nil {
 		_ = reopenStore(m.store)
@@ -154,22 +189,35 @@ func (m *BackupManager) Restore(path string) (bool, error) {
 		_ = reopenStore(m.store)
 		return false, err
 	}
-	if err := os.Rename(activePath, activePath+".replace-old"); err != nil {
+	oldPath := activePath + ".replace-old"
+	_ = os.Remove(oldPath)
+	if err := os.Rename(activePath, oldPath); err != nil {
 		_ = reopenStore(m.store)
 		return false, err
 	}
 	if err := os.Rename(stagedPath, activePath); err != nil {
-		_ = os.Rename(activePath+".replace-old", activePath)
+		_ = os.Rename(oldPath, activePath)
 		_ = reopenStore(m.store)
 		return false, err
 	}
-	_ = os.Remove(activePath + ".replace-old")
+	cleanupSidecars(activePath)
 	if err := reopenStore(m.store); err != nil {
 		_ = copyFile(recoveryPath, activePath)
 		_ = reopenStore(m.store)
 		return false, fmt.Errorf("restored database could not reopen: %w", err)
 	}
+	if valid, err := ValidateDatabase(activePath); err != nil || !valid {
+		_ = copyFile(recoveryPath, activePath)
+		_ = reopenStore(m.store)
+		return false, fmt.Errorf("restored database failed post-replacement validation: %v", err)
+	}
+	_ = os.Remove(oldPath)
 	return true, nil
+}
+
+func cleanupSidecars(databasePath string) {
+	_ = os.Remove(databasePath + "-shm")
+	_ = os.Remove(databasePath + "-wal")
 }
 
 func copyFile(source, destination string) error {
@@ -187,5 +235,6 @@ func reopenStore(store *Store) error {
 	}
 	store.DB = reopened.DB
 	store.Database = reopened.Database
+	store.notifyReopened(store.DB)
 	return nil
 }

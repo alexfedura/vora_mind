@@ -104,3 +104,29 @@ func TestValidBackupRestoreReopensDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRestoreRejectsWrongDatabaseAndIncompatibleSchema(t *testing.T) {
+	root := t.TempDir()
+	store, err := Open(filepath.Join(root, "active.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	manager, err := NewBackupManager(store, filepath.Join(root, "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrong := filepath.Join(manager.root, "wrong.db")
+	wrongStore, err := Open(wrong)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wrongStore.DB.Exec(`DROP TABLE application_identity`); err != nil {
+		wrongStore.DB.Close()
+		t.Fatal(err)
+	}
+	wrongStore.DB.Close()
+	if _, err := manager.PreflightRestore(wrong); err == nil {
+		t.Fatal("wrong or incompatible database should be rejected")
+	}
+}

@@ -58,6 +58,12 @@ func NewRuntime(store *persistence.Store, fs *infrastructure.FilesystemScope, ap
 		AppName: appName, AppVersion: appVersion, WailsVersion: wailsVersion,
 	}
 	r.WorkflowEngine = workflows.NewEngine(store.DB, r)
+	store.RegisterReopenCallback(func(db *sql.DB) {
+		r.DB = db
+		r.ProjectRepo = &persistence.ProjectRepository{DB: db}
+		r.AuditStore = &audit.SQLiteStore{DB: db}
+		r.WorkflowEngine = workflows.NewEngine(db, r)
+	})
 	r.registerCapabilities()
 	return r
 }

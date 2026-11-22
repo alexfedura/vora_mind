@@ -147,6 +147,11 @@ func (e *Engine) Create(name, description, projectScope, creator string, origin 
 		if executionPolicy == "" {
 			executionPolicy = "unknown"
 		}
+		switch strings.ToLower(strings.TrimSpace(executionPolicy)) {
+		case "naturally_idempotent", "idempotency_key", "non_idempotent", "unknown":
+		default:
+			return Workflow{}, errors.New("invalid workflow step executionPolicy")
+		}
 		idempotencyKey, _ := raw["idempotencyKey"].(string)
 		recoveryState, _ := raw["recoveryState"].(string)
 		if recoveryState == "" {

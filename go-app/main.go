@@ -49,7 +49,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	runtime := appbackend.NewRuntime(store, filesystem, "Vora Mind", "0.26.7", "v3.1.0")
+	runtime := appbackend.NewRuntime(store, filesystem, "Vora Mind", "0.26.8", "v3.1.0")
 	runtimeService := NewRuntimeService(runtime, store)
 	runtimeService.apiServer = api.NewServer(runtime)
 
