@@ -23,7 +23,7 @@ func testServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := application.NewRuntime(store, filesystem, "Vora Test", "0.26.11", "v3.1.0")
+	runtime := application.NewRuntime(store, filesystem, "Vora Test", "0.26.12", "v3.1.0")
 	return NewServer(runtime)
 }
 

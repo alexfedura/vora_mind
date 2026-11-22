@@ -57,3 +57,34 @@ These should not be merged with board snapshots or trace graphs unless the archi
 The current repository already contains the necessary building blocks for source, research, experiment, analysis, model, and transfer domains, but not yet a fully consistent, verified cross-domain implementation with universal ownership enforcement.
 
 The architecture target therefore is not a rewrite: it is a disciplined integration and enforcement effort that preserves valid legacy data while closing the ownership, provenance, and workflow gaps identified in the current-state audit.
+
+## 5. Phase 3.8 rebaseline conclusion
+
+The repository has a real Go/Wails foundation, but it is not yet a replacement for
+the complete React/Rust/Tauri/Electron product. The final target remains one Go
+application runtime with React presentation and Wails desktop lifecycle.
+
+```text
+React + TypeScript UI
+        |
+Wails bindings | HTTP | MCP | workflows
+        |
+Go capability/application runtime
+  - capability registry
+  - validation
+  - permissions
+  - approvals
+  - audit
+  - project context
+  - workflows
+        |
+Go repositories and infrastructure
+  - SQLite
+  - filesystem
+  - credential protection
+  - backup/restore
+  - provider adapters
+```
+
+Electron and Rust/Tauri remain migration sources, not targets, until every active
+product responsibility has a Go contract or an explicit retirement decision.

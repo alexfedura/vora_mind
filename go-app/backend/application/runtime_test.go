@@ -23,7 +23,7 @@ func testRuntime(t *testing.T) *Runtime {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewRuntime(store, filesystem, "Vora Test", "0.26.11", "v3.1.0")
+	return NewRuntime(store, filesystem, "Vora Test", "0.26.12", "v3.1.0")
 }
 
 func TestProjectCRUDAndRepeatedInitialization(t *testing.T) {
@@ -121,7 +121,7 @@ func TestRestoreRebindKeepsRuntimeServicesUsable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := NewRuntime(store, filesystem, "Vora Test", "0.26.11", "v3.1.0")
+	runtime := NewRuntime(store, filesystem, "Vora Test", "0.26.12", "v3.1.0")
 	backupRoot := filepath.Join(root, "backups")
 	manager, err := persistence.NewBackupManager(store, backupRoot)
 	if err != nil {
@@ -159,7 +159,7 @@ func TestProjectFilesystemIsolationAndReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := NewRuntime(store, filesystem, "Vora Test", "0.26.11", "v3.1.0")
+	runtime := NewRuntime(store, filesystem, "Vora Test", "0.26.12", "v3.1.0")
 
 	projectA := runtime.Execute("project.create", map[string]interface{}{"name": "Project A"}, string(capabilities.OriginHuman))
 	projectB := runtime.Execute("project.create", map[string]interface{}{"name": "Project B"}, string(capabilities.OriginHuman))
@@ -185,7 +185,7 @@ func TestProjectFilesystemIsolationAndReopen(t *testing.T) {
 	if _, err := filesystem.ResolveProject(idB, filepath.Join(rootA, "a.txt")); err == nil {
 		t.Fatal("project B must not resolve project A's workspace")
 	}
-	reopened := NewRuntime(store, filesystem, "Vora Test", "0.26.11", "v3.1.0")
+	reopened := NewRuntime(store, filesystem, "Vora Test", "0.26.12", "v3.1.0")
 	reopenedRoot, err := reopened.ProjectRepo.GetWorkspaceRoot(idA)
 	if err != nil || reopenedRoot != rootA {
 		t.Fatalf("project root did not reopen: root=%q err=%v", reopenedRoot, err)

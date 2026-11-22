@@ -25,7 +25,7 @@ func TestMCPProtocolDiscoveryAndInvocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := application.NewRuntime(store, filesystem, "Vora Test", "0.26.11", "v3.1.0")
+	runtime := application.NewRuntime(store, filesystem, "Vora Test", "0.26.12", "v3.1.0")
 	gateway := NewGateway(runtime)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
