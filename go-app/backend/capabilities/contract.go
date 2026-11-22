@@ -16,15 +16,16 @@ const (
 )
 
 type Descriptor struct {
-	ID           string                             `json:"id"`
-	Version      string                             `json:"version"`
-	Name         string                             `json:"name"`
-	Description  string                             `json:"description"`
-	InputSchema  map[string]interface{}             `json:"inputSchema"`
-	OutputSchema map[string]interface{}             `json:"outputSchema"`
-	Permissions  []security.Permission              `json:"requiredPermissions"`
-	Handler      Handler                            `json:"-"`
-	Validate     func(map[string]interface{}) error `json:"-"`
+	ID               string                             `json:"id"`
+	Version          string                             `json:"version"`
+	Name             string                             `json:"name"`
+	Description      string                             `json:"description"`
+	InputSchema      map[string]interface{}             `json:"inputSchema"`
+	OutputSchema     map[string]interface{}             `json:"outputSchema"`
+	Permissions      []security.Permission              `json:"requiredPermissions"`
+	Handler          Handler                            `json:"-"`
+	Validate         func(map[string]interface{}) error `json:"-"`
+	ApprovalRequired bool                               `json:"approvalRequired"`
 }
 
 type Handler func(input map[string]interface{}) (interface{}, error)

@@ -80,6 +80,12 @@ func (g *Gateway) registerTools() {
 }
 
 func rawJSONSchema(schema map[string]interface{}) interface{} {
+	if len(schema) == 0 {
+		schema = map[string]interface{}{"type": "object", "properties": map[string]interface{}{}, "required": []string{}}
+	}
+	if _, ok := schema["type"]; !ok {
+		schema = map[string]interface{}{"type": "object", "properties": schema, "required": []string{}}
+	}
 	payload, _ := json.Marshal(schema)
 	return json.RawMessage(payload)
 }

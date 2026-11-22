@@ -65,3 +65,42 @@ func TestRestorePreflightRejectsOutsideScope(t *testing.T) {
 		t.Fatal("restore outside backup scope should fail")
 	}
 }
+
+func TestValidBackupRestoreReopensDatabase(t *testing.T) {
+	root := t.TempDir()
+	database := filepath.Join(root, "active.db")
+	store, err := Open(database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	manager, err := NewBackupManager(store, filepath.Join(root, "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := manager.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB.Exec(`INSERT INTO projects(id,name,description,created_at,updated_at) VALUES(?,?,?,?,?)`,
+		"project_after_backup", "After", "", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := manager.Restore(record.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !restored {
+		t.Fatal("restore should succeed")
+	}
+	var count int
+	if err := store.DB.QueryRow(`SELECT COUNT(*) FROM projects WHERE id=?`, "project_after_backup").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("restored database should not contain post-backup project")
+	}
+	if err := store.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+}

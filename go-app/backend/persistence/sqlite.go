@@ -103,6 +103,21 @@ CREATE TABLE IF NOT EXISTS workflow_steps (
 CREATE INDEX IF NOT EXISTS idx_workflow_steps_workflow ON workflow_steps(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_execution_history_started ON execution_history(started_at);
 `},
+	{3, `
+ALTER TABLE workflow_steps ADD COLUMN execution_policy TEXT NOT NULL DEFAULT 'unknown';
+ALTER TABLE workflow_steps ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT '';
+ALTER TABLE workflow_steps ADD COLUMN recovery_state TEXT NOT NULL DEFAULT 'none';
+
+CREATE TABLE IF NOT EXISTS api_credentials (
+ id TEXT PRIMARY KEY,
+ credential_hash TEXT NOT NULL,
+ encrypted_secret TEXT NOT NULL DEFAULT '',
+ permissions_json TEXT NOT NULL DEFAULT '[]',
+ created_at TEXT NOT NULL,
+ revoked_at TEXT,
+ last_used_at TEXT
+);
+`},
 }
 
 func Open(databasePath string) (*Store, error) {
@@ -183,6 +198,24 @@ func applyMigrations(db *sql.DB) error {
 		}
 		if count == 0 {
 			if _, err := db.Exec("ALTER TABLE audit_events ADD COLUMN " + column + " TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+		}
+	}
+	for _, column := range []struct {
+		name       string
+		definition string
+	}{
+		{"execution_policy", "TEXT NOT NULL DEFAULT 'unknown'"},
+		{"idempotency_key", "TEXT NOT NULL DEFAULT ''"},
+		{"recovery_state", "TEXT NOT NULL DEFAULT 'none'"},
+	} {
+		var count int
+		if err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('workflow_steps') WHERE name = ?", column.name).Scan(&count); err != nil {
+			return err
+		}
+		if count == 0 {
+			if _, err := db.Exec("ALTER TABLE workflow_steps ADD COLUMN " + column.name + " " + column.definition); err != nil {
 				return err
 			}
 		}

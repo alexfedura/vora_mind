@@ -19,20 +19,30 @@ import (
 )
 
 type Server struct {
-	server   *http.Server
-	runtime  *application.Runtime
-	token    string
-	limitMu  sync.Mutex
-	requests map[string][]time.Time
-	running  bool
-	address  string
+	server      *http.Server
+	runtime     *application.Runtime
+	token       string
+	limitMu     sync.Mutex
+	requests    map[string][]time.Time
+	running     bool
+	address     string
+	credentials *security.CredentialManager
 }
 
 func NewServer(runtime *application.Runtime) *Server {
-	tokenBytes := make([]byte, 32)
-	_, _ = rand.Read(tokenBytes)
-	token := hex.EncodeToString(tokenBytes)
-	s := &Server{runtime: runtime, token: token, requests: make(map[string][]time.Time)}
+	s := &Server{runtime: runtime, requests: make(map[string][]time.Time), credentials: security.NewCredentialManager(runtime.DB)}
+	_, token, err := s.credentials.Generate([]security.Permission{
+		security.ProjectRead,
+		security.ProjectWrite,
+		security.DatabaseInspect,
+		security.CapabilitiesDiscover,
+	})
+	if err != nil {
+		tokenBytes := make([]byte, 32)
+		_, _ = rand.Read(tokenBytes)
+		token = hex.EncodeToString(tokenBytes)
+	}
+	s.token = token
 	mux := http.NewServeMux()
 	s.register(mux)
 	s.server = &http.Server{Handler: withSecurityHeaders(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
@@ -65,6 +75,21 @@ func (s *Server) Stop() error { s.running = false; return s.server.Shutdown(cont
 
 func withSecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "" {
+			hostName, _, err := net.SplitHostPort(r.Host)
+			if err != nil {
+				hostName = r.Host
+			}
+			if hostName != "127.0.0.1" && hostName != "localhost" && hostName != "::1" {
+				writeJSON(w, http.StatusForbidden, structuredError("INVALID_HOST", "Only loopback hosts are accepted", http.StatusForbidden))
+				return
+			}
+		}
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			writeJSON(w, http.StatusForbidden, structuredError("ORIGIN_NOT_ALLOWED", "Cross-origin browser requests are not allowed", http.StatusForbidden))
+			return
+		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
@@ -90,6 +115,9 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	token := strings.TrimSpace(strings.TrimPrefix(authorization, prefix))
+	if _, ok := s.credentials.Authenticate(token); ok {
+		return true
+	}
 	expected := []byte(s.token)
 	supplied := []byte(token)
 	if len(expected) != len(supplied) || subtle.ConstantTimeCompare(expected, supplied) != 1 {

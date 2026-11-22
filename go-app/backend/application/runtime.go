@@ -92,6 +92,11 @@ func (r *Runtime) ExecuteWithContext(context capabilities.ExecutionContext, capa
 			Code: "PERMISSION_DENIED", Message: "The execution origin does not have the required permissions.", Capability: capabilityID,
 		})
 	}
+	if descriptor.ApprovalRequired && !context.Approved {
+		return r.finish(context, capabilityID, executionID, start, capabilityOrigin, projectScope(input), nil, &capabilities.StructuredError{
+			Code: "APPROVAL_REQUIRED", Message: "This capability requires explicit approval.", Capability: capabilityID,
+		})
+	}
 	if descriptor.Validate != nil {
 		if err := descriptor.Validate(input); err != nil {
 			return r.finish(context, capabilityID, executionID, start, capabilityOrigin, "", nil, &capabilities.StructuredError{
@@ -492,6 +497,70 @@ func (r *Runtime) registerFilesystemCapabilities() {
 			path, _ := requiredString(input, "path", 1, 4096)
 			content, _ := input["content"].(string)
 			return r.Filesystem.CreateText(path, content)
+		},
+	})
+	r.registerFilesystemAction("filesystem.edit_text", "Edit a text file inside allowed scopes.", "edit")
+	r.registerFilesystemAction("filesystem.rename", "Rename a file inside allowed scopes.", "rename")
+	r.registerFilesystemAction("filesystem.copy", "Copy a file inside allowed scopes.", "copy")
+	r.registerFilesystemAction("filesystem.move", "Move a file inside allowed scopes.", "move")
+	r.registerFilesystemAction("filesystem.delete", "Delete a file inside allowed scopes.", "delete")
+}
+
+func (r *Runtime) registerFilesystemAction(id, description, operation string) {
+	approvalRequired := operation == "delete"
+	r.mustRegister(capabilities.Descriptor{
+		ID: id, Version: "1.0.0", Name: id, Description: description,
+		InputSchema: capabilities.JSONObjectSchema(nil, map[string]interface{}{
+			"path":        capabilities.JSONStringSchema("Source path"),
+			"source":      capabilities.JSONStringSchema("Source path"),
+			"destination": capabilities.JSONStringSchema("Destination path"),
+			"content":     capabilities.JSONStringSchema("UTF-8 text content"),
+		}),
+		OutputSchema:     capabilities.JSONObjectSchema(nil, map[string]interface{}{}),
+		Permissions:      []security.Permission{security.FilesystemWrite},
+		ApprovalRequired: approvalRequired,
+		Validate: func(input map[string]interface{}) error {
+			if operation == "rename" || operation == "copy" || operation == "move" {
+				source, sourceErr := requiredString(input, "source", 1, 4096)
+				destination, destinationErr := requiredString(input, "destination", 1, 4096)
+				if sourceErr != nil {
+					return sourceErr
+				}
+				if destinationErr != nil {
+					return destinationErr
+				}
+				if source == destination {
+					return fmt.Errorf("source and destination must differ")
+				}
+				return nil
+			}
+			_, err := requiredString(input, "path", 1, 4096)
+			return err
+		},
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			switch operation {
+			case "edit":
+				path, _ := requiredString(input, "path", 1, 4096)
+				content, _ := input["content"].(string)
+				return r.Filesystem.CreateText(path, content)
+			case "rename":
+				source, _ := requiredString(input, "source", 1, 4096)
+				destination, _ := requiredString(input, "destination", 1, 4096)
+				return r.Filesystem.Rename(source, destination)
+			case "copy":
+				source, _ := requiredString(input, "source", 1, 4096)
+				destination, _ := requiredString(input, "destination", 1, 4096)
+				return r.Filesystem.Copy(source, destination)
+			case "move":
+				source, _ := requiredString(input, "source", 1, 4096)
+				destination, _ := requiredString(input, "destination", 1, 4096)
+				return r.Filesystem.Move(source, destination)
+			case "delete":
+				path, _ := requiredString(input, "path", 1, 4096)
+				return r.Filesystem.Delete(path)
+			default:
+				return nil, fmt.Errorf("unsupported filesystem operation")
+			}
 		},
 	})
 }

@@ -128,3 +128,64 @@ func (m *BackupManager) PreflightRestore(path string) (bool, error) {
 	}
 	return ValidateDatabase(absolute)
 }
+
+func (m *BackupManager) Restore(path string) (bool, error) {
+	valid, err := m.PreflightRestore(path)
+	if err != nil {
+		return false, err
+	}
+	if !valid {
+		return false, errors.New("backup failed validation")
+	}
+	absolute, _ := filepath.Abs(path)
+	if err := m.store.DB.Close(); err != nil {
+		return false, fmt.Errorf("could not quiesce database: %w", err)
+	}
+	activePath := m.store.Database
+	_ = os.Remove(activePath + "-shm")
+	_ = os.Remove(activePath + "-wal")
+	recoveryPath := activePath + ".pre-restore-" + time.Now().UTC().Format("20060102T150405.000000000Z")
+	if err := copyFile(activePath, recoveryPath); err != nil {
+		_ = reopenStore(m.store)
+		return false, err
+	}
+	stagedPath := activePath + ".restore-staging"
+	if err := copyFile(absolute, stagedPath); err != nil {
+		_ = reopenStore(m.store)
+		return false, err
+	}
+	if err := os.Rename(activePath, activePath+".replace-old"); err != nil {
+		_ = reopenStore(m.store)
+		return false, err
+	}
+	if err := os.Rename(stagedPath, activePath); err != nil {
+		_ = os.Rename(activePath+".replace-old", activePath)
+		_ = reopenStore(m.store)
+		return false, err
+	}
+	_ = os.Remove(activePath + ".replace-old")
+	if err := reopenStore(m.store); err != nil {
+		_ = copyFile(recoveryPath, activePath)
+		_ = reopenStore(m.store)
+		return false, fmt.Errorf("restored database could not reopen: %w", err)
+	}
+	return true, nil
+}
+
+func copyFile(source, destination string) error {
+	input, err := os.ReadFile(source)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(destination, input, 0o600)
+}
+
+func reopenStore(store *Store) error {
+	reopened, err := Open(store.Database)
+	if err != nil {
+		return err
+	}
+	store.DB = reopened.DB
+	store.Database = reopened.Database
+	return nil
+}

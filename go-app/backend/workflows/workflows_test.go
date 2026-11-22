@@ -77,3 +77,56 @@ func TestWorkflowApprovalGate(t *testing.T) {
 		t.Fatalf("rejected status=%s", rejected.Status)
 	}
 }
+
+func TestWorkflowInterruptedIdempotentStepRecovery(t *testing.T) {
+	store, err := persistence.Open(t.TempDir() + "/recovery.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	engine := NewEngine(store.DB, testExecutor{})
+	workflow, err := engine.Create("Recovery", "", "", "tester", capabilities.OriginHuman, []map[string]interface{}{
+		{"capabilityId": "system.get_info", "input": map[string]interface{}{}, "executionPolicy": "naturally_idempotent", "idempotencyKey": "recovery-1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB.Exec(`UPDATE workflows SET status=? WHERE id=?`, Running, workflow.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB.Exec(`UPDATE workflow_steps SET status=? WHERE workflow_id=?`, Running, workflow.ID); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := engine.RecoverAfterRestart()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recovered) != 1 || recovered[0].Status != Succeeded {
+		t.Fatalf("idempotent recovery status=%v", recovered)
+	}
+}
+
+func TestWorkflowInterruptedUnknownStepRequiresApproval(t *testing.T) {
+	store, err := persistence.Open(t.TempDir() + "/uncertain.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	engine := NewEngine(store.DB, testExecutor{})
+	workflow, err := engine.Create("Recovery", "", "", "tester", capabilities.OriginHuman, []map[string]interface{}{
+		{"capabilityId": "filesystem.create_text", "input": map[string]interface{}{"path": "x.txt", "content": "x"}, "executionPolicy": "unknown"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB.Exec(`UPDATE workflows SET status=? WHERE id=?`, Running, workflow.ID); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := engine.RecoverAfterRestart()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recovered) != 1 || recovered[0].Status != AwaitingApproval {
+		t.Fatalf("uncertain recovery status=%v", recovered)
+	}
+}

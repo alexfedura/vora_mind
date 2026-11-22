@@ -39,7 +39,19 @@ type Step struct {
 	ApprovalStatus   string                        `json:"approvalStatus"`
 	StartedAt        *time.Time                    `json:"startedAt,omitempty"`
 	EndedAt          *time.Time                    `json:"endedAt,omitempty"`
+	ExecutionPolicy  string                        `json:"executionPolicy"`
+	IdempotencyKey   string                        `json:"idempotencyKey"`
+	RecoveryState    string                        `json:"recoveryState"`
 }
+
+type RecoveryState string
+
+const (
+	RecoveryNone     RecoveryState = "none"
+	RecoveryRetry    RecoveryState = "retry"
+	RecoveryApproval RecoveryState = "approval_required"
+	RecoveryManual   RecoveryState = "manual_resolution_required"
+)
 
 type Workflow struct {
 	ID                    string                        `json:"id"`
@@ -131,21 +143,31 @@ func (e *Engine) Create(name, description, projectScope, creator string, origin 
 			input = map[string]interface{}{}
 		}
 		approvalRequired, _ := raw["approvalRequired"].(bool)
+		executionPolicy, _ := raw["executionPolicy"].(string)
+		if executionPolicy == "" {
+			executionPolicy = "unknown"
+		}
+		idempotencyKey, _ := raw["idempotencyKey"].(string)
+		recoveryState, _ := raw["recoveryState"].(string)
+		if recoveryState == "" {
+			recoveryState = string(RecoveryNone)
+		}
 		maxRetries, _ := raw["maxRetries"].(float64)
 		step := Step{
 			ID: newStepID(), WorkflowID: workflow.ID, Index: index, CapabilityID: capabilityID,
 			Input: input, Status: Draft, MaxRetries: int(maxRetries),
 			ApprovalRequired: approvalRequired, ApprovalStatus: "not_required",
+			ExecutionPolicy: executionPolicy, IdempotencyKey: idempotencyKey, RecoveryState: recoveryState,
 		}
 		if approvalRequired {
 			step.ApprovalStatus = "pending"
 		}
 		inputJSON, _ := json.Marshal(input)
 		if _, err = tx.Exec(`
-			INSERT INTO workflow_steps(id,workflow_id,step_index,capability_id,input_json,status,retry_count,max_retries,approval_required,approval_status)
-			VALUES(?,?,?,?,?,?,?,?,?,?)`,
+			INSERT INTO workflow_steps(id,workflow_id,step_index,capability_id,input_json,status,retry_count,max_retries,approval_required,approval_status,execution_policy,idempotency_key,recovery_state)
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			step.ID, step.WorkflowID, step.Index, step.CapabilityID, string(inputJSON), step.Status,
-			0, step.MaxRetries, boolInt(approvalRequired), step.ApprovalStatus,
+			0, step.MaxRetries, boolInt(approvalRequired), step.ApprovalStatus, step.ExecutionPolicy, step.IdempotencyKey, step.RecoveryState,
 		); err != nil {
 			return Workflow{}, err
 		}
@@ -192,7 +214,7 @@ func (e *Engine) Get(id string) (Workflow, error) {
 
 func (e *Engine) listSteps(id string) ([]Step, error) {
 	rows, err := e.DB.Query(`
-		SELECT id,step_index,capability_id,input_json,status,execution_id,result_json,error_json,retry_count,max_retries,approval_required,approval_status,started_at,ended_at
+		SELECT id,step_index,capability_id,input_json,status,execution_id,result_json,error_json,retry_count,max_retries,approval_required,approval_status,started_at,ended_at,execution_policy,idempotency_key,recovery_state
 		FROM workflow_steps WHERE workflow_id=? ORDER BY step_index`, id)
 	if err != nil {
 		return nil, err
@@ -205,7 +227,7 @@ func (e *Engine) listSteps(id string) ([]Step, error) {
 		var executionID string
 		var approvalRequired int
 		var started, ended sql.NullString
-		if err := rows.Scan(&step.ID, &step.Index, &step.CapabilityID, &inputJSON, &status, &executionID, &resultJSON, &errorJSON, &step.RetryCount, &step.MaxRetries, &approvalRequired, &approvalStatus, &started, &ended); err != nil {
+		if err := rows.Scan(&step.ID, &step.Index, &step.CapabilityID, &inputJSON, &status, &executionID, &resultJSON, &errorJSON, &step.RetryCount, &step.MaxRetries, &approvalRequired, &approvalStatus, &started, &ended, &step.ExecutionPolicy, &step.IdempotencyKey, &step.RecoveryState); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(inputJSON), &step.Input)
@@ -350,6 +372,74 @@ func (e *Engine) Resume(id string) (Workflow, error) {
 		_, _ = e.DB.Exec(`UPDATE workflows SET status=?,updated_at=? WHERE id=?`, Pending, time.Now().UTC().Format(time.RFC3339Nano), id)
 	}
 	return e.Start(id)
+}
+
+func (e *Engine) RecoverAfterRestart() ([]Workflow, error) {
+	rows, err := e.DB.Query(`SELECT id FROM workflows WHERE status=? OR status=?`, Running, AwaitingApproval)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	recovered := make([]Workflow, 0, len(ids))
+	for _, id := range ids {
+		workflow, err := e.Get(id)
+		if err != nil {
+			return nil, err
+		}
+		if workflow.CancellationRequested {
+			recovered = append(recovered, workflow)
+			continue
+		}
+		if workflow.Status == AwaitingApproval {
+			recovered = append(recovered, workflow)
+			continue
+		}
+		if workflow.CurrentStep >= len(workflow.Steps) {
+			recovered = append(recovered, workflow)
+			continue
+		}
+		step := &workflow.Steps[workflow.CurrentStep]
+		policy := strings.ToLower(strings.TrimSpace(step.ExecutionPolicy))
+		if policy == "naturally_idempotent" || (policy == "idempotency_key" && strings.TrimSpace(step.IdempotencyKey) != "") {
+			_, err = e.DB.Exec(`UPDATE workflow_steps SET status=?,recovery_state=? WHERE id=?`, Draft, string(RecoveryRetry), step.ID)
+			if err != nil {
+				return nil, err
+			}
+			_, err = e.DB.Exec(`UPDATE workflows SET status=?,updated_at=? WHERE id=?`, Running, time.Now().UTC().Format(time.RFC3339Nano), id)
+			if err != nil {
+				return nil, err
+			}
+			started, err := e.Start(id)
+			if err != nil {
+				return nil, err
+			}
+			recovered = append(recovered, started)
+			continue
+		}
+		_, err = e.DB.Exec(`UPDATE workflow_steps SET status=?,recovery_state=? WHERE id=?`, AwaitingApproval, string(RecoveryApproval), step.ID)
+		if err != nil {
+			return nil, err
+		}
+		_, err = e.DB.Exec(`UPDATE workflows SET status=?,approval_state=?,updated_at=? WHERE id=?`, AwaitingApproval, "recovery_pending", time.Now().UTC().Format(time.RFC3339Nano), id)
+		if err != nil {
+			return nil, err
+		}
+		recovered = append(recovered, mustGetWorkflow(e, id))
+	}
+	return recovered, nil
+}
+
+func mustGetWorkflow(e *Engine, id string) Workflow {
+	workflow, _ := e.Get(id)
+	return workflow
 }
 
 func (e *Engine) ApproveStep(id string, approved bool) (Workflow, error) {

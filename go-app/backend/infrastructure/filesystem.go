@@ -161,3 +161,72 @@ func (s *FilesystemScope) CreateText(relative, content string) (map[string]inter
 	}
 	return map[string]interface{}{"path": path, "size": info.Size()}, nil
 }
+
+func (s *FilesystemScope) Rename(source, destination string) (map[string]interface{}, error) {
+	src, err := s.resolve(source)
+	if err != nil {
+		return nil, err
+	}
+	dst, err := s.resolve(destination)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		return nil, err
+	}
+	if err := os.Rename(src, dst); err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"source": src, "destination": dst}, nil
+}
+
+func (s *FilesystemScope) Copy(source, destination string) (map[string]interface{}, error) {
+	src, err := s.resolve(source)
+	if err != nil {
+		return nil, err
+	}
+	dst, err := s.resolve(destination)
+	if err != nil {
+		return nil, err
+	}
+	info, err := os.Stat(src)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("directory copy is not supported")
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		return nil, err
+	}
+	input, err := os.ReadFile(src)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(dst, input, 0o600); err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"source": src, "destination": dst, "size": int64(len(input))}, nil
+}
+
+func (s *FilesystemScope) Move(source, destination string) (map[string]interface{}, error) {
+	return s.Rename(source, destination)
+}
+
+func (s *FilesystemScope) Delete(relative string) (map[string]interface{}, error) {
+	path, err := s.resolve(relative)
+	if err != nil {
+		return nil, err
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("directory deletion is not supported")
+	}
+	if err := os.Remove(path); err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"path": path, "deleted": true}, nil
+}
