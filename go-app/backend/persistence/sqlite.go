@@ -143,6 +143,12 @@ CREATE TABLE IF NOT EXISTS application_identity (
 );
 INSERT OR REPLACE INTO application_identity(key, value) VALUES('database_owner','alexfedura/vora_mind');
 `},
+	{5, `
+ALTER TABLE api_credentials ADD COLUMN name TEXT NOT NULL DEFAULT '';
+ALTER TABLE api_credentials ADD COLUMN project_ids_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE api_credentials ADD COLUMN expires_at TEXT;
+ALTER TABLE api_credentials ADD COLUMN protection_provider TEXT NOT NULL DEFAULT '';
+`},
 }
 
 func Open(databasePath string) (*Store, error) {

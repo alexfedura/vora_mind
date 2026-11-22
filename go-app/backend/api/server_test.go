@@ -13,6 +13,7 @@ import (
 )
 
 func testServer(t *testing.T) *Server {
+	t.Setenv("VORA_CREDENTIAL_TEST_PROVIDER", "1")
 	store, err := persistence.Open(t.TempDir() + "/api.db")
 	if err != nil {
 		t.Fatal(err)
@@ -22,7 +23,7 @@ func testServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := application.NewRuntime(store, filesystem, "Vora Test", "0.26.8", "v3.1.0")
+	runtime := application.NewRuntime(store, filesystem, "Vora Test", "0.26.9", "v3.1.0")
 	return NewServer(runtime)
 }
 

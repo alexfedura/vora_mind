@@ -7,6 +7,7 @@ import (
 	"github.com/alexfedura/vora_mind/go-app/backend/application"
 	"github.com/alexfedura/vora_mind/go-app/backend/capabilities"
 	"github.com/alexfedura/vora_mind/go-app/backend/persistence"
+	"github.com/alexfedura/vora_mind/go-app/backend/security"
 	wailsapp "github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -20,10 +21,11 @@ type RuntimeService struct {
 		Start(context.Context) error
 		Stop() error
 	}
+	credentials *security.CredentialManager
 }
 
 func NewRuntimeService(runtime *application.Runtime, store *persistence.Store) *RuntimeService {
-	return &RuntimeService{runtime: runtime, store: store}
+	return &RuntimeService{runtime: runtime, store: store, credentials: security.NewCredentialManager(store.DB)}
 }
 
 func (s *RuntimeService) ServiceStartup(ctx context.Context, options wailsapp.ServiceOptions) error {
@@ -103,6 +105,67 @@ func (s *RuntimeService) StopAPI() map[string]interface{} {
 		return map[string]interface{}{"status": "failed", "error": err.Error()}
 	}
 	return map[string]interface{}{"status": "succeeded", "running": false}
+}
+
+func (s *RuntimeService) ListCredentials() map[string]interface{} {
+	if s.credentials == nil {
+		return map[string]interface{}{"status": "failed", "error": "credential manager is unavailable"}
+	}
+	items, err := s.credentials.List()
+	if err != nil {
+		return map[string]interface{}{"status": "failed", "error": "could not list credentials"}
+	}
+	return map[string]interface{}{"status": "succeeded", "credentials": items}
+}
+
+func (s *RuntimeService) CreateCredential(name string, permissionsJSON string, projectIDsJSON string) map[string]interface{} {
+	if s.credentials == nil {
+		return map[string]interface{}{"status": "failed", "error": "credential manager is unavailable"}
+	}
+	var permissions []security.Permission
+	if err := json.Unmarshal([]byte(permissionsJSON), &permissions); err != nil {
+		return map[string]interface{}{"status": "failed", "error": "permissions must be a JSON array"}
+	}
+	var projectIDs []string
+	if err := json.Unmarshal([]byte(projectIDsJSON), &projectIDs); err != nil {
+		return map[string]interface{}{"status": "failed", "error": "project IDs must be a JSON array"}
+	}
+	allowed := map[security.Permission]bool{
+		security.ProjectRead: true, security.ProjectWrite: true,
+		security.DatabaseInspect: true, security.FilesystemRead: true,
+		security.CapabilitiesDiscover: true, security.WorkflowsRead: true,
+	}
+	for _, permission := range permissions {
+		if !allowed[permission] {
+			return map[string]interface{}{"status": "failed", "error": "requested permission is not allowed"}
+		}
+	}
+	credential, secret, err := s.credentials.GenerateNamed(name, permissions, projectIDs, nil)
+	if err != nil {
+		return map[string]interface{}{"status": "failed", "error": err.Error()}
+	}
+	return map[string]interface{}{"status": "succeeded", "credential": credential, "secret": secret}
+}
+
+func (s *RuntimeService) RevokeCredential(id string) map[string]interface{} {
+	if s.credentials == nil {
+		return map[string]interface{}{"status": "failed", "error": "credential manager is unavailable"}
+	}
+	if err := s.credentials.Revoke(id); err != nil {
+		return map[string]interface{}{"status": "failed", "error": err.Error()}
+	}
+	return map[string]interface{}{"status": "succeeded"}
+}
+
+func (s *RuntimeService) RotateCredential(id string) map[string]interface{} {
+	if s.credentials == nil {
+		return map[string]interface{}{"status": "failed", "error": "credential manager is unavailable"}
+	}
+	credential, secret, err := s.credentials.Rotate(id)
+	if err != nil {
+		return map[string]interface{}{"status": "failed", "error": err.Error()}
+	}
+	return map[string]interface{}{"status": "succeeded", "credential": credential, "secret": secret}
 }
 
 func (s *RuntimeService) CreateWorkflow(name, description, projectScope string, stepsJSON string) capabilities.Result {

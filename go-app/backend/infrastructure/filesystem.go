@@ -9,7 +9,10 @@ import (
 )
 
 type FilesystemScope struct {
-	Roots []string
+	Roots          []string
+	ProjectRoots   map[string]string
+	SharedRoots    []string
+	UnassignedRoot string
 }
 
 func NewFilesystemScope(roots ...string) (*FilesystemScope, error) {
@@ -29,7 +32,60 @@ func NewFilesystemScope(roots ...string) (*FilesystemScope, error) {
 		return nil, fmt.Errorf("at least one filesystem scope is required")
 	}
 	sort.Strings(normalized)
-	return &FilesystemScope{Roots: normalized}, nil
+	unassigned := normalized[0]
+	return &FilesystemScope{Roots: normalized, ProjectRoots: map[string]string{}, UnassignedRoot: unassigned}, nil
+}
+
+func (s *FilesystemScope) SetProjectRoot(projectID, root string) error {
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return fmt.Errorf("project ID is required")
+	}
+	absolute, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	absolute = filepath.Clean(absolute)
+	if err := os.MkdirAll(absolute, 0o700); err != nil {
+		return err
+	}
+	s.ProjectRoots[projectID] = absolute
+	return nil
+}
+
+func (s *FilesystemScope) ResolveProject(projectID, relative string) (string, error) {
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return "", fmt.Errorf("project ID is required; use unassigned explicitly")
+	}
+	base := s.UnassignedRoot
+	if projectID != "unassigned" {
+		var ok bool
+		base, ok = s.ProjectRoots[projectID]
+		if !ok {
+			return "", fmt.Errorf("project workspace root is not configured")
+		}
+	}
+	relative = strings.TrimSpace(relative)
+	if relative == "" {
+		return "", fmt.Errorf("path is required")
+	}
+	absoluteCandidate := filepath.Clean(relative)
+	if !filepath.IsAbs(relative) {
+		absoluteCandidate = filepath.Join(base, relative)
+	}
+	canonicalCandidate, err := canonicalExistingPath(absoluteCandidate)
+	if err != nil {
+		return "", err
+	}
+	canonicalBase, err := filepath.EvalSymlinks(base)
+	if err != nil {
+		return "", err
+	}
+	if !pathWithinRoot(canonicalBase, canonicalCandidate) {
+		return "", fmt.Errorf("path is outside the project workspace")
+	}
+	return canonicalCandidate, nil
 }
 
 func (s *FilesystemScope) resolve(relative string) (string, error) {

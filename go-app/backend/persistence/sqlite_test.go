@@ -31,7 +31,7 @@ func TestFreshDatabaseInitializationIsRepeatable(t *testing.T) {
 	if foreignKeys != 1 {
 		t.Fatal("foreign keys were not enabled")
 	}
-	if migrations != 4 {
-		t.Fatalf("expected two migrations, got %d", migrations)
+	if migrations != 5 {
+		t.Fatalf("expected five migrations, got %d", migrations)
 	}
 }

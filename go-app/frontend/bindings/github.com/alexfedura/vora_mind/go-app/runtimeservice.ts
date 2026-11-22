@@ -17,6 +17,10 @@ export function CancelWorkflow(id: string): $CancellablePromise<capabilities$0.R
     return $Call.ByID(1924657930, id);
 }
 
+export function CreateCredential(name: string, permissionsJSON: string, projectIDsJSON: string): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByID(50484376, name, permissionsJSON, projectIDsJSON);
+}
+
 export function CreateProject(name: string, description: string): $CancellablePromise<capabilities$0.Result> {
     return $Call.ByID(273613534, name, description);
 }
@@ -53,6 +57,10 @@ export function ListCapabilities(): $CancellablePromise<capabilities$0.Result> {
     return $Call.ByID(4153048187);
 }
 
+export function ListCredentials(): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByID(361744589);
+}
+
 export function ListProjects(): $CancellablePromise<capabilities$0.Result> {
     return $Call.ByID(2436118723);
 }
@@ -63,6 +71,14 @@ export function ListWorkflows(): $CancellablePromise<capabilities$0.Result> {
 
 export function ResumeWorkflow(id: string): $CancellablePromise<capabilities$0.Result> {
     return $Call.ByID(272887395, id);
+}
+
+export function RevokeCredential(id: string): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByID(255389762, id);
+}
+
+export function RotateCredential(id: string): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByID(1344578399, id);
 }
 
 export function StartAPI(): $CancellablePromise<{ [_ in string]?: any } | null> {

@@ -20,7 +20,7 @@ func testRuntime(t *testing.T) *Runtime {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewRuntime(store, filesystem, "Vora Test", "0.26.8", "v3.1.0")
+	return NewRuntime(store, filesystem, "Vora Test", "0.26.9", "v3.1.0")
 }
 
 func TestProjectCRUDAndRepeatedInitialization(t *testing.T) {
@@ -91,7 +91,7 @@ func TestRestoreRebindKeepsRuntimeServicesUsable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := NewRuntime(store, filesystem, "Vora Test", "0.26.8", "v3.1.0")
+	runtime := NewRuntime(store, filesystem, "Vora Test", "0.26.9", "v3.1.0")
 	backupRoot := filepath.Join(root, "backups")
 	manager, err := persistence.NewBackupManager(store, backupRoot)
 	if err != nil {

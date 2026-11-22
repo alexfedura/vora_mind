@@ -452,6 +452,14 @@ func (r *Runtime) registerFilesystemCapabilities() {
 		Validate:    func(input map[string]interface{}) error { _, err := requiredString(input, "path", 1, 4096); return err },
 		Handler: func(input map[string]interface{}) (interface{}, error) {
 			path, _ := requiredString(input, "path", 1, 4096)
+			projectID, _ := optionalString(input, "projectId", 128)
+			if projectID != "" {
+				resolved, err := r.Filesystem.ResolveProject(projectID, path)
+				if err != nil {
+					return nil, err
+				}
+				path = resolved
+			}
 			entries, err := r.Filesystem.List(path)
 			if err != nil {
 				return nil, err

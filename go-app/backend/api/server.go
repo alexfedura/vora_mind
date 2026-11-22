@@ -184,6 +184,8 @@ func (s *Server) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/projects/", s.protected(s.projectRoute))
 	mux.HandleFunc("/api/v1/workflows", s.protected(s.workflowsRoute))
 	mux.HandleFunc("/api/v1/workflows/", s.protected(s.workflowRoute))
+	mux.HandleFunc("/api/v1/credentials", s.protected(s.credentialsRoute))
+	mux.HandleFunc("/api/v1/credentials/", s.protected(s.credentialRoute))
 }
 
 func methodNotAllowed(w http.ResponseWriter) {
@@ -332,6 +334,74 @@ func (s *Server) projectsRoute(w http.ResponseWriter, r *http.Request) {
 	default:
 		methodNotAllowed(w)
 	}
+}
+
+func (s *Server) credentialsRoute(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		credentials, err := s.credentials.List()
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, structuredError("CREDENTIAL_LIST_ERROR", "Could not list credentials", http.StatusInternalServerError))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"credentials": credentials})
+	case http.MethodPost:
+		input, ok := s.decodeJSON(w, r)
+		if !ok {
+			return
+		}
+		name, _ := input["name"].(string)
+		rawPermissions, _ := input["permissions"].([]interface{})
+		permissions := make([]security.Permission, 0, len(rawPermissions))
+		for _, raw := range rawPermissions {
+			if value, ok := raw.(string); ok {
+				permissions = append(permissions, security.Permission(value))
+			}
+		}
+		projectIDs := make([]string, 0)
+		if rawProjects, ok := input["projectIds"].([]interface{}); ok {
+			for _, raw := range rawProjects {
+				if value, ok := raw.(string); ok {
+					projectIDs = append(projectIDs, value)
+				}
+			}
+		}
+		credential, secret, err := s.credentials.GenerateNamed(name, permissions, projectIDs, nil)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, structuredError("CREDENTIAL_CREATE_ERROR", err.Error(), http.StatusBadRequest))
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]interface{}{"credential": credential, "secret": secret})
+	default:
+		methodNotAllowed(w)
+	}
+}
+
+func (s *Server) credentialRoute(w http.ResponseWriter, r *http.Request) {
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/credentials/"), "/")
+	parts := strings.Split(id, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		methodNotAllowed(w)
+		return
+	}
+	if len(parts) == 1 && r.Method == http.MethodDelete {
+		if err := s.credentials.Revoke(parts[0]); err != nil {
+			writeJSON(w, http.StatusBadRequest, structuredError("CREDENTIAL_REVOKE_ERROR", err.Error(), http.StatusBadRequest))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"status": "revoked"})
+		return
+	}
+	if len(parts) == 2 && parts[1] == "rotate" && r.Method == http.MethodPost {
+		credential, secret, err := s.credentials.Rotate(parts[0])
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, structuredError("CREDENTIAL_ROTATE_ERROR", err.Error(), http.StatusBadRequest))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"credential": credential, "secret": secret})
+		return
+	}
+	writeJSON(w, http.StatusNotFound, structuredError("NOT_FOUND", "Credential endpoint was not found", http.StatusNotFound))
 }
 
 func (s *Server) projectRoute(w http.ResponseWriter, r *http.Request) {

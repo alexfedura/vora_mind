@@ -14,6 +14,9 @@ function App() {
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(true);
   const [workflows,setWorkflows]=useState<Array<{id:string;name:string;status:string}>>([]);
+  const [credentials,setCredentials]=useState<Array<{id:string;name:string;status:string;permissions:string[];projectIds:string[];createdAt:string;lastUsedAt?:string}>>([]);
+  const [credentialName,setCredentialName]=useState("");
+  const [credentialSecret,setCredentialSecret]=useState("");
 
   const run=async(operation:()=>unknown,onSuccess?:()=>void)=>{
     setError("");
@@ -78,6 +81,46 @@ function App() {
 
   useEffect(()=>{void refreshWorkflows()},[]);
 
+  const refreshCredentials=async()=>{
+    const result=await run(()=>RuntimeService.ListCredentials() as unknown as PromiseLike<Result>);
+    if(result){
+      const data=result as unknown as {credentials?:typeof credentials};
+      setCredentials(data.credentials||[]);
+    }
+  };
+
+  useEffect(()=>{void refreshCredentials()},[]);
+
+  const createCredential=async()=>{
+    if(!credentialName.trim()){setError("Credential name is required.");return}
+    const result=await run(()=>RuntimeService.CreateCredential(
+      credentialName.trim(),
+      JSON.stringify(["project.read","capabilities.discover"]),
+      JSON.stringify([])
+    ) as unknown as PromiseLike<Result>);
+    if(result){
+      const data=result as unknown as {credential?:unknown;secret?:string};
+      setCredentialSecret(typeof data.secret==="string"?data.secret:"");
+      setCredentialName("");
+      await refreshCredentials();
+    }
+  };
+
+  const revokeCredential=async(id:string)=>{
+    if(!window.confirm("Revoke this credential? This action cannot be undone."))return;
+    await run(()=>RuntimeService.RevokeCredential(id) as unknown as PromiseLike<Result>,()=>void refreshCredentials());
+  };
+
+  const rotateCredential=async(id:string)=>{
+    if(!window.confirm("Rotate this credential? The old secret will stop working immediately."))return;
+    const result=await run(()=>RuntimeService.RotateCredential(id) as unknown as PromiseLike<Result>);
+    if(result){
+      const data=result as unknown as {secret?:string};
+      setCredentialSecret(typeof data.secret==="string"?data.secret:"");
+      await refreshCredentials();
+    }
+  };
+
   return (
     <main className="vora-foundation">
       <header><h1>Vora Mind</h1><p>Go/Wails capability runtime</p></header>
@@ -124,6 +167,36 @@ function App() {
               <button onClick={()=>void run(()=>RuntimeService.StartWorkflow(workflow.id),()=>void refreshWorkflows())}>Start</button>{" "}
               <button onClick={()=>void run(()=>RuntimeService.CancelWorkflow(workflow.id),()=>void refreshWorkflows())}>Cancel</button>{" "}
               <button onClick={()=>void run(()=>RuntimeService.ResumeWorkflow(workflow.id),()=>void refreshWorkflows())}>Resume</button>
+            </li>
+          ))}</ul>
+        )}
+      </section>
+      <section>
+        <h2>Credential Management</h2>
+        <div>
+          <input aria-label="Credential name" value={credentialName} onChange={event=>setCredentialName(event.target.value)} placeholder="Credential name"/>
+          <button onClick={()=>void createCredential()} disabled={!credentialName.trim()}>Create</button>
+        </div>
+        {credentialSecret&&(
+          <div role="alert">
+            <strong>One-time secret</strong>
+            <pre>{credentialSecret}</pre>
+            <button onClick={async()=>{
+              await navigator.clipboard.writeText(credentialSecret);
+              setError("");
+            }}>Copy secret</button>{" "}
+            <button onClick={()=>setCredentialSecret("")}>Dismiss</button>
+          </div>
+        )}
+        {credentials.length===0?<p>No credentials yet.</p>:(
+          <ul>{credentials.map(credential=>(
+            <li key={credential.id}>
+              <strong>{credential.name}</strong> — {credential.status}<br/>
+              <small>Created: {credential.createdAt} | Last used: {credential.lastUsedAt||"never"} | Permissions: {credential.permissions.join(", ")}</small><br/>
+              {credential.status==="active"&&<>
+                <button onClick={()=>void rotateCredential(credential.id)}>Rotate</button>{" "}
+                <button onClick={()=>void revokeCredential(credential.id)}>Revoke</button>
+              </>}
             </li>
           ))}</ul>
         )}
