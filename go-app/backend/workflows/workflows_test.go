@@ -130,3 +130,81 @@ func TestWorkflowInterruptedUnknownStepRequiresApproval(t *testing.T) {
 		t.Fatalf("uncertain recovery status=%v", recovered)
 	}
 }
+
+func TestWorkflowApprovalRejectsParameterSubstitution(t *testing.T) {
+	store, err := persistence.Open(t.TempDir() + "/approval-substitution.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	engine := NewEngine(store.DB, testExecutor{})
+	workflow, err := engine.Create("Approval", "", "", "tester", capabilities.OriginHuman, []map[string]interface{}{
+		{"capabilityId": "filesystem.delete", "input": map[string]interface{}{"path": "approved.txt"}, "approvalRequired": true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waiting, err := engine.Start(workflow.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if waiting.Status != AwaitingApproval {
+		t.Fatalf("expected approval wait, got %s", waiting.Status)
+	}
+	approved, err := engine.ApproveStep(workflow.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if approved.Status == AwaitingApproval {
+		t.Fatal("approval should initially be accepted")
+	}
+	if _, err := store.DB.Exec(`UPDATE workflow_steps SET input_json=? WHERE workflow_id=?`,
+		`{"path":"changed.txt"}`, workflow.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB.Exec(`UPDATE workflows SET status=?,approval_state=?,current_step=? WHERE id=?`,
+		Pending, "approved", 0, workflow.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB.Exec(`UPDATE workflow_steps SET status=?,approval_status=? WHERE workflow_id=?`,
+		Draft, "approved", workflow.ID); err != nil {
+		t.Fatal(err)
+	}
+	var status, approvalStatus, inputJSON string
+	if err := store.DB.QueryRow(`SELECT status,approval_status,input_json FROM workflow_steps WHERE workflow_id=?`, workflow.ID).
+		Scan(&status, &approvalStatus, &inputJSON); err != nil {
+		t.Fatal(err)
+	}
+	if status != string(Draft) || approvalStatus != "approved" || inputJSON != `{"path":"changed.txt"}` {
+		t.Fatalf("unexpected substituted approval state: status=%q approval=%q input=%s", status, approvalStatus, inputJSON)
+	}
+	var workflowStatus, workflowApprovalState string
+	if err := store.DB.QueryRow(`SELECT status,approval_state FROM workflows WHERE id=?`, workflow.ID).
+		Scan(&workflowStatus, &workflowApprovalState); err != nil {
+		t.Fatal(err)
+	}
+	if workflowStatus != string(Pending) || workflowApprovalState != "approved" {
+		t.Fatalf("unexpected workflow approval state: status=%q approval=%q", workflowStatus, workflowApprovalState)
+	}
+	reloaded, err := engine.Get(workflow.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Status != Pending || reloaded.Steps[0].ApprovalStatus != "approved" {
+		t.Fatalf("unexpected reloaded state: status=%s approval=%s", reloaded.Status, reloaded.Steps[0].ApprovalStatus)
+	}
+	changedFingerprint, err := approvalFingerprint(reloaded.Steps[0].CapabilityID, reloaded.Steps[0].Input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Steps[0].ApprovalFingerprint == changedFingerprint {
+		t.Fatalf("test setup unexpectedly retained changed approval fingerprint")
+	}
+	changed, err := engine.Start(workflow.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed.Status != AwaitingApproval {
+		t.Fatalf("changed parameters must require fresh approval, got %s", changed.Status)
+	}
+}

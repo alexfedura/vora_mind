@@ -13,3 +13,18 @@ test("Wails operational UI contains restore confirmation and one-time secret han
   assert.match(source, /Validate the backup before restore/);
   assert.doesNotMatch(source, /localStorage|sessionStorage/);
 });
+
+test("Phase 3.7 UI exposes project delete confirmation", () => {
+  const source = readFileSync(new URL("../go-app/frontend/src/App.tsx", import.meta.url), "utf8");
+  assert.match(source, /Delete project/);
+  assert.match(source, /Workspace files will be preserved/);
+  assert.match(source, /RuntimeService\.DeleteProject/);
+});
+
+test("Phase 3.7 Wails delete binding executes explicit human approval", () => {
+  const source = readFileSync(new URL("../go-app/runtime_service.go", import.meta.url), "utf8");
+  assert.match(source, /ExecuteWithContext/);
+  assert.match(source, /OriginHuman/);
+  assert.match(source, /Approved:\s*true/);
+  assert.match(source, /ProjectScope:\s*id/);
+});

@@ -64,6 +64,15 @@ function App() {
     await run(()=>RuntimeService.UpdateProject(selected.id,selected.name,selected.description),()=>void refresh());
   };
 
+  const deleteProject=async()=>{
+    if(!selected)return;
+    if(!window.confirm("Delete this project metadata? Workspace files will be preserved."))return;
+    await run(()=>RuntimeService.DeleteProject(selected.id) as unknown as PromiseLike<Result>,()=>{
+      setSelected(null);
+      void refresh();
+    });
+  };
+
   const startAPI=async()=>{
     const status=await run(async()=>await RuntimeService.StartAPI() as unknown as Result);
     if(status){setAPIStatus(status as unknown as {running?:boolean;address?:string;authentication?:string})}
@@ -188,6 +197,7 @@ function App() {
             <input aria-label="Selected project name" value={selected.name} onChange={event=>setSelected({...selected,name:event.target.value})}/>
             <input aria-label="Selected project description" value={selected.description} onChange={event=>setSelected({...selected,description:event.target.value})}/>
             <button onClick={()=>void updateProject()}>Update</button>
+            <button onClick={()=>void deleteProject()}>Delete project</button>
           </div>
         )}
       </section>

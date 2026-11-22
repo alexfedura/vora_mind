@@ -78,6 +78,19 @@ func (s *RuntimeService) UpdateProject(id, name, description string) capabilitie
 	return s.Execute("project.update", map[string]interface{}{"id": id, "name": name, "description": description}, string(capabilities.OriginHuman))
 }
 
+func (s *RuntimeService) DeleteProject(id string) capabilities.Result {
+	input := map[string]interface{}{"id": id}
+	context := capabilities.ExecutionContext{
+		Origin:        capabilities.OriginHuman,
+		Principal:     capabilities.Principal{ID: "wails_human", Type: "human"},
+		Permissions:   []security.Permission{security.ProjectWrite, security.ProjectRead},
+		ProjectScope:  id,
+		CorrelationID: "wails_project_delete_" + id,
+		Approved:      true,
+	}
+	return s.runtime.ExecuteWithContext(context, "project.delete", input)
+}
+
 func (s *RuntimeService) GetAPIStatus() map[string]interface{} {
 	if s.apiServer == nil {
 		return map[string]interface{}{"running": false, "address": "", "authentication": "not configured"}

@@ -159,6 +159,9 @@ CREATE TABLE IF NOT EXISTS project_filesystem_roots (
 );
 CREATE INDEX IF NOT EXISTS idx_project_filesystem_roots_root ON project_filesystem_roots(workspace_root);
 `},
+	{7, `
+ALTER TABLE workflow_steps ADD COLUMN approval_fingerprint TEXT NOT NULL DEFAULT '';
+`},
 }
 
 func Open(databasePath string) (*Store, error) {

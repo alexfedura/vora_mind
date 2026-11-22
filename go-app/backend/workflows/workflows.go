@@ -1,7 +1,9 @@
 package workflows
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -24,24 +26,25 @@ const (
 )
 
 type Step struct {
-	ID               string                        `json:"id"`
-	WorkflowID       string                        `json:"workflowId"`
-	Index            int                           `json:"index"`
-	CapabilityID     string                        `json:"capabilityId"`
-	Input            map[string]interface{}        `json:"input"`
-	Status           Status                        `json:"status"`
-	ExecutionID      string                        `json:"executionId,omitempty"`
-	Result           interface{}                   `json:"result,omitempty"`
-	Error            *capabilities.StructuredError `json:"error,omitempty"`
-	RetryCount       int                           `json:"retryCount"`
-	MaxRetries       int                           `json:"maxRetries"`
-	ApprovalRequired bool                          `json:"approvalRequired"`
-	ApprovalStatus   string                        `json:"approvalStatus"`
-	StartedAt        *time.Time                    `json:"startedAt,omitempty"`
-	EndedAt          *time.Time                    `json:"endedAt,omitempty"`
-	ExecutionPolicy  string                        `json:"executionPolicy"`
-	IdempotencyKey   string                        `json:"idempotencyKey"`
-	RecoveryState    string                        `json:"recoveryState"`
+	ID                  string                        `json:"id"`
+	WorkflowID          string                        `json:"workflowId"`
+	Index               int                           `json:"index"`
+	CapabilityID        string                        `json:"capabilityId"`
+	Input               map[string]interface{}        `json:"input"`
+	Status              Status                        `json:"status"`
+	ExecutionID         string                        `json:"executionId,omitempty"`
+	Result              interface{}                   `json:"result,omitempty"`
+	Error               *capabilities.StructuredError `json:"error,omitempty"`
+	RetryCount          int                           `json:"retryCount"`
+	MaxRetries          int                           `json:"maxRetries"`
+	ApprovalRequired    bool                          `json:"approvalRequired"`
+	ApprovalStatus      string                        `json:"approvalStatus"`
+	StartedAt           *time.Time                    `json:"startedAt,omitempty"`
+	EndedAt             *time.Time                    `json:"endedAt,omitempty"`
+	ExecutionPolicy     string                        `json:"executionPolicy"`
+	IdempotencyKey      string                        `json:"idempotencyKey"`
+	RecoveryState       string                        `json:"recoveryState"`
+	ApprovalFingerprint string                        `json:"approvalFingerprint,omitempty"`
 }
 
 type RecoveryState string
@@ -77,6 +80,15 @@ type Executor interface {
 type Engine struct {
 	DB       *sql.DB
 	Executor Executor
+}
+
+func approvalFingerprint(capabilityID string, input map[string]interface{}) (string, error) {
+	payload, err := json.Marshal(map[string]interface{}{"capabilityId": capabilityID, "input": input})
+	if err != nil {
+		return "", err
+	}
+	hash := sha256.Sum256(payload)
+	return hex.EncodeToString(hash[:]), nil
 }
 
 func NewEngine(db *sql.DB, executor Executor) *Engine {
@@ -219,7 +231,7 @@ func (e *Engine) Get(id string) (Workflow, error) {
 
 func (e *Engine) listSteps(id string) ([]Step, error) {
 	rows, err := e.DB.Query(`
-		SELECT id,step_index,capability_id,input_json,status,execution_id,result_json,error_json,retry_count,max_retries,approval_required,approval_status,started_at,ended_at,execution_policy,idempotency_key,recovery_state
+		SELECT id,step_index,capability_id,input_json,status,execution_id,result_json,error_json,retry_count,max_retries,approval_required,approval_status,started_at,ended_at,execution_policy,idempotency_key,recovery_state,approval_fingerprint
 		FROM workflow_steps WHERE workflow_id=? ORDER BY step_index`, id)
 	if err != nil {
 		return nil, err
@@ -232,7 +244,7 @@ func (e *Engine) listSteps(id string) ([]Step, error) {
 		var executionID string
 		var approvalRequired int
 		var started, ended sql.NullString
-		if err := rows.Scan(&step.ID, &step.Index, &step.CapabilityID, &inputJSON, &status, &executionID, &resultJSON, &errorJSON, &step.RetryCount, &step.MaxRetries, &approvalRequired, &approvalStatus, &started, &ended, &step.ExecutionPolicy, &step.IdempotencyKey, &step.RecoveryState); err != nil {
+		if err := rows.Scan(&step.ID, &step.Index, &step.CapabilityID, &inputJSON, &status, &executionID, &resultJSON, &errorJSON, &step.RetryCount, &step.MaxRetries, &approvalRequired, &approvalStatus, &started, &ended, &step.ExecutionPolicy, &step.IdempotencyKey, &step.RecoveryState, &step.ApprovalFingerprint); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(inputJSON), &step.Input)
@@ -291,6 +303,21 @@ func (e *Engine) Start(id string) (Workflow, error) {
 	if err != nil {
 		return Workflow{}, err
 	}
+	for workflow.CurrentStep < len(workflow.Steps) {
+		step := workflow.Steps[workflow.CurrentStep]
+		if step.ApprovalRequired && step.ApprovalStatus == "approved" {
+			currentFingerprint, err := approvalFingerprint(step.CapabilityID, step.Input)
+			if err != nil {
+				return Workflow{}, err
+			}
+			if step.ApprovalFingerprint == "" || step.ApprovalFingerprint != currentFingerprint {
+				_, _ = e.DB.Exec(`UPDATE workflow_steps SET approval_status=?,status=?,approval_fingerprint=? WHERE id=?`, "pending", AwaitingApproval, "", step.ID)
+				_, _ = e.DB.Exec(`UPDATE workflows SET status=?,approval_state=?,updated_at=? WHERE id=?`, AwaitingApproval, "pending", time.Now().UTC().Format(time.RFC3339Nano), id)
+				return e.Get(id)
+			}
+		}
+		break
+	}
 	if workflow.Status == Cancelled || workflow.Status == Succeeded {
 		return workflow, nil
 	}
@@ -309,6 +336,17 @@ func (e *Engine) Start(id string) (Workflow, error) {
 			_, _ = e.DB.Exec(`UPDATE workflows SET status=?,approval_state=?,updated_at=? WHERE id=?`, AwaitingApproval, "pending", time.Now().UTC().Format(time.RFC3339Nano), id)
 			_, _ = e.DB.Exec(`UPDATE workflow_steps SET status=? WHERE id=?`, AwaitingApproval, step.ID)
 			return e.Get(id)
+		}
+		if step.ApprovalRequired && step.ApprovalStatus == "approved" {
+			currentFingerprint, err := approvalFingerprint(step.CapabilityID, step.Input)
+			if err != nil {
+				return Workflow{}, err
+			}
+			if step.ApprovalFingerprint == "" || step.ApprovalFingerprint != currentFingerprint {
+				_, _ = e.DB.Exec(`UPDATE workflow_steps SET approval_status=?,status=?,approval_fingerprint=? WHERE id=?`, "pending", AwaitingApproval, "", step.ID)
+				_, _ = e.DB.Exec(`UPDATE workflows SET status=?,approval_state=?,updated_at=? WHERE id=?`, AwaitingApproval, "pending", time.Now().UTC().Format(time.RFC3339Nano), id)
+				return e.Get(id)
+			}
 		}
 		now := time.Now().UTC()
 		_, _ = e.DB.Exec(`UPDATE workflow_steps SET status=?,started_at=? WHERE id=?`, Running, now.Format(time.RFC3339Nano), step.ID)
@@ -457,10 +495,16 @@ func (e *Engine) ApproveStep(id string, approved bool) (Workflow, error) {
 	}
 	step := workflow.Steps[workflow.CurrentStep]
 	status := "rejected"
+	fingerprint := ""
 	if approved {
 		status = "approved"
+		var err error
+		fingerprint, err = approvalFingerprint(step.CapabilityID, step.Input)
+		if err != nil {
+			return Workflow{}, err
+		}
 	}
-	_, err = e.DB.Exec(`UPDATE workflow_steps SET approval_status=?,status=? WHERE id=?`, status, Draft, step.ID)
+	_, err = e.DB.Exec(`UPDATE workflow_steps SET approval_status=?,status=?,approval_fingerprint=? WHERE id=?`, status, Draft, fingerprint, step.ID)
 	if err != nil {
 		return Workflow{}, err
 	}

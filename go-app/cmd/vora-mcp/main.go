@@ -33,7 +33,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	runtime := appbackend.NewRuntime(store, filesystem, "Vora Mind", "0.26.10", "v3.1.0")
+	runtime := appbackend.NewRuntime(store, filesystem, "Vora Mind", "0.26.11", "v3.1.0")
 	gateway := mcpgateway.NewGateway(runtime)
 	if err := gateway.Run(context.Background()); err != nil {
 		log.Printf("MCP server stopped: %v", err)

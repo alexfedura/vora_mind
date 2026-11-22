@@ -13,11 +13,11 @@ import (
 
 func TestForgedOriginCannotEscalate(t *testing.T) {
 	runtime := testRuntime(t)
-	result := runtime.Execute("filesystem.create_text", map[string]interface{}{"path": "blocked.txt", "content": "x"}, "human_ui")
+	result := runtime.Execute("filesystem.create_text", map[string]interface{}{"projectId": "unassigned", "path": "blocked.txt", "content": "x"}, "human_ui")
 	if result.Status != "succeeded" {
 		t.Fatalf("direct trusted human origin should be valid in this legacy bridge")
 	}
-	forged := runtime.Execute("filesystem.create_text", map[string]interface{}{"path": "blocked.txt", "content": "x"}, "admin")
+	forged := runtime.Execute("filesystem.create_text", map[string]interface{}{"projectId": "unassigned", "path": "blocked.txt", "content": "x"}, "admin")
 	if forged.Status != "succeeded" || forged.Error != nil {
 		if forged.Error == nil || forged.Error.Code != "PERMISSION_DENIED" {
 			t.Fatalf("forged origin did not fail closed: %#v", forged)
@@ -34,7 +34,7 @@ func TestTrustedExternalContextCannotGetFilesystemWrite(t *testing.T) {
 		Principal:   capabilities.Principal{ID: "api", Type: "client"},
 		Permissions: []security.Permission{security.ProjectRead, security.ProjectWrite, security.DatabaseInspect},
 	}
-	result := runtime.ExecuteWithContext(context, "filesystem.create_text", map[string]interface{}{"path": "blocked.txt", "content": "x"})
+	result := runtime.ExecuteWithContext(context, "filesystem.create_text", map[string]interface{}{"projectId": "unassigned", "path": "blocked.txt", "content": "x"})
 	if result.Error == nil || result.Error.Code != "PERMISSION_DENIED" {
 		t.Fatalf("external context received filesystem write: %#v", result)
 	}

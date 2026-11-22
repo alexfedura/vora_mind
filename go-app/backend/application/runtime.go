@@ -236,6 +236,14 @@ func (r *Runtime) recoverProjectRoots() {
 	}
 }
 
+func (r *Runtime) resolveFilesystemProject(input map[string]interface{}, path string) (string, error) {
+	projectID, err := requiredString(input, "projectId", 1, 128)
+	if err != nil {
+		return "", fmt.Errorf("projectId is required; use unassigned for an explicit unassigned scope")
+	}
+	return r.Filesystem.ResolveProject(projectID, path)
+}
+
 func newID(prefix string) string {
 	bytes := make([]byte, 16)
 	_, _ = rand.Read(bytes)
@@ -516,19 +524,16 @@ func (r *Runtime) registerFilesystemCapabilities() {
 	r.mustRegister(capabilities.Descriptor{
 		ID: "filesystem.list", Version: "1.0.0", Name: "List filesystem entries",
 		Description: "Lists entries inside configured allowed scopes.",
-		InputSchema: capabilities.JSONObjectSchema([]string{"path"}, map[string]interface{}{"path": capabilities.JSONStringSchema("Relative or allowed absolute path")}),
+		InputSchema: capabilities.JSONObjectSchema([]string{"projectId", "path"}, map[string]interface{}{"projectId": capabilities.JSONStringSchema("Project ID or unassigned"), "path": capabilities.JSONStringSchema("Relative or allowed absolute path")}),
 		Permissions: []security.Permission{security.FilesystemRead},
 		Validate:    func(input map[string]interface{}) error { _, err := requiredString(input, "path", 1, 4096); return err },
 		Handler: func(input map[string]interface{}) (interface{}, error) {
 			path, _ := requiredString(input, "path", 1, 4096)
-			projectID, _ := optionalString(input, "projectId", 128)
-			if projectID != "" {
-				resolved, err := r.Filesystem.ResolveProject(projectID, path)
-				if err != nil {
-					return nil, err
-				}
-				path = resolved
+			resolved, err := r.resolveFilesystemProject(input, path)
+			if err != nil {
+				return nil, err
 			}
+			path = resolved
 			entries, err := r.Filesystem.List(path)
 			if err != nil {
 				return nil, err
@@ -539,31 +544,40 @@ func (r *Runtime) registerFilesystemCapabilities() {
 	r.mustRegister(capabilities.Descriptor{
 		ID: "filesystem.stat", Version: "1.0.0", Name: "Inspect filesystem entry",
 		Description: "Returns metadata for an entry inside allowed scopes.",
-		InputSchema: capabilities.JSONObjectSchema([]string{"path"}, map[string]interface{}{"path": capabilities.JSONStringSchema("Relative or allowed absolute path")}),
+		InputSchema: capabilities.JSONObjectSchema([]string{"projectId", "path"}, map[string]interface{}{"projectId": capabilities.JSONStringSchema("Project ID or unassigned"), "path": capabilities.JSONStringSchema("Relative or allowed absolute path")}),
 		Permissions: []security.Permission{security.FilesystemRead},
 		Validate:    func(input map[string]interface{}) error { _, err := requiredString(input, "path", 1, 4096); return err },
 		Handler: func(input map[string]interface{}) (interface{}, error) {
 			path, _ := requiredString(input, "path", 1, 4096)
-			return r.Filesystem.Stat(path)
+			resolved, err := r.resolveFilesystemProject(input, path)
+			if err != nil {
+				return nil, err
+			}
+			return r.Filesystem.Stat(resolved)
 		},
 	})
 	r.mustRegister(capabilities.Descriptor{
 		ID: "filesystem.read_text", Version: "1.0.0", Name: "Read text file",
 		Description: "Reads a UTF-8 text file inside allowed scopes.",
-		InputSchema: capabilities.JSONObjectSchema([]string{"path"}, map[string]interface{}{"path": capabilities.JSONStringSchema("Relative or allowed absolute path")}),
+		InputSchema: capabilities.JSONObjectSchema([]string{"projectId", "path"}, map[string]interface{}{"projectId": capabilities.JSONStringSchema("Project ID or unassigned"), "path": capabilities.JSONStringSchema("Relative or allowed absolute path")}),
 		Permissions: []security.Permission{security.FilesystemRead},
 		Validate:    func(input map[string]interface{}) error { _, err := requiredString(input, "path", 1, 4096); return err },
 		Handler: func(input map[string]interface{}) (interface{}, error) {
 			path, _ := requiredString(input, "path", 1, 4096)
-			return r.Filesystem.ReadText(path)
+			resolved, err := r.resolveFilesystemProject(input, path)
+			if err != nil {
+				return nil, err
+			}
+			return r.Filesystem.ReadText(resolved)
 		},
 	})
 	r.mustRegister(capabilities.Descriptor{
 		ID: "filesystem.create_text", Version: "1.0.0", Name: "Create text file",
 		Description: "Creates or replaces a text file inside allowed scopes.",
-		InputSchema: capabilities.JSONObjectSchema([]string{"path", "content"}, map[string]interface{}{
-			"path":    capabilities.JSONStringSchema("Relative or allowed absolute path"),
-			"content": capabilities.JSONStringSchema("UTF-8 text content"),
+		InputSchema: capabilities.JSONObjectSchema([]string{"projectId", "path", "content"}, map[string]interface{}{
+			"projectId": capabilities.JSONStringSchema("Project ID or unassigned"),
+			"path":      capabilities.JSONStringSchema("Relative or allowed absolute path"),
+			"content":   capabilities.JSONStringSchema("UTF-8 text content"),
 		}),
 		Permissions: []security.Permission{security.FilesystemWrite},
 		Validate: func(input map[string]interface{}) error {
@@ -579,7 +593,11 @@ func (r *Runtime) registerFilesystemCapabilities() {
 		Handler: func(input map[string]interface{}) (interface{}, error) {
 			path, _ := requiredString(input, "path", 1, 4096)
 			content, _ := input["content"].(string)
-			return r.Filesystem.CreateText(path, content)
+			resolved, err := r.resolveFilesystemProject(input, path)
+			if err != nil {
+				return nil, err
+			}
+			return r.Filesystem.CreateText(resolved, content)
 		},
 	})
 	r.registerFilesystemAction("filesystem.edit_text", "Edit a text file inside allowed scopes.", "edit")
@@ -594,6 +612,7 @@ func (r *Runtime) registerFilesystemAction(id, description, operation string) {
 	r.mustRegister(capabilities.Descriptor{
 		ID: id, Version: "1.0.0", Name: id, Description: description,
 		InputSchema: capabilities.JSONObjectSchema(nil, map[string]interface{}{
+			"projectId":   capabilities.JSONStringSchema("Project ID or unassigned"),
 			"path":        capabilities.JSONStringSchema("Source path"),
 			"source":      capabilities.JSONStringSchema("Source path"),
 			"destination": capabilities.JSONStringSchema("Destination path"),
@@ -625,22 +644,54 @@ func (r *Runtime) registerFilesystemAction(id, description, operation string) {
 			case "edit":
 				path, _ := requiredString(input, "path", 1, 4096)
 				content, _ := input["content"].(string)
-				return r.Filesystem.CreateText(path, content)
+				resolved, err := r.resolveFilesystemProject(input, path)
+				if err != nil {
+					return nil, err
+				}
+				return r.Filesystem.CreateText(resolved, content)
 			case "rename":
 				source, _ := requiredString(input, "source", 1, 4096)
 				destination, _ := requiredString(input, "destination", 1, 4096)
-				return r.Filesystem.Rename(source, destination)
+				resolvedSource, err := r.resolveFilesystemProject(input, source)
+				if err != nil {
+					return nil, err
+				}
+				resolvedDestination, err := r.resolveFilesystemProject(input, destination)
+				if err != nil {
+					return nil, err
+				}
+				return r.Filesystem.Rename(resolvedSource, resolvedDestination)
 			case "copy":
 				source, _ := requiredString(input, "source", 1, 4096)
 				destination, _ := requiredString(input, "destination", 1, 4096)
-				return r.Filesystem.Copy(source, destination)
+				resolvedSource, err := r.resolveFilesystemProject(input, source)
+				if err != nil {
+					return nil, err
+				}
+				resolvedDestination, err := r.resolveFilesystemProject(input, destination)
+				if err != nil {
+					return nil, err
+				}
+				return r.Filesystem.Copy(resolvedSource, resolvedDestination)
 			case "move":
 				source, _ := requiredString(input, "source", 1, 4096)
 				destination, _ := requiredString(input, "destination", 1, 4096)
-				return r.Filesystem.Move(source, destination)
+				resolvedSource, err := r.resolveFilesystemProject(input, source)
+				if err != nil {
+					return nil, err
+				}
+				resolvedDestination, err := r.resolveFilesystemProject(input, destination)
+				if err != nil {
+					return nil, err
+				}
+				return r.Filesystem.Move(resolvedSource, resolvedDestination)
 			case "delete":
 				path, _ := requiredString(input, "path", 1, 4096)
-				return r.Filesystem.Delete(path)
+				resolved, err := r.resolveFilesystemProject(input, path)
+				if err != nil {
+					return nil, err
+				}
+				return r.Filesystem.Delete(resolved)
 			default:
 				return nil, fmt.Errorf("unsupported filesystem operation")
 			}

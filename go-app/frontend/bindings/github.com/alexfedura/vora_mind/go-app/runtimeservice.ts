@@ -33,6 +33,10 @@ export function CreateWorkflow(name: string, description: string, projectScope: 
     return $Call.ByID(4069827144, name, description, projectScope, stepsJSON);
 }
 
+export function DeleteProject(id: string): $CancellablePromise<capabilities$0.Result> {
+    return $Call.ByID(1399108355, id);
+}
+
 export function Execute(capabilityID: string, input: { [_ in string]?: any } | null, origin: string): $CancellablePromise<capabilities$0.Result> {
     return $Call.ByID(2327284800, capabilityID, input, origin);
 }
