@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 
 	"github.com/alexfedura/vora_mind/go-app/backend/application"
 	"github.com/alexfedura/vora_mind/go-app/backend/capabilities"
@@ -14,6 +15,7 @@ import (
 type RuntimeService struct {
 	runtime   *application.Runtime
 	store     *persistence.Store
+	backups   *persistence.BackupManager
 	apiServer interface {
 		Address() string
 		Running() bool
@@ -25,7 +27,12 @@ type RuntimeService struct {
 }
 
 func NewRuntimeService(runtime *application.Runtime, store *persistence.Store) *RuntimeService {
-	return &RuntimeService{runtime: runtime, store: store, credentials: security.NewCredentialManager(store.DB)}
+	service := &RuntimeService{runtime: runtime, store: store, credentials: security.NewCredentialManager(store.DB)}
+	backupRoot := filepath.Join(filepath.Dir(store.Database), "backups")
+	if manager, err := persistence.NewBackupManager(store, backupRoot); err == nil {
+		service.backups = manager
+	}
+	return service
 }
 
 func (s *RuntimeService) ServiceStartup(ctx context.Context, options wailsapp.ServiceOptions) error {
@@ -166,6 +173,50 @@ func (s *RuntimeService) RotateCredential(id string) map[string]interface{} {
 		return map[string]interface{}{"status": "failed", "error": err.Error()}
 	}
 	return map[string]interface{}{"status": "succeeded", "credential": credential, "secret": secret}
+}
+
+func (s *RuntimeService) ListBackups() map[string]interface{} {
+	if s.backups == nil {
+		return map[string]interface{}{"status": "failed", "error": "backup manager is unavailable"}
+	}
+	backups, err := s.backups.List()
+	if err != nil {
+		return map[string]interface{}{"status": "failed", "error": "could not list backups"}
+	}
+	return map[string]interface{}{"status": "succeeded", "backups": backups}
+}
+
+func (s *RuntimeService) CreateBackup() map[string]interface{} {
+	if s.backups == nil {
+		return map[string]interface{}{"status": "failed", "error": "backup manager is unavailable"}
+	}
+	record, err := s.backups.Create()
+	if err != nil {
+		return map[string]interface{}{"status": "failed", "error": err.Error()}
+	}
+	return map[string]interface{}{"status": "succeeded", "backup": record}
+}
+
+func (s *RuntimeService) ValidateBackup(path string) map[string]interface{} {
+	if s.backups == nil {
+		return map[string]interface{}{"status": "failed", "error": "backup manager is unavailable"}
+	}
+	valid, err := s.backups.PreflightRestore(path)
+	if err != nil {
+		return map[string]interface{}{"status": "failed", "valid": false, "error": err.Error()}
+	}
+	return map[string]interface{}{"status": "succeeded", "valid": valid}
+}
+
+func (s *RuntimeService) RestoreBackup(path string) map[string]interface{} {
+	if s.backups == nil {
+		return map[string]interface{}{"status": "failed", "error": "backup manager is unavailable"}
+	}
+	restored, err := s.backups.Restore(path)
+	if err != nil {
+		return map[string]interface{}{"status": "failed", "error": err.Error()}
+	}
+	return map[string]interface{}{"status": "succeeded", "restored": restored}
 }
 
 func (s *RuntimeService) CreateWorkflow(name, description, projectScope string, stepsJSON string) capabilities.Result {

@@ -149,6 +149,16 @@ ALTER TABLE api_credentials ADD COLUMN project_ids_json TEXT NOT NULL DEFAULT '[
 ALTER TABLE api_credentials ADD COLUMN expires_at TEXT;
 ALTER TABLE api_credentials ADD COLUMN protection_provider TEXT NOT NULL DEFAULT '';
 `},
+	{6, `
+CREATE TABLE IF NOT EXISTS project_filesystem_roots (
+ project_id TEXT PRIMARY KEY,
+ workspace_root TEXT NOT NULL,
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL,
+ FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_project_filesystem_roots_root ON project_filesystem_roots(workspace_root);
+`},
 }
 
 func Open(databasePath string) (*Store, error) {

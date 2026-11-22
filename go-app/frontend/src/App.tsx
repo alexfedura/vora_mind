@@ -17,6 +17,9 @@ function App() {
   const [credentials,setCredentials]=useState<Array<{id:string;name:string;status:string;permissions:string[];projectIds:string[];createdAt:string;lastUsedAt?:string}>>([]);
   const [credentialName,setCredentialName]=useState("");
   const [credentialSecret,setCredentialSecret]=useState("");
+  const [backups,setBackups]=useState<Array<{path:string;size:number;createdAt:string;valid:boolean}>>([]);
+  const [selectedBackup,setSelectedBackup]=useState("");
+  const [restoreValidation,setRestoreValidation]=useState("");
 
   const run=async(operation:()=>unknown,onSuccess?:()=>void)=>{
     setError("");
@@ -121,6 +124,42 @@ function App() {
     }
   };
 
+  const refreshBackups=async()=>{
+    const result=await run(()=>RuntimeService.ListBackups() as unknown as PromiseLike<Result>);
+    if(result){
+      const data=result as unknown as {backups?:typeof backups};
+      setBackups(data.backups||[]);
+    }
+  };
+
+  useEffect(()=>{void refreshBackups()},[]);
+
+  const createBackup=async()=>{
+    await run(()=>RuntimeService.CreateBackup() as unknown as PromiseLike<Result>,()=>void refreshBackups());
+  };
+
+  const validateBackup=async(path:string)=>{
+    setSelectedBackup(path);
+    setRestoreValidation("");
+    const result=await run(()=>RuntimeService.ValidateBackup(path) as unknown as PromiseLike<Result>);
+    if(result){
+      const data=result as unknown as {valid?:boolean};
+      setRestoreValidation(data.valid?"Valid backup":"Validation failed");
+    }
+  };
+
+  const restoreBackup=async()=>{
+    if(!selectedBackup){setError("Select a backup first.");return}
+    if(restoreValidation!=="Valid backup"){setError("Validate the backup before restore.");return}
+    if(!window.confirm("Restore this database backup? The live database will be replaced and a recovery copy will be preserved."))return;
+    await run(()=>RuntimeService.RestoreBackup(selectedBackup) as unknown as PromiseLike<Result>,()=>{
+      setRestoreValidation("Restore completed");
+      void refresh();
+      void refreshWorkflows();
+      void refreshBackups();
+    });
+  };
+
   return (
     <main className="vora-foundation">
       <header><h1>Vora Mind</h1><p>Go/Wails capability runtime</p></header>
@@ -200,6 +239,21 @@ function App() {
             </li>
           ))}</ul>
         )}
+      </section>
+      <section>
+        <h2>Backup and Restore</h2>
+        <button onClick={()=>void createBackup()}>Create backup</button>
+        {backups.length===0?<p>No backups yet.</p>:(
+          <ul>{backups.map(backup=>(
+            <li key={backup.path}>
+              <button onClick={()=>void validateBackup(backup.path)}>{backup.path}</button>
+              <small> {backup.valid?"valid":"invalid"} — {backup.createdAt}</small>
+            </li>
+          ))}</ul>
+        )}
+        {selectedBackup&&<p>Selected: {selectedBackup}</p>}
+        {restoreValidation&&<p>{restoreValidation}</p>}
+        <button onClick={()=>void restoreBackup()} disabled={!selectedBackup||restoreValidation!=="Valid backup"}>Restore selected backup</button>
       </section>
     </main>
   );

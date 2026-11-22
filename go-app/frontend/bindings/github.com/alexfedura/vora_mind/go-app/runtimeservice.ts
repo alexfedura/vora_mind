@@ -17,6 +17,10 @@ export function CancelWorkflow(id: string): $CancellablePromise<capabilities$0.R
     return $Call.ByID(1924657930, id);
 }
 
+export function CreateBackup(): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByID(604346239);
+}
+
 export function CreateCredential(name: string, permissionsJSON: string, projectIDsJSON: string): $CancellablePromise<{ [_ in string]?: any } | null> {
     return $Call.ByID(50484376, name, permissionsJSON, projectIDsJSON);
 }
@@ -53,6 +57,10 @@ export function GetWorkflow(id: string): $CancellablePromise<capabilities$0.Resu
     return $Call.ByID(4276468886, id);
 }
 
+export function ListBackups(): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByID(3519002520);
+}
+
 export function ListCapabilities(): $CancellablePromise<capabilities$0.Result> {
     return $Call.ByID(4153048187);
 }
@@ -67,6 +75,10 @@ export function ListProjects(): $CancellablePromise<capabilities$0.Result> {
 
 export function ListWorkflows(): $CancellablePromise<capabilities$0.Result> {
     return $Call.ByID(4019576285);
+}
+
+export function RestoreBackup(path: string): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByID(1547551339, path);
 }
 
 export function ResumeWorkflow(id: string): $CancellablePromise<capabilities$0.Result> {
@@ -95,4 +107,8 @@ export function StopAPI(): $CancellablePromise<{ [_ in string]?: any } | null> {
 
 export function UpdateProject(id: string, name: string, description: string): $CancellablePromise<capabilities$0.Result> {
     return $Call.ByID(3239121681, id, name, description);
+}
+
+export function ValidateBackup(path: string): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByID(1028000737, path);
 }

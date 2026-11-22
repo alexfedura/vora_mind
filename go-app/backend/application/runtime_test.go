@@ -1,10 +1,12 @@
 package application
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/alexfedura/vora_mind/go-app/backend/capabilities"
+	"github.com/alexfedura/vora_mind/go-app/backend/domain"
 	"github.com/alexfedura/vora_mind/go-app/backend/infrastructure"
 	"github.com/alexfedura/vora_mind/go-app/backend/persistence"
 )
@@ -20,7 +22,7 @@ func testRuntime(t *testing.T) *Runtime {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewRuntime(store, filesystem, "Vora Test", "0.26.9", "v3.1.0")
+	return NewRuntime(store, filesystem, "Vora Test", "0.26.10", "v3.1.0")
 }
 
 func TestProjectCRUDAndRepeatedInitialization(t *testing.T) {
@@ -91,7 +93,7 @@ func TestRestoreRebindKeepsRuntimeServicesUsable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := NewRuntime(store, filesystem, "Vora Test", "0.26.9", "v3.1.0")
+	runtime := NewRuntime(store, filesystem, "Vora Test", "0.26.10", "v3.1.0")
 	backupRoot := filepath.Join(root, "backups")
 	manager, err := persistence.NewBackupManager(store, backupRoot)
 	if err != nil {
@@ -115,5 +117,49 @@ func TestRestoreRebindKeepsRuntimeServicesUsable(t *testing.T) {
 	projects := runtime.Execute("project.list", map[string]interface{}{}, string(capabilities.OriginHuman))
 	if projects.Status != "succeeded" {
 		t.Fatalf("runtime should remain usable after restore: %#v", projects.Error)
+	}
+}
+
+func TestProjectFilesystemIsolationAndReopen(t *testing.T) {
+	root := t.TempDir()
+	store, err := persistence.Open(filepath.Join(root, "active.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.DB.Close() })
+	filesystem, err := infrastructure.NewFilesystemScope(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := NewRuntime(store, filesystem, "Vora Test", "0.26.10", "v3.1.0")
+
+	projectA := runtime.Execute("project.create", map[string]interface{}{"name": "Project A"}, string(capabilities.OriginHuman))
+	projectB := runtime.Execute("project.create", map[string]interface{}{"name": "Project B"}, string(capabilities.OriginHuman))
+	if projectA.Status != "succeeded" || projectB.Status != "succeeded" {
+		t.Fatalf("project creation failed: A=%#v B=%#v", projectA.Error, projectB.Error)
+	}
+	idA := projectA.Data.(map[string]interface{})["project"].(domain.Project).ID
+	idB := projectB.Data.(map[string]interface{})["project"].(domain.Project).ID
+	rootA, err := runtime.ProjectRepo.GetWorkspaceRoot(idA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootB, err := runtime.ProjectRepo.GetWorkspaceRoot(idB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rootA == rootB {
+		t.Fatal("projects must have distinct workspace roots")
+	}
+	if err := os.WriteFile(filepath.Join(rootA, "a.txt"), []byte("a"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := filesystem.ResolveProject(idB, filepath.Join(rootA, "a.txt")); err == nil {
+		t.Fatal("project B must not resolve project A's workspace")
+	}
+	reopened := NewRuntime(store, filesystem, "Vora Test", "0.26.10", "v3.1.0")
+	reopenedRoot, err := reopened.ProjectRepo.GetWorkspaceRoot(idA)
+	if err != nil || reopenedRoot != rootA {
+		t.Fatalf("project root did not reopen: root=%q err=%v", reopenedRoot, err)
 	}
 }

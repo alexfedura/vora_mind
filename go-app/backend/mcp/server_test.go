@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func TestMCPProtocolDiscoveryAndInvocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := application.NewRuntime(store, filesystem, "Vora Test", "0.26.9", "v3.1.0")
+	runtime := application.NewRuntime(store, filesystem, "Vora Test", "0.26.10", "v3.1.0")
 	gateway := NewGateway(runtime)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -72,11 +73,18 @@ func TestMCPExecutableSubprocess(t *testing.T) {
 		executableName += ".exe"
 	}
 	executable := filepath.Join(t.TempDir(), executableName)
-	cmd := exec.Command("go", "build", "-o", executable, "../../cmd/vora-mcp")
-	cmd.Dir = "."
+	_, testFile, _, ok := goruntime.Caller(0)
+	if !ok {
+		t.Fatal("could not resolve MCP test source path")
+	}
+	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(testFile), "..", ".."))
+	buildCtx, buildCancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer buildCancel()
+	cmd := exec.CommandContext(buildCtx, "go", "build", "-o", executable, "./cmd/vora-mcp")
+	cmd.Dir = moduleRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("MCP executable build failed: %v\n%s", err, output)
+		t.Fatalf("MCP executable build failed: %v\ncwd=%s\n%s", err, cmd.Dir, output)
 	}
 	dataDir := t.TempDir()
 	process := exec.Command(executable)
@@ -105,6 +113,26 @@ func TestMCPExecutableSubprocess(t *testing.T) {
 	}
 	if info.IsError {
 		t.Fatalf("subprocess MCP read failed: %#v", info)
+	}
+	denied, err := session.CallTool(ctx, &officialmcp.CallToolParams{
+		Name:      "filesystem_create_text",
+		Arguments: map[string]interface{}{"path": "denied.txt", "content": "x"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !denied.IsError {
+		t.Fatal("external MCP client unexpectedly received filesystem write permission")
+	}
+	malformed, err := session.CallTool(ctx, &officialmcp.CallToolParams{
+		Name:      "project_create",
+		Arguments: map[string]interface{}{"name": ""},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !malformed.IsError {
+		t.Fatal("malformed project input unexpectedly succeeded")
 	}
 	if err := session.Close(); err != nil {
 		t.Fatal(err)

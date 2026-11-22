@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	goruntime "runtime"
 	"sort"
@@ -63,8 +64,10 @@ func NewRuntime(store *persistence.Store, fs *infrastructure.FilesystemScope, ap
 		r.ProjectRepo = &persistence.ProjectRepository{DB: db}
 		r.AuditStore = &audit.SQLiteStore{DB: db}
 		r.WorkflowEngine = workflows.NewEngine(db, r)
+		r.recoverProjectRoots()
 	})
 	r.registerCapabilities()
+	r.recoverProjectRoots()
 	return r
 }
 
@@ -217,6 +220,22 @@ func projectScope(input map[string]interface{}) string {
 	return ""
 }
 
+func (r *Runtime) recoverProjectRoots() {
+	if r.ProjectRepo == nil || r.Filesystem == nil {
+		return
+	}
+	projects, err := r.ProjectRepo.List()
+	if err != nil {
+		return
+	}
+	for _, project := range projects {
+		root, err := r.ProjectRepo.GetWorkspaceRoot(project.ID)
+		if err == nil {
+			_ = r.Filesystem.SetProjectRoot(project.ID, root)
+		}
+	}
+}
+
 func newID(prefix string) string {
 	bytes := make([]byte, 16)
 	_, _ = rand.Read(bytes)
@@ -266,6 +285,14 @@ func (r *Runtime) registerCapabilities() {
 			project := domain.Project{ID: newID("project"), Name: name, Description: description, CreatedAt: now, UpdatedAt: now}
 			if err := r.ProjectRepo.Create(project); err != nil {
 				return nil, fmt.Errorf("could not create project: %w", err)
+			}
+			root, err := r.ProjectRepo.RegisterWorkspaceRoot(project.ID, filepath.Join(filepath.Dir(r.DatabasePath), "projects", project.ID))
+			if err != nil {
+				_ = r.ProjectRepo.Delete(project.ID)
+				return nil, fmt.Errorf("could not register project workspace root: %w", err)
+			}
+			if err := r.Filesystem.SetProjectRoot(project.ID, root); err != nil {
+				return nil, fmt.Errorf("could not activate project workspace root: %w", err)
 			}
 			return map[string]interface{}{"project": project}, nil
 		},
@@ -340,6 +367,48 @@ func (r *Runtime) registerCapabilities() {
 				return nil, err
 			}
 			return map[string]interface{}{"project": project}, nil
+		},
+	})
+
+	r.mustRegister(capabilities.Descriptor{
+		ID: "project.delete", Version: "1.0.0", Name: "Delete project",
+		Description:      "Deletes project metadata while preserving project files.",
+		InputSchema:      capabilities.JSONObjectSchema([]string{"id"}, map[string]interface{}{"id": capabilities.JSONStringSchema("Project ID")}),
+		Permissions:      []security.Permission{security.ProjectWrite},
+		ApprovalRequired: true,
+		Validate: func(input map[string]interface{}) error {
+			_, err := requiredString(input, "id", 1, 128)
+			return err
+		},
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			id, _ := requiredString(input, "id", 1, 128)
+			if err := r.ProjectRepo.Delete(id); err != nil {
+				if errors.Is(err, persistence.ErrProjectNotFound) {
+					return nil, fmt.Errorf("project %s was not found", id)
+				}
+				return nil, err
+			}
+			delete(r.Filesystem.ProjectRoots, id)
+			return map[string]interface{}{"projectId": id, "deleted": true, "workspaceFilesPreserved": true}, nil
+		},
+	})
+
+	r.mustRegister(capabilities.Descriptor{
+		ID: "project.filesystem_root", Version: "1.0.0", Name: "Get project filesystem root",
+		Description: "Returns the configured project workspace root.",
+		InputSchema: capabilities.JSONObjectSchema([]string{"id"}, map[string]interface{}{"id": capabilities.JSONStringSchema("Project ID")}),
+		Permissions: []security.Permission{security.ProjectRead, security.FilesystemRead},
+		Validate: func(input map[string]interface{}) error {
+			_, err := requiredString(input, "id", 1, 128)
+			return err
+		},
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			id, _ := requiredString(input, "id", 1, 128)
+			root, err := r.ProjectRepo.GetWorkspaceRoot(id)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]interface{}{"projectId": id, "workspaceRoot": root}, nil
 		},
 	})
 
