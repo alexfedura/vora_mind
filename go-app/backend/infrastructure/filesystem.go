@@ -47,12 +47,43 @@ func (s *FilesystemScope) resolve(relative string) (string, error) {
 		}
 		absoluteCandidate = filepath.Clean(resolved)
 	}
+	canonicalCandidate, err := canonicalExistingPath(absoluteCandidate)
+	if err != nil {
+		return "", err
+	}
 	for _, root := range s.Roots {
-		if pathWithinRoot(root, absoluteCandidate) {
-			return absoluteCandidate, nil
+		canonicalRoot, err := filepath.EvalSymlinks(root)
+		if err != nil {
+			continue
+		}
+		if pathWithinRoot(canonicalRoot, canonicalCandidate) {
+			return canonicalCandidate, nil
 		}
 	}
 	return "", fmt.Errorf("path is outside allowed filesystem scopes")
+}
+
+func canonicalExistingPath(path string) (string, error) {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Clean(resolved), nil
+	}
+	current := filepath.Clean(path)
+	suffix := make([]string, 0)
+	for {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			for i := len(suffix) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, suffix[i])
+			}
+			return filepath.Clean(resolved), nil
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return filepath.Clean(path), nil
+		}
+		suffix = append(suffix, filepath.Base(current))
+		current = parent
+	}
 }
 
 func pathWithinRoot(root, path string) bool {

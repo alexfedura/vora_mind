@@ -9,12 +9,28 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as capabilities$0 from "./backend/capabilities/models.js";
 
+export function ApproveWorkflowStep(id: string, approved: boolean): $CancellablePromise<capabilities$0.Result> {
+    return $Call.ByID(151504065, id, approved);
+}
+
+export function CancelWorkflow(id: string): $CancellablePromise<capabilities$0.Result> {
+    return $Call.ByID(1924657930, id);
+}
+
 export function CreateProject(name: string, description: string): $CancellablePromise<capabilities$0.Result> {
     return $Call.ByID(273613534, name, description);
 }
 
+export function CreateWorkflow(name: string, description: string, projectScope: string, stepsJSON: string): $CancellablePromise<capabilities$0.Result> {
+    return $Call.ByID(4069827144, name, description, projectScope, stepsJSON);
+}
+
 export function Execute(capabilityID: string, input: { [_ in string]?: any } | null, origin: string): $CancellablePromise<capabilities$0.Result> {
     return $Call.ByID(2327284800, capabilityID, input, origin);
+}
+
+export function GetAPIStatus(): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByID(1249097231);
 }
 
 export function GetApplicationInfo(): $CancellablePromise<capabilities$0.Result> {
@@ -25,10 +41,42 @@ export function GetDatabaseStatus(): $CancellablePromise<capabilities$0.Result> 
     return $Call.ByID(4170731524);
 }
 
+export function GetProject(id: string): $CancellablePromise<capabilities$0.Result> {
+    return $Call.ByID(1052747980, id);
+}
+
+export function GetWorkflow(id: string): $CancellablePromise<capabilities$0.Result> {
+    return $Call.ByID(4276468886, id);
+}
+
 export function ListCapabilities(): $CancellablePromise<capabilities$0.Result> {
     return $Call.ByID(4153048187);
 }
 
 export function ListProjects(): $CancellablePromise<capabilities$0.Result> {
     return $Call.ByID(2436118723);
+}
+
+export function ListWorkflows(): $CancellablePromise<capabilities$0.Result> {
+    return $Call.ByID(4019576285);
+}
+
+export function ResumeWorkflow(id: string): $CancellablePromise<capabilities$0.Result> {
+    return $Call.ByID(272887395, id);
+}
+
+export function StartAPI(): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByID(1690796237);
+}
+
+export function StartWorkflow(id: string): $CancellablePromise<capabilities$0.Result> {
+    return $Call.ByID(343507358, id);
+}
+
+export function StopAPI(): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByID(3875986527);
+}
+
+export function UpdateProject(id: string, name: string, description: string): $CancellablePromise<capabilities$0.Result> {
+    return $Call.ByID(3239121681, id, name, description);
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -18,6 +19,7 @@ import (
 	"github.com/alexfedura/vora_mind/go-app/backend/infrastructure"
 	"github.com/alexfedura/vora_mind/go-app/backend/persistence"
 	"github.com/alexfedura/vora_mind/go-app/backend/security"
+	"github.com/alexfedura/vora_mind/go-app/backend/workflows"
 )
 
 type PermissionPolicy struct{}
@@ -34,15 +36,16 @@ func (PermissionPolicy) Allows(origin capabilities.ExecutionOrigin, permission s
 }
 
 type Runtime struct {
-	Registry     *capabilities.Registry
-	DB           *sql.DB
-	DatabasePath string
-	ProjectRepo  *persistence.ProjectRepository
-	AuditStore   *audit.SQLiteStore
-	Filesystem   *infrastructure.FilesystemScope
-	AppName      string
-	AppVersion   string
-	WailsVersion string
+	Registry       *capabilities.Registry
+	DB             *sql.DB
+	DatabasePath   string
+	ProjectRepo    *persistence.ProjectRepository
+	AuditStore     *audit.SQLiteStore
+	Filesystem     *infrastructure.FilesystemScope
+	AppName        string
+	AppVersion     string
+	WailsVersion   string
+	WorkflowEngine *workflows.Engine
 }
 
 func NewRuntime(store *persistence.Store, fs *infrastructure.FilesystemScope, appName, appVersion, wailsVersion string) *Runtime {
@@ -54,31 +57,44 @@ func NewRuntime(store *persistence.Store, fs *infrastructure.FilesystemScope, ap
 		ProjectRepo: repo, AuditStore: auditStore, Filesystem: fs,
 		AppName: appName, AppVersion: appVersion, WailsVersion: wailsVersion,
 	}
+	r.WorkflowEngine = workflows.NewEngine(store.DB, r)
 	r.registerCapabilities()
 	return r
 }
 
 func (r *Runtime) Execute(capabilityID string, input map[string]interface{}, origin string) capabilities.Result {
+	context := capabilities.ExecutionContext{
+		Origin:    capabilities.ExecutionOrigin(origin),
+		Principal: capabilities.Principal{ID: "legacy_internal", Type: "internal"},
+	}
+	if !validOrigin(context.Origin) {
+		context.Origin = ""
+	}
+	context.Permissions = permissionsForOrigin(context.Origin)
+	return r.ExecuteWithContext(context, capabilityID, input)
+}
+
+func (r *Runtime) ExecuteWithContext(context capabilities.ExecutionContext, capabilityID string, input map[string]interface{}) capabilities.Result {
 	start := time.Now()
 	executionID := newID("exec")
-	capabilityOrigin := capabilities.ExecutionOrigin(strings.TrimSpace(origin))
+	capabilityOrigin := context.Origin
 	if !validOrigin(capabilityOrigin) {
-		capabilityOrigin = capabilities.OriginHuman
+		capabilityOrigin = ""
 	}
 	descriptor, ok := r.Registry.Get(capabilityID)
 	if !ok {
-		return r.finish(capabilityID, executionID, start, capabilityOrigin, "", nil, &capabilities.StructuredError{
+		return r.finish(context, capabilityID, executionID, start, capabilityOrigin, "", nil, &capabilities.StructuredError{
 			Code: "CAPABILITY_NOT_FOUND", Message: "The requested capability is not registered.", Capability: capabilityID,
 		})
 	}
-	if !r.Registry.CanExecute(capabilityOrigin, descriptor) {
-		return r.finish(capabilityID, executionID, start, capabilityOrigin, "", nil, &capabilities.StructuredError{
+	if !hasRequiredPermissions(context.Permissions, descriptor.Permissions) || !r.Registry.CanExecute(capabilityOrigin, descriptor) {
+		return r.finish(context, capabilityID, executionID, start, capabilityOrigin, "", nil, &capabilities.StructuredError{
 			Code: "PERMISSION_DENIED", Message: "The execution origin does not have the required permissions.", Capability: capabilityID,
 		})
 	}
 	if descriptor.Validate != nil {
 		if err := descriptor.Validate(input); err != nil {
-			return r.finish(capabilityID, executionID, start, capabilityOrigin, "", nil, &capabilities.StructuredError{
+			return r.finish(context, capabilityID, executionID, start, capabilityOrigin, "", nil, &capabilities.StructuredError{
 				Code: "INVALID_INPUT", Message: err.Error(), Capability: capabilityID,
 			})
 		}
@@ -88,16 +104,16 @@ func (r *Runtime) Execute(capabilityID string, input map[string]interface{}, ori
 		code := "CAPABILITY_EXECUTION_ERROR"
 		var structured *capabilities.StructuredError
 		if errors.As(err, &structured) {
-			return r.finish(capabilityID, executionID, start, capabilityOrigin, projectScope(input), nil, structured)
+			return r.finish(context, capabilityID, executionID, start, capabilityOrigin, projectScope(input), nil, structured)
 		}
-		return r.finish(capabilityID, executionID, start, capabilityOrigin, projectScope(input), nil, &capabilities.StructuredError{
+		return r.finish(context, capabilityID, executionID, start, capabilityOrigin, projectScope(input), nil, &capabilities.StructuredError{
 			Code: code, Message: err.Error(), Capability: capabilityID,
 		})
 	}
-	return r.finish(capabilityID, executionID, start, capabilityOrigin, projectScope(input), data, nil)
+	return r.finish(context, capabilityID, executionID, start, capabilityOrigin, projectScope(input), data, nil)
 }
 
-func (r *Runtime) finish(capabilityID, executionID string, start time.Time, origin capabilities.ExecutionOrigin, projectScope string, data interface{}, structured *capabilities.StructuredError) capabilities.Result {
+func (r *Runtime) finish(context capabilities.ExecutionContext, capabilityID, executionID string, start time.Time, origin capabilities.ExecutionOrigin, projectScope string, data interface{}, structured *capabilities.StructuredError) capabilities.Result {
 	status := "succeeded"
 	var auditError *audit.ErrorDetails
 	if structured != nil {
@@ -114,7 +130,22 @@ func (r *Runtime) finish(capabilityID, executionID string, start time.Time, orig
 		Timestamp: time.Now().UTC(), Origin: audit.ExecutionOrigin(origin),
 		ProjectScope: projectScope, Status: status, DurationMS: duration,
 		Error: auditError, Permissions: permissions,
+		PrincipalID: context.Principal.ID, CorrelationID: context.CorrelationID, WorkflowID: context.WorkflowID,
 	})
+	resultSummary, _ := json.Marshal(data)
+	errorJSON, _ := json.Marshal(structured)
+	startedAt := start.UTC().Format(time.RFC3339Nano)
+	endedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	_, _ = r.DB.Exec(`
+		INSERT OR REPLACE INTO execution_history(
+			execution_id, capability_id, origin, principal_id, project_scope,
+			workflow_id, correlation_id, started_at, ended_at, duration_ms,
+			status, result_summary, error_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		executionID, capabilityID, origin, context.Principal.ID, projectScope,
+		context.WorkflowID, context.CorrelationID, startedAt, endedAt, duration,
+		status, string(resultSummary), string(errorJSON),
+	)
 	return capabilities.Result{
 		ExecutionID: executionID, CapabilityID: capabilityID, Status: status,
 		Data: data, Error: structured, DurationMS: duration,
@@ -128,6 +159,38 @@ func validOrigin(origin capabilities.ExecutionOrigin) bool {
 	default:
 		return false
 	}
+}
+
+func permissionsForOrigin(origin capabilities.ExecutionOrigin) []security.Permission {
+	switch origin {
+	case capabilities.OriginHuman, capabilities.OriginInternal:
+		return []security.Permission{
+			security.ProjectRead, security.ProjectWrite, security.DatabaseInspect,
+			security.FilesystemRead, security.FilesystemWrite,
+		}
+	case capabilities.OriginAI:
+		return []security.Permission{
+			security.ProjectRead, security.ProjectWrite, security.DatabaseInspect,
+			security.FilesystemRead,
+		}
+	case capabilities.OriginExternal:
+		return []security.Permission{security.ProjectRead, security.DatabaseInspect}
+	default:
+		return nil
+	}
+}
+
+func hasRequiredPermissions(granted, required []security.Permission) bool {
+	grantedSet := make(map[security.Permission]bool, len(granted))
+	for _, permission := range granted {
+		grantedSet[permission] = true
+	}
+	for _, permission := range required {
+		if !grantedSet[permission] {
+			return false
+		}
+	}
+	return true
 }
 
 func projectScope(input map[string]interface{}) string {
@@ -358,6 +421,7 @@ func (r *Runtime) registerCapabilities() {
 
 	r.registerFilesystemCapabilities()
 	r.registerDiscoveryCapabilities()
+	r.registerWorkflowCapabilities()
 }
 
 func (r *Runtime) foreignKeyStatus() bool {
@@ -449,6 +513,7 @@ func (r *Runtime) registerDiscoveryCapabilities() {
 					"inputSchema": d.InputSchema, "outputSchema": d.OutputSchema, "requiredPermissions": d.Permissions,
 				})
 			}
+
 			return map[string]interface{}{"capabilities": output}, nil
 		},
 	})
@@ -469,6 +534,118 @@ func (r *Runtime) registerDiscoveryCapabilities() {
 				"id": d.ID, "version": d.Version, "name": d.Name, "description": d.Description,
 				"inputSchema": d.InputSchema, "outputSchema": d.OutputSchema, "requiredPermissions": d.Permissions,
 			}, nil
+		},
+	})
+}
+
+func (r *Runtime) registerWorkflowCapabilities() {
+	r.mustRegister(capabilities.Descriptor{
+		ID: "workflow.create", Version: "1.0.0", Name: "Create workflow", Description: "Creates a durable workflow.",
+		InputSchema: capabilities.JSONObjectSchema([]string{"name", "steps"}, map[string]interface{}{"name": capabilities.JSONStringSchema("Workflow name"), "description": capabilities.JSONStringSchema("Description"), "projectScope": capabilities.JSONStringSchema("Project scope"), "steps": map[string]interface{}{"type": "array"}}),
+		Permissions: []security.Permission{security.ProjectRead},
+		Validate: func(input map[string]interface{}) error {
+			name, _ := requiredString(input, "name", 1, 200)
+			if name == "" {
+				return fmt.Errorf("name is required")
+			}
+			steps, ok := input["steps"].([]interface{})
+			if !ok {
+				return fmt.Errorf("steps must be an array")
+			}
+			if len(steps) > 100 {
+				return fmt.Errorf("workflow cannot exceed 100 steps")
+			}
+			return nil
+		},
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			name, _ := requiredString(input, "name", 1, 200)
+			description, _ := optionalString(input, "description", 2000)
+			projectScope, _ := optionalString(input, "projectScope", 128)
+			raw, _ := input["steps"].([]interface{})
+			steps := make([]map[string]interface{}, 0, len(raw))
+			for _, item := range raw {
+				if step, ok := item.(map[string]interface{}); ok {
+					steps = append(steps, step)
+				}
+			}
+			workflow, err := r.WorkflowEngine.Create(name, description, projectScope, "human_ui", capabilities.OriginHuman, steps)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]interface{}{"workflow": workflow}, nil
+		},
+	})
+	r.registerWorkflowAction("workflow.get", "Gets a workflow.", false)
+	r.registerWorkflowAction("workflow.start", "Starts a workflow.", true)
+	r.registerWorkflowAction("workflow.cancel", "Cancels a workflow.", true)
+	r.registerWorkflowAction("workflow.resume", "Resumes a workflow.", true)
+	r.registerWorkflowAction("workflow.approve_step", "Approves or rejects the current workflow step.", true)
+	r.registerWorkflowHistory()
+}
+
+func (r *Runtime) registerWorkflowAction(id, description string, write bool) {
+	permissions := []security.Permission{security.ProjectRead}
+	if write {
+		permissions = append(permissions, security.ProjectWrite)
+	}
+	r.mustRegister(capabilities.Descriptor{
+		ID: id, Version: "1.0.0", Name: id, Description: description,
+		InputSchema: capabilities.JSONObjectSchema([]string{"id"}, map[string]interface{}{"id": capabilities.JSONStringSchema("Workflow ID")}),
+		Permissions: permissions,
+		Validate:    func(input map[string]interface{}) error { _, err := requiredString(input, "id", 1, 128); return err },
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			workflowID, _ := requiredString(input, "id", 1, 128)
+			var workflow workflows.Workflow
+			var err error
+			switch id {
+			case "workflow.get":
+				workflow, err = r.WorkflowEngine.Get(workflowID)
+			case "workflow.start":
+				workflow, err = r.WorkflowEngine.Start(workflowID)
+			case "workflow.cancel":
+				workflow, err = r.WorkflowEngine.Cancel(workflowID)
+			case "workflow.resume":
+				workflow, err = r.WorkflowEngine.Resume(workflowID)
+			case "workflow.approve_step":
+				approved, _ := input["approved"].(bool)
+				workflow, err = r.WorkflowEngine.ApproveStep(workflowID, approved)
+			default:
+				workflow, err = r.WorkflowEngine.Get(workflowID)
+			}
+			if err != nil {
+				return nil, err
+			}
+			return map[string]interface{}{"workflow": workflow}, nil
+		},
+	})
+}
+
+func (r *Runtime) registerWorkflowHistory() {
+	r.mustRegister(capabilities.Descriptor{
+		ID: "workflow.execution_history", Version: "1.0.0", Name: "Workflow execution history", Description: "Lists unified execution history.",
+		InputSchema: capabilities.JSONObjectSchema(nil, map[string]interface{}{"limit": map[string]interface{}{"type": "number"}}),
+		Permissions: []security.Permission{security.ProjectRead},
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			limit := 100
+			if value, ok := input["limit"].(float64); ok {
+				limit = int(value)
+			}
+			history, err := r.WorkflowEngine.ExecutionHistory(limit)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]interface{}{"executions": history}, nil
+		},
+	})
+	r.mustRegister(capabilities.Descriptor{
+		ID: "workflow.list", Version: "1.0.0", Name: "List workflows", Description: "Lists durable workflows.",
+		InputSchema: capabilities.JSONObjectSchema(nil, map[string]interface{}{}), Permissions: []security.Permission{security.ProjectRead},
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			list, err := r.WorkflowEngine.List()
+			if err != nil {
+				return nil, err
+			}
+			return map[string]interface{}{"workflows": list}, nil
 		},
 	})
 }

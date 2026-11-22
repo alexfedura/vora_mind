@@ -48,6 +48,61 @@ CREATE TABLE IF NOT EXISTS audit_events (
 CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp ON audit_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_events_capability ON audit_events(capability_id);
 `},
+	{2, `
+CREATE TABLE IF NOT EXISTS execution_history (
+ execution_id TEXT PRIMARY KEY,
+ capability_id TEXT NOT NULL,
+ origin TEXT NOT NULL,
+ principal_id TEXT NOT NULL DEFAULT '',
+ project_scope TEXT NOT NULL DEFAULT '',
+ workflow_id TEXT NOT NULL DEFAULT '',
+ correlation_id TEXT NOT NULL DEFAULT '',
+ started_at TEXT NOT NULL,
+ ended_at TEXT NOT NULL,
+ duration_ms INTEGER NOT NULL,
+ status TEXT NOT NULL,
+ result_summary TEXT NOT NULL DEFAULT '',
+ error_json TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS workflows (
+ id TEXT PRIMARY KEY,
+ name TEXT NOT NULL,
+ description TEXT NOT NULL DEFAULT '',
+ project_scope TEXT NOT NULL DEFAULT '',
+ creator TEXT NOT NULL DEFAULT '',
+ origin TEXT NOT NULL,
+ status TEXT NOT NULL,
+ current_step INTEGER NOT NULL DEFAULT 0,
+ cancellation_requested INTEGER NOT NULL DEFAULT 0,
+ approval_state TEXT NOT NULL DEFAULT 'none',
+ error_json TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS workflow_steps (
+ id TEXT PRIMARY KEY,
+ workflow_id TEXT NOT NULL,
+ step_index INTEGER NOT NULL,
+ capability_id TEXT NOT NULL,
+ input_json TEXT NOT NULL,
+ status TEXT NOT NULL,
+ execution_id TEXT NOT NULL DEFAULT '',
+ result_json TEXT NOT NULL DEFAULT '',
+ error_json TEXT NOT NULL DEFAULT '',
+ retry_count INTEGER NOT NULL DEFAULT 0,
+ max_retries INTEGER NOT NULL DEFAULT 0,
+ approval_required INTEGER NOT NULL DEFAULT 0,
+ approval_status TEXT NOT NULL DEFAULT 'not_required',
+ started_at TEXT,
+ ended_at TEXT,
+ UNIQUE(workflow_id, step_index),
+ FOREIGN KEY(workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_steps_workflow ON workflow_steps(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_execution_history_started ON execution_history(started_at);
+`},
 }
 
 func Open(databasePath string) (*Store, error) {
@@ -119,6 +174,17 @@ func applyMigrations(db *sql.DB) error {
 		}
 		if err := tx.Commit(); err != nil {
 			return err
+		}
+	}
+	for _, column := range []string{"principal_id", "correlation_id", "workflow_id"} {
+		var count int
+		if err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('audit_events') WHERE name = ?", column).Scan(&count); err != nil {
+			return err
+		}
+		if count == 0 {
+			if _, err := db.Exec("ALTER TABLE audit_events ADD COLUMN " + column + " TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

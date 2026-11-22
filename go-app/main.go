@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/alexfedura/vora_mind/go-app/backend/api"
 	appbackend "github.com/alexfedura/vora_mind/go-app/backend/application"
 	"github.com/alexfedura/vora_mind/go-app/backend/infrastructure"
 	"github.com/alexfedura/vora_mind/go-app/backend/persistence"
@@ -48,8 +49,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	runtime := appbackend.NewRuntime(store, filesystem, "Vora Mind", "0.26.5", "v3.1.0")
+	runtime := appbackend.NewRuntime(store, filesystem, "Vora Mind", "0.26.6", "v3.1.0")
 	runtimeService := NewRuntimeService(runtime, store)
+	runtimeService.apiServer = api.NewServer(runtime)
 
 	app := application.New(application.Options{
 		Name:        "Vora Mind",

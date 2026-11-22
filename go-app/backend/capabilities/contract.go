@@ -49,6 +49,22 @@ type Result struct {
 	DurationMS   int64            `json:"durationMs"`
 }
 
+type Principal struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
+}
+
+type ExecutionContext struct {
+	ExecutionID   string
+	Origin        ExecutionOrigin
+	Principal     Principal
+	Permissions   []security.Permission
+	ProjectScope  string
+	CorrelationID string
+	WorkflowID    string
+	Approved      bool
+}
+
 func JSONObjectSchema(required []string, properties map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"type":                 "object",
