@@ -19,7 +19,7 @@ func testRuntime(t *testing.T) *Runtime {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.DB.Close() })
-	filesystem, err := infrastructure.NewFilesystemScope(t.TempDir())
+	filesystem, err := infrastructure.NewFilesystemScope(filepath.Dir(store.Database))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,5 +189,46 @@ func TestProjectFilesystemIsolationAndReopen(t *testing.T) {
 	reopenedRoot, err := reopened.ProjectRepo.GetWorkspaceRoot(idA)
 	if err != nil || reopenedRoot != rootA {
 		t.Fatalf("project root did not reopen: root=%q err=%v", reopenedRoot, err)
+	}
+}
+
+func TestProjectOpenContextAndRootOperations(t *testing.T) {
+	runtime := testRuntime(t)
+	created := runtime.Execute("project.create", map[string]interface{}{"name": "Context Project", "description": "test"}, string(capabilities.OriginHuman))
+	if created.Status != "succeeded" {
+		t.Fatal(created.Error)
+	}
+	project := created.Data.(map[string]interface{})["project"].(domain.Project)
+
+	opened := runtime.Execute("project.open", map[string]interface{}{"id": project.ID}, string(capabilities.OriginHuman))
+	if opened.Status != "succeeded" {
+		t.Fatal(opened.Error)
+	}
+	contextResult := runtime.Execute("project.get_context", map[string]interface{}{}, string(capabilities.OriginHuman))
+	if contextResult.Status != "succeeded" {
+		t.Fatal(contextResult.Error)
+	}
+	contextData := contextResult.Data.(map[string]interface{})
+	if contextData["active"] != true {
+		t.Fatalf("active project context was not established: %#v", contextData)
+	}
+
+	rootResult := runtime.Execute("project.filesystem_roots", map[string]interface{}{}, string(capabilities.OriginHuman))
+	if rootResult.Status != "succeeded" {
+		t.Fatal(rootResult.Error)
+	}
+	roots := rootResult.Data.(map[string]interface{})["roots"].([]domain.WorkspaceRoot)
+	if len(roots) != 1 || roots[0].ProjectID != project.ID {
+		t.Fatalf("unexpected project roots: %#v", roots)
+	}
+
+	updatedRoot := filepath.Join(filepath.Dir(runtime.DatabasePath), "updated-"+project.ID)
+	updated := runtime.Execute("project.filesystem_root_update", map[string]interface{}{"id": project.ID, "root": updatedRoot}, string(capabilities.OriginHuman))
+	if updated.Status != "succeeded" {
+		t.Fatal(updated.Error)
+	}
+	resolved := runtime.Execute("project.filesystem_root_resolve", map[string]interface{}{"id": project.ID, "path": "nested/file.txt"}, string(capabilities.OriginHuman))
+	if resolved.Status != "succeeded" {
+		t.Fatal(resolved.Error)
 	}
 }

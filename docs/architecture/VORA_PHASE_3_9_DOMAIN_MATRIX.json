@@ -1,0 +1,487 @@
+{
+  "generatedFor": "Phase 3.9",
+  "source": "Phase 3.9 source inventory and existing architecture evidence",
+  "total": 48,
+  "domains": [
+    {
+      "domain": "Projects",
+      "rustStatus": "LEGACY_AND_GO",
+      "goStatus": "PARTIAL",
+      "wailsStatus": "PARTIAL",
+      "httpStatus": "PARTIAL",
+      "mcpStatus": "YES",
+      "workflowStatus": "NO",
+      "migrationStatus": "PARTIAL"
+    },
+    {
+      "domain": "Workspace roots",
+      "rustStatus": "LEGACY_AND_GO",
+      "goStatus": "PARTIAL",
+      "wailsStatus": "PARTIAL",
+      "httpStatus": "PARTIAL",
+      "mcpStatus": "YES",
+      "workflowStatus": "NO",
+      "migrationStatus": "PARTIAL"
+    },
+    {
+      "domain": "Research",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Sources",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Source revisions",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Source acquisition",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Questions",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Hypotheses",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Evidence",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Observations",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Claims",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Experiments",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Results",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Analysis",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Models",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Model versions",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Learning",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Knowledge transfer",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Decisions",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Vora Trace",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Boards",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Cards",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Shapes",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Canvas",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Snapshots",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Media",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Documents",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Highlights",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "File ingestion",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Journals",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Tasks",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Workflows",
+      "rustStatus": "LEGACY_AND_GO",
+      "goStatus": "PARTIAL",
+      "wailsStatus": "PARTIAL",
+      "httpStatus": "PARTIAL",
+      "mcpStatus": "YES",
+      "workflowStatus": "YES",
+      "migrationStatus": "PARTIAL"
+    },
+    {
+      "domain": "Forge",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Agents",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "AST",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Patches",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Commit lineage",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Market data",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Charts",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Watchlists",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Alerts",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Templates",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Backups",
+      "rustStatus": "LEGACY_AND_GO",
+      "goStatus": "PARTIAL",
+      "wailsStatus": "PARTIAL",
+      "httpStatus": "PARTIAL",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "PARTIAL"
+    },
+    {
+      "domain": "Restore",
+      "rustStatus": "LEGACY_AND_GO",
+      "goStatus": "PARTIAL",
+      "wailsStatus": "PARTIAL",
+      "httpStatus": "PARTIAL",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "PARTIAL"
+    },
+    {
+      "domain": "Credentials",
+      "rustStatus": "LEGACY_AND_GO",
+      "goStatus": "PARTIAL",
+      "wailsStatus": "PARTIAL",
+      "httpStatus": "PARTIAL",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "PARTIAL"
+    },
+    {
+      "domain": "Settings",
+      "rustStatus": "LEGACY_AND_GO",
+      "goStatus": "PARTIAL",
+      "wailsStatus": "PARTIAL",
+      "httpStatus": "PARTIAL",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "PARTIAL"
+    },
+    {
+      "domain": "Logs",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    },
+    {
+      "domain": "Updates",
+      "rustStatus": "LEGACY_ONLY",
+      "goStatus": "NOT_MIGRATED",
+      "wailsStatus": "NO",
+      "httpStatus": "NO",
+      "mcpStatus": "NO",
+      "workflowStatus": "NO",
+      "migrationStatus": "NOT_MIGRATED"
+    }
+  ]
+}

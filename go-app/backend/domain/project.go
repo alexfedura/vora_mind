@@ -9,3 +9,10 @@ type Project struct {
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
+
+type WorkspaceRoot struct {
+	ProjectID string    `json:"projectId"`
+	Root      string    `json:"root"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}

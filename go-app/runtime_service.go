@@ -74,6 +74,39 @@ func (s *RuntimeService) GetProject(id string) capabilities.Result {
 	return s.Execute("project.get", map[string]interface{}{"id": id}, string(capabilities.OriginHuman))
 }
 
+func (s *RuntimeService) OpenProject(id string) capabilities.Result {
+	return s.Execute("project.open", map[string]interface{}{"id": id}, string(capabilities.OriginHuman))
+}
+
+func (s *RuntimeService) GetProjectContext() capabilities.Result {
+	return s.Execute("project.get_context", map[string]interface{}{}, string(capabilities.OriginHuman))
+}
+
+func (s *RuntimeService) ListProjectFilesystemRoots() capabilities.Result {
+	return s.Execute("project.filesystem_roots", map[string]interface{}{}, string(capabilities.OriginHuman))
+}
+
+func (s *RuntimeService) UpdateProjectFilesystemRoot(id, root string) capabilities.Result {
+	return s.Execute("project.filesystem_root_update", map[string]interface{}{"id": id, "root": root}, string(capabilities.OriginHuman))
+}
+
+func (s *RuntimeService) RemoveProjectFilesystemRoot(id string) capabilities.Result {
+	input := map[string]interface{}{"id": id}
+	context := capabilities.ExecutionContext{
+		Origin:        capabilities.OriginHuman,
+		Principal:     capabilities.Principal{ID: "wails_human", Type: "human"},
+		Permissions:   []security.Permission{security.ProjectWrite},
+		ProjectScope:  id,
+		CorrelationID: "wails_project_root_remove_" + id,
+		Approved:      true,
+	}
+	return s.runtime.ExecuteWithContext(context, "project.filesystem_root_remove", input)
+}
+
+func (s *RuntimeService) ResolveProjectFilesystemPath(id, path string) capabilities.Result {
+	return s.Execute("project.filesystem_root_resolve", map[string]interface{}{"id": id, "path": path}, string(capabilities.OriginHuman))
+}
+
 func (s *RuntimeService) UpdateProject(id, name, description string) capabilities.Result {
 	return s.Execute("project.update", map[string]interface{}{"id": id, "name": name, "description": description}, string(capabilities.OriginHuman))
 }

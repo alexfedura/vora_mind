@@ -2,10 +2,12 @@ package infrastructure
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 type FilesystemScope struct {
@@ -13,6 +15,7 @@ type FilesystemScope struct {
 	ProjectRoots   map[string]string
 	SharedRoots    []string
 	UnassignedRoot string
+	projectRootsMu sync.RWMutex
 }
 
 func NewFilesystemScope(roots ...string) (*FilesystemScope, error) {
@@ -41,6 +44,9 @@ func (s *FilesystemScope) SetProjectRoot(projectID, root string) error {
 	if projectID == "" {
 		return fmt.Errorf("project ID is required")
 	}
+	if _, err := s.ValidateProjectRoot(root); err != nil {
+		return err
+	}
 	absolute, err := filepath.Abs(root)
 	if err != nil {
 		return err
@@ -49,8 +55,49 @@ func (s *FilesystemScope) SetProjectRoot(projectID, root string) error {
 	if err := os.MkdirAll(absolute, 0o700); err != nil {
 		return err
 	}
+	s.projectRootsMu.Lock()
 	s.ProjectRoots[projectID] = absolute
+	s.projectRootsMu.Unlock()
 	return nil
+}
+
+func (s *FilesystemScope) ValidateProjectRoot(root string) (string, error) {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return "", fmt.Errorf("workspace root is required")
+	}
+	if filepath.IsAbs(root) == false {
+		return "", fmt.Errorf("workspace root must be absolute")
+	}
+	absolute, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	absolute = filepath.Clean(absolute)
+	canonical, err := canonicalExistingPath(absolute)
+	if err != nil {
+		return "", err
+	}
+	for _, allowed := range s.Roots {
+		canonicalAllowed, err := filepath.EvalSymlinks(allowed)
+		if err != nil {
+			continue
+		}
+		if pathWithinRoot(canonicalAllowed, canonical) {
+			if err := os.MkdirAll(absolute, 0o700); err != nil {
+				return "", err
+			}
+			return canonical, nil
+		}
+	}
+	return "", fmt.Errorf("workspace root is outside allowed filesystem scopes")
+}
+
+func (s *FilesystemScope) RemoveProjectRoot(projectID string) {
+	projectID = strings.TrimSpace(projectID)
+	s.projectRootsMu.Lock()
+	delete(s.ProjectRoots, projectID)
+	s.projectRootsMu.Unlock()
 }
 
 func (s *FilesystemScope) ResolveProject(projectID, relative string) (string, error) {
@@ -60,8 +107,13 @@ func (s *FilesystemScope) ResolveProject(projectID, relative string) (string, er
 	}
 	base := s.UnassignedRoot
 	if projectID != "unassigned" {
+		if err := rejectUnsafeProjectRelativePath(relative); err != nil {
+			return "", err
+		}
 		var ok bool
+		s.projectRootsMu.RLock()
 		base, ok = s.ProjectRoots[projectID]
+		s.projectRootsMu.RUnlock()
 		if !ok {
 			return "", fmt.Errorf("project workspace root is not configured")
 		}
@@ -86,6 +138,32 @@ func (s *FilesystemScope) ResolveProject(projectID, relative string) (string, er
 		return "", fmt.Errorf("path is outside the project workspace")
 	}
 	return canonicalCandidate, nil
+}
+
+func rejectUnsafeProjectRelativePath(relative string) error {
+	relative = strings.TrimSpace(relative)
+	if relative == "" {
+		return fmt.Errorf("path is required")
+	}
+	if filepath.IsAbs(relative) || filepath.VolumeName(relative) != "" ||
+		strings.HasPrefix(relative, `\\`) || strings.HasPrefix(relative, `//`) {
+		return fmt.Errorf("project-relative path must not be absolute")
+	}
+	decoded := relative
+	if strings.Contains(relative, "%") {
+		unescaped, err := url.PathUnescape(relative)
+		if err != nil {
+			return fmt.Errorf("invalid encoded project-relative path")
+		}
+		decoded = unescaped
+	}
+	normalized := strings.ReplaceAll(decoded, `\`, "/")
+	for _, component := range strings.Split(normalized, "/") {
+		if component == ".." {
+			return fmt.Errorf("project-relative path traversal is not allowed")
+		}
+	}
+	return nil
 }
 
 func (s *FilesystemScope) resolve(relative string) (string, error) {
@@ -126,6 +204,43 @@ func canonicalExistingPath(path string) (string, error) {
 	current := filepath.Clean(path)
 	suffix := make([]string, 0)
 	for {
+		if info, err := os.Lstat(current); err == nil {
+			target, readErr := os.Readlink(current)
+			if readErr == nil && strings.TrimSpace(target) != "" {
+				target = strings.TrimPrefix(target, `\\?\`)
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(filepath.Dir(current), target)
+				}
+				resolvedTarget, evalErr := filepath.EvalSymlinks(target)
+				if evalErr != nil {
+					return "", fmt.Errorf("broken or inaccessible reparse point")
+				}
+				resolvedTarget = filepath.Clean(resolvedTarget)
+				for i := len(suffix) - 1; i >= 0; i-- {
+					resolvedTarget = filepath.Join(resolvedTarget, suffix[i])
+				}
+				return filepath.Clean(resolvedTarget), nil
+			}
+			_ = info
+		}
+		if info, err := os.Lstat(current); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(current)
+			if err != nil {
+				return "", fmt.Errorf("could not inspect symlink")
+			}
+			if !filepath.IsAbs(target) {
+				target = filepath.Join(filepath.Dir(current), target)
+			}
+			resolvedTarget, err := filepath.EvalSymlinks(target)
+			if err != nil {
+				return "", fmt.Errorf("broken or inaccessible symlink")
+			}
+			resolvedTarget = filepath.Clean(resolvedTarget)
+			for i := len(suffix) - 1; i >= 0; i-- {
+				resolvedTarget = filepath.Join(resolvedTarget, suffix[i])
+			}
+			return filepath.Clean(resolvedTarget), nil
+		}
 		resolved, err := filepath.EvalSymlinks(current)
 		if err == nil {
 			for i := len(suffix) - 1; i >= 0; i-- {

@@ -3,10 +3,14 @@ import { RuntimeService } from "../bindings/github.com/alexfedura/vora_mind/go-a
 
 type Project = { id: string; name: string; description: string };
 type Result = { status: string; data?: unknown; error?: { code: string; message: string } | null };
+type DatabaseStatus = { status?: string; path?: string; migrationCount?: number; foreignKeys?: boolean };
 
 function App() {
   const [projects,setProjects]=useState<Project[]>([]);
   const [capabilities,setCapabilities]=useState<Array<{id:string;name:string;description:string}>>([]);
+  const [databaseStatus,setDatabaseStatus]=useState<DatabaseStatus|null>(null);
+  const [databaseStatusLoading,setDatabaseStatusLoading]=useState(true);
+  const [databaseStatusError,setDatabaseStatusError]=useState("");
   const [selected,setSelected]=useState<Project|null>(null);
   const [name,setName]=useState("");
   const [description,setDescription]=useState("");
@@ -20,6 +24,9 @@ function App() {
   const [backups,setBackups]=useState<Array<{path:string;size:number;createdAt:string;valid:boolean}>>([]);
   const [selectedBackup,setSelectedBackup]=useState("");
   const [restoreValidation,setRestoreValidation]=useState("");
+  const [activeProject,setActiveProject]=useState<Project|null>(null);
+  const [workspaceRoots,setWorkspaceRoots]=useState<Array<{projectId:string;root:string;createdAt:string;updatedAt:string}>>([]);
+  const [workspaceRoot,setWorkspaceRoot]=useState("");
 
   const run=async(operation:()=>unknown,onSuccess?:()=>void)=>{
     setError("");
@@ -44,10 +51,47 @@ function App() {
       const data=capabilityResult.data as {capabilities?:Array<{id:string;name:string;description:string}>}|undefined;
       setCapabilities(data?.capabilities||[]);
     }
+    const contextResult=await run(()=>RuntimeService.GetProjectContext());
+    if(contextResult){
+      const data=contextResult.data as {active?:boolean;project?:Project|null}|undefined;
+      setActiveProject(data?.active?data.project||null:null);
+    }
+    const rootsResult=await run(()=>RuntimeService.ListProjectFilesystemRoots());
+    if(rootsResult){
+      const data=rootsResult.data as {roots?:typeof workspaceRoots}|undefined;
+      const roots=data?.roots||[];
+      setWorkspaceRoots(roots);
+      const activeId=contextResult?.data
+        ? (contextResult.data as {active?:boolean;project?:Project|null}).project?.id
+        : undefined;
+      const activeRoot=activeId?roots.find(root=>root.projectId===activeId):undefined;
+      setWorkspaceRoot(activeRoot?.root||"");
+    }
     setLoading(false);
   };
 
   useEffect(()=>{void refresh()},[]);
+
+  const refreshDatabaseStatus=async()=>{
+    setDatabaseStatusLoading(true);
+    setDatabaseStatusError("");
+    try{
+      const result=await Promise.resolve(RuntimeService.GetDatabaseStatus() as PromiseLike<Result>);
+      if(result.status==="failed"){
+        setDatabaseStatus(null);
+        setDatabaseStatusError(result.error?.message||"Could not read database status.");
+        return;
+      }
+      setDatabaseStatus((result.data||{}) as DatabaseStatus);
+    }catch(caught){
+      setDatabaseStatus(null);
+      setDatabaseStatusError(caught instanceof Error?caught.message:String(caught));
+    }finally{
+      setDatabaseStatusLoading(false);
+    }
+  };
+
+  useEffect(()=>{void refreshDatabaseStatus()},[]);
 
   const createProject=async()=>{
     if(!name.trim()){setError("Project name is required.");return}
@@ -55,8 +99,12 @@ function App() {
   };
 
   const selectProject=async(project:Project)=>{
-    const result=await run(()=>RuntimeService.GetProject(project.id));
-    if(result){setSelected((result.data as {project:Project}).project)}
+    const result=await run(()=>RuntimeService.OpenProject(project.id));
+    if(result){
+      const data=result.data as {project:Project}|undefined;
+      if(data?.project){setSelected(data.project);setActiveProject(data.project)}
+      void refresh();
+    }
   };
 
   const updateProject=async()=>{
@@ -174,6 +222,18 @@ function App() {
       <header><h1>Vora Mind</h1><p>Go/Wails capability runtime</p></header>
       {error&&<div className="error" role="alert">{error}</div>}
       <section>
+        <h2>Database Status</h2>
+        {databaseStatusLoading?<p>Loading database status...</p>:databaseStatusError?(
+          <p className="error" role="alert">Database status error: {databaseStatusError}</p>
+        ):databaseStatus&&(
+          <>
+            <p>Status: {databaseStatus.status||"unknown"}</p>
+            <p>Database path: <code>{databaseStatus.path||"unknown"}</code></p>
+          </>
+        )}
+        <button onClick={()=>void refreshDatabaseStatus()} disabled={databaseStatusLoading}>Refresh database status</button>
+      </section>
+      <section>
         <h2>API Status</h2>
         <p>Status: {apiStatus.running?"running":"disabled"}</p>
         {apiStatus.address&&<p>Address: {apiStatus.address}</p>}
@@ -198,7 +258,25 @@ function App() {
             <input aria-label="Selected project description" value={selected.description} onChange={event=>setSelected({...selected,description:event.target.value})}/>
             <button onClick={()=>void updateProject()}>Update</button>
             <button onClick={()=>void deleteProject()}>Delete project</button>
+            <h3>Workspace root</h3>
+            <p>Active project: {activeProject?.name||"none"}</p>
+            <input aria-label="Workspace root" value={workspaceRoot} onChange={event=>setWorkspaceRoot(event.target.value)} placeholder="Absolute workspace root"/>
+            <button onClick={()=>void run(()=>RuntimeService.UpdateProjectFilesystemRoot(selected.id,workspaceRoot),()=>void refresh())}>Update root</button>{" "}
+            <button onClick={()=>{
+              if(!window.confirm("Remove this project workspace root? Workspace files will be preserved."))return;
+              void run(()=>RuntimeService.RemoveProjectFilesystemRoot(selected.id),()=>{
+                setWorkspaceRoot("");
+                void refresh();
+              });
+            }}>Remove root</button>
           </div>
+        )}
+        {workspaceRoots.length>0&&(
+          <ul>{workspaceRoots.map(root=>(
+            <li key={root.projectId}>
+              <code>{root.projectId}</code>: {root.root}
+            </li>
+          ))}</ul>
         )}
       </section>
       <section>

@@ -1,0 +1,2770 @@
+{
+  "generatedFor": "Phase 3.9",
+  "source": "Actual src-tauri/src inventory",
+  "total": 333,
+  "directCallerCommands": 49,
+  "inventory": [
+    {
+      "name": "add_data_entry",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "add_hypothesis_insight",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_add_run_deviation",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_add_run_log",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_create_definition_version",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_create_evidence",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_create_finding_relation",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_create_finding_version",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_create_method_version",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_create_metric_version",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_create_run",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_finalize_run",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_get_run",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_get_workspace",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_start_run",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_transition_definition",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_transition_evidence",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analysis_transition_finding",
+      "implementationFile": "src-tauri\\src\\analysis\\ipc.rs",
+      "rustModule": "analysis",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "analyze_with_ai",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "apply_patch_and_validate",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "archive_question",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "checkout_board_version",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "clear_vora_snapshots",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "commit_card_version",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "commit_library_item_group_version",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "commit_snapshot",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "create_board",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "create_board_version",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "create_child_hypothesis",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "create_git_commit",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "create_highlight",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "create_hypothesis_from_source",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "create_library_item_group",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "create_question",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "create_semantic_plan",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "create_task_flow_item",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "create_text_link",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "delete_board",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "delete_data_entry",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "delete_hypothesis_insight",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "delete_media_slice",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "delete_question",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "delete_setting",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\services\\voraDb.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "delete_task_flow_item",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "delete_text_link",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "delete_vora_snapshot",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\services\\voraDb.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "execute_forge_tool",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_add_dataset_samples",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_add_dataset_split_group",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_add_run_deviation",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_add_run_log",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_create_dataset",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_create_dataset_transformation",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_create_dataset_version",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_create_design_version",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_create_run",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_get_dataset_samples",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_get_workspace",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_preregister_design",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_register_dataset_asset",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_seal_dataset_version",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_transition_run",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "experiment_verify_dataset_version",
+      "implementationFile": "src-tauri\\src\\experiment\\ipc.rs",
+      "rustModule": "experiment",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "export_database_backup",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\services\\voraDb.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "export_settings_json",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\services\\voraDb.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "forge_compute_ast_semantic_diff",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "forge_execute_multi_patch_transaction",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "forge_execute_patch_transaction",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "forge_find_symbol",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "forge_get_canonical_entities",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "forge_get_impact_radius",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "forge_get_lineage_history",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "forge_get_task_audit_history",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "forge_record_audit_entry",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "forge_repair_and_expand_plan",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "forge_rollback_to_snapshot",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "forge_test_candidate_patch",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "forge_test_multi_candidate_patches",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "fork_board_from_version",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "generate_board_from_prompt",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_all_boards",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_all_cards",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_all_settings",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_all_snapshots",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_all_vora_snapshots",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_board_version_snapshot",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_board_versions",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_card_version_content",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_card_versions",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_current_db_path",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_data_entries",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_document_content",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_documents",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_forge_tools",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_git_commit_history",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_highlights",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_hypotheses",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_hypothesis_insights",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_hypothesis_snapshots",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_journal_entries",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_last_media_source",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_last_update_failure",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_library_definitions_for_selection",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_library_item_group_usages",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_library_item_group_versions",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_library_item_groups",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_media_slice",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_media_source",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_questions",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_setting",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_settings_file_path",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_task_flow_items",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_text_links_for_card",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_vora_file",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_vora_items",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "get_vora_snapshots",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "graduate_to_library",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "has_card_versions",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "import_database_backup",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\services\\voraDb.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "import_document",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "import_file_reference",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "import_settings_json",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "install_update",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "knowledge_transfer_adopt",
+      "implementationFile": "src-tauri\\src\\knowledge_transfer\\ipc.rs",
+      "rustModule": "knowledge_transfer",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "knowledge_transfer_change_eligibility",
+      "implementationFile": "src-tauri\\src\\knowledge_transfer\\ipc.rs",
+      "rustModule": "knowledge_transfer",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "knowledge_transfer_create_adaptation",
+      "implementationFile": "src-tauri\\src\\knowledge_transfer\\ipc.rs",
+      "rustModule": "knowledge_transfer",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "knowledge_transfer_create_concept_version",
+      "implementationFile": "src-tauri\\src\\knowledge_transfer\\ipc.rs",
+      "rustModule": "knowledge_transfer",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "knowledge_transfer_create_eligibility",
+      "implementationFile": "src-tauri\\src\\knowledge_transfer\\ipc.rs",
+      "rustModule": "knowledge_transfer",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "knowledge_transfer_create_origin",
+      "implementationFile": "src-tauri\\src\\knowledge_transfer\\ipc.rs",
+      "rustModule": "knowledge_transfer",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "knowledge_transfer_create_principle_version",
+      "implementationFile": "src-tauri\\src\\knowledge_transfer\\ipc.rs",
+      "rustModule": "knowledge_transfer",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "knowledge_transfer_get_provenance_preview",
+      "implementationFile": "src-tauri\\src\\knowledge_transfer\\ipc.rs",
+      "rustModule": "knowledge_transfer",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "knowledge_transfer_get_workspace",
+      "implementationFile": "src-tauri\\src\\knowledge_transfer\\ipc.rs",
+      "rustModule": "knowledge_transfer",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "knowledge_transfer_record_usage",
+      "implementationFile": "src-tauri\\src\\knowledge_transfer\\ipc.rs",
+      "rustModule": "knowledge_transfer",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "knowledge_transfer_review_knowledge_version",
+      "implementationFile": "src-tauri\\src\\knowledge_transfer\\ipc.rs",
+      "rustModule": "knowledge_transfer",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_create_assessment_version",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_create_attempt",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_create_competency",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_create_learner",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_create_mastery_rule",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_create_objective",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_create_project",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_create_reproduction_task",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_evaluate_attempt",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_evaluate_competency",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_evaluate_reproduction",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_get_workspace",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_review_assessment",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_save_attempt_response",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_submit_attempt",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_submit_reproduction",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "learning_transition_assessment_version",
+      "implementationFile": "src-tauri\\src\\learning\\ipc.rs",
+      "rustModule": "learning",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "link_snapshot_to_hypothesis",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "list_media_files",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "list_media_slices",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "mkt_cancel_request",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [
+        "src\\lib\\market\\marketApi.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "mkt_delete_drawing_alert",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [
+        "src\\lib\\market\\marketApi.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "mkt_delete_drawing_alerts_for_drawings",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [
+        "src\\lib\\market\\marketApi.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "mkt_delete_drawing_template",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [
+        "src\\lib\\market\\marketApi.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "mkt_detect_boxes",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "mkt_fetch_local_candles",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "mkt_get_scale_registry",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "mkt_get_symbol_origin",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "mkt_list_drawing_alerts",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "mkt_list_drawing_templates",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "mkt_list_pivots",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "mkt_list_scale_registries",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "mkt_refresh_symbol_origin",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "mkt_save_drawing_alert",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [
+        "src\\lib\\market\\marketApi.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "mkt_save_drawing_template",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [
+        "src\\lib\\market\\marketApi.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "mkt_set_scale_registry",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "mkt_update_drawing_alert",
+      "implementationFile": "src-tauri\\src\\market\\ipc.rs",
+      "rustModule": "market",
+      "frontendCallers": [
+        "src\\lib\\market\\marketApi.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "model_create",
+      "implementationFile": "src-tauri\\src\\model\\ipc.rs",
+      "rustModule": "model",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "model_create_evaluation",
+      "implementationFile": "src-tauri\\src\\model\\ipc.rs",
+      "rustModule": "model",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "model_create_evidence",
+      "implementationFile": "src-tauri\\src\\model\\ipc.rs",
+      "rustModule": "model",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "model_create_replication",
+      "implementationFile": "src-tauri\\src\\model\\ipc.rs",
+      "rustModule": "model",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "model_create_validation",
+      "implementationFile": "src-tauri\\src\\model\\ipc.rs",
+      "rustModule": "model",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "model_create_version",
+      "implementationFile": "src-tauri\\src\\model\\ipc.rs",
+      "rustModule": "model",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "model_finalize_validation",
+      "implementationFile": "src-tauri\\src\\model\\ipc.rs",
+      "rustModule": "model",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "model_get_workspace",
+      "implementationFile": "src-tauri\\src\\model\\ipc.rs",
+      "rustModule": "model",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "model_transition",
+      "implementationFile": "src-tauri\\src\\model\\ipc.rs",
+      "rustModule": "model",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "model_transition_version",
+      "implementationFile": "src-tauri\\src\\model\\ipc.rs",
+      "rustModule": "model",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "move_card_to_bin",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "move_library_item_group_to_trash",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "move_library_object_to_trash",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "parse_code_ast",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "player_get_duration",
+      "implementationFile": "src-tauri\\src\\mind\\player.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "player_get_position",
+      "implementationFile": "src-tauri\\src\\mind\\player.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "player_kill",
+      "implementationFile": "src-tauri\\src\\mind\\player.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "player_load",
+      "implementationFile": "src-tauri\\src\\mind\\player.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "player_load_at",
+      "implementationFile": "src-tauri\\src\\mind\\player.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "player_pause",
+      "implementationFile": "src-tauri\\src\\mind\\player.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "player_play",
+      "implementationFile": "src-tauri\\src\\mind\\player.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "player_seek",
+      "implementationFile": "src-tauri\\src\\mind\\player.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "player_set_fullscreen",
+      "implementationFile": "src-tauri\\src\\mind\\player.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "player_set_speed",
+      "implementationFile": "src-tauri\\src\\mind\\player.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "player_set_volume",
+      "implementationFile": "src-tauri\\src\\mind\\player.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "player_spawn",
+      "implementationFile": "src-tauri\\src\\mind\\player.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "promote_to_hypothesis",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "read_project_file",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "record_hypothesis_execution",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "record_verdict",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "register_media_source",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "rename_board",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "reorder_task_flow_items",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "replace_all_settings",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\services\\voraDb.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "replace_vora_snapshots",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\services\\voraDb.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "research_add_gap_evidence",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_add_hypothesis_evidence",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_add_hypothesis_model_reference",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_add_literature_source",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_adopt_framework_version",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_assign_domain",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_assign_unassigned_hypothesis",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_assign_unassigned_question",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_associate_project_source",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_dataset_version_reference",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_design",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_domain",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_gap",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_idea",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_linked_design",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_literature_review",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_observation",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_observation_plan",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_pattern",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_phenomenon",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_prior_assessment",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_project",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_question",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_reviewed_literature_review",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_create_typed_hypothesis",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_get_project_context",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_get_project_source",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_get_workspace",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_link_competing_hypotheses",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_link_hypothesis_design",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_link_question_lineage",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [
+        "src\\mind\\services\\researchService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "research_list_project_sources",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_list_source_projects",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_refine_question",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_review_gap_exception",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_review_literature_review",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_review_observation_plan",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_review_prior_assessment",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_transition_design",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_transition_gap",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_transition_hypothesis",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_transition_project",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_transition_question",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "research_update_project_source_context",
+      "implementationFile": "src-tauri\\src\\research\\ipc.rs",
+      "rustModule": "research",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "resolve_missing_file",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "resolve_snapshot",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "resolve_strict_edges",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "restore_card_from_bin",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "restore_card_version",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "restore_library_item_group",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "restore_library_object_from_trash",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "run_project_tests",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "save_card_direct",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "save_checklist_schema",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "save_deepseek_key",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "save_hypothesis_protocol",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "save_journal_entry",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "save_media_slice",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "save_media_source_position",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "save_protocol_flowchart",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "save_question",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "save_setting",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\services\\voraDb.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "save_vora_item",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\services\\voraDb.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "save_vora_snapshot",
+      "implementationFile": "src-tauri\\src\\mind\\portable_db.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\services\\voraDb.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "scan_workspace",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "search_library_objects",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "select_for_promotion",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "send_highlight_to_library",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "set_task_flow_item_completed",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "simulate_semantic_change",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_add_framework_item",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_correct_knowledge_extraction",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_create_claim_relation",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_create_extract",
+      "implementationFile": "src-tauri\\src\\source\\ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_create_framework",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_create_framework_version",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_create_knowledge_extraction",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_create_knowledge_item",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_create_link",
+      "implementationFile": "src-tauri\\src\\source\\ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_create_segment",
+      "implementationFile": "src-tauri\\src\\source\\ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_create_source",
+      "implementationFile": "src-tauri\\src\\source\\ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_create_source_claim",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_create_source_location",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_create_source_version",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_get_extract",
+      "implementationFile": "src-tauri\\src\\source\\ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_get_source_bundle",
+      "implementationFile": "src-tauri\\src\\source\\ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_claim_relations",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_extracts",
+      "implementationFile": "src-tauri\\src\\source\\ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_framework_reviews",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_framework_versions",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_frameworks",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_knowledge_extractions",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_knowledge_items",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_provenance",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_source_claims",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_source_locations",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_source_revisions",
+      "implementationFile": "src-tauri\\src\\source\\ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_source_versions",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_list_sources",
+      "implementationFile": "src-tauri\\src\\source\\ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_mark_extract_reviewed",
+      "implementationFile": "src-tauri\\src\\source\\ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_publish_framework_version",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_remove_framework_item",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_reorder_framework_items",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_review_framework_version",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_review_knowledge_extraction",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "src_update_framework_version",
+      "implementationFile": "src-tauri\\src\\source\\acquisition_ipc.rs",
+      "rustModule": "source",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "trace_app_version",
+      "implementationFile": "src-tauri\\src\\vora_trace.rs",
+      "rustModule": "vora_trace.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "trace_export_graph_json",
+      "implementationFile": "src-tauri\\src\\vora_trace.rs",
+      "rustModule": "vora_trace.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "trace_find_commits_for_file",
+      "implementationFile": "src-tauri\\src\\vora_trace.rs",
+      "rustModule": "vora_trace.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "trace_git_log_for_project",
+      "implementationFile": "src-tauri\\src\\vora_trace.rs",
+      "rustModule": "vora_trace.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "trace_import_graph_json",
+      "implementationFile": "src-tauri\\src\\vora_trace.rs",
+      "rustModule": "vora_trace.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "trace_list_decisions",
+      "implementationFile": "src-tauri\\src\\vora_trace.rs",
+      "rustModule": "vora_trace.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "trace_load_graph",
+      "implementationFile": "src-tauri\\src\\vora_trace.rs",
+      "rustModule": "vora_trace.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "trace_read_all_decisions",
+      "implementationFile": "src-tauri\\src\\vora_trace.rs",
+      "rustModule": "vora_trace.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "trace_recent_decisions",
+      "implementationFile": "src-tauri\\src\\vora_trace.rs",
+      "rustModule": "vora_trace.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "trace_save_decision_md",
+      "implementationFile": "src-tauri\\src\\vora_trace.rs",
+      "rustModule": "vora_trace.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "trace_save_graph",
+      "implementationFile": "src-tauri\\src\\vora_trace.rs",
+      "rustModule": "vora_trace.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\traceService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "trace_scan_ecosystem",
+      "implementationFile": "src-tauri\\src\\vora_trace.rs",
+      "rustModule": "vora_trace.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "triage_question",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "unlink_snapshot_from_hypothesis",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "unselect_for_promotion",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "untriage_question",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "update_media_source_duration",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "update_object_review_status",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [
+        "src\\mind\\services\\dbService.ts"
+      ],
+      "status": "NOT_MIGRATED",
+      "classificationBasis": "Direct invoke call in main React frontend"
+    },
+    {
+      "name": "update_protocol_completion",
+      "implementationFile": "src-tauri\\src\\mind\\hypothesis.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "update_task_flow_item",
+      "implementationFile": "src-tauri\\src\\lib.rs",
+      "rustModule": "lib.rs",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    },
+    {
+      "name": "validate_media_source",
+      "implementationFile": "src-tauri\\src\\mind\\media.rs",
+      "rustModule": "mind",
+      "frontendCallers": [],
+      "status": "NEEDS_DOMAIN_REVIEW",
+      "classificationBasis": "No direct frontend invoke found; indirect or runtime usage must be reviewed"
+    }
+  ]
+}

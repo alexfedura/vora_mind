@@ -61,6 +61,7 @@ type ExecutionContext struct {
 	Principal     Principal
 	Permissions   []security.Permission
 	ProjectScope  string
+	ProjectIDs    []string
 	CorrelationID string
 	WorkflowID    string
 	Approved      bool

@@ -243,6 +243,7 @@ func trustedContext(r *http.Request, credential security.Credential) capabilitie
 		Origin:        capabilities.OriginExternal,
 		Principal:     capabilities.Principal{ID: principalID, Type: "api_client"},
 		Permissions:   credential.Permissions,
+		ProjectIDs:    credential.ProjectIDs,
 		CorrelationID: correlation,
 	}
 }
@@ -405,9 +406,50 @@ func (s *Server) credentialRoute(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) projectRoute(w http.ResponseWriter, r *http.Request) {
-	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
-	if id == "" {
+	remainder := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
+	if remainder == "context" && r.Method == http.MethodGet {
+		s.executeResponse(w, r, "project.get_context", nil)
+		return
+	}
+	if remainder == "" {
 		methodNotAllowed(w)
+		return
+	}
+	parts := strings.Split(remainder, "/")
+	id := parts[0]
+	if len(parts) == 2 && parts[1] == "open" && r.Method == http.MethodPost {
+		s.executeResponse(w, r, "project.open", map[string]interface{}{"id": id})
+		return
+	}
+	if len(parts) == 2 && parts[1] == "roots" {
+		switch r.Method {
+		case http.MethodGet:
+			s.executeResponse(w, r, "project.filesystem_roots", nil)
+		case http.MethodPatch:
+			input, ok := s.decodeJSON(w, r)
+			if !ok {
+				return
+			}
+			input["id"] = id
+			s.executeResponse(w, r, "project.filesystem_root_update", input)
+		case http.MethodDelete:
+			s.executeResponse(w, r, "project.filesystem_root_remove", map[string]interface{}{"id": id})
+		default:
+			methodNotAllowed(w)
+		}
+		return
+	}
+	if len(parts) == 3 && parts[1] == "roots" && parts[2] == "resolve" && r.Method == http.MethodPost {
+		input, ok := s.decodeJSON(w, r)
+		if !ok {
+			return
+		}
+		input["id"] = id
+		s.executeResponse(w, r, "project.filesystem_root_resolve", input)
+		return
+	}
+	if len(parts) != 1 {
+		writeJSON(w, http.StatusNotFound, structuredError("NOT_FOUND", "Endpoint was not found", http.StatusNotFound))
 		return
 	}
 	switch r.Method {
@@ -420,6 +462,8 @@ func (s *Server) projectRoute(w http.ResponseWriter, r *http.Request) {
 		}
 		input["id"] = id
 		s.executeResponse(w, r, "project.update", input)
+	case http.MethodDelete:
+		s.executeResponse(w, r, "project.delete", map[string]interface{}{"id": id})
 	default:
 		methodNotAllowed(w)
 	}

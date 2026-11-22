@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/alexfedura/vora_mind/go-app/backend/capabilities"
+	"github.com/alexfedura/vora_mind/go-app/backend/domain"
 	"github.com/alexfedura/vora_mind/go-app/backend/infrastructure"
 	"github.com/alexfedura/vora_mind/go-app/backend/security"
 )
@@ -56,5 +57,44 @@ func TestSymlinkEscapeRejected(t *testing.T) {
 	}
 	if _, err := scope.ReadText(filepath.Join(link, "outside.txt")); err == nil {
 		t.Fatal("symlink escape should be rejected")
+	}
+}
+
+func TestCredentialProjectScopeCannotAccessOtherProject(t *testing.T) {
+	runtime := testRuntime(t)
+	created := runtime.Execute("project.create", map[string]interface{}{"name": "Scoped"}, "human_ui")
+	if created.Status != "succeeded" {
+		t.Fatal(created.Error)
+	}
+	projectID := created.Data.(map[string]interface{})["project"].(domain.Project).ID
+	context := capabilities.ExecutionContext{
+		Origin:      capabilities.OriginExternal,
+		Principal:   capabilities.Principal{ID: "scoped-client", Type: "api_client"},
+		Permissions: []security.Permission{security.ProjectRead},
+		ProjectIDs:  []string{"credential-project-other"},
+	}
+	result := runtime.ExecuteWithContext(context, "project.open", map[string]interface{}{"id": projectID})
+	if result.Error == nil || result.Error.Code != "PERMISSION_DENIED" {
+		t.Fatalf("credential unexpectedly accessed another project: %#v", result)
+	}
+}
+
+func TestCredentialProjectScopeRejectsDiscoveryOutsideScope(t *testing.T) {
+	runtime := testRuntime(t)
+	context := capabilities.ExecutionContext{
+		Origin:      capabilities.OriginExternal,
+		Principal:   capabilities.Principal{ID: "scoped-client", Type: "api_client"},
+		Permissions: []security.Permission{security.ProjectRead},
+		ProjectIDs:  []string{"only-project"},
+	}
+	for _, capabilityID := range []string{"project.create", "project.list", "project.get_context", "project.filesystem_roots"} {
+		input := map[string]interface{}{}
+		if capabilityID == "project.create" {
+			input["name"] = "blocked"
+		}
+		result := runtime.ExecuteWithContext(context, capabilityID, input)
+		if result.Error == nil || result.Error.Code != "PERMISSION_DENIED" {
+			t.Fatalf("%s unexpectedly passed project scope policy: %#v", capabilityID, result)
+		}
 	}
 }

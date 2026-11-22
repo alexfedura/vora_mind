@@ -19,6 +19,7 @@ import (
 	"github.com/alexfedura/vora_mind/go-app/backend/domain"
 	"github.com/alexfedura/vora_mind/go-app/backend/infrastructure"
 	"github.com/alexfedura/vora_mind/go-app/backend/persistence"
+	projectservice "github.com/alexfedura/vora_mind/go-app/backend/projects"
 	"github.com/alexfedura/vora_mind/go-app/backend/security"
 	"github.com/alexfedura/vora_mind/go-app/backend/workflows"
 )
@@ -29,7 +30,9 @@ func (PermissionPolicy) Allows(origin capabilities.ExecutionOrigin, permission s
 	switch permission {
 	case security.ProjectRead, security.ProjectWrite, security.DatabaseInspect:
 		return true
-	case security.FilesystemRead, security.FilesystemWrite:
+	case security.FilesystemRead:
+		return origin == capabilities.OriginHuman || origin == capabilities.OriginInternal || origin == capabilities.OriginAI
+	case security.FilesystemWrite:
 		return origin == capabilities.OriginHuman || origin == capabilities.OriginInternal
 	default:
 		return false
@@ -41,6 +44,7 @@ type Runtime struct {
 	DB             *sql.DB
 	DatabasePath   string
 	ProjectRepo    *persistence.ProjectRepository
+	ProjectService *projectservice.Service
 	AuditStore     *audit.SQLiteStore
 	Filesystem     *infrastructure.FilesystemScope
 	AppName        string
@@ -58,10 +62,12 @@ func NewRuntime(store *persistence.Store, fs *infrastructure.FilesystemScope, ap
 		ProjectRepo: repo, AuditStore: auditStore, Filesystem: fs,
 		AppName: appName, AppVersion: appVersion, WailsVersion: wailsVersion,
 	}
+	r.ProjectService = projectservice.NewService(store.DB, repo, fs)
 	r.WorkflowEngine = workflows.NewEngine(store.DB, r)
 	store.RegisterReopenCallback(func(db *sql.DB) {
 		r.DB = db
 		r.ProjectRepo = &persistence.ProjectRepository{DB: db}
+		r.ProjectService = projectservice.NewService(db, r.ProjectRepo, r.Filesystem)
 		r.AuditStore = &audit.SQLiteStore{DB: db}
 		r.WorkflowEngine = workflows.NewEngine(db, r)
 		r.recoverProjectRoots()
@@ -95,6 +101,32 @@ func (r *Runtime) ExecuteWithContext(context capabilities.ExecutionContext, capa
 		return r.finish(context, capabilityID, executionID, start, capabilityOrigin, "", nil, &capabilities.StructuredError{
 			Code: "CAPABILITY_NOT_FOUND", Message: "The requested capability is not registered.", Capability: capabilityID,
 		})
+	}
+	requestedProjectScope := projectScope(input)
+	if len(context.ProjectIDs) > 0 && requestedProjectScope != "" {
+		allowed := false
+		for _, projectID := range context.ProjectIDs {
+			if projectID == requestedProjectScope {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return r.finish(context, capabilityID, executionID, start, capabilityOrigin, requestedProjectScope, nil, &capabilities.StructuredError{
+				Code: "PERMISSION_DENIED", Message: "The credential cannot access the requested project.", Capability: capabilityID,
+			})
+		}
+	}
+	if len(context.ProjectIDs) > 0 {
+		switch capabilityID {
+		case "project.create",
+			"project.list",
+			"project.get_context",
+			"project.filesystem_roots":
+			return r.finish(context, capabilityID, executionID, start, capabilityOrigin, requestedProjectScope, nil, &capabilities.StructuredError{
+				Code: "PERMISSION_DENIED", Message: "The credential cannot perform this project discovery operation.", Capability: capabilityID,
+			})
+		}
 	}
 	if !hasRequiredPermissions(context.Permissions, descriptor.Permissions) || !r.Registry.CanExecute(capabilityOrigin, descriptor) {
 		return r.finish(context, capabilityID, executionID, start, capabilityOrigin, "", nil, &capabilities.StructuredError{
@@ -291,16 +323,10 @@ func (r *Runtime) registerCapabilities() {
 			description, _ := optionalString(input, "description", 2000)
 			now := time.Now().UTC()
 			project := domain.Project{ID: newID("project"), Name: name, Description: description, CreatedAt: now, UpdatedAt: now}
-			if err := r.ProjectRepo.Create(project); err != nil {
-				return nil, fmt.Errorf("could not create project: %w", err)
-			}
-			root, err := r.ProjectRepo.RegisterWorkspaceRoot(project.ID, filepath.Join(filepath.Dir(r.DatabasePath), "projects", project.ID))
+			defaultRoot := filepath.Join(filepath.Dir(r.DatabasePath), "projects", project.ID)
+			project, err := r.ProjectService.Create(project, defaultRoot)
 			if err != nil {
-				_ = r.ProjectRepo.Delete(project.ID)
-				return nil, fmt.Errorf("could not register project workspace root: %w", err)
-			}
-			if err := r.Filesystem.SetProjectRoot(project.ID, root); err != nil {
-				return nil, fmt.Errorf("could not activate project workspace root: %w", err)
+				return nil, fmt.Errorf("could not create project: %w", err)
 			}
 			return map[string]interface{}{"project": project}, nil
 		},
@@ -313,7 +339,7 @@ func (r *Runtime) registerCapabilities() {
 		OutputSchema: capabilities.JSONObjectSchema(nil, map[string]interface{}{"projects": map[string]interface{}{"type": "array"}}),
 		Permissions:  []security.Permission{security.ProjectRead},
 		Handler: func(input map[string]interface{}) (interface{}, error) {
-			projects, err := r.ProjectRepo.List()
+			projects, err := r.ProjectService.List()
 			if err != nil {
 				return nil, err
 			}
@@ -333,7 +359,7 @@ func (r *Runtime) registerCapabilities() {
 		},
 		Handler: func(input map[string]interface{}) (interface{}, error) {
 			id, _ := requiredString(input, "id", 1, 128)
-			project, err := r.ProjectRepo.Get(id)
+			project, err := r.ProjectService.Get(id)
 			if errors.Is(err, persistence.ErrProjectNotFound) {
 				return nil, fmt.Errorf("project %s was not found", id)
 			}
@@ -367,7 +393,7 @@ func (r *Runtime) registerCapabilities() {
 			id, _ := requiredString(input, "id", 1, 128)
 			name, _ := requiredString(input, "name", 1, 120)
 			description, _ := optionalString(input, "description", 2000)
-			project, err := r.ProjectRepo.Update(id, name, description)
+			project, err := r.ProjectService.Update(id, name, description)
 			if errors.Is(err, persistence.ErrProjectNotFound) {
 				return nil, fmt.Errorf("project %s was not found", id)
 			}
@@ -390,13 +416,12 @@ func (r *Runtime) registerCapabilities() {
 		},
 		Handler: func(input map[string]interface{}) (interface{}, error) {
 			id, _ := requiredString(input, "id", 1, 128)
-			if err := r.ProjectRepo.Delete(id); err != nil {
+			if err := r.ProjectService.Delete(id); err != nil {
 				if errors.Is(err, persistence.ErrProjectNotFound) {
 					return nil, fmt.Errorf("project %s was not found", id)
 				}
 				return nil, err
 			}
-			delete(r.Filesystem.ProjectRoots, id)
 			return map[string]interface{}{"projectId": id, "deleted": true, "workspaceFilesPreserved": true}, nil
 		},
 	})
@@ -417,6 +442,116 @@ func (r *Runtime) registerCapabilities() {
 				return nil, err
 			}
 			return map[string]interface{}{"projectId": id, "workspaceRoot": root}, nil
+		},
+	})
+
+	r.mustRegister(capabilities.Descriptor{
+		ID: "project.open", Version: "1.0.0", Name: "Open project",
+		Description:  "Opens a project and establishes its trusted active project context.",
+		InputSchema:  capabilities.JSONObjectSchema([]string{"id"}, map[string]interface{}{"id": capabilities.JSONStringSchema("Project ID")}),
+		OutputSchema: capabilities.JSONObjectSchema(nil, map[string]interface{}{"project": map[string]interface{}{"type": "object"}}),
+		Permissions:  []security.Permission{security.ProjectRead},
+		Validate: func(input map[string]interface{}) error {
+			_, err := requiredString(input, "id", 1, 128)
+			return err
+		},
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			id, _ := requiredString(input, "id", 1, 128)
+			project, err := r.ProjectService.Open(id)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]interface{}{"project": project}, nil
+		},
+	})
+
+	r.mustRegister(capabilities.Descriptor{
+		ID: "project.get_context", Version: "1.0.0", Name: "Get active project context",
+		Description:  "Returns the trusted active project and workspace context.",
+		InputSchema:  capabilities.JSONObjectSchema(nil, map[string]interface{}{}),
+		OutputSchema: capabilities.JSONObjectSchema(nil, map[string]interface{}{}),
+		Permissions:  []security.Permission{security.ProjectRead},
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			return r.ProjectService.GetContext()
+		},
+	})
+
+	r.mustRegister(capabilities.Descriptor{
+		ID: "project.filesystem_roots", Version: "1.0.0", Name: "List project workspace roots",
+		Description:  "Lists registered project workspace roots.",
+		InputSchema:  capabilities.JSONObjectSchema(nil, map[string]interface{}{}),
+		OutputSchema: capabilities.JSONObjectSchema(nil, map[string]interface{}{"roots": map[string]interface{}{"type": "array"}}),
+		Permissions:  []security.Permission{security.ProjectRead, security.FilesystemRead},
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			roots, err := r.ProjectService.ListRoots()
+			if err != nil {
+				return nil, err
+			}
+			return map[string]interface{}{"roots": roots}, nil
+		},
+	})
+
+	r.mustRegister(capabilities.Descriptor{
+		ID: "project.filesystem_root_update", Version: "1.0.0", Name: "Update project workspace root",
+		Description: "Registers or updates a project workspace root.",
+		InputSchema: capabilities.JSONObjectSchema([]string{"id", "root"}, map[string]interface{}{
+			"id":   capabilities.JSONStringSchema("Project ID"),
+			"root": capabilities.JSONStringSchema("Absolute workspace root"),
+		}),
+		Permissions: []security.Permission{security.ProjectWrite, security.FilesystemWrite},
+		Validate: func(input map[string]interface{}) error {
+			if _, err := requiredString(input, "id", 1, 128); err != nil {
+				return err
+			}
+			_, err := requiredString(input, "root", 1, 4096)
+			return err
+		},
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			id, _ := requiredString(input, "id", 1, 128)
+			root, _ := requiredString(input, "root", 1, 4096)
+			item, err := r.ProjectService.UpdateRoot(id, root)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]interface{}{"root": item}, nil
+		},
+	})
+
+	r.mustRegister(capabilities.Descriptor{
+		ID: "project.filesystem_root_remove", Version: "1.0.0", Name: "Remove project workspace root",
+		Description:      "Removes a project workspace root registration without deleting workspace files.",
+		InputSchema:      capabilities.JSONObjectSchema([]string{"id"}, map[string]interface{}{"id": capabilities.JSONStringSchema("Project ID")}),
+		Permissions:      []security.Permission{security.ProjectWrite},
+		ApprovalRequired: true,
+		Validate: func(input map[string]interface{}) error {
+			_, err := requiredString(input, "id", 1, 128)
+			return err
+		},
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			id, _ := requiredString(input, "id", 1, 128)
+			return r.ProjectService.RemoveRoot(id)
+		},
+	})
+
+	r.mustRegister(capabilities.Descriptor{
+		ID: "project.filesystem_root_resolve", Version: "1.0.0", Name: "Resolve project workspace path",
+		Description: "Resolves a project-relative path inside the authorized workspace root.",
+		InputSchema: capabilities.JSONObjectSchema([]string{"id", "path"}, map[string]interface{}{
+			"id":   capabilities.JSONStringSchema("Project ID"),
+			"path": capabilities.JSONStringSchema("Project-relative path"),
+		}),
+		Permissions: []security.Permission{security.ProjectRead, security.FilesystemRead},
+		Validate: func(input map[string]interface{}) error {
+			if _, err := requiredString(input, "id", 1, 128); err != nil {
+				return err
+			}
+			_, err := requiredString(input, "path", 1, 4096)
+			return err
+		},
+		Handler: func(input map[string]interface{}) (interface{}, error) {
+			id, _ := requiredString(input, "id", 1, 128)
+			path, _ := requiredString(input, "path", 1, 4096)
+			return r.ProjectService.ResolveRoot(id, path)
 		},
 	})
 

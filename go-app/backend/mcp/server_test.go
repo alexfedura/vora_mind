@@ -140,6 +140,100 @@ func TestMCPExecutableSubprocess(t *testing.T) {
 	if info.IsError {
 		t.Fatalf("subprocess MCP read failed: %#v", info)
 	}
+	created, err := session.CallTool(ctx, &officialmcp.CallToolParams{
+		Name:      "project_create",
+		Arguments: map[string]interface{}{"name": "MCP Project"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.IsError {
+		t.Fatalf("MCP project create failed: %#v", created)
+	}
+	createdPayload := ""
+	for _, content := range created.Content {
+		if text, ok := content.(*officialmcp.TextContent); ok {
+			createdPayload = text.Text
+			break
+		}
+	}
+	var createdResult map[string]interface{}
+	if err := json.Unmarshal([]byte(createdPayload), &createdResult); err != nil {
+		t.Fatalf("MCP project create response was not structured JSON: %v", err)
+	}
+	data, _ := createdResult["data"].(map[string]interface{})
+	project, _ := data["project"].(map[string]interface{})
+	projectID, _ := project["id"].(string)
+	if projectID == "" {
+		t.Fatal("MCP project create did not return a project ID")
+	}
+	opened, err := session.CallTool(ctx, &officialmcp.CallToolParams{
+		Name:      "project_open",
+		Arguments: map[string]interface{}{"id": projectID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opened.IsError {
+		t.Fatalf("MCP project open failed: %#v", opened)
+	}
+	contextResult, err := session.CallTool(ctx, &officialmcp.CallToolParams{
+		Name:      "project_get_context",
+		Arguments: map[string]interface{}{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contextResult.IsError {
+		t.Fatalf("MCP project context failed: %#v", contextResult)
+	}
+	listed, err := session.CallTool(ctx, &officialmcp.CallToolParams{
+		Name:      "project_list",
+		Arguments: map[string]interface{}{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listed.IsError {
+		t.Fatalf("MCP project list failed: %#v", listed)
+	}
+	roots, err := session.CallTool(ctx, &officialmcp.CallToolParams{
+		Name:      "project_filesystem_roots",
+		Arguments: map[string]interface{}{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roots.IsError {
+		t.Fatalf("MCP workspace root list failed: %#v", roots)
+	}
+	projectRoot := filepath.Join(dataDir, "projects", projectID)
+	if err := os.MkdirAll(projectRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectRoot, "inside.txt"), []byte("inside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := session.CallTool(ctx, &officialmcp.CallToolParams{
+		Name:      "project_filesystem_root_resolve",
+		Arguments: map[string]interface{}{"id": projectID, "path": "inside.txt"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.IsError {
+		t.Fatalf("MCP project path resolution failed: %#v", resolved)
+	}
+	outside, err := session.CallTool(ctx, &officialmcp.CallToolParams{
+		Name:      "project_filesystem_root_resolve",
+		Arguments: map[string]interface{}{"id": projectID, "path": "../outside.txt"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !outside.IsError {
+		t.Fatal("MCP project path resolution accepted traversal")
+	}
 	denied, err := session.CallTool(ctx, &officialmcp.CallToolParams{
 		Name:      "filesystem_create_text",
 		Arguments: map[string]interface{}{"path": "denied.txt", "content": "x"},
@@ -164,4 +258,8 @@ func TestMCPExecutableSubprocess(t *testing.T) {
 		t.Fatal(err)
 	}
 	cancel()
+	if process.Process != nil {
+		_ = process.Process.Kill()
+		_, _ = process.Process.Wait()
+	}
 }
