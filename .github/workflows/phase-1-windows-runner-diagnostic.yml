@@ -1,0 +1,97 @@
+name: Phase 1 Windows Runner Diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: windows-2025
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.0"
+          cache: false
+
+      - name: Verify runner environment
+        shell: pwsh
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $isGithubHosted = $env:RUNNER_ENVIRONMENT -ieq "github-hosted"
+          $isWindows = $env:RUNNER_OS -ieq "Windows"
+          $isAmd64 = $env:RUNNER_ARCH -ieq "X64" -or [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq [System.Runtime.InteropServices.Architecture]::X64
+          $powerShellAvailable = $null -ne (Get-Command pwsh -ErrorAction SilentlyContinue)
+          $profileAvailable = -not [string]::IsNullOrWhiteSpace($env:USERPROFILE) -and (Test-Path $env:USERPROFILE)
+          $ephemeralGitHub = $isGithubHosted -and -not [string]::IsNullOrWhiteSpace($env:GITHUB_ACTIONS) -and -not [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)
+
+          $goCommand = Get-Command go -ErrorAction SilentlyContinue
+          $goAvailable = $null -ne $goCommand
+          $goVersion = ""
+          if ($goAvailable) {
+            $goVersion = (& go version).Trim()
+          }
+
+          $tempRoot = [System.IO.Path]::GetTempPath()
+          $tempDrive = Get-PSDrive -PSProvider FileSystem |
+            Where-Object { $tempRoot.StartsWith($_.Root, [System.StringComparison]::OrdinalIgnoreCase) } |
+            Select-Object -First 1
+          $tempStorageAvailable = $null -ne $tempDrive -and $tempDrive.Free -gt 1GB
+
+          $summary = [ordered]@{
+            GitHubHosted = $isGithubHosted
+            Windows = $isWindows
+            AMD64 = $isAmd64
+            PowerShell = $powerShellAvailable
+            GoAvailable = $goAvailable
+            GoMatchesDeclaredModule = $goAvailable -and $goVersion -match "go1\.26"
+            TemporaryStorageAbove1GB = $tempStorageAvailable
+            UserProfileAvailable = $profileAvailable
+            EphemeralGitHubEnvironment = $ephemeralGitHub
+            DisposableIntegrationOptInSet = $env:VORA_RUN_WINDOWS_PARTICIPANT_INTEGRATION -eq "1"
+            DisposableMarkerVariableSet = -not [string]::IsNullOrWhiteSpace($env:VORA_DISPOSABLE_PROFILE_MARKER)
+          }
+
+          $summary.GetEnumerator() | ForEach-Object {
+            Write-Host ("{0}={1}" -f $_.Key, $_.Value)
+          }
+
+          if (-not $isGithubHosted) { throw "Not running in a GitHub-hosted environment." }
+          if (-not $isWindows) { throw "Runner OS is not Windows." }
+          if (-not $isAmd64) { throw "Runner architecture is not AMD64/x64." }
+          if (-not $powerShellAvailable) { throw "PowerShell is unavailable." }
+          if (-not $goAvailable) { throw "Go is unavailable." }
+          if (-not $tempStorageAvailable) { throw "Temporary storage is below the 1 GB diagnostic threshold." }
+          if (-not $profileAvailable) { throw "A usable runner user profile is unavailable." }
+          if (-not $ephemeralGitHub) { throw "The GitHub ephemeral runner environment could not be identified." }
+
+          $target = Join-Path (Get-Location) "go-app"
+          if (-not (Test-Path (Join-Path $target "go.mod"))) {
+            throw "Go module directory is unavailable."
+          }
+          Push-Location $target
+          try {
+            $declared = (& go list -mod=readonly -m -f "{{.GoVersion}}")
+            if ($declared -ne "1.26.0") {
+              throw "Unexpected module Go version."
+            }
+            Write-Host "GoModuleVersionCompatible=true"
+          } finally {
+            Pop-Location
+          }
+
+          if ($env:VORA_RUN_WINDOWS_PARTICIPANT_INTEGRATION -eq "1" -or
+              -not [string]::IsNullOrWhiteSpace($env:VORA_DISPOSABLE_PROFILE_MARKER)) {
+            throw "Disposable integration variables must remain unset for this diagnostic."
+          }
