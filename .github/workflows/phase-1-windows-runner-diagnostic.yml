@@ -30,7 +30,7 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           $isGithubHosted = $env:RUNNER_ENVIRONMENT -ieq "github-hosted"
-          $isWindows = $env:RUNNER_OS -ieq "Windows"
+          $windowsDetected = $env:RUNNER_OS -ieq "Windows"
           $isAmd64 = $env:RUNNER_ARCH -ieq "X64" -or [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq [System.Runtime.InteropServices.Architecture]::X64
           $powerShellAvailable = $null -ne (Get-Command pwsh -ErrorAction SilentlyContinue)
           $profileAvailable = -not [string]::IsNullOrWhiteSpace($env:USERPROFILE) -and (Test-Path $env:USERPROFILE)
@@ -38,9 +38,24 @@ jobs:
 
           $goCommand = Get-Command go -ErrorAction SilentlyContinue
           $goAvailable = $null -ne $goCommand
-          $goVersion = ""
+          $goSanitizedVersion = "unavailable"
           if ($goAvailable) {
-            $goVersion = (& go version).Trim()
+            try {
+              $goVersionOutput = (& go version 2>$null)
+              if ($LASTEXITCODE -ne 0) {
+                throw "go version command failed"
+              }
+              $goVersionMatch = [regex]::Match(
+                (($goVersionOutput -join " ").Trim()),
+                "(?<![A-Za-z0-9])(?<token>go\d+(?:\.\d+){1,3}(?:-[0-9A-Za-z.-]+)?)(?![A-Za-z0-9])"
+              )
+              if (-not $goVersionMatch.Success) {
+                throw "go version token was not recognized"
+              }
+              $goSanitizedVersion = $goVersionMatch.Groups["token"].Value
+            } catch {
+              $goSanitizedVersion = "malformed"
+            }
           }
 
           $tempRoot = [System.IO.Path]::GetTempPath()
@@ -51,15 +66,16 @@ jobs:
 
           $summary = [ordered]@{
             GitHubHosted = $isGithubHosted
-            Windows = $isWindows
+            Windows = $windowsDetected
             AMD64 = $isAmd64
             PowerShell = $powerShellAvailable
             GoAvailable = $goAvailable
-            GoMatchesDeclaredModule = $goAvailable -and $goVersion -match "go1\.26"
+            GoSanitizedVersion = $goSanitizedVersion
             TemporaryStorageAbove1GB = $tempStorageAvailable
             UserProfileAvailable = $profileAvailable
             EphemeralGitHubEnvironment = $ephemeralGitHub
-            DisposableIntegrationOptInSet = $env:VORA_RUN_WINDOWS_PARTICIPANT_INTEGRATION -eq "1"
+            ParticipantOptInSet = -not [string]::IsNullOrWhiteSpace($env:VORA_RUN_WINDOWS_PARTICIPANT_INTEGRATION)
+            DPAPIOptInSet = -not [string]::IsNullOrWhiteSpace($env:VORA_RUN_WINDOWS_DPAPI_INTEGRATION)
             DisposableMarkerVariableSet = -not [string]::IsNullOrWhiteSpace($env:VORA_DISPOSABLE_PROFILE_MARKER)
           }
 
@@ -68,30 +84,19 @@ jobs:
           }
 
           if (-not $isGithubHosted) { throw "Not running in a GitHub-hosted environment." }
-          if (-not $isWindows) { throw "Runner OS is not Windows." }
+          if (-not $windowsDetected) { throw "Runner OS is not Windows." }
           if (-not $isAmd64) { throw "Runner architecture is not AMD64/x64." }
           if (-not $powerShellAvailable) { throw "PowerShell is unavailable." }
           if (-not $goAvailable) { throw "Go is unavailable." }
           if (-not $tempStorageAvailable) { throw "Temporary storage is below the 1 GB diagnostic threshold." }
           if (-not $profileAvailable) { throw "A usable runner user profile is unavailable." }
           if (-not $ephemeralGitHub) { throw "The GitHub ephemeral runner environment could not be identified." }
-
-          $target = Join-Path (Get-Location) "go-app"
-          if (-not (Test-Path (Join-Path $target "go.mod"))) {
-            throw "Go module directory is unavailable."
-          }
-          Push-Location $target
-          try {
-            $declared = (& go list -mod=readonly -m -f "{{.GoVersion}}")
-            if ($declared -ne "1.26.0") {
-              throw "Unexpected module Go version."
-            }
-            Write-Host "GoModuleVersionCompatible=true"
-          } finally {
-            Pop-Location
+          if (-not $goAvailable -or $goSanitizedVersion -eq "malformed") {
+            throw "A valid sanitized Go version could not be established."
           }
 
-          if ($env:VORA_RUN_WINDOWS_PARTICIPANT_INTEGRATION -eq "1" -or
+          if (-not [string]::IsNullOrWhiteSpace($env:VORA_RUN_WINDOWS_PARTICIPANT_INTEGRATION) -or
+              -not [string]::IsNullOrWhiteSpace($env:VORA_RUN_WINDOWS_DPAPI_INTEGRATION) -or
               -not [string]::IsNullOrWhiteSpace($env:VORA_DISPOSABLE_PROFILE_MARKER)) {
             throw "Disposable integration variables must remain unset for this diagnostic."
           }
